@@ -825,7 +825,7 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                 AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
                 AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
-                AND (speakers.hallucination = 0 OR speakers.hallucination IS NULL)
+                AND speakers.hallucination = 0
                 AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
             GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
             ORDER BY audio_transcriptions.timestamp DESC
@@ -1553,7 +1553,7 @@ impl DatabaseManager {
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
                 WHERE (s.name = '' OR s.name IS NULL)
-                AND (s.hallucination IS NULL OR s.hallucination = 0)
+                AND s.hallucination = 0
                 "#;
 
         let speaker_filter = match &speaker_ids {
@@ -1657,7 +1657,7 @@ impl DatabaseManager {
 
     pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
         sqlx::query_as::<_, Speaker>(
-            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND (hallucination IS NULL OR hallucination != 1)",
+            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND hallucination = 0",
         )
         .bind(name_prefix)
         .fetch_all(&self.pool)
@@ -1723,7 +1723,7 @@ impl DatabaseManager {
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
-                AND (s.hallucination IS NULL OR s.hallucination = 0)
+                AND s.hallucination = 0
                 AND at.timestamp IN (
                     SELECT timestamp
                     FROM audio_transcriptions at2

@@ -1450,7 +1450,12 @@ async fn delete_speaker_handler(
         .db
         .get_audio_chunks_for_speaker(payload.id)
         .await
-        .unwrap();
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
 
     state.db.delete_speaker(payload.id).await.map_err(|e| {
         (
@@ -1461,7 +1466,12 @@ async fn delete_speaker_handler(
 
     // delete all audio chunks from the file system
     for audio_chunk in audio_chunks {
-        let _ = std::fs::remove_file(audio_chunk.file_path);
+        std::fs::remove_file(audio_chunk.file_path).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
     }
 
     Ok(JsonResponse(json!({"success": true})))

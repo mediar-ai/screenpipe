@@ -635,15 +635,15 @@ export default function MeetingHistory({
   );
 
   return (
-    <Dialog open={showMeetingHistory} onOpenChange={setShowMeetingHistory}>
-      <DialogContent
-        className="max-w-[90vw] w-full max-h-[90vh] h-full"
+    <Card>
+      <CardContent
+        className="h-full"
         onClick={(e) => {
           e.stopPropagation();
         }}
       >
-        <DialogHeader className="py-4">
-          <DialogTitle className="flex items-center justify-between">
+        <CardHeader className="py-4">
+          <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
               meeting and conversation history
               <Badge variant="secondary" className="ml-2">
@@ -704,9 +704,9 @@ export default function MeetingHistory({
                 </Tooltip>
               </TooltipProvider>
             </div>
-          </DialogTitle>
-        </DialogHeader>
-        <DialogDescription className="mb-4">
+          </CardTitle>
+        </CardHeader>
+        <CardDescription className="mb-4">
           <span className="block text-sm text-gray-600">
             this page provides transcriptions and summaries of your daily
             meetings. it uses your ai settings to generate summaries. note:
@@ -717,7 +717,7 @@ export default function MeetingHistory({
           <span className="block text-sm text-gray-600 mt-2">
             <strong>make sure to setup your ai settings</strong>
           </span>
-        </DialogDescription>
+        </CardDescription>
         <div className="flex-grow overflow-auto">
           {loading ? (
             <div className="space-y-6">
@@ -971,7 +971,7 @@ export default function MeetingHistory({
             </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }
