@@ -48,6 +48,7 @@ export interface Pipe {
 
 interface CorePipe {
   id: string;
+  name: string;
   description: string;
   url: string;
 }
@@ -55,34 +56,37 @@ interface CorePipe {
 const corePipes: CorePipe[] = [
   {
     id: "pipe-linkedin-ai-assistant",
+    name: "linkedin ai assistant",
     description: "ai assistant that helps you write better linkedin posts and engage with your network",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-linkedin-ai-assistant",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
   },
   {
     id: "pipe-for-loom",
+    name: "loom generator",
     description: "generate looms from your screenpipe data",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
   },
   {
     id: "pipe-obsidian-time-logs",
-    description:
-      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
+    name: "obsidian time logger",
+    description: "continuously write logs of your days in an obsidian table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
   },
   {
     id: "pipe-post-questions-on-reddit",
-    description:
-      "get more followers, promote your content/product while being useful, without doing any work",
+    name: "reddit question bot",
+    description: "get more followers, promote your content/product while being useful, without doing any work",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
   },
   {
     id: "pipe-notion-table-logs",
-    description:
-      "continuously write logs of your days in a notion table using ollama",
+    name: "notion time logger",
+    description: "continuously write logs of your days in a notion table using ollama",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
   },
   {
     id: "pipe-simple-nextjs",
+    name: "keyword analytics",
     description: "show most used keywords",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
   },
@@ -140,6 +144,18 @@ const truncateDescription = (description: string, maxLines: number = 4) => {
 
   const result = visibleLines.join("\n");
   return lineCount >= maxLines ? result + "..." : result;
+};
+
+const getFriendlyName = (id: string, corePipes: CorePipe[]): string => {
+  const corePipe = corePipes.find(cp => cp.id === id);
+  if (corePipe) return corePipe.name;
+  
+  // Convert pipe-name-format to Title Case if no match found
+  return id
+    .replace('pipe-', '')
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 
 const PipeStore: React.FC = () => {
@@ -497,7 +513,9 @@ const PipeStore: React.FC = () => {
             >
               <X className="h-4 w-4" />
             </Button>
-            <h2 className="text-lg font-medium">{selectedPipe.id}</h2>
+            <h2 className="text-lg font-medium">
+              {getFriendlyName(selectedPipe.id, corePipes)}
+            </h2>
             <Badge variant="outline" className="font-mono text-xs">
               by {getAuthorFromSource(selectedPipe.source)}
             </Badge>
@@ -804,7 +822,9 @@ const PipeStore: React.FC = () => {
                   <div className="flex flex-col h-full">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-medium truncate">{pipe.id}</h3>
+                        <h3 className="font-medium truncate">
+                          {getFriendlyName(pipe.id, corePipes)}
+                        </h3>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="truncate">
                             by {getAuthorFromSource(pipe.source)}
@@ -826,13 +846,14 @@ const PipeStore: React.FC = () => {
                         {pipe.enabled ? (
                           <Button
                             size="icon"
-                            variant="outline"
+                            variant={pipe.enabled ? "default" : "outline"}
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleEnabled(pipe);
                             }}
+                            className={`${pipe.enabled ? 'bg-primary hover:bg-primary/90' : 'hover:bg-muted'}`}
                           >
-                            <Power className="h-3.5 w-3.5 " />
+                            <Power className="h-3.5 w-3.5" />
                           </Button>
                         ) : (
                           <Button
