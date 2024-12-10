@@ -75,6 +75,8 @@ fn load_test_image() -> image::DynamicImage {
 // Apple Vision OCR benchmark (macOS only)
 #[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr(c: &mut Criterion) {
+    use cidre::ns;
+
     let image = load_test_image();
     let mut group = c.benchmark_group("Apple Vision OCR");
     group.sample_size(10);
@@ -82,8 +84,11 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("Performance", ""), |b| {
         b.iter(|| {
-            let result = perform_ocr_apple(black_box(&image), vec![]);
-            assert!(!result.is_empty(), "OCR failed");
+            let result = perform_ocr_apple(
+                black_box(&image),
+                &ns::ArrayMut::<ns::String>::with_capacity(0),
+            );
+            assert!(!result.0.is_empty(), "OCR failed");
         })
     });
 
@@ -92,6 +97,8 @@ fn bench_apple_vision_ocr(c: &mut Criterion) {
 
 #[cfg(target_os = "macos")]
 fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
+    use cidre::ns;
+
     let image = load_test_image();
     let mut group = c.benchmark_group("Apple Vision OCR with Accuracy");
     group.sample_size(10);
@@ -104,10 +111,13 @@ fn bench_apple_vision_ocr_with_accuracy(c: &mut Criterion) {
 
             for _ in 0..iters {
                 let start = std::time::Instant::now();
-                let result = perform_ocr_apple(black_box(&image), vec![]);
+                let result = perform_ocr_apple(
+                    black_box(&image),
+                    &ns::ArrayMut::<ns::String>::with_capacity(0),
+                );
                 total_duration += start.elapsed();
 
-                let accuracy = calculate_accuracy(&result, EXPECTED_KEYWORDS);
+                let accuracy = calculate_accuracy(&result.0.as_str(), EXPECTED_KEYWORDS);
                 total_accuracy += accuracy;
             }
 
