@@ -76,6 +76,43 @@ impl DatabaseManager {
             .execute(&pool)
             .await?;
 
+        // Create FTS tables and triggers
+        sqlx::query(
+            r#"
+            -- FTS table for OCR
+            CREATE VIRTUAL TABLE IF NOT EXISTS ocr_text_fts USING fts5(frame_id, ocr_text);
+            CREATE TRIGGER IF NOT EXISTS ocr_text_insert AFTER INSERT ON ocr_text
+            BEGIN
+                INSERT INTO ocr_text_fts (frame_id, ocr_text) VALUES (NEW.frame_id, NEW.text);
+            END;
+            CREATE TRIGGER IF NOT EXISTS ocr_text_update AFTER UPDATE ON ocr_text
+            BEGIN
+                UPDATE ocr_text_fts SET ocr_text = NEW.text WHERE frame_id = OLD.frame_id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS ocr_text_delete AFTER DELETE ON ocr_text
+            BEGIN
+                DELETE FROM ocr_text_fts WHERE frame_id = OLD.frame_id;
+            END;
+
+            -- FTS table for audio transcriptions
+            CREATE VIRTUAL TABLE IF NOT EXISTS audio_transcriptions_fts USING fts5(audio_chunk_id, transcription);
+            CREATE TRIGGER IF NOT EXISTS audio_transcription_insert AFTER INSERT ON audio_transcriptions
+            BEGIN
+                INSERT INTO audio_transcriptions_fts (audio_chunk_id, transcription) VALUES (NEW.audio_chunk_id, NEW.transcription);
+            END;
+            CREATE TRIGGER IF NOT EXISTS audio_transcription_update AFTER UPDATE ON audio_transcriptions
+            BEGIN
+                UPDATE audio_transcriptions_fts SET transcription = NEW.transcription WHERE audio_chunk_id = OLD.audio_chunk_id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS audio_transcription_delete AFTER DELETE ON audio_transcriptions
+            BEGIN
+                DELETE FROM audio_transcriptions_fts WHERE audio_chunk_id = OLD.audio_chunk_id;
+            END;
+            "#
+        )
+        .execute(&pool)
+        .await?;
+        
         let db_manager = DatabaseManager { pool };
 
         info!("running migrations");
