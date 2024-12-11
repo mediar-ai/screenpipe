@@ -15,7 +15,7 @@ export function ConversationBox(props: {
             initial={{ opacity: props.init ? 1 : 0 }}
             animate={{ opacity: 1 }}
             transition={{ type: "spring", duration: 500}}
-            className="w-[400px] flex flex-col space-y-1 min-h-[50px] p-5 border rounded-[20px]"
+            className="w-[400px] bg-white flex flex-col space-y-1 min-h-[50px] p-5 border rounded-[20px]"
         >
           <h1 className="text-[1.2vw] font-bold">
             screenpipe
