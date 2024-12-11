@@ -273,10 +273,10 @@ mod pipes {
         tokio::fs::create_dir_all(&temp_dir).await?;
 
         // Download to temp directory first
-        if let Ok(parsed_url) = Url::parse(source) {
+        let download_result = if let Ok(parsed_url) = Url::parse(source) {
             debug!("Source is a URL: {}", parsed_url);
             if parsed_url.host_str() == Some("github.com") {
-                download_github_folder(&parsed_url, &temp_dir).await?;
+                download_github_folder(&parsed_url, &temp_dir).await
             } else {
                 anyhow::bail!("Unsupported URL format");
             }
@@ -286,7 +286,13 @@ mod pipes {
             if !source_path.exists() || !source_path.is_dir() {
                 anyhow::bail!("Invalid local source path");
             }
-            copy_dir_all(source_path, &temp_dir).await?;
+            copy_dir_all(source_path, &temp_dir).await
+        };
+
+        // remove temp dir if download failed
+        if let Err(e) = download_result {
+            tokio::fs::remove_dir_all(&temp_dir).await?;
+            error!("Failed to download pipe: {}", e);
         }
 
         // If download successful, move temp dir to final location
@@ -356,22 +362,21 @@ mod pipes {
             let package_json = tokio::fs::read_to_string(&package_json_path).await?;
             let package_data: Value = serde_json::from_str(&package_json)?;
 
+            let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+
+            // Make bun install mandatory for all package.json pipes
+            let mut install_child = Command::new(&bun_path)
+                .arg("i")
+                .current_dir(&dest_dir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+
+            // Stream logs for npm install
+            stream_logs("bun install", &mut install_child).await?;
+
             if package_data["dependencies"].get("next").is_some() {
                 info!("Detected Next.js project, setting up for production");
-
-                let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
-
-                // Run bun install
-                let mut install_child = Command::new(&bun_path)
-                    .arg("i")
-                    .current_dir(&dest_dir)
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()?;
-
-                // Stream logs for npm install
-                stream_logs("bun install", &mut install_child).await?;
-
                 // Update pipe.json to indicate it's a Next.js project
                 let mut pipe_config = if let Some(existing_json) = &existing_config {
                     existing_json.clone()
