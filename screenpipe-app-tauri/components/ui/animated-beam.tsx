@@ -23,7 +23,41 @@ export interface AnimatedBeamProps {
   startYOffset?: number;
   endXOffset?: number;
   endYOffset?: number;
+  drawBeforeBeaming?: boolean
 }
+
+
+const draw = {
+  hidden: { 
+    strokeWidth: '2px',
+    pathLength: 0, 
+    opacity: 0,
+    transition: {
+      pathLength: {
+        duration: 2
+      },
+      opacity: {
+        duration: 2.5
+      }
+    }
+  },
+  visible: {
+      pathLength: 1,
+      strokeWidth: '2px',
+      opacity: 1,
+      transition: {
+        pathLength: { 
+          // delay, 
+          type: "spring", 
+          duration: 4, 
+          bounce: 0 
+        },
+        opacity: { 
+          // delay, 
+          duration: 4 }
+      }
+  }
+};
 
 export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   className,
@@ -43,6 +77,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   startYOffset = 0,
   endXOffset = 0,
   endYOffset = 0,
+  drawBeforeBeaming
 }) => {
   const id = useId();
   const [pathD, setPathD] = useState("");
@@ -123,7 +158,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
   ]);
 
   return (
-    <svg
+    <motion.svg
       fill="none"
       width={svgDimensions.width}
       height={svgDimensions.height}
@@ -133,20 +168,25 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
         className,
       )}
       viewBox={`0 0 ${svgDimensions.width} ${svgDimensions.height}`}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
     >
-      <path
+      <motion.path
         d={pathD}
         stroke={pathColor}
         strokeWidth={pathWidth}
         strokeOpacity={pathOpacity}
         strokeLinecap="round"
+        variants={draw}
       />
-      <path
+      <motion.path
         d={pathD}
         strokeWidth={pathWidth}
         stroke={`url(#${id})`}
         strokeOpacity="1"
         strokeLinecap="round"
+        variants={draw}
       />
       <defs>
         <motion.linearGradient
@@ -183,6 +223,6 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
           ></stop>
         </motion.linearGradient>
       </defs>
-    </svg>
+    </motion.svg>
   );
 };
