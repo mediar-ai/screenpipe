@@ -36,6 +36,7 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 interface UnnamedSpeaker {
   id: number;
@@ -81,6 +82,8 @@ export default function IdentifySpeakers({
     useState(false);
   const [showSpeakerNames, setShowSpeakerNames] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const serverUrl = useServerUrl();
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -172,7 +175,7 @@ export default function IdentifySpeakers({
 
     try {
       const response = await fetch(
-        `http://localhost:3030/speakers/search?name=${searchTerm}`
+        `${serverUrl}/speakers/search?name=${searchTerm}`
       );
       if (!response.ok) {
         throw new Error("failed to fetch speakers");
@@ -193,7 +196,7 @@ export default function IdentifySpeakers({
     console.log("fetching similar speakers for", speakerId);
     try {
       const response = await fetch(
-        `http://localhost:3030/speakers/similar?speaker_id=${speakerId}&limit=5`
+        `${serverUrl}/speakers/similar?speaker_id=${speakerId}&limit=5`
       );
       if (!response.ok) {
         throw new Error("failed to fetch similar speakers");
@@ -247,7 +250,7 @@ export default function IdentifySpeakers({
       // Always fetch from the last 7x24 hours
 
       const response = await fetch(
-        `http://localhost:3030/speakers/unnamed?limit=1&offset=0${
+        `${serverUrl}/speakers/unnamed?limit=1&offset=0${
           segmentSpeakerIds.length > 0
             ? `&speaker_ids=${segmentSpeakerIds.join(",")}`
             : ""
@@ -326,7 +329,7 @@ export default function IdentifySpeakers({
   const handleUpdateSpeakerName = async (newName: string) => {
     // use the endpoint /speakers/update to update the name
     try {
-      await fetch(`http://localhost:3030/speakers/update`, {
+      await fetch(`${serverUrl}/speakers/update`, {
         method: "POST",
         body: JSON.stringify({
           id: unnamedSpeakers[currentSpeakerIndex].id,
@@ -349,7 +352,7 @@ export default function IdentifySpeakers({
 
   const handleRemoveSpeaker = async () => {
     try {
-      await fetch(`http://localhost:3030/speakers/delete`, {
+      await fetch(`${serverUrl}/speakers/delete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -374,7 +377,7 @@ export default function IdentifySpeakers({
     if (selectedExistingSpeaker) {
       try {
         // Add API call to merge speakers
-        await fetch(`http://localhost:3030/speakers/merge`, {
+        await fetch(`${serverUrl}/speakers/merge`, {
           method: "POST",
           body: JSON.stringify({
             speaker_to_merge_id: unnamedSpeakers[currentSpeakerIndex].id,
@@ -421,7 +424,7 @@ export default function IdentifySpeakers({
   const handleMarkSpeakerAsHallucination = async () => {
     // use the endpoint /speakers/hallucination to mark the speaker as hallucination
     try {
-      await fetch(`http://localhost:3030/speakers/hallucination`, {
+      await fetch(`${serverUrl}/speakers/hallucination`, {
         method: "POST",
         body: JSON.stringify({
           speaker_id: unnamedSpeakers[currentSpeakerIndex].id,

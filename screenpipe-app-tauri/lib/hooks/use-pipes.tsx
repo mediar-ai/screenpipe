@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useServerUrl } from "./server-url";
 
 export type Pipe = {
   enabled: boolean;
@@ -142,6 +143,7 @@ export const usePipes = (initialRepoUrls: string[]) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [repoUrls, setRepoUrls] = useState<string[]>(initialRepoUrls);
+  const serverUrl = useServerUrl();
 
   const fetchPipeData = async (repoUrl: string): Promise<Pipe | null> => {
     console.log("fetchPipeData", repoUrl);
@@ -287,8 +289,8 @@ export const usePipes = (initialRepoUrls: string[]) => {
       }
 
       // get pipes from local api /pipes/list and add them to the list
-      const localPipes = await fetch(`http://localhost:3030/pipes/list`).then(
-        (res) => res.json()
+      const localPipes = await fetch(`${serverUrl}/pipes/list`).then((res) =>
+        res.json()
       );
       // console.log("localPipes", localPipes);
       setPipes([

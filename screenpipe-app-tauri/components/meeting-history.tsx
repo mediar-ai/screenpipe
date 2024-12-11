@@ -52,6 +52,7 @@ import { Checkbox } from "./ui/checkbox";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { DropdownMenuItem } from "./ui/dropdown-menu";
 import IdentifySpeakers from "./identify-speakers";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -164,6 +165,7 @@ export default function MeetingHistory({
   const [openIdentifyDialogs, setOpenIdentifyDialogs] = useState<{
     [key: number]: boolean;
   }>({});
+  const serverUrl = useServerUrl();
 
   // Add this function to handle individual dialog states
   const handleIdentifyDialog = (meetingGroup: number, isOpen: boolean) => {
@@ -221,7 +223,7 @@ export default function MeetingHistory({
       console.log("searching from:", startTime);
 
       const response = await fetch(
-        `http://localhost:3030/search?content_type=audio&start_time=${startTime}&limit=1000`
+        `${serverUrl}/search?content_type=audio&start_time=${startTime}&limit=1000`
       );
       if (!response.ok) {
         throw new Error("failed to fetch meeting history");

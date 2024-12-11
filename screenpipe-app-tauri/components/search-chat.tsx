@@ -89,6 +89,7 @@ import {
 } from "./ui/command";
 import { Speaker } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 interface SearchChatProps {
   currentSearchId: string | null;
@@ -294,6 +295,8 @@ export function SearchChat({
 
   const [speakerSearchQuery, setSpeakerSearchQuery] = useState("");
 
+  const serverUrl = useServerUrl();
+
   useEffect(() => {
     setCurrentPlatform(platform());
   }, []);
@@ -323,7 +326,7 @@ export function SearchChat({
   const loadSpeakers = async () => {
     try {
       const getSpeakers = await fetch(
-        `http://localhost:3030/speakers/search?name=${speakerSearchQuery}`
+        `${serverUrl}/speakers/search?name=${speakerSearchQuery}`
       );
       const speakers = await getSpeakers.json();
       setSpeakers(speakers);
@@ -418,7 +421,6 @@ export function SearchChat({
   };
 
   const generateCurlCommand = () => {
-    const baseUrl = "http://localhost:3030";
     const params = {
       content_type: contentType,
       limit: limit.toString(),
@@ -438,7 +440,7 @@ export function SearchChat({
       .map(([key, value]) => `${key}=${encodeURIComponent(value!)}`)
       .join("&");
 
-    return `curl "${baseUrl}/search?${queryParams}" | jq`;
+    return `curl "${serverUrl}/search?${queryParams}" | jq`;
   };
 
   useEffect(() => {

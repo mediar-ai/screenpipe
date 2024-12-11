@@ -351,12 +351,17 @@ async fn main() {
                     new_id
                 });
 
+            let port = store
+                .get("port")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3030);
+
             if is_analytics_enabled {
                 match start_analytics(
                     unique_id,
                     posthog_api_key,
                     interval_hours,
-                    "http://localhost:3030".to_string(),
+                    format!("http://localhost:{}", port),
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);

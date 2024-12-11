@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { encode } from "./utils";
 import { Speaker } from "./types";
+import { useServerUrl } from "./hooks/server-url";
+import { join, localDataDir } from "@tauri-apps/api/path";
+import { createStore } from "@tauri-apps/plugin-store";
 
 // Define types based on the server's schema
 export type OCRContent = {
@@ -163,6 +166,7 @@ export async function queryScreenpipe(
 ): Promise<ScreenpipeResponse | null> {
   try {
     console.log("params", params);
+    const serverUrl = await getScreenpipeServerUrl();
 
     const queryParams = new URLSearchParams({
       content_type: params.content_type,
@@ -181,7 +185,7 @@ export async function queryScreenpipe(
       queryParams.append("window_name", params.window_name);
     if (params.speaker_ids)
       queryParams.append("speaker_ids", params.speaker_ids);
-    const url = `http://localhost:3030/search?${queryParams.toString()}`;
+    const url = `${serverUrl}/search?${queryParams.toString()}`;
     console.log("calling screenpipe", url);
 
     const response = await fetch(url);
@@ -197,4 +201,12 @@ export async function queryScreenpipe(
     console.error("error querying screenpipe:", error);
     return null;
   }
+}
+
+async function getScreenpipeServerUrl() {
+  const dataDir = await localDataDir();
+  const storePath = await join(dataDir, "screenpipe", "store.bin");
+  const store = await createStore(storePath);
+  const port = (await store.get("port")) || 3030;
+  return `http://localhost:${port}`;
 }

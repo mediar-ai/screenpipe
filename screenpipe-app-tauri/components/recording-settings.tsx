@@ -62,6 +62,7 @@ import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -112,6 +113,7 @@ export function RecordingSettings({
   const isDisabled = health?.status_code === 500;
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
+  const serverUrl = useServerUrl();
 
   useEffect(() => {
     const checkPlatform = async () => {
@@ -125,12 +127,9 @@ export function RecordingSettings({
     const loadDevices = async () => {
       try {
         // Fetch monitors
-        const monitorsResponse = await fetch(
-          "http://localhost:3030/vision/list",
-          {
-            method: "POST",
-          }
-        );
+        const monitorsResponse = await fetch(`${serverUrl}/vision/list`, {
+          method: "POST",
+        });
         if (!monitorsResponse.ok) {
           throw new Error("Failed to fetch monitors");
         }
@@ -139,9 +138,7 @@ export function RecordingSettings({
         setAvailableMonitors(monitors);
 
         // Fetch audio devices
-        const audioDevicesResponse = await fetch(
-          "http://localhost:3030/audio/list"
-        );
+        const audioDevicesResponse = await fetch(`${serverUrl}/audio/list`);
         if (!audioDevicesResponse.ok) {
           throw new Error("Failed to fetch audio devices");
         }
@@ -1422,7 +1419,7 @@ export function RecordingSettings({
                 </Label>
               </div>
             )}
-            {/* <div className="flex flex-col space-y-2">
+            <div className="flex flex-col space-y-2">
               <Label htmlFor="port" className="flex items-center space-x-2">
                 <span>server port</span>
                 <TooltipProvider>
@@ -1461,7 +1458,7 @@ export function RecordingSettings({
                   className="w-32"
                 />
               </div>
-            </div> */}
+            </div>
           </CardContent>
         </Card>
       </div>

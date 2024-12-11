@@ -10,6 +10,7 @@ import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
 import { TimelineSelection } from "@/components/timeline/timeline-selection";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -66,6 +67,7 @@ export default function Timeline() {
     x: 0,
     y: 0,
   });
+  const serverUrl = useServerUrl();
 
   useEffect(() => {
     setPosition({
@@ -84,7 +86,7 @@ export default function Timeline() {
     const startTime = new Date();
     startTime.setHours(0, 1, 0, 0);
 
-    const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
+    const url = `${serverUrl}/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
 
     setLoadedTimeRange({
       start: startTime,

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 
 import { invoke } from "@tauri-apps/api/core";
 import { debounce } from "lodash";
+import { useServerUrl } from "./server-url";
 
 interface HealthCheckResponse {
   status: string;
@@ -47,7 +48,7 @@ export function useHealthCheck() {
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const healthRef = useRef(health);
-
+  const serverUrl = useServerUrl();
   const fetchHealth = useCallback(async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -57,7 +58,7 @@ export function useHealthCheck() {
 
     try {
       setIsLoading(true);
-      const response = await fetch("http://localhost:3030/health", {
+      const response = await fetch(`${serverUrl}/health`, {
         cache: "no-store",
         signal: abortControllerRef.current.signal,
         headers: {
