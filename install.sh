@@ -71,6 +71,49 @@ URL="https://github.com/mediar-ai/screenpipe/releases/download/v${VERSION}/${FIL
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR" || exit 1
 
+# Quietly install dependencies on Linux
+if [ "$os" = "unknown-linux-gnu" ]; then
+    # Check for required libraries
+    NEED_ALSA=0
+    NEED_FFMPEG=0
+
+    if ! ldconfig -p | grep -q "libasound.so.2" >/dev/null 2>&1; then
+        NEED_ALSA=1
+    fi
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+        NEED_FFMPEG=1
+    fi
+
+    # Install missing dependencies based on package manager
+    if [ $NEED_ALSA -eq 1 ] || [ $NEED_FFMPEG -eq 1 ]; then
+        if command -v apt-get >/dev/null 2>&1; then
+            # Ubuntu/Debian
+            PKGS=""
+            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS libasound2-dev" && echo "installing libasound2-dev..."
+            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
+            sudo apt-get install -qq -y $PKGS >/dev/null 2>&1
+        elif command -v dnf >/dev/null 2>&1; then
+            # Fedora/RHEL
+            PKGS=""
+            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
+            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
+            sudo dnf install -q -y $PKGS >/dev/null 2>&1
+        elif command -v pacman >/dev/null 2>&1; then
+            # Arch Linux
+            PKGS=""
+            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
+            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
+            sudo pacman -S --noconfirm --quiet $PKGS >/dev/null 2>&1
+        elif command -v zypper >/dev/null 2>&1; then
+            # OpenSUSE
+            PKGS=""
+            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
+            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
+            sudo zypper --quiet --non-interactive install $PKGS >/dev/null 2>&1
+        fi
+    fi
+fi
+
 echo "Downloading screenpipe v${VERSION} for ${arch}-${os}..."
 
 # Add debug output for download
@@ -81,7 +124,7 @@ if ! curl -L "$URL" -o "$FILENAME"; then
 fi
 
 # Verify download
-if ! file "$FILENAME" | grep -q "gzip compressed data"; then
+if ! gzip -t "$FILENAME" 2>/dev/null; then
     echo "Downloaded file is not in valid gzip format"
     exit 1
 fi
@@ -105,12 +148,17 @@ if ! sudo mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
 fi
 
 # Copy files maintaining the expected structure
-if ! sudo cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
-    echo "Failed to copy library"
+if [ "$(uname)" = "Darwin" ]; then
+    # macOS specific files
+    if ! sudo cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
+        echo "Failed to copy library"
+        exit 1
+    fi
 fi
 
 if ! sudo cp bin/screenpipe "$INSTALL_DIR/"; then
     echo "Failed to copy binary"
+    exit 1
 fi
 
 # Fix binary linking on macOS
