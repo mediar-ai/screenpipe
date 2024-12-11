@@ -274,9 +274,9 @@ pub struct AuthStatus {
 // Command to open the auth window
 #[tauri::command]
 pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    let auth_url = "http://localhost:3001/login";
-    #[cfg(not(debug_assertions))]
+    // #[cfg(debug_assertions)]
+    // let auth_url = "http://localhost:3001/login";
+    // #[cfg(not(debug_assertions))]
     let auth_url = "https://screenpi.pe/login";
 
     // If window exists, try to close it and wait a bit

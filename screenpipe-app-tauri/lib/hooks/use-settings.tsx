@@ -62,6 +62,7 @@ export type Settings = {
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
   disabledShortcuts: Shortcut[];
+  clerkUserId: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -111,6 +112,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
   disabledShortcuts: [],
+  clerkUserId: "",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
