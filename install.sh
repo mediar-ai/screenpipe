@@ -231,6 +231,29 @@ if ! ln -sf "$INSTALL_DIR/screenpipe" "$HOME/.local/bin/screenpipe"; then
     exit 1
 fi
 
+echo "Adding ~/.local/bin to PATH..."
+
+# Detect shell and update appropriate config file
+SHELL_CONFIG=""
+case "$SHELL" in
+    */zsh)
+        SHELL_CONFIG="$HOME/.zshrc"
+        ;;
+    */bash)
+        SHELL_CONFIG="$HOME/.bashrc"
+        ;;
+esac
+
+echo "SHELL_CONFIG: $SHELL_CONFIG"
+
+if [ -n "$SHELL_CONFIG" ]; then
+    echo "" >>"$SHELL_CONFIG"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >>"$SHELL_CONFIG"
+    echo "Please restart your terminal or run: source $SHELL_CONFIG"
+else
+    echo "Please add ~/.local/bin to your PATH manually"
+fi
+
 # Cleanup
 cd || exit 1
 rm -rf "$TMP_DIR"
