@@ -1,21 +1,28 @@
-#!/bin/bash
+#!/bin/sh
 
 # Check if running on macOS and needs sudo
-if [[ "$(uname)" == "Darwin" && "$EUID" -ne 0 ]]; then
+if [ "$(uname)" = "Darwin" ] && [ "$EUID" -ne 0 ]; then
     echo "On macOS, please run with sudo to handle security measures"
     exit 1
 fi
 
 # Function to detect OS and architecture
 get_os_arch() {
-    local os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    local arch=$(uname -m)
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
 
     case "$arch" in
     x86_64) arch="x86_64" ;;
-    aarch64 | arm64) arch="aarch64" ;;
+    aarch64 | arm64)
+        # Only allow arm64 on macOS
+        if [ "$os" != "darwin" ]; then
+            echo >&2 "error: arm64/aarch64 is only supported on macOS"
+            exit 1
+        fi
+        arch="aarch64"
+        ;;
     *)
-        echo "Unsupported architecture: $arch"
+        echo >&2 "error: unsupported architecture: $arch"
         exit 1
         ;;
     esac
@@ -25,10 +32,15 @@ get_os_arch() {
         echo "apple-darwin" "$arch"
         ;;
     linux)
+        # Block Linux arm64
+        if [ "$arch" = "aarch64" ]; then
+            echo >&2 "error: Linux arm64/aarch64 is not supported yet"
+            exit 1
+        fi
         echo "unknown-linux-gnu" "$arch"
         ;;
     *)
-        echo "Unsupported OS: $os"
+        echo >&2 "error: unsupported operating system: $os"
         exit 1
         ;;
     esac
@@ -45,19 +57,40 @@ fi
 
 echo "Latest version: $VERSION"
 
-read os arch <<<$(get_os_arch)
+if ! OS_ARCH=$(get_os_arch); then
+    # get_os_arch already printed the error message
+    exit 1
+fi
+
+os=$(echo "$OS_ARCH" | cut -d' ' -f1)
+arch=$(echo "$OS_ARCH" | cut -d' ' -f2)
 
 FILENAME="screenpipe-${VERSION}-${arch}-${os}.tar.gz"
 URL="https://github.com/mediar-ai/screenpipe/releases/download/v${VERSION}/${FILENAME}"
 
 TMP_DIR=$(mktemp -d)
-cd "$TMP_DIR"
+cd "$TMP_DIR" || exit 1
 
 echo "Downloading screenpipe v${VERSION} for ${arch}-${os}..."
-curl -L "$URL" -o "$FILENAME"
+
+# Add debug output for download
+echo "Downloading from URL: $URL"
+if ! curl -L "$URL" -o "$FILENAME"; then
+    echo "Download failed"
+    exit 1
+fi
+
+# Verify download
+if ! file "$FILENAME" | grep -q "gzip compressed data"; then
+    echo "Downloaded file is not in valid gzip format"
+    exit 1
+fi
 
 echo "Extracting..."
-tar xzf "$FILENAME"
+if ! tar xzf "$FILENAME"; then
+    echo "Extraction failed"
+    exit 1
+fi
 
 echo "Installing..."
 INSTALL_DIR="/usr/local/screenpipe"
@@ -65,32 +98,40 @@ INSTALL_DIR="/usr/local/screenpipe"
 # Remove existing installation
 rm -rf "$INSTALL_DIR"
 
-# Create the exact directory structure needed
-mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"
+# Create install directory with sudo
+if ! sudo mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
+    echo "Failed to create install directory"
+    exit 1
+fi
 
 # Copy files maintaining the expected structure
-cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"
-cp bin/screenpipe "$INSTALL_DIR/"
+if ! sudo cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
+    echo "Failed to copy library"
+fi
+
+if ! sudo cp bin/screenpipe "$INSTALL_DIR/"; then
+    echo "Failed to copy binary"
+fi
 
 # Fix binary linking on macOS
-if [[ "$(uname)" == "Darwin" ]]; then
+if [ "$(uname)" = "Darwin" ]; then
     echo "Fixing binary linking..."
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR" || exit 1
 
     echo "Current library paths:"
     otool -L "./screenpipe"
 
     # Remove any existing rpaths
-    install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
+    sudo install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
 
     # Add new rpath
-    install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
+    sudo install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
 
     # Change the library path in the binary
-    install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
+    sudo install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
 
     # Also try changing the library id
-    install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
+    sudo install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
 
     echo "Updated library paths:"
     otool -L "./screenpipe"
@@ -98,20 +139,26 @@ if [[ "$(uname)" == "Darwin" ]]; then
 fi
 
 # Remove quarantine attributes on macOS
-if [[ "$(uname)" == "Darwin" ]]; then
+if [ "$(uname)" = "Darwin" ]; then
     echo "Removing quarantine attributes..."
-    xattr -r -d com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
+    sudo xattr -r -d com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
 fi
 
-# Set proper permissions
-chown -R root:wheel "$INSTALL_DIR"
-chmod -R 755 "$INSTALL_DIR"
+# Set ownership based on OS
+if [ "$(uname)" = "Darwin" ]; then
+    sudo chown -R root:wheel "$INSTALL_DIR"
+else
+    sudo chown -R root:root "$INSTALL_DIR"
+fi
 
-# Create symlink in /usr/local/bin
-ln -sf "$INSTALL_DIR/screenpipe" "/usr/local/bin/screenpipe"
+# Create symlink
+if ! sudo ln -sf "$INSTALL_DIR/screenpipe" "/usr/local/bin/screenpipe"; then
+    echo "Failed to create symlink"
+    exit 1
+fi
 
 # Cleanup
-cd
+cd || exit 1
 rm -rf "$TMP_DIR"
 
 echo "Installation complete!"
