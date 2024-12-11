@@ -43,8 +43,8 @@ const Onboarding: React.FC = () => {
 
   return (
     <Dialog open={true} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
-        <div className="flex flex-col w-full h-full overflow-hidden">
+      <DialogContent className="max-w-5xl min-h-[740px] max-h-[100vh]">
+        <div className="flex flex-col w-full h-full">
           <T/>
         </div>
       </DialogContent>

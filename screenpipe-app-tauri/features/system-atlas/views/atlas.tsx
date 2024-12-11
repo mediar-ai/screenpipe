@@ -30,15 +30,15 @@ export default function SystemAtlas() {
   return (
     <main
         id="main-container"
-        className="relative w-[100vw] h-[100vh] flex flex-col justify-center items-center "
+        className="relative w-[100%] h-[100%] flex flex-col justify-center items-center "
     >
         <ConversationBox
             init 
-            className="absolute top-[30px] left-[30px] z-[100]" 
+            className="absolute top-[0px] left-[0px] z-[1000]" 
         />
         <section
             id="atlas"
-            className="relative flex h-[500px] w-[95%] flex-row items-stretch p-5 justify-between bg-background"
+            className="relative bottom-[50px] flex h-[500px] z-[999] w-[100%] flex-row items-stretch justify-between bg-background"
             ref={containerRef}
         >
             <PermissionStatus
@@ -62,8 +62,9 @@ export default function SystemAtlas() {
                     appStoreRef={appStoreRef}
                     searchRef={searchRef}
                 />
+                
             </div>
-            <div className="h-[300px] p-4 self-center relative flex flex-col items-center justify-between">
+            <div className="h-[300px] py-4 self-center relative flex flex-col items-center justify-between">
                 <SystemApps
                     className="z-[10] relative top-[-40px]"
                     collectionRef={collectionRef}
