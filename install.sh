@@ -31,7 +31,7 @@ esac
 # Fetch the latest release dynamically
 echo "Fetching the latest release information from GitHub..."
 RELEASE_INFO=$(curl -fsSL "$BASE_URL")
-LATEST_RELEASE=$(echo "$RELEASE_INFO" | jq -r 'map(select(.prerelease == false)) | first | .tag_name')
+LATEST_RELEASE=$(echo "$RELEASE_INFO" | grep -oP '"tag_name": "\K[^\"]+' | head -n 1)
 
 if [[ -z "$LATEST_RELEASE" ]]; then
   echo "Error: No stable releases found."
@@ -40,9 +40,7 @@ fi
 
 # Find the correct asset for the current OS and ARCH
 echo "Searching for the correct asset for $OS ($ARCH)..."
-DOWNLOAD_URL=$(echo "$RELEASE_INFO" | jq -r --arg PATTERN "$PATTERN" '
-  map(select(.prerelease == false)) | first | .assets[] | select(.name | contains($PATTERN)) | .browser_download_url
-')
+DOWNLOAD_URL=$(echo "$RELEASE_INFO" | grep -oP '"browser_download_url": "\K[^\"]+' | grep "$PATTERN" | head -n 1)
 
 if [[ -z "$DOWNLOAD_URL" ]]; then
   echo "Error: No matching asset found for $OS ($ARCH) in release $LATEST_RELEASE."
