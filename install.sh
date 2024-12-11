@@ -1,11 +1,5 @@
 #!/bin/sh
 
-# Check if running on macOS and needs sudo
-if [ "$(uname)" = "Darwin" ] && [ "$EUID" -ne 0 ]; then
-    echo "On macOS, please run with sudo to handle security measures"
-    exit 1
-fi
-
 # Function to detect OS and architecture
 get_os_arch() {
     os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -136,27 +130,26 @@ if ! tar xzf "$FILENAME"; then
 fi
 
 echo "Installing..."
-INSTALL_DIR="/usr/local/screenpipe"
+INSTALL_DIR="$HOME/.local/screenpipe"
 
 # Remove existing installation
 rm -rf "$INSTALL_DIR"
 
-# Create install directory with sudo
-if ! sudo mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
+# Create install directory
+if ! mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
     echo "Failed to create install directory"
     exit 1
 fi
 
-# Copy files maintaining the expected structure
+# Copy files
 if [ "$(uname)" = "Darwin" ]; then
-    # macOS specific files
-    if ! sudo cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
+    if ! cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
         echo "Failed to copy library"
         exit 1
     fi
 fi
 
-if ! sudo cp bin/screenpipe "$INSTALL_DIR/"; then
+if ! cp bin/screenpipe "$INSTALL_DIR/"; then
     echo "Failed to copy binary"
     exit 1
 fi
@@ -170,16 +163,16 @@ if [ "$(uname)" = "Darwin" ]; then
     otool -L "./screenpipe"
 
     # Remove any existing rpaths
-    sudo install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
+    install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
 
     # Add new rpath
-    sudo install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
+    install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
 
     # Change the library path in the binary
-    sudo install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
+    install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
 
     # Also try changing the library id
-    sudo install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
+    install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
 
     echo "Updated library paths:"
     otool -L "./screenpipe"
@@ -189,18 +182,12 @@ fi
 # Remove quarantine attributes on macOS
 if [ "$(uname)" = "Darwin" ]; then
     echo "Removing quarantine attributes..."
-    sudo xattr -r -d com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
+    xattr -r -d com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
 fi
 
-# Set ownership based on OS
-if [ "$(uname)" = "Darwin" ]; then
-    sudo chown -R root:wheel "$INSTALL_DIR"
-else
-    sudo chown -R root:root "$INSTALL_DIR"
-fi
-
-# Create symlink
-if ! sudo ln -sf "$INSTALL_DIR/screenpipe" "/usr/local/bin/screenpipe"; then
+# Create symlink in user's bin directory
+mkdir -p "$HOME/.local/bin"
+if ! ln -sf "$INSTALL_DIR/screenpipe" "$HOME/.local/bin/screenpipe"; then
     echo "Failed to create symlink"
     exit 1
 fi
