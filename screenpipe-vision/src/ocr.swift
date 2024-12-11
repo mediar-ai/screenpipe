@@ -46,16 +46,6 @@ public func performOCR(imageData: UnsafePointer<UInt8>, length: Int, width: Int,
     // Preprocess the image
     let ciImage = CIImage(cgImage: cgImage)
     let context = CIContext(options: nil)
-
-    // Apply preprocessing filters (slightly reduced contrast compared to original)
-    // let processed =
-    //   ciImage
-    //   .applyingFilter(
-        // "CIColorControls", parameters: [kCIInputContrastKey: 1.2]
-    //   )
-    //   .applyingFilter(
-    //     "CIUnsharpMask", parameters: [kCIInputRadiusKey: 0.5, kCIInputIntensityKey: 0.7])
-    let processed = ciImage
   
     guard let preprocessedCGImage = context.createCGImage(ciImage, from: ciImage.extent) else {
       return strdup("Error: Failed to create preprocessed image")

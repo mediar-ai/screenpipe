@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { LaunchLinkedInChromeSession } from "@/components/launch_linkedin_chrome_session";
-import TemplateEditor from "@/components/settings_editor";
-import template from "@/lib/storage/templates.json";
-import { StartWorkflow } from "@/components/start_workflow";
-import StateViewer from "@/components/state_viewer";
+import { IntroRequester } from "@/components/intro-requester";
 import { ReloadButton } from "@/components/reload_button";
 import { HarvestClosestConnections } from "@/components/harvest";
 
@@ -13,24 +10,29 @@ export default function Home() {
   const [loginStatus, setLoginStatus] = useState<'checking' | 'logged_in' | 'logged_out' | null>(null);
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen w-full p-4 pb-20 gap-16 sm:p-8">
-      <main className="w-full max-w-[95vw] flex flex-col gap-8 row-start-2 items-center sm:items-start justify-center">
-        <div className="w-full flex justify-end">
-        </div>
+    <div className="min-h-screen w-full p-4 pb-20 sm:p-8">
+      <div className="space-y-1.5 mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">linkedin ai assistant</h1>
+        <p className="text-sm text-muted-foreground">automate your linkedin interactions with ai</p>
+      </div>
+
+      <div className="flex flex-col gap-2 mb-8">
         <ReloadButton />
         <LaunchLinkedInChromeSession 
           loginStatus={loginStatus}
           setLoginStatus={setLoginStatus}
         />
-        {loginStatus === 'logged_in' && (
-          <>
+      </div>
+
+      {loginStatus === 'logged_in' && (
+        <div className="w-full space-y-6">
+          <h2 className="text-2xl font-semibold mb-6">workflows</h2>
+          <div className="space-y-6 text-lg">
             <HarvestClosestConnections />
-            {/* <TemplateEditor initialTemplate={template} />
-            <StartWorkflow />
-            <StateViewer /> */}
-          </>
-        )}
-      </main>
+            <IntroRequester />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

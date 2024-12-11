@@ -18,16 +18,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Return detailed status messages based on the harvesting result
-    const message = result.weeklyLimitReached 
-      ? `weekly linkedin invitation limit reached, retrying at ${new Date(result.nextHarvestTime!).toLocaleString()}`
-      : result.connectionsSent === 0
-        ? "no new connections found to harvest"
-        : `sent ${result.connectionsSent} connections.`;
+    let message = '';
+    if (result.weeklyLimitReached) {
+      message = `weekly limit reached, retrying at ${new Date(result.nextHarvestTime!).toLocaleString()}`;
+    } else if (result.dailyLimitReached) {
+      message = `daily limit of ${result.connectionsSent} connections reached, next harvest at ${new Date(result.nextHarvestTime!).toLocaleString()}`;
+    } else if (result.connectionsSent === 0) {
+      message = "no new connections found to harvest";
+    } else {
+      message = `sent ${result.connectionsSent} connections.`;
+    }
 
     return NextResponse.json(
       {
         message,
         weeklyLimitReached: result.weeklyLimitReached,
+        dailyLimitReached: result.dailyLimitReached,
         connectionsSent: result.connectionsSent,
         nextHarvestTime: result.nextHarvestTime,
       },
@@ -35,6 +41,9 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error('error starting harvesting:', error);
-    return NextResponse.json({ message: error.message.toLowerCase() }, { status: 500 });
+    return NextResponse.json(
+      { message: error.message.toLowerCase() },
+      { status: 500 }
+    );
   }
 }

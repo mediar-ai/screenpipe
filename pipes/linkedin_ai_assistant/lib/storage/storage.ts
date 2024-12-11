@@ -201,8 +201,9 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
 
 export interface Connection {
     profileUrl: string;
-    status: 'pending' | 'accepted' | 'declined';
+    status: 'pending' | 'accepted' | 'declined' | 'email_required' | 'cooldown';
     timestamp: string;
+    cooldownUntil?: string;
 }
 
 interface ConnectionsStore {
@@ -217,12 +218,19 @@ export async function loadConnections(): Promise<ConnectionsStore> {
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
         return JSON.parse(data);
-    } catch {
-        return {
-            connections: {},
-            connectionsSent: 0,
-            isHarvesting: false,
-        };
+    } catch (error: any) {
+        if (error.code === 'ENOENT') {
+            // File does not exist, safe to return default empty object
+            return {
+                connections: {},
+                connectionsSent: 0,
+                isHarvesting: false,
+            };
+        } else {
+            // Parsing error or other read error, do not overwrite existing data
+            console.error('Failed to read or parse connections.json:', error);
+            throw new Error('Could not load connections data.');
+        }
     }
 }
 
@@ -249,9 +257,16 @@ export async function saveNextHarvestTime(timestamp: string) {
 }
 
 export async function saveHarvestingState(isHarvesting: boolean) {
-    const connectionsStore = await loadConnections();
+    let connectionsStore: ConnectionsStore;
+    try {
+        connectionsStore = await loadConnections();
+    } catch (error) {
+        console.error('Failed to load connections for saving harvesting state:', error);
+        throw new Error('Cannot save harvesting state because connections data could not be loaded.');
+    }
+
     connectionsStore.isHarvesting = isHarvesting;
-    
+
     await fs.writeFile(
         path.join(STORAGE_DIR, 'connections.json'),
         JSON.stringify(connectionsStore, null, 2)

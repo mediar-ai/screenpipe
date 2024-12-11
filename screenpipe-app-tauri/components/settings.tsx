@@ -33,7 +33,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { Slider } from "@/components/ui/slider"; // Add this import
 import { Badge } from "@/components/ui/badge"; // Add this import
-import { parseKeyboardShortcut } from "@/lib/utils"; // Add this import
+import { cn, parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
   Eye,
@@ -48,9 +48,7 @@ import {
 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
-import { Command } from "@tauri-apps/plugin-shell";
 import { LogFileButton } from "./log-file-button";
-import { platform } from "@tauri-apps/plugin-os";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
@@ -66,19 +64,21 @@ import {
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { AuthButton } from "./auth";
-import { DropdownMenuItem } from "./ui/dropdown-menu";
 
 export function Settings({ className }: { className?: string }) {
-  const { settings, updateSettings, resetSetting, resetSettings } =
-    useSettings();
+  const {
+    settings,
+    updateSettings,
+    resetSetting,
+    resetSettings,
+    localSettings,
+    setLocalSettings,
+  } = useSettings();
   const { debouncedFetchHealth } = useHealthCheck();
-  const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
     "idle" | "running" | "error"
   >("idle");
-  const [currentPlatform, setCurrentPlatform] = useState("unknown");
 
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [nonModifierKey, setNonModifierKey] = useState<string>("");
@@ -154,10 +154,6 @@ export function Settings({ className }: { className?: string }) {
   const newShortcut = [...selectedModifiers, nonModifierKey].join("+");
   const isShortcutChanged = newShortcut !== currentShortcut;
 
-  useEffect(() => {
-    setCurrentPlatform(platform());
-  }, []);
-
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, openaiApiKey: newValue });
@@ -231,10 +227,6 @@ export function Settings({ className }: { className?: string }) {
     setLocalSettings({ ...localSettings, embeddedLLM: newValue });
     updateSettings({ embeddedLLM: newValue });
   };
-
-  React.useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
 
   const startOllamaSidecar = async () => {
     setOllamaStatus("running");
@@ -459,13 +451,6 @@ export function Settings({ className }: { className?: string }) {
     }
   };
 
-  const isCustomUrl = ![
-    "https://api.openai.com/v1",
-    "http://localhost:11434/v1",
-    "https://ai-proxy.i-f9f.workers.dev/v1",
-    "embedded",
-  ].includes(localSettings.aiUrl);
-
   // Add this function to check the embedded AI status
   const checkEmbeddedAIStatus = useCallback(async () => {
     if (localSettings.embeddedLLM.enabled) {
@@ -518,18 +503,6 @@ export function Settings({ className }: { className?: string }) {
     });
   };
 
-  useEffect(() => {
-    const handleSettingsUpdate = () => {
-      debouncedFetchHealth();
-    };
-
-    window.addEventListener("settings-updated", handleSettingsUpdate);
-
-    return () => {
-      window.removeEventListener("settings-updated", handleSettingsUpdate);
-    };
-  }, [debouncedFetchHealth]);
-
   const handleResetSettings = async () => {
     try {
       await resetSettings();
@@ -554,15 +527,18 @@ export function Settings({ className }: { className?: string }) {
       }}
     >
       <DialogTrigger asChild>
-        <DropdownMenuItem
-          className="cursor-pointer"
+        <div
+          className={cn(
+            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className
+          )}
           onSelect={(e) => e.preventDefault()}
         >
           <div className="flex items-center">
             <Settings2 className="mr-2 h-4 w-4" />
             <span>settings</span>
           </div>
-        </DropdownMenuItem>
+        </div>
       </DialogTrigger>
 
       <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
