@@ -40,21 +40,6 @@ get_os_arch() {
     esac
 }
 
-install_xcode_tools() {
-    # Only run if the tools are not installed yet
-    # To check that try to print the SDK path
-    xcode-select -p &> /dev/null
-    if [ $? -ne 0 ]; then
-        echo "Command Line Tools for Xcode not found. Installing from softwareupdate…"
-        # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
-        touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress;
-        PROD=$(softwareupdate -l | grep "\*.*Command Line" | tail -n 1 | sed 's/^[^C]* //')
-        softwareupdate -i "$PROD" --verbose;
-    else
-        echo "Command Line Tools for Xcode have been installed."
-    fi
-}
-
 echo "Fetching latest version from GitHub..."
 LATEST_RELEASE=$(curl -s https://api.github.com/repos/mediar-ai/screenpipe/releases/latest)
 VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": "v[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
@@ -80,7 +65,7 @@ URL="https://github.com/mediar-ai/screenpipe/releases/download/v${VERSION}/${FIL
 TMP_DIR=$(mktemp -d)
 cd "$TMP_DIR" || exit 1
 
-# Quietly install dependencies on Linux
+# Check dependencies on Linux
 if [ "$os" = "unknown-linux-gnu" ]; then
     # Check for required libraries
     NEED_ALSA=0
@@ -123,8 +108,43 @@ if [ "$os" = "unknown-linux-gnu" ]; then
     fi
 fi
 
+# Check macOS dependencies
 if [ "$(uname)" = "Darwin" ]; then
-    install_xcode_tools
+
+    # Check if Xcode tools are installed
+    xcode-select -p &
+    >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "Command Line Tools for Xcode not found. Installing from softwareupdate…"
+        # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
+        touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+        PROD=$(softwareupdate -l | grep "\*.*Command Line" | tail -n 1 | sed 's/^[^C]* //')
+        softwareupdate -i "$PROD" --verbose
+    else
+        echo "Command Line Tools for Xcode have been installed."
+    fi
+
+    # Check if ffmpeg is installed
+    if ! command -v ffmpeg >/dev/null 2>&1; then
+        echo "installing ffmpeg..."
+        FFMPEG_VERSION="7.1"
+        FFMPEG_URL="https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_VERSION}.zip"
+
+        # Download and extract ffmpeg
+        curl -L "$FFMPEG_URL" -o ffmpeg.zip
+        unzip -q ffmpeg.zip
+        rm ffmpeg.zip
+
+        # Move to local bin
+        mkdir -p "$HOME/.local/bin"
+        mv ffmpeg "$HOME/.local/bin/"
+        chmod +x "$HOME/.local/bin/ffmpeg"
+
+        # Remove quarantine attribute
+        xattr -d com.apple.quarantine "$HOME/.local/bin/ffmpeg" 2>/dev/null || true
+
+        echo "ffmpeg installed successfully"
+    fi
 fi
 
 echo "Downloading screenpipe v${VERSION} for ${arch}-${os}..."
