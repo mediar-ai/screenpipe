@@ -21,12 +21,12 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand, ConfigCommand, DeviceCommand, MonitorCommand},
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::monitor::{get_default_monitor, list_monitors};
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
@@ -37,6 +37,8 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+
+static mut SELECTED_MONITORS: Vec<u32> = Vec::new();
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -260,6 +262,152 @@ async fn main() -> anyhow::Result<()> {
                 info!("database migrations completed successfully");
                 return Ok(());
             }
+            Command::Monitors { subcommand } => {
+                match subcommand {
+                    MonitorCommand::List { output } => {
+                        let monitors = list_monitors().await;
+                        match output {
+                            OutputFormat::Json => info!("{}", serde_json::to_string_pretty(&monitors.iter().map(|m| m.id()).collect::<Vec<_>>())?),
+                            OutputFormat::Text => {
+                                info!("available monitors:");
+                                for monitor in monitors {
+                                    info!("monitor id: {}, name: {}, is primary: {}", monitor.id(), monitor.name(), monitor.is_primary());
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+                    MonitorCommand::Select { id, save } => {
+                        info!("validating monitor ids...");
+                        let monitors = list_monitors().await;
+                        
+                        // Validate monitor IDs
+                        for monitor_id in &id {
+                            if !monitors.iter().any(|m| m.id() == *monitor_id) {
+                                warn!("invalid monitor id: {}", monitor_id);
+                                return Err(anyhow::anyhow!("invalid monitor id: {}", monitor_id));
+                            }
+                        }
+                    
+                        let selected_ids = if id.is_empty() {
+                            // If no IDs provided, use default monitor
+                            let default_monitor = get_default_monitor().await;
+                            info!("no monitor ids provided, using default monitor: {:?}", default_monitor.id());
+                            vec![default_monitor.id()]
+                        } else {
+                            info!("selected monitor ids: {:?}", id);
+                            id
+                        };
+                        
+                        if save {
+                            unsafe {
+                                SELECTED_MONITORS = selected_ids;
+                            }
+                            info!("monitor selection saved in memory");
+                        }
+                    
+                        info!("monitor selection {}saved", if save { "" } else { "not " });
+                        return Ok(());
+                    }
+                }
+            }
+            Command::Devices { subcommand } => {
+                match subcommand {
+                    DeviceCommand::List { output } => {
+                        let devices = list_audio_devices().await.map_err(|e| {
+                            error!("failed to list audio devices: {:?}", e);
+                            e
+                        })?;
+                        match output {
+                            OutputFormat::Json => info!("{}", serde_json::to_string_pretty(&devices)?),
+                            OutputFormat::Text => {
+                                info!("available audio devices:");
+                                for device in devices {
+                                    info!("  {}", device);
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+                    DeviceCommand::Select { id } => {
+                        info!("selected audio devices: {:?}", id);
+                        // TODO: Implement device selection persistence
+                        warn!("audio device selection persistence not implemented yet");
+                        return Ok(());
+                    }
+                }
+            }
+            Command::Config { subcommand } => {
+                match subcommand {
+                    ConfigCommand::Show { output } => {
+                        let config = json!({
+                            "fps": cli.fps,
+                            "audio_chunk_duration": cli.audio_chunk_duration,
+                            "video_chunk_duration": cli.video_chunk_duration,
+                            "port": cli.port,
+                            "audio_disabled": cli.disable_audio,
+                            "vision_disabled": cli.disable_vision,
+                            "save_text_files": cli.save_text_files,
+                            "audio_transcription_engine": format!("{:?}", cli.audio_transcription_engine),
+                            "ocr_engine": format!("{:?}", cli.ocr_engine),
+                            "vad_engine": format!("{:?}", cli.vad_engine),
+                            "vad_sensitivity": format!("{:?}", cli.vad_sensitivity),
+                            "debug": cli.debug,
+                            "telemetry": !cli.disable_telemetry,
+                            "local_llm": cli.enable_llm,
+                            "use_pii_removal": cli.use_pii_removal,
+                            "ui_monitoring": cli.enable_ui_monitoring,
+                            "frame_cache": cli.enable_frame_cache,
+                            "data_dir": local_data_dir.to_string_lossy().to_string(),
+                            "deepgram_api_key": cli.deepgram_api_key.as_deref().unwrap_or("not set"),
+                            "ignored_windows": cli.ignored_windows,
+                            "included_windows": cli.included_windows,
+                        });
+                        match output {
+                            OutputFormat::Json => info!("{}", serde_json::to_string_pretty(&config)?),
+                            OutputFormat::Text => {
+                                info!("current configuration:");
+                                for (key, value) in config.as_object().unwrap() {
+                                    info!("  {}: {}", key, value);
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+                    ConfigCommand::Set { 
+                        fps, audio_chunk_duration, video_chunk_duration, port,
+                        audio_transcription_engine, ocr_engine, vad_engine, vad_sensitivity,
+                        disable_audio, disable_vision, save_text_files, debug,
+                        disable_telemetry, enable_llm, use_pii_removal,
+                        enable_ui_monitoring, enable_frame_cache,
+                        data_dir, deepgram_api_key,
+                    } => {
+                        // TODO: Implement config persistence
+                        warn!("config persistence not implemented yet");
+                        info!("configuration updated (in-memory only):");
+                        if let Some(v) = fps { info!("  fps: {}", v); }
+                        if let Some(v) = audio_chunk_duration { info!("  audio_chunk_duration: {}", v); }
+                        if let Some(v) = video_chunk_duration { info!("  video_chunk_duration: {}", v); }
+                        if let Some(v) = port { info!("  port: {}", v); }
+                        if let Some(v) = audio_transcription_engine { info!("  audio_transcription_engine: {:?}", v); }
+                        if let Some(v) = ocr_engine { info!("  ocr_engine: {:?}", v); }
+                        if let Some(v) = vad_engine { info!("  vad_engine: {:?}", v); }
+                        if let Some(v) = vad_sensitivity { info!("  vad_sensitivity: {:?}", v); }
+                        if let Some(v) = disable_audio { info!("  disable_audio: {}", v); }
+                        if let Some(v) = disable_vision { info!("  disable_vision: {}", v); }
+                        if let Some(v) = save_text_files { info!("  save_text_files: {}", v); }
+                        if let Some(v) = debug { info!("  debug: {}", v); }
+                        if let Some(v) = disable_telemetry { info!("  disable_telemetry: {}", v); }
+                        if let Some(v) = enable_llm { info!("  enable_llm: {}", v); }
+                        if let Some(v) = use_pii_removal { info!("  use_pii_removal: {}", v); }
+                        if let Some(v) = enable_ui_monitoring { info!("  enable_ui_monitoring: {}", v); }
+                        if let Some(v) = enable_frame_cache { info!("  enable_frame_cache: {}", v); }
+                        if let Some(v) = data_dir { info!("  data_dir: {}", v); }
+                        if let Some(_) = deepgram_api_key { info!("  deepgram_api_key: [hidden]"); }
+                        return Ok(());
+                    }
+                }
+            }
         }
     }
 
@@ -282,11 +430,13 @@ async fn main() -> anyhow::Result<()> {
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
     if cli.list_audio_devices {
+        warn!("--list-audio-devices is deprecated and will be removed in a future version");
         print_devices(&all_audio_devices);
         return Ok(());
     }
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
+        warn!("--list-monitors is deprecated and will be removed in a future version");
         println!("available monitors:");
         for monitor in all_monitors.iter() {
             println!("  {}. {:?}", monitor.id(), monitor);
@@ -383,10 +533,24 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let monitor_ids = if cli.monitor_id.is_empty() {
-        all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
-    } else {
+    // let monitor_ids = if cli.monitor_id.is_empty() {
+    //     all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
+    // } else {
+    //     cli.monitor_id.clone()
+    // };
+    let monitor_ids = if !cli.monitor_id.is_empty() {
+        warn!("--monitor-id is deprecated. please use 'screenpipe monitors select' instead");
         cli.monitor_id.clone()
+    } else {
+        unsafe {
+            if !SELECTED_MONITORS.is_empty() {
+                info!("using saved monitor selection: {:?}", SELECTED_MONITORS);
+                SELECTED_MONITORS.clone()
+            } else {
+                info!("no saved monitor selection found, using all monitors");
+                all_monitors.iter().map(|m| m.id()).collect()
+            }
+        }
     };
 
     let languages = cli.unique_languages().unwrap();

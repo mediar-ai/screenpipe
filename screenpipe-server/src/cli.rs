@@ -124,8 +124,8 @@ pub struct Cli {
     #[arg(short = 'i', long)]
     pub audio_device: Vec<String>,
 
-    /// List available audio devices
-    #[arg(long)]
+    /// List available audio devices (deprecated: use 'screenpipe devices list' instead)
+    #[arg(long, hide = true)]
     pub list_audio_devices: bool,
 
     /// Data directory. Default to $HOME/.screenpipe
@@ -167,11 +167,11 @@ pub struct Cli {
     )]
     pub ocr_engine: CliOcrEngine,
 
-    /// List available monitors, then you can use --monitor-id to select one (with the ID)
-    #[arg(long)]
+    /// List available monitors (deprecated: use 'screenpipe monitors list' instead)
+    #[arg(long, hide = true)]
     pub list_monitors: bool,
 
-    /// Monitor IDs to use, these will be used to select the monitors to record
+    /// Monitor IDs to use (deprecated: use 'screenpipe monitors select' instead)
     #[arg(short = 'm', long)]
     pub monitor_id: Vec<u32>,
 
@@ -265,6 +265,21 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
+    /// Monitor management commands
+    Monitors {
+        #[command(subcommand)]
+        subcommand: MonitorCommand,
+    },
+    /// Device management commands
+    Devices {
+        #[command(subcommand)]
+        subcommand: DeviceCommand,
+    },
+    /// Configuration management commands
+    Config {
+        #[command(subcommand)]
+        subcommand: ConfigCommand,
+    },
     /// Setup screenpipe environment
     Setup {
         /// Enable beta features
@@ -275,6 +290,110 @@ pub enum Command {
     Migrate,
 }
 
+#[derive(Subcommand)]
+pub enum MonitorCommand {
+    /// List all available monitors
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+    /// Select monitors to use for recording
+    Select {
+        /// Monitor IDs to use
+        #[arg(short = 'm', long)]
+        id: Vec<u32>,
+        /// Save selection to config
+        #[arg(short, long, default_value_t = true)]
+        save: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DeviceCommand {
+    /// List all available audio devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+    /// Select audio devices to use
+    Select {
+        /// Audio device IDs to use
+        #[arg(short, long)]
+        id: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommand {
+    /// Show current configuration
+    Show {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+    /// Set configuration values
+    Set {
+        /// FPS value
+        #[arg(long)]
+        fps: Option<f32>,
+        /// Audio chunk duration in seconds
+        #[arg(long)]
+        audio_chunk_duration: Option<u64>,
+        /// Video chunk duration in seconds
+        #[arg(long)]
+        video_chunk_duration: Option<u64>,
+        /// Port number
+        #[arg(long)]
+        port: Option<u16>,
+        /// Audio transcription engine
+        #[arg(long, value_enum)]
+        audio_transcription_engine: Option<CliAudioTranscriptionEngine>,
+        /// OCR engine
+        #[arg(long, value_enum)]
+        ocr_engine: Option<CliOcrEngine>,
+        /// VAD engine
+        #[arg(long, value_enum)]
+        vad_engine: Option<CliVadEngine>,
+        /// VAD sensitivity
+        #[arg(long, value_enum)]
+        vad_sensitivity: Option<CliVadSensitivity>,
+        /// Enable/disable audio recording
+        #[arg(long)]
+        disable_audio: Option<bool>,
+        /// Enable/disable vision recording
+        #[arg(long)]
+        disable_vision: Option<bool>,
+        /// Enable/disable text file saving
+        #[arg(long)]
+        save_text_files: Option<bool>,
+        /// Enable/disable debug mode
+        #[arg(long)]
+        debug: Option<bool>,
+        /// Enable/disable telemetry
+        #[arg(long)]
+        disable_telemetry: Option<bool>,
+        /// Enable/disable local LLM
+        #[arg(long)]
+        enable_llm: Option<bool>,
+        /// Enable/disable PII removal
+        #[arg(long)]
+        use_pii_removal: Option<bool>,
+        /// Enable/disable UI monitoring
+        #[arg(long)]
+        enable_ui_monitoring: Option<bool>,
+        /// Enable/disable frame cache
+        #[arg(long)]
+        enable_frame_cache: Option<bool>,
+        /// Data directory path
+        #[arg(long)]
+        data_dir: Option<String>,
+        /// Deepgram API key
+        #[arg(long)]
+        deepgram_api_key: Option<String>,
+    },
+}
 
 #[derive(Subcommand)]
 pub enum PipeCommand {
