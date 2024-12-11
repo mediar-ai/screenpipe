@@ -15,6 +15,7 @@ use colored::Colorize;
 use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::pin_mut;
+use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
@@ -132,6 +133,16 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
+
+    if !is_local_ipv4_port_free(cli.port) {
+        error!(
+            "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
+        );
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            "Address in use",
+        ));
+    }
 
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
