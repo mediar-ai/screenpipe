@@ -18,22 +18,14 @@ import {
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "../ui/label";
 import { trackError } from "@/lib/opentelemetry";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
-interface OnboardingStatusProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
-const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingSetup = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
+  const { handleNextSlide, handlePrevSlide } = useOnboardingFlow();
 
   const startSetup = async () => {
     setIsLoading(true);
@@ -148,7 +140,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   return (
     <div
-      className={`${className} w-full flex justify-between flex-col items-center`}
+      className={`w-full flex justify-between flex-col items-center`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
@@ -250,4 +242,4 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   );
 };
 
-export default OnboardingStatus;
+export default OnboardingSetup;

@@ -1,5 +1,7 @@
+import { onboardingFlow } from "@/components/onboarding/entities/constants";
+import { toast, useToast } from "@/components/ui/use-toast";
 import localforage from "localforage";
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, useMemo } from "react";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
@@ -17,9 +19,9 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const checkFirstTimeUser = async () => {
       const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
-      if (isFirstTime === null) {
+      // if (isFirstTime === null) {
         setShowOnboarding(true);
-      }
+      // }
     };
     checkFirstTimeUser();
   }, []);
