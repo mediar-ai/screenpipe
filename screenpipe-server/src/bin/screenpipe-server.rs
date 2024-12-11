@@ -138,10 +138,7 @@ async fn main() -> anyhow::Result<()> {
         error!(
             "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
         );
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::AddrInUse,
-            "Address in use",
-        ));
+        return Err(anyhow::anyhow!("port already in use"));
     }
 
     let local_data_dir = get_base_dir(&cli.data_dir)?;
