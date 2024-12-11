@@ -346,7 +346,6 @@ export function RecordingSettings({
       setLocalSettings({
         ...localSettings,
         audioTranscriptionEngine: value,
-        deepgramApiKey: "abcd", // TODO
       });
     } else {
       setLocalSettings({ ...localSettings, audioTranscriptionEngine: value });
@@ -684,22 +683,13 @@ export function RecordingSettings({
               </Label>
               <Select
                 onValueChange={handleAudioTranscriptionModelChange}
-                defaultValue={localSettings.audioTranscriptionEngine}
+                value={localSettings.audioTranscriptionEngine}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="select audio transcription engine" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem
-                    value="screenpipe-cloud"
-                    // disabled={!credits?.amount}
-                    onSelect={(e) => {
-                      if (!credits?.amount) {
-                        e.preventDefault();
-                        openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
-                      }
-                    }}
-                  >
+                  <SelectItem value="screenpipe-cloud">
                     <div className="flex items-center justify-between w-full space-x-2">
                       <span>screenpipe cloud</span>
                       <div className="flex items-center gap-2">

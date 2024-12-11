@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createStore } from "@tauri-apps/plugin-store";
 import { localDataDir, join } from "@tauri-apps/api/path";
 import { User, useSettings } from "./use-settings";
+import { useInterval } from "./use-interval";
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
@@ -33,6 +34,13 @@ export function useUser() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { settings, updateSettings } = useSettings();
+
+  // poll credits every 3 seconds if the settings dialog is open
+  useInterval(() => {
+    if (settings.user?.token) {
+      loadUser(settings.user.token);
+    }
+  }, 3000);
 
   const loadUser = async (token: string) => {
     if (!store) await initStore();

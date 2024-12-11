@@ -74,13 +74,6 @@ function AccountSection() {
   const { localSettings, setLocalSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // poll credits every 30 seconds if the settings dialog is open
-  useInterval(() => {
-    if (localSettings.user?.token) {
-      loadUser(localSettings.user.token);
-    }
-  }, 30000); 
-
   const handleRefreshCredits = async () => {
     if (!localSettings.user?.token) return;
 
@@ -455,6 +448,11 @@ export function Settings({ className }: { className?: string }) {
   const handleAiProviderChange = (newValue: AIProviderType) => {
     let newUrl = "";
     let newModel = localSettings.aiModel;
+
+    if (newValue === "screenpipe-cloud" && !credits?.amount) {
+      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+      return;
+    }
     switch (newValue) {
       case "openai":
         newUrl = "https://api.openai.com/v1";
@@ -740,10 +738,7 @@ export function Settings({ className }: { className?: string }) {
                         <SelectValue placeholder="Select AI provider" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem
-                          value="screenpipe-cloud"
-                          disabled={!credits?.amount}
-                        >
+                        <SelectItem value="screenpipe-cloud">
                           screenpipe cloud{" "}
                           {!credits?.amount && "(requires credits)"}
                         </SelectItem>
