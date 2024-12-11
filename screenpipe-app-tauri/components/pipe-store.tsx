@@ -56,8 +56,9 @@ interface CorePipe {
 const corePipes: CorePipe[] = [
   {
     id: "pipe-linkedin-ai-assistant",
-    name: "linkedin ai assistant",
-    description: "ai assistant that helps you write better linkedin posts and engage with your network",
+    name: "linkedin ai assistant (preview)",
+    description:
+      "ai assistant that helps you write better linkedin posts and engage with your network - coming soon",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
   },
   {
@@ -69,19 +70,22 @@ const corePipes: CorePipe[] = [
   {
     id: "pipe-obsidian-time-logs",
     name: "obsidian time logger",
-    description: "continuously write logs of your days in an obsidian table using ollama+llama3.2",
+    description:
+      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
   },
   {
     id: "pipe-post-questions-on-reddit",
     name: "reddit question bot",
-    description: "get more followers, promote your content/product while being useful, without doing any work",
+    description:
+      "get more followers, promote your content/product while being useful, without doing any work",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
   },
   {
     id: "pipe-notion-table-logs",
     name: "notion time logger",
-    description: "continuously write logs of your days in a notion table using ollama",
+    description:
+      "continuously write logs of your days in a notion table using ollama",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
   },
   {
@@ -147,15 +151,15 @@ const truncateDescription = (description: string, maxLines: number = 4) => {
 };
 
 const getFriendlyName = (id: string, corePipes: CorePipe[]): string => {
-  const corePipe = corePipes.find(cp => cp.id === id);
+  const corePipe = corePipes.find((cp) => cp.id === id);
   if (corePipe) return corePipe.name;
-  
+
   // Convert pipe-name-format to Title Case if no match found
   return id
-    .replace('pipe-', '')
-    .split('-')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+    .replace("pipe-", "")
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 };
 
 const PipeStore: React.FC = () => {
@@ -167,13 +171,6 @@ const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
   const { user, checkLoomSubscription } = useUser();
-  const [hasLoomSubscription, setHasLoomSubscription] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      checkLoomSubscription().then(setHasLoomSubscription);
-    }
-  }, []);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -273,18 +270,6 @@ const PipeStore: React.FC = () => {
   };
 
   const handleToggleEnabled = async (pipe: Pipe) => {
-    if (pipe.id === "pipe-for-loom" && !pipe.enabled) {
-      const hasLoomSubscription = await checkLoomSubscription();
-      setHasLoomSubscription(hasLoomSubscription);
-      if (!hasLoomSubscription) {
-        toast({
-          title: "subscription required",
-          description: "please subscribe to use the loom pipe",
-        });
-        return;
-      }
-    }
-
     try {
       posthog.capture("toggle_pipe", {
         pipe_id: pipe.id,
@@ -529,25 +514,15 @@ const PipeStore: React.FC = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      {selectedPipe.id === "pipe-for-loom" &&
-                      !selectedPipe.enabled &&
-                      !hasLoomSubscription ? (
-                        <StripeSubscriptionButton
-                          onSubscriptionComplete={() =>
-                            handleToggleEnabled(selectedPipe)
-                          }
-                        />
-                      ) : (
-                        <Button
-                          onClick={() => handleToggleEnabled(selectedPipe)}
-                          variant={selectedPipe.enabled ? "default" : "outline"}
-                          disabled={health?.status === "error"}
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <Power className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button
+                        onClick={() => handleToggleEnabled(selectedPipe)}
+                        variant={selectedPipe.enabled ? "default" : "outline"}
+                        disabled={health?.status === "error"}
+                        size="icon"
+                        className="h-8 w-8"
+                      >
+                        <Power className="h-4 w-4" />
+                      </Button>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>{selectedPipe.enabled ? "disable" : "enable"} pipe</p>
@@ -710,12 +685,16 @@ const PipeStore: React.FC = () => {
   };
 
   const handleCardClick = async (pipe: Pipe) => {
-    // Check if pipe is already installed by looking in the pipes array
-    const isInstalled = pipes.some((p) => p.id === pipe.id);
+    // Special handling for LinkedIn pipe
+    if (pipe.id === "pipe-linkedin-ai-assistant") {
+      openUrl("https://cal.com/louis030195/screenpipe-linkedin-onboarding");
+      return;
+    }
 
+    // Rest of the existing logic
+    const isInstalled = pipes.some((p) => p.id === pipe.id);
     if (!isInstalled && pipe.source) {
       try {
-        // If pipe is not installed, download it first
         await handleDownloadPipe(pipe.source);
         // Fetch the updated pipe data and wait for it
         const response = await fetch("http://localhost:3030/pipes/list");
@@ -757,7 +736,6 @@ const PipeStore: React.FC = () => {
         });
       }
     } else {
-      // For already installed pipes, find the installed version
       const installedPipe = pipes.find((p) => p.id === pipe.id);
       setSelectedPipe(installedPipe || pipe);
     }
@@ -843,29 +821,35 @@ const PipeStore: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {pipe.enabled ? (
-                          <Button
-                            size="icon"
-                            variant={pipe.enabled ? "default" : "outline"}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleEnabled(pipe);
-                            }}
-                            className={`${pipe.enabled ? 'bg-primary hover:bg-primary/90' : 'hover:bg-muted'}`}
-                          >
-                            <Power className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : (
-                          <Button
-                            size="icon"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDownloadPipe(pipe.source);
-                            }}
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
+                        {pipe.id !== "pipe-linkedin-ai-assistant" && (
+                          pipe.enabled ? (
+                            <Button
+                              size="icon"
+                              variant={pipe.enabled ? "default" : "outline"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleEnabled(pipe);
+                              }}
+                              className={`${
+                                pipe.enabled
+                                  ? "bg-primary hover:bg-primary/90"
+                                  : "hover:bg-muted"
+                              }`}
+                            >
+                              <Power className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadPipe(pipe.source);
+                              }}
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </Button>
+                          )
                         )}
                       </div>
                     </div>
