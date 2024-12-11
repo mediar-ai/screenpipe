@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AnimatedCircleBorder } from "./animated-circle-border";
 import { cn } from "@/lib/utils";
 
-const circleAnimations = {
+const childrenAnimations = {
     hidden: { 
       opacity: 0,
       transition: {
@@ -22,7 +22,7 @@ const circleAnimations = {
     },
 };
 
-const childrenAnimations = {
+const circleAnimations = {
     hidden: { 
         boxShadow: '0px 0px 0px 0px rgba(0,0,0,0)' // Initial state
     },
