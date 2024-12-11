@@ -28,6 +28,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen } from "lucide-react";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 type PipeConfigFormProps = {
   pipe: Pipe;
@@ -46,6 +48,8 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   pipe,
   onConfigSave,
 }) => {
+  const serverUrl = useServerUrl();
+
   const [config, setConfig] = useState(pipe.config);
   console.log("pipe", pipe);
   console.log("config", config);
@@ -83,7 +87,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
         throw new Error("pipe id is missing");
       }
 
-      const response = await fetch(`http://localhost:3030/pipes/update`, {
+      const response = await fetch(`${serverUrl}/pipes/update`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -36,6 +36,7 @@ import { StripeSubscriptionButton } from "./stripe-subscription-button";
 import { useUser } from "@/lib/hooks/use-user";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
+import { useServerUrl } from "@/lib/hooks/server-url";
 
 export interface Pipe {
   enabled: boolean;
@@ -169,8 +170,9 @@ const PipeStore: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const { health } = useHealthCheck();
-  const { getDataDir } = useSettings();
+  const { getDataDir, settings } = useSettings();
   const { user, checkLoomSubscription } = useUser();
+  const serverUrl = useServerUrl();
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -204,7 +206,7 @@ const PipeStore: React.FC = () => {
 
     const dataDir = await getDataDir();
     try {
-      const response = await fetch("http://localhost:3030/pipes/list");
+      const response = await fetch(`${serverUrl}/pipes/list`);
       const data = await response.json();
 
       if (!data.success) throw new Error("Failed to fetch installed pipes");
@@ -242,7 +244,7 @@ const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch("http://localhost:3030/pipes/download", {
+      const response = await fetch(`${serverUrl}/pipes/download`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -277,7 +279,7 @@ const PipeStore: React.FC = () => {
       });
 
       const endpoint = pipe.enabled ? "disable" : "enable";
-      const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
+      const response = await fetch(`${serverUrl}/pipes/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -332,7 +334,7 @@ const PipeStore: React.FC = () => {
           description: "please wait...",
         });
 
-        const response = await fetch("http://localhost:3030/pipes/download", {
+        const response = await fetch(`${serverUrl}/pipes/download`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -388,7 +390,7 @@ const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
-        const response = await fetch("http://localhost:3030/pipes/update", {
+        const response = await fetch(`${serverUrl}/pipes/update`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -429,7 +431,7 @@ const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch("http://localhost:3030/pipes/delete", {
+      const response = await fetch(`${serverUrl}/pipes/delete`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -656,7 +658,7 @@ const PipeStore: React.FC = () => {
         description: "please wait...",
       });
 
-      const response = await fetch(`http://localhost:3030/pipes/download`, {
+      const response = await fetch(`${serverUrl}/pipes/download`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -697,7 +699,7 @@ const PipeStore: React.FC = () => {
       try {
         await handleDownloadPipe(pipe.source);
         // Fetch the updated pipe data and wait for it
-        const response = await fetch("http://localhost:3030/pipes/list");
+        const response = await fetch(`${serverUrl}/pipes/list`);
         const data = await response.json();
 
         if (!data.success) throw new Error("Failed to fetch installed pipes");
@@ -821,8 +823,8 @@ const PipeStore: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {pipe.id !== "pipe-linkedin-ai-assistant" && (
-                          pipe.enabled ? (
+                        {pipe.id !== "pipe-linkedin-ai-assistant" &&
+                          (pipe.enabled ? (
                             <Button
                               size="icon"
                               variant={pipe.enabled ? "default" : "outline"}
@@ -849,8 +851,7 @@ const PipeStore: React.FC = () => {
                             >
                               <Download className="h-3.5 w-3.5" />
                             </Button>
-                          )
-                        )}
+                          ))}
                       </div>
                     </div>
                     <div className="text-sm text-muted-foreground mt-2 flex-1 line-clamp-3">
