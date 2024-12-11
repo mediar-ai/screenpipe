@@ -22,7 +22,6 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS ocr_text_delete AFTER DELETE ON ocr_text
-WHEN NEW.frame_id IS NOT NULL
 BEGIN
     DELETE FROM ocr_text_fts WHERE frame_id = OLD.frame_id;
 END;
@@ -38,7 +37,6 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS audio_transcriptions_delete AFTER DELETE ON audio_transcriptions
-WHEN NEW.audio_chunk_id IS NOT NULL
 BEGIN
     DELETE FROM audio_transcriptions_fts WHERE audio_chunk_id = OLD.audio_chunk_id;
 END;
@@ -55,7 +53,6 @@ BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS ui_monitoring_delete AFTER DELETE ON ui_monitoring
-WHEN NEW.id IS NOT NULL
 BEGIN
     DELETE FROM ui_monitoring_fts WHERE id = NEW.id;
 END;
