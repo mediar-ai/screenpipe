@@ -291,7 +291,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
-
     if data_dir != "default" && data_dir != "" {
         args.push("--data-dir");
         args.push(data_dir.as_str());
@@ -304,9 +303,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .expect("Failed to get parent directory of executable")
         .to_path_buf();
 
-
     if cfg!(windows) {
-
         let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()
@@ -317,8 +314,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
-
-
 
         let c = c.args(&args);
 

@@ -83,8 +83,6 @@ BEGIN
     );
 END;
 
-CREATE INDEX IF NOT EXISTS idx_audio_transcriptions_timestamp ON audio_transcriptions(timestamp);
-
 -- Re-enable foreign keys after migration
 PRAGMA foreign_keys = ON;
 
