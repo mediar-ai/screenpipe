@@ -10,6 +10,7 @@ import OnboardingStatus from "../status"
 import OnboardingSelection from "../usecases-selection"
 import { taskBase } from "./types"
 import { AnimatedBeamDemo } from "../screenpipe-component"
+import WelcomeScreen from "@/features/onboarding/views/intro"
 
 const devProcess: taskBase[] = [
     {
@@ -130,7 +131,7 @@ export const onboardingFlow: (taskBase)[] = [
         condition:{
             isConditional: false,
         },
-        component: () => <OnboardingIntro/>
+        component: () => <WelcomeScreen/>
     },
     {
         type: 'TASK',
