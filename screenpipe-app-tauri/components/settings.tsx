@@ -45,6 +45,8 @@ import {
   X,
   Play,
   Loader2,
+  Coins,
+  UserCog,
 } from "lucide-react";
 import { RecordingSettings } from "./recording-settings";
 import { Switch } from "./ui/switch";
@@ -64,6 +66,169 @@ import {
 } from "@/components/ui/select";
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useUser } from "@/lib/hooks/use-user";
+import supabase from "@/lib/supabase/client";
+import { AuthButton } from "./auth";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+
+function AccountSection() {
+  const { user } = useUser();
+  const { updateSettings, localSettings, setLocalSettings } = useSettings();
+  const [credits, setCredits] = useState<{ amount: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCredits() {
+      if (!user?.user_id) return;
+
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("id")
+          .eq("clerk_id", user.user_id)
+          .single();
+
+        if (userError) {
+          console.error("error fetching user:", userError);
+          return;
+        }
+
+        const { data: creditsData, error: creditsError } = await supabase
+          .from("credits")
+          .select("*")
+          .eq("user_id", userData.id)
+          .single();
+
+        if (creditsError) {
+          console.error("error fetching credits:", creditsError);
+          return;
+        }
+
+        setCredits(creditsData);
+      } catch (err) {
+        console.error("error in fetchCredits:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCredits();
+  }, [user?.user_id]);
+
+  const handleSignIn = async () => {
+    // This would typically open your auth window
+    await invoke("open_auth_window");
+  };
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle>account</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() =>
+                openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ")
+              }
+            >
+              <div className="flex items-center gap-2">
+                <Coins className="w-4 h-4" />
+                get credits
+              </div>
+            </Button>
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Coins className="w-4 h-4" />
+              <span className="font-mono">
+                {loading ? "..." : credits?.amount || 0}
+              </span>
+              <span>credits available</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={handleSignIn}
+            >
+              <UserCog className="w-4 h-4 mr-2" />
+              manage account
+            </Button>
+
+            <Button variant="outline" size="sm" className="h-8" disabled>
+              <div className="flex items-center gap-2">
+                connect stripe
+                <Badge variant="outline" className="ml-1 uppercase text-xs">
+                  soon
+                </Badge>
+              </div>
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="w-full mt-4">
+          <div className="flex items-center gap-4">
+            <Label htmlFor="clerkUserId" className="min-w-[120px] text-right">
+              id
+            </Label>
+            <div className="w-full flex items-center gap-2">
+              <div className="w-full flex gap-2">
+                <Input
+                  id="clerkUserId"
+                  value={localSettings.clerkUserId || user?.user_id || ""}
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    setLocalSettings((prev) => ({
+                      ...prev,
+                      clerkUserId: newValue,
+                    }));
+                  }}
+                  className="w-full"
+                  placeholder="enter your id"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  autoComplete="off"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    updateSettings({ clerkUserId: localSettings.clerkUserId });
+                    toast({
+                      title: "id updated",
+                      description: "your id has been updated",
+                    });
+                  }}
+                >
+                  update
+                </Button>
+              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-[300px]">
+                    <p>
+                      your id is used to sync your credits and settings across
+                      devices. you can find it in your dashboard.{" "}
+                      <span className="text-destructive font-semibold">
+                        do not share this id with anyone.
+                      </span>
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function Settings({ className }: { className?: string }) {
   const {
@@ -74,6 +239,8 @@ export function Settings({ className }: { className?: string }) {
     localSettings,
     setLocalSettings,
   } = useSettings();
+  const { user } = useUser();
+  const { credits } = user || {};
   const { debouncedFetchHealth } = useHealthCheck();
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<
@@ -158,14 +325,6 @@ export function Settings({ className }: { className?: string }) {
     const newValue = e.target.value;
     setLocalSettings({ ...localSettings, openaiApiKey: newValue });
     updateSettings({ openaiApiKey: newValue });
-  };
-
-  const handleDeepgramApiKeyChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, deepgramApiKey: newValue });
-    updateSettings({ deepgramApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -339,21 +498,25 @@ export function Settings({ className }: { className?: string }) {
       case "https://ai-proxy.i-f9f.workers.dev/v1":
         return (
           <p>
-            screenpipe cloud doesn&apos;t require an API key.
-            <br />
-            we offer free credits.
-            <br />
-            note: using this option may involve sending data to our servers.
-            <br />
-            please review our data privacy policy for more information at:
-            <br />
-            <a
-              href="https://screenpi.pe/privacy"
-              target="_blank"
-              className="text-primary hover:underline"
-            >
-              screenpipe privacy policy
-            </a>
+            {credits?.amount ? (
+              <>
+                screenpipe cloud doesn&apos;t require an API key.
+                <br />
+                you have {credits.amount} credits left.
+              </>
+            ) : (
+              <>
+                you need credits to use screenpipe cloud.
+                <br />
+                <a
+                  href="https://buy.stripe.com/5kA6p79qefweacg5kJ"
+                  target="_blank"
+                  className="text-primary hover:underline"
+                >
+                  get credits here
+                </a>
+              </>
+            )}
           </p>
         );
       case "https://api.openai.com/v1":
@@ -551,6 +714,7 @@ export function Settings({ className }: { className?: string }) {
           </DialogDescription>
         </DialogHeader>
         <div className="mt-8 space-y-6">
+          <AccountSection />
           <RecordingSettings
             localSettings={localSettings}
             setLocalSettings={setLocalSettings}
@@ -577,12 +741,16 @@ export function Settings({ className }: { className?: string }) {
                         <SelectValue placeholder="Select AI provider" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem
+                          value="screenpipe-cloud"
+                          disabled={!credits?.amount}
+                        >
+                          screenpipe cloud{" "}
+                          {!credits?.amount && "(requires credits)"}
+                        </SelectItem>
                         <SelectItem value="openai">openai</SelectItem>
                         <SelectItem value="native-ollama">
                           ollama (local)
-                        </SelectItem>
-                        <SelectItem value="screenpipe-cloud">
-                          screenpipe cloud
                         </SelectItem>
                         <SelectItem value="custom">custom</SelectItem>
                         {embeddedAIStatus === "running" && (
@@ -933,59 +1101,6 @@ export function Settings({ className }: { className?: string }) {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center">deepgram</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center">
-              <div className="w-full ">
-                <div className="flex items-center gap-4 mb-4">
-                  <Label htmlFor="apiKey" className="min-w-[80px] text-right">
-                    api key
-                  </Label>
-                  <div className="flex-grow relative">
-                    <Input
-                      id="apiKey"
-                      type={showApiKey ? "text" : "password"}
-                      value={settings.deepgramApiKey}
-                      onChange={handleDeepgramApiKeyChange}
-                      className="pr-10"
-                      placeholder="Enter your Deepgram API Key"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                    >
-                      {showApiKey ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground text-center">
-                deepgram&apos;s transcription models are currently the most
-                reliable for this application.
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground text-center">
-                don&apos;t have an API key? get one from{" "}
-                <a
-                  href="https://console.deepgram.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  deepgram&apos;s website
-                </a>{" "}
-                or DM us on discord, it&apos;s on us!
-              </p>
-            </CardContent>
-          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-center">shortcuts</CardTitle>

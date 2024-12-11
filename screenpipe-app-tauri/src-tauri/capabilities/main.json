@@ -2,7 +2,13 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": ["main", "timeline", "search", "meetings", "identify-speakers"],
+  "windows": [
+    "main",
+    "timeline",
+    "search",
+    "meetings",
+    "identify-speakers"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
@@ -131,7 +137,11 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["pipe", "purge", "-y"],
+          "args": [
+            "pipe",
+            "purge",
+            "-y"
+          ],
           "sidecar": true
         }
       ]
@@ -142,7 +152,9 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["setup"],
+          "args": [
+            "setup"
+          ],
           "sidecar": true
         }
       ]
@@ -153,7 +165,9 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["migrate"],
+          "args": [
+            "migrate"
+          ],
           "sidecar": true
         }
       ]
@@ -164,7 +178,9 @@
         {
           "name": "ollama",
           "cmd": "ollama",
-          "args": ["serve"],
+          "args": [
+            "serve"
+          ],
           "sidecar": true
         }
       ]
@@ -203,7 +219,12 @@
         {
           "name": "screenpipe-pipe-list",
           "cmd": "screenpipe",
-          "args": ["pipe", "list", "--output", "json"],
+          "args": [
+            "pipe",
+            "list",
+            "--output",
+            "json"
+          ],
           "sidecar": true
         }
       ]
