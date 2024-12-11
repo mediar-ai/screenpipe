@@ -50,6 +50,7 @@
 
 <p align="center">
    
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
 
 
 
