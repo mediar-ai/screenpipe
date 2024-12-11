@@ -37,6 +37,13 @@ use serde_json::Value;
 use std::io::Cursor;
 
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
+use std::env;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref DEEPGRAM_API_URL: String = env::var("DEEPGRAM_API_URL")
+        .unwrap_or_else(|_| "https://api.deepgram.com/v1/listen".to_string());
+}
 
 async fn transcribe_with_deepgram(
     api_key: &str,
@@ -87,7 +94,8 @@ async fn transcribe_with_deepgram(
 
     let response = client
         .post(format!(
-            "https://api.deepgram.com/v1/listen?{}",
+            "{}?{}",
+            *DEEPGRAM_API_URL,
             query_params
         ))
         .header("Content-Type", "audio/wav")

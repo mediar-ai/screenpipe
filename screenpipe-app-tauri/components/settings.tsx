@@ -67,57 +67,39 @@ import {
 import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useUser } from "@/lib/hooks/use-user";
-import supabase from "@/lib/supabase/client";
-import { AuthButton } from "./auth";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 function AccountSection() {
-  const { user } = useUser();
-  const { updateSettings, localSettings, setLocalSettings } = useSettings();
-  const [credits, setCredits] = useState<{ amount: number } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loadUser } = useUser();
+  const { localSettings, setLocalSettings } = useSettings();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    async function fetchCredits() {
-      if (!user?.user_id) return;
-
-      try {
-        const { data: userData, error: userError } = await supabase
-          .from("users")
-          .select("id")
-          .eq("clerk_id", user.user_id)
-          .single();
-
-        if (userError) {
-          console.error("error fetching user:", userError);
-          return;
-        }
-
-        const { data: creditsData, error: creditsError } = await supabase
-          .from("credits")
-          .select("*")
-          .eq("user_id", userData.id)
-          .single();
-
-        if (creditsError) {
-          console.error("error fetching credits:", creditsError);
-          return;
-        }
-
-        setCredits(creditsData);
-      } catch (err) {
-        console.error("error in fetchCredits:", err);
-      } finally {
-        setLoading(false);
-      }
+  // poll credits every 30 seconds if the settings dialog is open
+  useInterval(() => {
+    if (localSettings.user?.token) {
+      loadUser(localSettings.user.token);
     }
+  }, 30000); 
 
-    fetchCredits();
-  }, [user?.user_id]);
+  const handleRefreshCredits = async () => {
+    if (!localSettings.user?.token) return;
 
-  const handleSignIn = async () => {
-    // This would typically open your auth window
-    await invoke("open_auth_window");
+    setIsRefreshing(true);
+    try {
+      await loadUser(localSettings.user.token);
+      toast({
+        title: "credits refreshed",
+        description: "your credit balance has been updated",
+      });
+    } catch (error) {
+      toast({
+        title: "failed to refresh credits",
+        description: "please try again later",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   return (
@@ -125,7 +107,28 @@ function AccountSection() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle>account</CardTitle>
-          <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-[240px]"
+            onClick={() => invoke("open_auth_window")}
+          >
+            <UserCog className="w-4 h-4 mr-2" />
+            manage account
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <Separator className="my-4" />
+
+        <div className="flex flex-col w-full gap-2">
+          <div className="flex w-full gap-2 items-center">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground w-[275px]">
+              <Coins className="w-4 h-4" />
+              <span className="font-mono">{user?.credits?.amount || 0}</span>
+              <span>credits available</span>
+            </div>
+
             <Button
               variant="outline"
               size="sm"
@@ -140,54 +143,37 @@ function AccountSection() {
               </div>
             </Button>
 
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Coins className="w-4 h-4" />
-              <span className="font-mono">
-                {loading ? "..." : credits?.amount || 0}
-              </span>
-              <span>credits available</span>
-            </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               className="h-8"
-              onClick={handleSignIn}
+              onClick={handleRefreshCredits}
+              disabled={isRefreshing}
             >
-              <UserCog className="w-4 h-4 mr-2" />
-              manage account
-            </Button>
-
-            <Button variant="outline" size="sm" className="h-8" disabled>
-              <div className="flex items-center gap-2">
-                connect stripe
-                <Badge variant="outline" className="ml-1 uppercase text-xs">
-                  soon
-                </Badge>
-              </div>
+              <RefreshCw
+                className={cn("w-4 h-4", { "animate-spin": isRefreshing })}
+              />
             </Button>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="w-full mt-4">
+
           <div className="flex items-center gap-4">
-            <Label htmlFor="clerkUserId" className="min-w-[120px] text-right">
-              id
-            </Label>
+            <Label htmlFor="key">key</Label>
             <div className="w-full flex items-center gap-2">
-              <div className="w-full flex gap-2">
+              <div className=" flex gap-2">
                 <Input
-                  id="clerkUserId"
-                  value={localSettings.clerkUserId || user?.user_id || ""}
+                  id="key"
+                  value={localSettings.user?.token || ""}
                   onChange={(e) => {
                     const newValue = e.target.value;
                     setLocalSettings((prev) => ({
                       ...prev,
-                      clerkUserId: newValue,
+                      user: {
+                        ...prev.user,
+                        token: newValue,
+                      },
                     }));
                   }}
-                  className="w-full"
-                  placeholder="enter your id"
+                  placeholder="enter your key"
                   autoCorrect="off"
                   autoCapitalize="off"
                   autoComplete="off"
@@ -196,10 +182,10 @@ function AccountSection() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    updateSettings({ clerkUserId: localSettings.clerkUserId });
+                    loadUser(localSettings.user?.token || "");
                     toast({
-                      title: "id updated",
-                      description: "your id has been updated",
+                      title: "key updated",
+                      description: "your key has been updated",
                     });
                   }}
                 >
@@ -213,10 +199,10 @@ function AccountSection() {
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[300px]">
                     <p>
-                      your id is used to sync your credits and settings across
+                      your key is used to sync your credits and settings across
                       devices. you can find it in your dashboard.{" "}
                       <span className="text-destructive font-semibold">
-                        do not share this id with anyone.
+                        do not share this key with anyone.
                       </span>
                     </p>
                   </TooltipContent>
@@ -224,6 +210,19 @@ function AccountSection() {
               </TooltipProvider>
             </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-[275px]"
+            disabled
+          >
+            <div className="flex items-center gap-2">
+              connect stripe
+              <Badge variant="outline" className="ml-1 uppercase text-xs">
+                soon
+              </Badge>
+            </div>
+          </Button>
         </div>
       </CardContent>
     </Card>

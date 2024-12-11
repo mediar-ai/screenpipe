@@ -225,7 +225,7 @@ export default {
 				}
 			}
 
-			if (path === '/v1/transcribe' && request.method === 'POST') {
+			if (path === '/v1/listen' && request.method === 'POST') {
 				const formData = await request.formData();
 				const audioFile = formData.get('audio') as File;
 				const languages = formData.get('languages')?.toString().split(',') || [];

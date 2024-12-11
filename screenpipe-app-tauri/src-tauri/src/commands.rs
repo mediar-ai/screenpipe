@@ -260,10 +260,6 @@ pub fn update_show_screenpipe_shortcut(
     Ok(())
 }
 
-
-
-
-
 // Add these new structs
 #[derive(Debug, Serialize)]
 pub struct AuthStatus {
@@ -291,8 +287,9 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
         "auth",
         tauri::WebviewUrl::External(auth_url.parse().unwrap()),
     )
-    .title("screenpipe auth")
+    .title("screenpipe login")
     .center()
+    .inner_size(800.0, 600.0)
     .build()
     .map_err(|e| format!("failed to open auth window: {}", e))?;
 
@@ -308,13 +305,6 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
 
     Ok(())
 }
-
-
-
-
-
-
-
 
 #[tauri::command]
 pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -339,4 +329,3 @@ pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
         .unwrap();
     }
 }
-
