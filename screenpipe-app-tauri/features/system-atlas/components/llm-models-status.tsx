@@ -3,7 +3,7 @@ import { OllamaIcon } from "@/components/icons/ollama"
 import { OpenAiIcon } from "@/components/icons/open-ai"
 import { PerplexityIcon } from "@/components/icons/perplexity"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
-import { CircleIcon } from "lucide-react"
+import { CircleIcon } from "@/components/ui/circle-icon"
 import { Ref } from "react"
 
 const LlmModelsStatus = (props: {
