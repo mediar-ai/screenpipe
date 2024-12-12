@@ -229,10 +229,11 @@ export default {
 				// Get the raw body instead of form data
 				const audioBuffer = await request.arrayBuffer();
 				const languages = request.headers.get('detect_language')?.split(',') || [];
-
+				const sampleRate = request.headers.get('sample_rate') || '16000';
 				try {
 					const deepgramResponse = await fetch(
-						'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true' +
+						'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&sample_rate=' +
+							sampleRate +
 							(languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
 						{
 							method: 'POST',
