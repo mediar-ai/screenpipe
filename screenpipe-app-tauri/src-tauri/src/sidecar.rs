@@ -241,7 +241,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if audio_transcription_engine != "default" {
         args.push("--audio-transcription-engine");
-        let model = audio_transcription_engine.as_str();
+        let model = if audio_transcription_engine == "screenpipe-cloud" {
+            "deepgram"
+        } else {
+            audio_transcription_engine.as_str()
+        };
         args.push(model);
     }
 

@@ -377,14 +377,30 @@ jobs:
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: powershell
+        shell: pwsh
         run: |
-          mkdir omp
-          python -m pip install intel-openmp --target omp
-          # Create mkl directory if it doesn't exist (ignore error if it does)
-          mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
-          ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
+          # Ensure target directory exists
+          $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+          mkdir -Force $mkl_dir
 
+          # Copy from temp directory if it exists, otherwise try pip install
+          $temp_mkl = "C:/temp_mkl_setup"
+          if (Test-Path "$temp_mkl/*.dll") {
+            println!("found existing dlls in temp dir, copying...")
+            Get-ChildItem -Path $temp_mkl -Recurse -Filter *.dll | Copy-Item -Destination $mkl_dir -Force
+          } else {
+            println!("no existing dlls found, trying pip install...")
+            mkdir omp
+            python -m pip install intel-openmp --target omp
+            Get-ChildItem -Path ./omp -Recurse -Filter *.dll | Copy-Item -Destination $mkl_dir -Force
+          }
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $mkl_dir -Filter *.dll).Count
+          println!("found {dll_count} dlls in target directory")
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
