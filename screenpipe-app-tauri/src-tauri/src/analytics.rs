@@ -100,7 +100,8 @@ impl AnalyticsManager {
         let pipes_url = format!("{}/pipes/list", self.local_api_base_url);
         let response: PipeListResponse = self.client.get(&pipes_url).send().await?.json().await?;
 
-        let enabled_pipes: Vec<String> = response.data
+        let enabled_pipes: Vec<String> = response
+            .data
             .into_iter()
             .filter(|pipe| pipe.enabled)
             .map(|pipe| pipe.id)

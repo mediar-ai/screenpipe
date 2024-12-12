@@ -16,11 +16,11 @@ pub async fn get_app_icon(
     use cocoa::base::{id, nil};
     use cocoa::foundation::{NSAutoreleasePool, NSData, NSString};
     use objc::{class, msg_send, sel, sel_impl};
-    
+
     unsafe {
         // Create autorelease pool
         let pool = NSAutoreleasePool::new(nil);
-        
+
         let result = (|| {
             let workspace: id = msg_send![class!(NSWorkspace), sharedWorkspace];
 
@@ -31,7 +31,7 @@ pub async fn get_app_icon(
                 let path: id = msg_send![workspace, fullPathForApplication: ns_app_name];
                 // Release the NSString we created
                 let _: () = msg_send![ns_app_name, release];
-                
+
                 if path == nil {
                     return Ok(None);
                 }
@@ -68,18 +68,18 @@ pub async fn get_app_icon(
 
         // Drain the autorelease pool
         let _: () = msg_send![pool, drain];
-        
+
         result
     }
 }
 
-#[cfg(target_os = "windows")] 
-use tokio::sync::Semaphore;
-#[cfg(target_os = "windows")] 
-use std::sync::Arc;
-#[cfg(target_os = "windows")] 
+#[cfg(target_os = "windows")]
 use lazy_static::lazy_static;
-#[cfg(target_os = "windows")] 
+#[cfg(target_os = "windows")]
+use std::sync::Arc;
+#[cfg(target_os = "windows")]
+use tokio::sync::Semaphore;
+#[cfg(target_os = "windows")]
 lazy_static! {
     static ref SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(5));
 }
@@ -105,12 +105,16 @@ pub async fn get_app_icon(
         None
     }
 
-    let path = match app_path  {
+    let path = match app_path {
         Some(p) => p,
-        None => find_exe_path(app_name).await.ok_or_else(|| "app_path is None and could not find executable path".to_string())?,
+        None => find_exe_path(app_name)
+            .await
+            .ok_or_else(|| "app_path is None and could not find executable path".to_string())?,
     };
 
-    let base64 = get_icon_base64_by_path(&path).await.map_err(|e| e.to_string())?;
+    let base64 = get_icon_base64_by_path(&path)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(Some(AppIcon {
         base64,
@@ -119,11 +123,9 @@ pub async fn get_app_icon(
 }
 
 #[cfg(target_os = "windows")]
-fn get_exe_by_reg_key(
-    app_name: &str
-) -> Option<String> {
-    use winreg::RegKey;
+fn get_exe_by_reg_key(app_name: &str) -> Option<String> {
     use winreg::enums::*;
+    use winreg::RegKey;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -140,14 +142,27 @@ fn get_exe_by_reg_key(
             for subkey in key.enum_keys().filter_map(Result::ok) {
                 if let Ok(app_key) = key.open_subkey(&subkey) {
                     if let Ok(display_name) = app_key.get_value::<String, _>("DisplayName") {
-                        if display_name.to_lowercase().contains(&app_name.to_lowercase()) {
+                        if display_name
+                            .to_lowercase()
+                            .contains(&app_name.to_lowercase())
+                        {
                             if let Ok(path) = app_key.get_value::<String, _>("DisplayIcon") {
-                                let cleaned_path = path.split(',').next()
-                                    .unwrap_or(&path).to_string().trim_matches('"').to_string();
+                                let cleaned_path = path
+                                    .split(',')
+                                    .next()
+                                    .unwrap_or(&path)
+                                    .to_string()
+                                    .trim_matches('"')
+                                    .to_string();
                                 return Some(cleaned_path);
                             } else if let Ok(path) = app_key.get_value::<String, _>("(default)") {
-                                let cleaned_path = path.split(',').next()
-                                    .unwrap_or(&path).to_string().trim_matches('"').to_string();
+                                let cleaned_path = path
+                                    .split(',')
+                                    .next()
+                                    .unwrap_or(&path)
+                                    .to_string()
+                                    .trim_matches('"')
+                                    .to_string();
                                 return Some(cleaned_path);
                             }
                         }
@@ -160,11 +175,14 @@ fn get_exe_by_reg_key(
 }
 
 #[cfg(target_os = "windows")]
-async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
+async fn get_exe_from_potential_path(app_name: &str) -> Option<String> {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
     let potential_paths = [
-        (r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs", true),
+        (
+            r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
+            true,
+        ),
         (r"C:\Windows\", false),
     ];
     for (path, recursive) in &potential_paths {
@@ -173,16 +191,14 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
                 r#"
                     Get-ChildItem -Path "{}" -Filter "*{}*.exe" -Recurse | ForEach-Object {{ $_.FullName }}
                     "#,
-                path, 
-                app_name
+                path, app_name
             )
         } else {
             format!(
                 r#"
                     Get-ChildItem -Path "{}" -Filter "*{}*.exe" | ForEach-Object {{ $_.FullName }}
                     "#,
-                path, 
-                app_name
+                path, app_name
             )
         };
 
@@ -210,14 +226,12 @@ async fn get_exe_from_potential_path(app_name: &str) -> Option<String>{
 }
 
 #[cfg(target_os = "windows")]
-async fn get_exe_by_appx(
-    app_name: &str
-) -> Option<String> {
+async fn get_exe_by_appx(app_name: &str) -> Option<String> {
     use std::str;
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     let app_name = app_name.strip_suffix(".exe").unwrap_or(&app_name);
-    let app_name_withoutspace = app_name.replace(" ", ""); 
+    let app_name_withoutspace = app_name.replace(" ", "");
 
     let _permit = SEMAPHORE.acquire().await.unwrap();
 
@@ -236,7 +250,7 @@ async fn get_exe_by_appx(
         .expect("failed to execute powershell command");
 
     if !output.status.success() {
-        return None
+        return None;
     }
 
     let stdout = str::from_utf8(&output.stdout).ok()?;
@@ -302,9 +316,9 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use std::fs;
-    use gtk::prelude::IconThemeExt;
     use base64::{engine::general_purpose::STANDARD, Engine};
+    use gtk::prelude::IconThemeExt;
+    use std::fs;
 
     if gtk::init().is_err() {
         return Err("failed to initialize GTK".to_string());
@@ -313,7 +327,9 @@ pub async fn get_app_icon(
     fn find_icon_path(app_name: &str) -> Option<String> {
         let icon_theme = gtk::IconTheme::default().unwrap();
         let icon_info = icon_theme.lookup_icon(app_name, 64, gtk::IconLookupFlags::empty())?;
-        icon_info.filename().map(|s| s.to_string_lossy().into_owned())
+        icon_info
+            .filename()
+            .map(|s| s.to_string_lossy().into_owned())
     }
 
     let path = match app_path {
@@ -330,4 +346,3 @@ pub async fn get_app_icon(
         path: Some(path),
     }))
 }
-

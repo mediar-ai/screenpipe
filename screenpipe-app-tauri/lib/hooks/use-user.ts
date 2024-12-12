@@ -3,6 +3,7 @@ import { createStore } from "@tauri-apps/plugin-store";
 import { localDataDir, join } from "@tauri-apps/api/path";
 import { User, useSettings } from "./use-settings";
 import { useInterval } from "./use-interval";
+import { fetch } from "@tauri-apps/plugin-http";
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
