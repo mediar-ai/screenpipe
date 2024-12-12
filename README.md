@@ -115,7 +115,7 @@ make sure to allow permissions on macos (screen, mic)
 bunx @screenpipe/create-pipe@latest
 ```
 
-screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
+screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
 ## other examples
 
