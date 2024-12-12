@@ -367,7 +367,7 @@ jobs:
         shell: powershell
         run: |
           mkdir omp
-          C:\Users\screenpipe-windows\AppData\Local\Microsoft\WindowsApps\python.exe -m pip install intel-openmp --target omp
+          python -m pip install intel-openmp --target omp
           # Create mkl directory if it doesn't exist (ignore error if it does)
           mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
