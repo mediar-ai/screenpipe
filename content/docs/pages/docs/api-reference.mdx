@@ -18,8 +18,11 @@ below is the detailed api reference for screenpipe's core functionality.
 
 #### query parameters:
 
-- `q` (string, optional): search term
-- `content_type` (enum): type of content to search (ocr, audio, fts, ui)
+- `q` (string, optional): search term (a SINGLE word)
+- `content_type` (enum): type of content to search:
+  - `ocr`: optical character recognition text
+  - `audio`: audio transcriptions
+  - `ui`: user interface elements
 - `limit` (int): max results per page (default: 20)
 - `offset` (int): pagination offset
 - `start_time` (timestamp, optional): filter by start timestamp
@@ -29,15 +32,19 @@ below is the detailed api reference for screenpipe's core functionality.
 - `include_frames` (bool, optional): include base64 encoded frames
 - `min_length` (int, optional): minimum content length
 - `max_length` (int, optional): maximum content length
+- `speaker_ids` (int[], optional): filter by specific speaker ids
 
 #### sample requests:
 
 ```bash
-curl http://localhost:3030/health
-```
+# Basic search
+curl "http://localhost:3030/search?q=meeting&content_type=ocr&limit=10"
 
-```bash
-curl "http://localhost:3030/search?q=KEYWORD_QUERY_HERE&limit=10&offset=20"
+# Audio search with speaker filter
+curl "http://localhost:3030/search?content_type=audio&speaker_ids=1,2"
+
+# UI elements search
+curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
 ```
 
 #### sample response:
@@ -186,6 +193,101 @@ curl "http://localhost:3030/search?q=KEYWORD_QUERY_HERE&limit=10&offset=20"
   "config": {
     "key": "value"
   }
+}
+```
+
+### speakers api
+
+#### list unnamed speakers
+- **endpoint**: `/speakers/unnamed`
+- **method**: `get`
+- **description**: get list of speakers without names assigned
+
+##### query parameters:
+- `limit` (int): max results
+- `offset` (int): pagination offset
+- `speaker_ids` (int[], optional): filter specific speaker ids
+
+##### sample request:
+```bash
+curl "http://localhost:3030/speakers/unnamed?limit=10&offset=0"
+```
+
+#### search speakers
+- **endpoint**: `/speakers/search`
+- **method**: `get`
+- **description**: search speakers by name
+
+##### query parameters:
+- `name` (string, optional): name prefix to search for
+
+##### sample request:
+```bash
+curl "http://localhost:3030/speakers/search?name=john"
+```
+
+#### update speaker
+- **endpoint**: `/speakers/update`
+- **method**: `post`
+- **description**: update speaker name or metadata
+
+##### request body:
+```json
+{
+  "id": 123,
+  "name": "john doe",
+  "metadata": "{\"role\": \"engineer\"}"
+}
+```
+
+#### delete speaker
+- **endpoint**: `/speakers/delete`
+- **method**: `post`
+- **description**: delete a speaker and associated audio chunks
+
+##### request body:
+```json
+{
+  "id": 123
+}
+```
+
+#### get similar speakers
+- **endpoint**: `/speakers/similar`
+- **method**: `get`
+- **description**: find speakers with similar voice patterns
+
+##### query parameters:
+- `speaker_id` (int): reference speaker id
+- `limit` (int): max results
+
+##### sample request:
+```bash
+curl "http://localhost:3030/speakers/similar?speaker_id=123&limit=5"
+```
+
+#### merge speakers
+- **endpoint**: `/speakers/merge`
+- **method**: `post`
+- **description**: merge two speakers into one
+
+##### request body:
+```json
+{
+  "speaker_to_keep_id": 123,
+  "speaker_to_merge_id": 456
+}
+```
+
+#### mark as hallucination
+- **endpoint**: `/speakers/hallucination`
+- **method**: `post`
+- **description**: mark a speaker as incorrectly identified
+
+##### request body:
+```json
+{
+  "speaker_id": 123
 }
 ```
 
