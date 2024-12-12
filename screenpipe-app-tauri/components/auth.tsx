@@ -12,7 +12,7 @@ export function AuthButton() {
   const { isSignedIn, user } = useUser();
 
   useEffect(() => {
-    posthog.identify(user?.user_id, {
+    posthog.identify(user?.id, {
       email: user?.email,
     });
     posthog.setPersonProperties({
