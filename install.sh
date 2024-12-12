@@ -124,13 +124,44 @@ if [ "$(uname)" = "Darwin" ]; then
     # Check if ffmpeg is installed
     if ! command -v ffmpeg >/dev/null 2>&1; then
         echo "installing ffmpeg..."
-        FFMPEG_VERSION="7.1"
-        FFMPEG_URL="https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_VERSION}.zip"
 
-        # Download and extract ffmpeg
-        curl -sL "$FFMPEG_URL" -o ffmpeg.zip
-        unzip -q ffmpeg.zip
+        if [ "$arch" = "aarch64" ]; then
+            FFMPEG_URL="https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+        else
+            FFMPEG_URL="https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
+        fi
+
+        echo "downloading ffmpeg from: $FFMPEG_URL"
+        if ! curl -sL "$FFMPEG_URL" -o ffmpeg.zip; then
+            echo "failed to download ffmpeg"
+            exit 1
+        fi
+
+        if ! unzip -q ffmpeg.zip; then
+            echo "failed to extract ffmpeg"
+            exit 1
+        fi
         rm ffmpeg.zip
+
+        # Verify code signing on macOS
+        echo "verifying code signature..."
+        if ! codesign -v ./ffmpeg 2>/dev/null; then
+            echo "warning: binary is not signed or signature is invalid"
+            read -p "do you want to continue anyway? (y/N) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "installation aborted"
+                exit 1
+            fi
+        fi
+
+        # Verify the binary runs and check version
+        echo "verifying binary..."
+        if ! FFMPEG_VERSION=$(./ffmpeg -version | head -n1); then
+            echo "binary verification failed"
+            exit 1
+        fi
+        echo "detected version: $FFMPEG_VERSION"
 
         # Move to local bin
         mkdir -p "$HOME/.local/bin"
