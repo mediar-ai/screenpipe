@@ -89,7 +89,7 @@ every second you are not recording is a missing context for AGI
 macos, linux:
 
 ```bash
-curl -fL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
 ```
 
 or on windows
