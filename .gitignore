@@ -14,14 +14,13 @@
 
 # IDE specific files
 .idea/
-.vscode/
 *.rs.bk
 
 # act cli
 .secrets
 
-# db 
-data/ 
+# db
+data/
 text_json/
 
 src-tauri/deno-*
@@ -43,5 +42,3 @@ onnxruntime-win-x64-gpu*/
 
 # JavaScript stuff
 node_modules/
-
-
