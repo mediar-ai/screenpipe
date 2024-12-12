@@ -50,6 +50,7 @@
 
 <p align="center">
    
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
 
 
 
@@ -72,9 +73,11 @@
 
 we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
-![diagram](./content/diagram2.png)
 
-![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+<img src="./content/diagram2.png" width="800" />
+
+<img src="https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91" width="400" />
+
 
 
 # why?
@@ -86,7 +89,7 @@ every second you are not recording is a missing context for AGI
 macos, linux:
 
 ```bash
-brew install screenpipe
+curl -fsSL https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | bash
 ```
 
 or on windows
@@ -101,6 +104,8 @@ then
 screenpipe
 ```
 
+make sure to allow permissions on macos (screen, mic)
+
 - [get the desktop app](https://screenpi.pe/)
 - [docs & build from source](https://docs.screenpi.pe/docs/getting-started)
 
@@ -110,7 +115,7 @@ screenpipe
 bunx @screenpipe/create-pipe@latest
 ```
 
-screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
+screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
 ## other examples
 
