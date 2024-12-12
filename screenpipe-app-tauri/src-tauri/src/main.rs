@@ -123,8 +123,13 @@ async fn main() {
 
                 #[cfg(target_os = "windows")]
                 {
-                    // Terminate the application
-                    std::process::exit(0);
+                    // Kill all screenpipe processes (CLI sidecar)
+                    if let Err(e) = sidecar::kill_all_sreenpipes(
+                        app_handle.state::<SidecarState>(),
+                        app_handle.clone(),
+                    ){
+                        error!("Failed to kill sidecar: {}", e);
+                    }
                 }
                 
                 window.hide().unwrap();
