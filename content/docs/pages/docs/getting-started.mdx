@@ -9,17 +9,12 @@ screenpipe offers multiple installation methods depending on user needs and tech
 
 for non technical users or those who want to get started quickly, we recommend getting the [desktop app here](https://screenpi.pe).
 
-<Tabs items={['macos', 'linux', 'windows']}>
+<Tabs items={['macos & linux', 'windows']}>
   <Tab>
     ```bash copy
-    brew install screenpipe
+    curl -fsSL https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | bash
     screenpipe
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    brew install screenpipe
-    screenpipe
+    # make sure to allow permissions on macos (screen, mic)
     ```
   </Tab>
   <Tab>
