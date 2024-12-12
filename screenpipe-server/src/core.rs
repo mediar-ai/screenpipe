@@ -383,7 +383,11 @@ async fn record_audio(
             }
 
             transcription.transcription = current_transcript.clone();
-            previous_transcript = current_transcript.unwrap();
+            if current_transcript.is_some() {
+                previous_transcript = current_transcript.unwrap();
+            } else {
+                continue;
+            }
             // Process the audio result
             match process_audio_result(
                 &db,

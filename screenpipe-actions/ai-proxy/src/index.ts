@@ -1,44 +1,51 @@
-// import { DurableObject } from "cloudflare:workers";
+import { DurableObject } from 'cloudflare:workers';
 import { Env } from './types';
 import { Langfuse } from 'langfuse-node';
 
-/**
- * Welcome to Cloudflare Workers! This is your first Durable Objects application.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your Durable Object in action
- * - Run `npm run deploy` to publish your application
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/durable-objects
- */
+export class RateLimiter {
+	private state: DurableObjectState;
+	private requests: Map<string, { count: number; lastReset: number }>;
 
-/** A Durable Object's behavior is defined in an exported Javascript class */
-// export class MyDurableObject extends DurableObject {
-// 	/**
-// 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
-// 	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
-// 	 *
-// 	 * @param ctx - The interface for interacting with Durable Object state
-// 	 * @param env - The interface to reference bindings declared in wrangler.toml
-// 	 */
-// 	constructor(ctx: DurableObjectState, env: Env) {
-// 		super(ctx, env);
-// 	}
+	constructor(state: DurableObjectState) {
+		this.state = state;
+		this.requests = new Map();
+	}
 
-// 	/**
-// 	 * The Durable Object exposes an RPC method sayHello which will be invoked when when a Durable
-// 	 *  Object instance receives a request from a Worker via the same method invocation on the stub
-// 	 *
-// 	 * @param name - The name provided to a Durable Object instance from a Worker
-// 	 * @returns The greeting to be sent back to the Worker
-// 	 */
-// 	async sayHello(name: string): Promise<string> {
-// 		return `Hello, ${name}!`;
-// 	}
-// }
+	async fetch(request: Request) {
+		const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+		const url = new URL(request.url);
+		const now = Date.now();
+
+		// different limits for different endpoints
+		const limits: Record<string, { rpm: number; window: number }> = {
+			'/v1/chat/completions': { rpm: 20, window: 60000 }, // 20 requests per minute for openai
+			default: { rpm: 60, window: 60000 }, // 60 rpm for other endpoints
+		};
+
+		const limit = limits[url.pathname] || limits.default;
+
+		// get or initialize request tracking
+		let tracking = this.requests.get(ip) || { count: 0, lastReset: now };
+
+		// reset if window expired
+		if (now - tracking.lastReset > limit.window) {
+			tracking = { count: 0, lastReset: now };
+		}
+
+		tracking.count++;
+		this.requests.set(ip, tracking);
+
+		const isAllowed = tracking.count <= limit.rpm;
+
+		return new Response(
+			JSON.stringify({
+				allowed: isAllowed,
+				remaining: Math.max(0, limit.rpm - tracking.count),
+				reset_in: Math.ceil((tracking.lastReset + limit.window - now) / 1000),
+			})
+		);
+	}
+}
 
 export default {
 	/**
@@ -79,6 +86,31 @@ export default {
 			});
 		}
 
+		const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+		const rateLimiterId = env.RATE_LIMITER.idFromName(ip);
+		const rateLimiter = env.RATE_LIMITER.get(rateLimiterId);
+
+		// Check rate limit
+		const rateLimitResponse = await rateLimiter.fetch(request.url);
+		const rateLimitData = (await rateLimitResponse.json()) as { allowed: boolean; remaining: number; reset_in: number };
+
+		if (!rateLimitData.allowed) {
+			return new Response(
+				JSON.stringify({
+					error: 'rate limit exceeded',
+					retry_after: 60, // seconds
+				}),
+				{
+					status: 429,
+					headers: {
+						...corsHeaders,
+						'Content-Type': 'application/json',
+						'Retry-After': '60',
+					},
+				}
+			);
+		}
+
 		try {
 			const url = new URL(request.url);
 			const path = url.pathname;
@@ -91,7 +123,13 @@ export default {
 			}
 
 			if (path === '/v1/chat/completions' && request.method === 'POST') {
-				const body = await request.json();
+				const body = (await request.json()) as {
+					model: string;
+					messages: any[];
+					stream: boolean;
+					response_format?: { type: string };
+					temperature?: number;
+				};
 				const isStreaming = body.stream === true;
 
 				const trace = langfuse.trace({
@@ -148,16 +186,12 @@ export default {
 								generation.end({
 									completionStartTime: new Date(),
 									output: 'Streaming response completed',
-									endTime: new Date(),
-									status: 'success',
 								});
-							} catch (error) {
+							} catch (error: any) {
 								console.error('Error in OpenAI stream:', error);
 								generation.end({
 									completionStartTime: new Date(),
-									completion: error.message,
-									endTime: new Date(),
-									status: 'error',
+									output: error.message,
 								});
 								await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
 							} finally {
@@ -191,13 +225,11 @@ export default {
 							throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
 						}
 
-						const data = await openaiResponse.json();
+						const data = (await openaiResponse.json()) as { choices: { message: { content: string } }[] };
 
 						generation.end({
 							completionStartTime: new Date(),
 							output: data.choices[0]?.message?.content,
-							endTime: new Date(),
-							status: 'success',
 						});
 
 						return new Response(JSON.stringify(data), {
@@ -206,13 +238,11 @@ export default {
 								'Content-Type': 'application/json',
 							},
 						});
-					} catch (error) {
+					} catch (error: any) {
 						console.error('Error in OpenAI request:', error);
 						generation.end({
 							completionStartTime: new Date(),
-							completion: error.message,
-							endTime: new Date(),
-							status: 'error',
+							output: error.message,
 						});
 						return new Response(JSON.stringify({ error: error.message }), {
 							status: 500,
@@ -257,7 +287,7 @@ export default {
 							'Content-Type': 'application/json',
 						},
 					});
-				} catch (error) {
+				} catch (error: any) {
 					console.error('Error in Deepgram request:', error);
 					return new Response(
 						JSON.stringify({
@@ -297,6 +327,7 @@ interface Env {
 	LANGFUSE_SECRET_KEY: string;
 	ANTHROPIC_API_KEY: string;
 	DEEPGRAM_API_KEY: string;
+	RATE_LIMITER: DurableObjectNamespace;
 }
 
 /*
@@ -342,4 +373,17 @@ done | tr -d '\n'
 deployment
 
 wrangler deploy
+
+rate limit testing
+
+# test openai endpoint (should hit limit faster)
+for i in {1..25}; do
+  echo "Request $i"
+  curl -X POST "$HOST/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}' \
+    -w "\nStatus: %{http_code}\n"
+  sleep 0.1
+done
+
 */
