@@ -85,7 +85,7 @@ path = "examples/websocket.rs"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams","Win32_UI_Accessibility", "UI_UIAutomation", "Win32_UI_WindowsAndMessaging","Win32_System_Com"] }
 xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
