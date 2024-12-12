@@ -362,19 +362,6 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: Setup Python
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        uses: actions/setup-python@v5
-        env:
-          RUNNER_TOOL_CACHE: "C:\\actions-runner\\_work\\_tool"
-        with:
-          python-version: "3.11"
-          architecture: "x64"
-          cache: "pip"
-          cache-dependency-path: |
-            **/requirements.txt
-            **/pyproject.toml
-
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: pwsh
