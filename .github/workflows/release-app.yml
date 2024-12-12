@@ -362,11 +362,16 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
-      - name: setup python
+      - name: Setup Python
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: '3.11'  # Use stable version
+          architecture: 'x64'     # Explicitly specify architecture
+          cache: 'pip'           # Enable pip caching
+          cache-dependency-path: |
+            **/requirements.txt
+            **/pyproject.toml
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
@@ -379,7 +384,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -617,7 +622,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
