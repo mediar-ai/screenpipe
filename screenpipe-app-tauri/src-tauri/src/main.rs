@@ -11,7 +11,6 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
-use std::process;
 use std::sync::Arc;
 use tauri::Config;
 use tauri::Manager;
@@ -120,18 +119,6 @@ async fn main() {
                         .app_handle()
                         .set_activation_policy(tauri::ActivationPolicy::Regular);
                 }
-
-                #[cfg(target_os = "windows")]
-                {
-                    // Kill all screenpipe processes (CLI sidecar)
-                    if let Err(e) = sidecar::kill_all_sreenpipes(
-                        app_handle.state::<SidecarState>(),
-                        app_handle.clone(),
-                    ){
-                        error!("Failed to kill sidecar: {}", e);
-                    }
-                }
-                
                 window.hide().unwrap();
                 api.prevent_close();
             }

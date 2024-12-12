@@ -2,6 +2,7 @@ use crate::{get_base_dir, SidecarState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
+use std::process;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -100,6 +101,34 @@ pub async fn kill_all_sreenpipes(
             error!("Failed to kill screenpipe processes: {}", e);
             Err(format!("Failed to kill screenpipe processes: {}", e))
         }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub async fn auto_destruct_monitor(auto_destruct_pid: Option<u32>) {
+    if let Some(pid) = auto_destruct_pid {
+        loop {
+            if !is_process_alive(pid) {
+                tracing::info!("Parent process with PID {} is not alive. Terminating sidecar.", pid);
+                process::exit(0);
+            }
+            sleep(Duration::from_secs(1)).await;
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_process_alive(pid: u32) -> bool {
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+
+    unsafe {
+        let process: HANDLE = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid);
+        if process.is_invalid() {
+            return false;
+        }
+        CloseHandle(process);
+        true
     }
 }
 
