@@ -11,6 +11,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
+use std::process;
 use std::sync::Arc;
 use tauri::Config;
 use tauri::Manager;
@@ -39,10 +40,10 @@ use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
 mod llm_sidecar;
+mod permissions;
 mod server;
 mod sidecar;
 mod updates;
-mod permissions;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
@@ -50,11 +51,9 @@ pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 
-
+pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-pub use permissions::do_permissions_check;
-
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -116,9 +115,18 @@ async fn main() {
                 let _ = window.set_always_on_top(false);
                 let _ = window.set_visible_on_all_workspaces(false);
                 #[cfg(target_os = "macos")]
-                let _ = window
-                    .app_handle()
-                    .set_activation_policy(tauri::ActivationPolicy::Regular);
+                {
+                    let _ = window
+                        .app_handle()
+                        .set_activation_policy(tauri::ActivationPolicy::Regular);
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    // Terminate the application
+                    std::process::exit(0);
+                }
+                
                 window.hide().unwrap();
                 api.prevent_close();
             }
