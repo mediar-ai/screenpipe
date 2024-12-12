@@ -283,6 +283,10 @@ fi
 cd || exit 1
 rm -rf "$TMP_DIR"
 
+# Define colors
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
 echo "
 ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗
 ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║██╔══██╗██╔════╝
@@ -298,5 +302,5 @@ echo "1. restart your terminal or run: source $SHELL_CONFIG"
 echo "2. run: screenpipe"
 echo "3. allow permissions on macos (screen, mic) if needed"
 echo ""
-echo "join our discord: https://discord.gg/dU9EBuw7Uq"
-echo "check the docs: https://docs.screenpi.pe"
+echo "join our discord: ${BLUE}https://discord.gg/dU9EBuw7Uq${NC}"
+echo "check the docs: ${BLUE}https://docs.screenpi.pe${NC}"
