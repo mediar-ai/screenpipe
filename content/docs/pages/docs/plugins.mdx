@@ -147,3 +147,101 @@ key features:
 - [louis@screenpi.pe](mailto:louis@screenpi.pe)
 
 </MotionDiv>
+
+### examples
+
+<MotionDiv delay={0.8}>
+
+#### simple hourly summary with ollama
+
+this example gets the last hour of screen/audio data and generates a summary using your local ollama model:
+
+```typescript copy
+import { generateText } from 'ai';
+import { ollama } from 'ollama-ai-provider';
+import { pipe } from '@screenpipe/sdk';
+
+async function generateHourlySummary() {
+  // get settings & last hour data
+  const settings = await pipe.settings.getAll();
+  const lastHour = await pipe.queryScreenpipe({
+    contentType: 'all',
+    startTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    limit: 10000
+  });
+
+  // format data for context
+  const context = lastHour?.data.map(item => {
+    if (item.type === 'OCR') {
+      return `[${item.content.appName}] ${item.content.text}`;
+    }
+    return `[audio] ${item.content.transcription}`;
+  }).join('\n');
+
+  if (settings.aiProviderType === 'native-ollama') {
+    const { text } = await generateText({
+      model: ollama(settings.aiModel),
+      system: 'you are a helpful assistant that summarizes activity data into markdown',
+      prompt: `summarize this activity data:\n${context}`,
+    });
+
+    // write to obsidian / markdown file 
+    fs.writeFileSync(`/tmp/hourly-summary-${new Date().toISOString()}.md`, text);
+  }
+}
+
+generateHourlySummary();
+```
+
+#### smart meeting assistant with ollama
+
+this example monitors for meeting apps and provides real-time AI assistance:
+
+```typescript copy
+import { streamText } from 'ai';
+import { ollama } from 'ollama-ai-provider';
+import { pipe } from '@screenpipe/sdk';
+
+
+async function meetingAssistant() {
+  const settings = await pipe.settings.getAll();
+  
+
+
+  if (settings.aiProviderType === 'native-ollama') {
+    // get last 60 min context
+    const context = await pipe.queryScreenpipe({
+      contentType: 'all',
+      startTime: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      limit: 10000
+    });
+
+    const { text } = await generateText({
+      model: ollama(settings.aiModel),
+      system: 'you are a meeting assistant that provides real-time insights',
+      prompt: `analyze this meeting context and suggest helpful insights:\n${JSON.stringify(context)}`
+    });
+
+    // send insights to app AI inbox with actions
+    await pipe.inbox.send({
+      title: 'meeting insights',
+      body: text,
+      actions: [{
+        label: 'save to notes',
+        callback: async () => {
+          // save to your note system
+          console.log('saving insights...');
+        }
+      }]
+    });
+  }
+}
+
+```
+
+these examples show how to:
+- query screen/audio data with `pipe.queryScreenpipe`
+- use local AI with ollama (you can also use OpenAI, Anthropic, or any other provider)
+- send interactive notifications with `pipe.inbox`
+
+</MotionDiv>
