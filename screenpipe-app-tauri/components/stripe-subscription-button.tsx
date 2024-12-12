@@ -14,13 +14,13 @@ interface StripeSubscriptionButtonProps {
 export function StripeSubscriptionButton({
   onSubscriptionComplete,
 }: StripeSubscriptionButtonProps) {
-  const { isSignedIn, user, checkLoomSubscription } = useUser();
+  const { isSignedIn, user } = useUser();
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
     const checkSubscription = async () => {
       if (user) {
-        const hasSubscription = await checkLoomSubscription();
+        const hasSubscription = false;
         setIsSubscribed(hasSubscription);
         if (hasSubscription && onSubscriptionComplete) {
           onSubscriptionComplete();
@@ -45,7 +45,7 @@ export function StripeSubscriptionButton({
 
     try {
       // Direct Stripe Checkout URL with price_id
-      const checkoutUrl = `https://buy.stripe.com/28o00JcCq2JsgAE9AX?prefilled_email=${user?.email}&client_reference_id=${user?.user_id}`;
+      const checkoutUrl = `https://buy.stripe.com/28o00JcCq2JsgAE9AX?prefilled_email=${user?.email}&client_reference_id=${user?.id}`;
 
       // Open Stripe checkout in default browser
       await open(checkoutUrl);
