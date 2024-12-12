@@ -198,9 +198,6 @@ if [ "$(uname)" = "Darwin" ]; then
     echo "Fixing binary linking..."
     cd "$INSTALL_DIR" || exit 1
 
-    echo "Current library paths:"
-    otool -L "./screenpipe"
-
     # Remove any existing rpaths
     install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
 
@@ -212,10 +209,6 @@ if [ "$(uname)" = "Darwin" ]; then
 
     # Also try changing the library id
     install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
-
-    echo "Updated library paths:"
-    otool -L "./screenpipe"
-    otool -L "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
 fi
 
 # Remove quarantine attributes on macOS
