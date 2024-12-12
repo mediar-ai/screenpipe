@@ -87,7 +87,9 @@ every second you are not recording is a missing context for AGI
 macos, linux:
 
 ```bash
-brew install screenpipe
+curl -fsSL https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | bash
+screenpipe
+# make sure to allow permissions on macos (screen, mic)
 ```
 
 or on windows
