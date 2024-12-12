@@ -21,7 +21,14 @@ export interface NotificationOptions {
 /**
  * Types of content that can be queried in Screenpipe.
  */
-export type ContentType = "ocr" | "audio" | "all";
+export type ContentType = 
+  | "all"
+  | "ocr"
+  | "audio"
+  | "ui"
+  | "audio+ui"
+  | "ocr+ui"
+  | "audio+ocr";
 
 /**
  * Parameters for querying Screenpipe.
@@ -38,6 +45,7 @@ export interface ScreenpipeQueryParams {
   includeFrames?: boolean;
   minLength?: number;
   maxLength?: number;
+  speakerIds?: number[];
 }
 
 /**
@@ -67,6 +75,7 @@ export interface AudioContent {
   tags: string[];
   deviceName: string;
   deviceType: string;
+  speaker?: Speaker;
 }
 
 /**
@@ -85,12 +94,35 @@ export interface FTSContent {
 }
 
 /**
+ * Structure of UI content.
+ */
+export interface UiContent {
+  id: number;
+  text: string;
+  timestamp: string;
+  appName: string;
+  windowName: string;
+  initialTraversalAt?: string;
+  filePath: string;
+  offsetIndex: number;
+}
+
+/**
+ * Speaker information
+ */
+export interface Speaker {
+  id: number;
+  name?: string;
+  metadata?: string;
+}
+
+/**
  * Union type for different types of content items.
  */
 export type ContentItem =
   | { type: "OCR"; content: OCRContent }
   | { type: "Audio"; content: AudioContent }
-  | { type: "FTS"; content: FTSContent };
+  | { type: "UI"; content: UiContent };
 
 /**
  * Pagination information for search results.
@@ -360,8 +392,13 @@ export async function queryScreenpipe(
   const queryParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined) {
-      const snakeKey = toSnakeCase(key);
-      queryParams.append(snakeKey, value.toString());
+      if (key === 'speakerIds' && Array.isArray(value)) {
+        // Convert speaker IDs array to comma-separated string
+        queryParams.append(toSnakeCase(key), value.join(','));
+      } else {
+        const snakeKey = toSnakeCase(key);
+        queryParams.append(snakeKey, value.toString());
+      }
     }
   });
 
