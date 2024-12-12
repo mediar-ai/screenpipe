@@ -25,6 +25,18 @@ export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
 }
 
+export interface User {
+  id?: string;
+  email?: string;
+  name?: string;
+  image?: string;
+  token?: string;
+  clerk_id?: string;
+  credits?: {
+    amount: number;
+  };
+}
+
 export type Settings = {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -62,6 +74,7 @@ export type Settings = {
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
   disabledShortcuts: Shortcut[];
+  user: User;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -111,6 +124,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
   disabledShortcuts: [],
+  user: {},
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -295,9 +309,10 @@ async function createUserSettings(
 
   for (const key of Object.keys(defaultSettingsObject)) {
     const storedValue = await store.get(key);
-    userSettingsObject[key] = storedValue === null || storedValue === undefined 
-      ? defaultSettingsObject[key as keyof Settings]
-      : storedValue;
+    userSettingsObject[key] =
+      storedValue === null || storedValue === undefined
+        ? defaultSettingsObject[key as keyof Settings]
+        : storedValue;
   }
 
   return userSettingsObject as Settings;

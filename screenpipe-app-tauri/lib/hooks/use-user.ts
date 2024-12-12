@@ -1,16 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { createStore } from "@tauri-apps/plugin-store";
 import { localDataDir, join } from "@tauri-apps/api/path";
-
-interface UserData {
-  token: string;
-  email: string;
-  user_id: string;
-  displayName: string;
-  photoURL: string;
-}
-
-
+import { User, useSettings } from "./use-settings";
+import { useInterval } from "./use-interval";
 
 let store: Awaited<ReturnType<typeof createStore>> | null = null;
 
@@ -20,67 +12,64 @@ async function initStore() {
   store = await createStore(storePath);
 }
 
-async function checkSubscription(email: string): Promise<boolean> {
-  try {
-    const isDev = window.location.href.includes("localhost");
-    // const baseUrl = isDev ? "http://localhost:3001" : "https://screenpi.pe";
-    const baseUrl = "https://screenpi.pe";
+async function verifyUserToken(token: string): Promise<User> {
+  const response = await fetch("https://screenpi.pe/api/tauri", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
 
-    const response = await fetch(`${baseUrl}/api/stripe-loom`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      ...(isDev ? {} : { credentials: "include" }),
-      body: JSON.stringify({ email }),
-    });
-
-    if (!response.ok) {
-      console.error("subscription check failed with status:", response.status);
-      return false;
-    }
-
-    const data = await response.json();
-    return data.hasActiveSubscription;
-  } catch (error) {
-    console.error("failed to check subscription:", error);
-    return false;
+  if (!response.ok) {
+    throw new Error("failed to verify token");
   }
+
+  const data = await response.json();
+  return data.user as User;
 }
 
 export function useUser() {
-  const [user, setUser] = useState<UserData | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { settings, updateSettings } = useSettings();
 
+  // poll credits every 3 seconds if the settings dialog is open
+  useInterval(() => {
+    if (settings.user?.token) {
+      loadUser(settings.user.token);
+    }
+  }, 3000);
+
+  const loadUser = async (token: string) => {
+    if (!store) await initStore();
+
+    try {
+      const userData = await verifyUserToken(token);
+      console.log("userData", userData);
+      setUser(userData);
+      await updateSettings({ user: userData });
+    } catch (err) {
+      console.error("failed to load user:", err);
+      setError(err instanceof Error ? err.message : "failed to load user");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // load from settings
   useEffect(() => {
-    const loadUser = async () => {
-      if (!store) await initStore();
-
-      try {
-        const savedUser = await store!.get<UserData>("auth_data");
-        setUser(savedUser || null);
-      } catch (err) {
-        console.error("failed to load user:", err);
-        setError(err instanceof Error ? err.message : "failed to load user");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadUser();
-  }, []);
-
-  const checkLoomSubscription = useCallback(async () => {
-    if (!user?.email) return false;
-    return checkSubscription(user.email);
-  }, [user?.email]);
+    if (settings.user?.token) {
+      setUser(settings.user);
+    }
+  }, [settings.user?.token]);
 
   return {
     user,
     isSignedIn: !!user,
     isLoading,
     error,
-    checkLoomSubscription,
+    loadUser,
   };
 }

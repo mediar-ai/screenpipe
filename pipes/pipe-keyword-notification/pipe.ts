@@ -1,5 +1,4 @@
-// import { pipe, ContentItem } from "@screenpipe/js";
-import { pipe, ContentItem } from "/Users/louisbeaumont/Documents/screen-pipe/screenpipe-js/main.ts";
+import { pipe, ContentItem } from "@screenpipe/js";
 
 async function monitorScreenAndNotify(): Promise<void> {
   console.log("starting screen monitor");

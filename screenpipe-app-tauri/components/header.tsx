@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-user";
-import { AuthButton } from "./auth";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -154,7 +153,7 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -179,10 +178,6 @@ export default function Header() {
                 <DropdownMenuLabel>account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem className="cursor-pointer p-0">
-                    <AuthButton />
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="cursor-pointer p-0"
                     onClick={(e) => {

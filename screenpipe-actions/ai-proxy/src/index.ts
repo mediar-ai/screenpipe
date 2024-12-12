@@ -225,20 +225,10 @@ export default {
 				}
 			}
 
-			if (path === '/v1/transcribe' && request.method === 'POST') {
-				const formData = await request.formData();
-				const audioFile = formData.get('audio') as File;
-				const languages = formData.get('languages')?.toString().split(',') || [];
-
-				if (!audioFile) {
-					return new Response(JSON.stringify({ error: 'no audio file provided' }), {
-						status: 400,
-						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
-						},
-					});
-				}
+			if (path === '/v1/listen' && request.method === 'POST') {
+				// Get the raw body instead of form data
+				const audioBuffer = await request.arrayBuffer();
+				const languages = request.headers.get('detect_language')?.split(',') || [];
 
 				try {
 					const deepgramResponse = await fetch(
@@ -248,9 +238,9 @@ export default {
 							method: 'POST',
 							headers: {
 								Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-								'Content-Type': audioFile.type,
+								'Content-Type': 'audio/wav', // Set correct content type
 							},
-							body: await audioFile.arrayBuffer(),
+							body: audioBuffer,
 						}
 					);
 
@@ -268,13 +258,19 @@ export default {
 					});
 				} catch (error) {
 					console.error('Error in Deepgram request:', error);
-					return new Response(JSON.stringify({ error: error.message }), {
-						status: 500,
-						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
-						},
-					});
+					return new Response(
+						JSON.stringify({
+							error: error.message,
+							details: error.stack,
+						}),
+						{
+							status: 500,
+							headers: {
+								...corsHeaders,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
 				}
 			}
 
@@ -310,15 +306,18 @@ wrangler dev
 
 
 terminal 2
+HOST=https://ai-proxy.i-f9f.workers.dev
+HOST=http://localhost:8787
 
-curl http://localhost:8787/test
-
-curl -X POST http://localhost:8787/v1/transcribe \
-  -F "audio=@./screenpipe-audio/test_data/poetic_kapil_gupta.wav" \
-  -F "languages=en,fr"
+curl $host/test
 
 
-curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
+curl -X POST $HOST/v1/listen \
+  -H "Content-Type: audio/wav" \
+  -H "detect_language: en" \
+  --data-binary "@./screenpipe-audio/test_data/poetic_kapil_gupta.wav"
+
+curl -X POST $HOST/v1/chat/completions \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer YOUR_API_KEY" \
 -d '{
@@ -337,4 +336,9 @@ curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
 }' | while read -r line; do
 echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
 done | tr -d '\n'
+
+
+deployment
+
+wrangler deploy
 */

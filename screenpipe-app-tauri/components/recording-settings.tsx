@@ -23,6 +23,7 @@ import {
   Folder,
   AppWindowMac,
   X,
+  EyeOff,
 } from "lucide-react";
 import { cn, getCliPath } from "@/lib/utils";
 import {
@@ -62,7 +63,8 @@ import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
-
+import { useUser } from "@/lib/hooks/use-user";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 type PermissionsStatus = {
   screenRecording: string;
   microphone: string;
@@ -112,6 +114,9 @@ export function RecordingSettings({
   const isDisabled = health?.status_code === 500;
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const { user } = useUser();
+  const { credits } = user || {};
 
   useEffect(() => {
     const checkPlatform = async () => {
@@ -332,7 +337,19 @@ export function RecordingSettings({
   };
 
   const handleAudioTranscriptionModelChange = (value: string) => {
-    setLocalSettings({ ...localSettings, audioTranscriptionEngine: value });
+    if (value === "screenpipe-cloud" && !credits?.amount) {
+      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+      return;
+    }
+
+    if (value === "screenpipe-cloud") {
+      setLocalSettings({
+        ...localSettings,
+        audioTranscriptionEngine: value,
+      });
+    } else {
+      setLocalSettings({ ...localSettings, audioTranscriptionEngine: value });
+    }
   };
 
   const handleOcrModelChange = (value: string) => {
@@ -666,12 +683,25 @@ export function RecordingSettings({
               </Label>
               <Select
                 onValueChange={handleAudioTranscriptionModelChange}
-                defaultValue={localSettings.audioTranscriptionEngine}
+                value={localSettings.audioTranscriptionEngine}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="select audio transcription engine" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="screenpipe-cloud">
+                    <div className="flex items-center justify-between w-full space-x-2">
+                      <span>screenpipe cloud</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">cloud</Badge>
+                        {!credits?.amount && (
+                          <Badge variant="outline" className="text-xs">
+                            get credits
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </SelectItem>
                   <SelectItem value="deepgram">
                     <div className="flex items-center justify-between w-full space-x-2">
                       <span>deepgram</span>
@@ -685,6 +715,64 @@ export function RecordingSettings({
                   </SelectItem>
                 </SelectContent>
               </Select>
+
+              {localSettings.audioTranscriptionEngine === "deepgram" && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-4">
+                    <Label
+                      htmlFor="deepgramApiKey"
+                      className="min-w-[80px] text-right"
+                    >
+                      api key
+                    </Label>
+                    <div className="flex-grow relative">
+                      <Input
+                        id="deepgramApiKey"
+                        type={showApiKey ? "text" : "password"}
+                        value={localSettings.deepgramApiKey}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          setLocalSettings({
+                            ...localSettings,
+                            deepgramApiKey: newValue,
+                          });
+                          updateSettings({ deepgramApiKey: newValue });
+                        }}
+                        className="pr-10 w-full"
+                        placeholder="enter your deepgram api key"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        autoComplete="off"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm text-center text-muted-foreground">
+                    don&apos;t have an api key? get one from{" "}
+                    <a
+                      href="https://console.deepgram.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      deepgram&apos;s website
+                    </a>{" "}
+                    or use screenpipe cloud
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col space-y-2">

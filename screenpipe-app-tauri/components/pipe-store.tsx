@@ -32,10 +32,10 @@ import { join } from "@tauri-apps/api/path";
 import { convertHtmlToMarkdown } from "@/lib/utils";
 import { LogFileButton } from "./log-file-button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { StripeSubscriptionButton } from "./stripe-subscription-button";
 import { useUser } from "@/lib/hooks/use-user";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
+import { invoke } from "@tauri-apps/api/core";
 
 export interface Pipe {
   enabled: boolean;
@@ -51,6 +51,8 @@ interface CorePipe {
   name: string;
   description: string;
   url: string;
+  credits: number;
+  paid: boolean;
 }
 
 const corePipes: CorePipe[] = [
@@ -60,12 +62,16 @@ const corePipes: CorePipe[] = [
     description:
       "ai assistant that helps you write better linkedin posts and engage with your network - coming soon",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
+    credits: 0,
+    paid: false,
   },
   {
     id: "pipe-for-loom",
     name: "loom generator",
     description: "generate looms from your screenpipe data",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
+    credits: 10,
+    paid: true,
   },
   {
     id: "pipe-obsidian-time-logs",
@@ -73,6 +79,8 @@ const corePipes: CorePipe[] = [
     description:
       "continuously write logs of your days in an obsidian table using ollama+llama3.2",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
+    credits: 0,
+    paid: false,
   },
   {
     id: "pipe-post-questions-on-reddit",
@@ -80,6 +88,8 @@ const corePipes: CorePipe[] = [
     description:
       "get more followers, promote your content/product while being useful, without doing any work",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
+    credits: 0,
+    paid: false,
   },
   {
     id: "pipe-notion-table-logs",
@@ -87,12 +97,16 @@ const corePipes: CorePipe[] = [
     description:
       "continuously write logs of your days in a notion table using ollama",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
+    credits: 0,
+    paid: false,
   },
   {
     id: "pipe-simple-nextjs",
     name: "keyword analytics",
     description: "show most used keywords",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
+    credits: 0,
+    paid: false,
   },
 ];
 
@@ -170,7 +184,7 @@ const PipeStore: React.FC = () => {
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
-  const { user, checkLoomSubscription } = useUser();
+  const { user } = useUser();
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -271,6 +285,27 @@ const PipeStore: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
+      // Add payment check for paid pipes
+      const corePipe = corePipes.find((cp) => cp.id === pipe.id);
+      if (corePipe?.paid && !pipe.enabled) {
+        // Check if user exists AND has valid token
+        if (!user?.token) {
+          toast({
+            title: "authentication required",
+            description: "please sign in to use paid pipes",
+            variant: "destructive",
+          });
+          await invoke("open_auth_window");
+          return;
+        }
+
+        const userCredits = user.credits?.amount || 0;
+        if (userCredits < corePipe.credits) {
+          openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+          return;
+        }
+      }
+
       posthog.capture("toggle_pipe", {
         pipe_id: pipe.id,
         enabled: !pipe.enabled,
@@ -428,6 +463,7 @@ const PipeStore: React.FC = () => {
         title: "deleting pipe",
         description: "please wait...",
       });
+      setSelectedPipe(null);
 
       const response = await fetch("http://localhost:3030/pipes/delete", {
         method: "POST",
@@ -443,7 +479,6 @@ const PipeStore: React.FC = () => {
       }
 
       // First unselect the pipe, then fetch the updated list
-      setSelectedPipe(null);
       await fetchInstalledPipes();
 
       toast({
@@ -511,87 +546,108 @@ const PipeStore: React.FC = () => {
           <div className="w-[320px] border-r bg-muted/10 flex-shrink-0 overflow-y-auto">
             <div className="p-4 space-y-4">
               <div className="flex gap-2">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        onClick={() => handleToggleEnabled(selectedPipe)}
-                        variant={selectedPipe.enabled ? "default" : "outline"}
-                        disabled={health?.status === "error"}
-                        size="icon"
-                        className="h-8 w-8"
-                      >
-                        <Power className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{selectedPipe.enabled ? "disable" : "enable"} pipe</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => handleToggleEnabled(selectedPipe)}
+                            variant={
+                              selectedPipe.enabled ? "default" : "outline"
+                            }
+                            disabled={health?.status === "error"}
+                            size="icon"
+                            className="h-8 w-8"
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            {selectedPipe.enabled ? "disable" : "enable"} pipe
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-                <LogFileButton className="text-xs" />
+                    <LogFileButton className="text-xs" />
 
-                {selectedPipe.source?.startsWith("http") && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => openUrl(selectedPipe.source)}
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>view source code</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                    {selectedPipe.source?.startsWith("http") && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() => openUrl(selectedPipe.source)}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>view source code</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        onClick={() => handleDeletePipe(selectedPipe)}
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>delete pipe</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => handleDeletePipe(selectedPipe)}
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>delete pipe</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-              <div className="space-y-2">
-                {!selectedPipe.source?.startsWith("https://") && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => handleRefreshFromDisk(selectedPipe)}
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                        >
-                          <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                          refresh
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>refresh the code from your local disk</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
+                    <div className="space-y-2">
+                      {!selectedPipe.source?.startsWith("https://") && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                onClick={() =>
+                                  handleRefreshFromDisk(selectedPipe)
+                                }
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>refresh the code from your local disk</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  </div>
+
+                  {corePipes.find((cp) => cp.id === selectedPipe.id)?.paid && (
+                    <div className="text-xs text-muted-foreground mt-2">
+                      requires{" "}
+                      {
+                        corePipes.find((cp) => cp.id === selectedPipe.id)
+                          ?.credits
+                      }{" "}
+                      credits{" "}
+                      {user?.credits ? `(you have ${user.credits.amount})` : ""}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {selectedPipe.enabled && (
@@ -822,34 +878,36 @@ const PipeStore: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {pipe.id !== "pipe-linkedin-ai-assistant" && (
-                          pipe.enabled ? (
-                            <Button
-                              size="icon"
-                              variant={pipe.enabled ? "default" : "outline"}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleEnabled(pipe);
-                              }}
-                              className={`${
-                                pipe.enabled
-                                  ? "bg-primary hover:bg-primary/90"
-                                  : "hover:bg-muted"
-                              }`}
-                            >
-                              <Power className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : (
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDownloadPipe(pipe.source);
-                              }}
-                            >
-                              <Download className="h-3.5 w-3.5" />
-                            </Button>
-                          )
+                          <>
+                            {pipes.some((p) => p.id === pipe.id) ? (
+                              <Button
+                                size="icon"
+                                variant={pipe.enabled ? "default" : "outline"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleEnabled(pipe);
+                                }}
+                                className={`${
+                                  pipe.enabled
+                                    ? "bg-primary hover:bg-primary/90"
+                                    : "hover:bg-muted"
+                                }`}
+                              >
+                                <Power className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadPipe(pipe.source);
+                                }}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -864,6 +922,16 @@ const PipeStore: React.FC = () => {
                     <div className="text-xs text-muted-foreground mt-2">
                       Updated recently
                     </div>
+                    {corePipes.find((cp) => cp.id === pipe.id)?.paid && (
+                      <div className="text-xs text-muted-foreground mt-2">
+                        requires{" "}
+                        {corePipes.find((cp) => cp.id === pipe.id)?.credits}{" "}
+                        credits{" "}
+                        {user?.credits
+                          ? `(you have ${user.credits.amount})`
+                          : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
