@@ -73,9 +73,11 @@
 
 we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
 
-![diagram](./content/diagram2.png)
 
-![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+<img src="./content/diagram2.png" width="800" />
+
+<img src="https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91" width="400" />
+
 
 
 # why?
@@ -88,8 +90,6 @@ macos, linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | bash
-screenpipe
-# make sure to allow permissions on macos (screen, mic)
 ```
 
 or on windows
@@ -103,6 +103,8 @@ then
 ```bash
 screenpipe
 ```
+
+make sure to allow permissions on macos (screen, mic)
 
 - [get the desktop app](https://screenpi.pe/)
 - [docs & build from source](https://docs.screenpi.pe/docs/getting-started)
