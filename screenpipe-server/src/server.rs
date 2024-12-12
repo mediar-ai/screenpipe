@@ -519,8 +519,15 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         .unwrap()
         .as_secs();
 
+    let app_uptime = (now as i64) - (state.app_start_time.timestamp());
+    let grace_period = 120; // 2 minutes in seconds
+    
     let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
-    let audio_active = now - last_capture < 5; // Consider active if captured in last 5 seconds
+    let audio_active = if app_uptime < grace_period {
+        true // Consider active during grace period
+    } else {
+        now - last_capture < 5 // Consider active if captured in last 5 seconds
+    };
 
     let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
