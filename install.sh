@@ -40,16 +40,16 @@ get_os_arch() {
     esac
 }
 
-echo "Fetching latest version from GitHub..."
+echo "fetching latest version from github..."
 LATEST_RELEASE=$(curl -s https://api.github.com/repos/mediar-ai/screenpipe/releases/latest)
 VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": "v[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
 
 if [ -z "$VERSION" ]; then
-    echo "Failed to fetch latest version"
+    echo "failed to fetch latest version"
     exit 1
 fi
 
-echo "Latest version: $VERSION"
+echo "latest version: $VERSION"
 
 if ! OS_ARCH=$(get_os_arch); then
     # get_os_arch already printed the error message
@@ -113,13 +113,12 @@ if [ "$(uname)" = "Darwin" ]; then
     # Check if Xcode tools are installed
     xcode-select -p &>/dev/null
     if [ $? -ne 0 ]; then
-        echo "Command Line Tools for Xcode not found. Installing from softwareupdate…"
-        # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
+        echo "command line tools for xcode not found. installing from softwareupdate…"
         touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
         PROD=$(softwareupdate -l | grep "\*.*Command Line" | tail -n 1 | sed 's/^[^C]* //')
         softwareupdate -i "$PROD" --verbose
     else
-        echo "Command Line Tools for Xcode have been installed."
+        echo "command line tools for xcode have been installed."
     fi
 
     # Check if ffmpeg is installed
@@ -129,7 +128,7 @@ if [ "$(uname)" = "Darwin" ]; then
         FFMPEG_URL="https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_VERSION}.zip"
 
         # Download and extract ffmpeg
-        curl -L "$FFMPEG_URL" -o ffmpeg.zip
+        curl -sL "$FFMPEG_URL" -o ffmpeg.zip
         unzip -q ffmpeg.zip
         rm ffmpeg.zip
 
@@ -145,28 +144,48 @@ if [ "$(uname)" = "Darwin" ]; then
     fi
 fi
 
-echo "Downloading screenpipe v${VERSION} for ${arch}-${os}..."
+# Install Bun if not present
+if ! command -v bun >/dev/null 2>&1; then
+    echo "installing bun..."
+    if [ "$(uname)" = "Darwin" ] || [ "$os" = "unknown-linux-gnu" ]; then
+        curl -fsSL https://bun.sh/install | bash
+        
+        # Source the updated profile to make bun available
+        if [ -f "$HOME/.bashrc" ]; then
+            . "$HOME/.bashrc"
+        elif [ -f "$HOME/.zshrc" ]; then
+            . "$HOME/.zshrc"
+        fi
+        
+        echo "bun installed successfully"
+    else
+        echo "error: unsupported operating system for bun installation"
+        exit 1
+    fi
+fi
+
+echo "downloading screenpipe v${VERSION} for ${arch}-${os}..."
 
 # Add debug output for download
-echo "Downloading from URL: $URL"
-if ! curl -L "$URL" -o "$FILENAME"; then
-    echo "Download failed"
+echo "downloading from url: $URL"
+if ! curl -sL "$URL" -o "$FILENAME"; then
+    echo "download failed"
     exit 1
 fi
 
 # Verify download
 if ! gzip -t "$FILENAME" 2>/dev/null; then
-    echo "Downloaded file is not in valid gzip format"
+    echo "downloaded file is not in valid gzip format"
     exit 1
 fi
 
-echo "Extracting..."
+echo "extracting..."
 if ! tar xzf "$FILENAME"; then
-    echo "Extraction failed"
+    echo "extraction failed"
     exit 1
 fi
 
-echo "Installing..."
+echo "installing..."
 INSTALL_DIR="$HOME/.local/screenpipe"
 
 # Remove existing installation
@@ -180,17 +199,17 @@ fi
 
 # Download and install libraries for macOS
 if [ "$(uname)" = "Darwin" ]; then
-    echo "Downloading required libraries..."
+    echo "downloading required libraries..."
     
     if [ "$arch" = "aarch64" ]; then
         LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
-        if ! curl -L "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"; then
+        if ! curl -sL "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"; then
             echo "Failed to download arm64 library"
             exit 1
         fi
     elif [ "$arch" = "x86_64" ]; then
         LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"
-        if ! curl -L "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"; then
+        if ! curl -sL "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"; then
             echo "Failed to download x86_64 library"
             exit 1
         fi
@@ -205,7 +224,7 @@ fi
 
 # Fix binary linking on macOS
 if [ "$(uname)" = "Darwin" ]; then
-    echo "Fixing binary linking..."
+    echo "fixing binary linking..."
     cd "$INSTALL_DIR" || exit 1
 
     # Remove any existing rpaths
@@ -226,7 +245,7 @@ fi
 
 # Remove quarantine attributes on macOS
 if [ "$(uname)" = "Darwin" ]; then
-    echo "Removing quarantine attributes..."
+    echo "removing quarantine attributes..."
     xattr -r -d com.apple.quarantine "$INSTALL_DIR" 2>/dev/null || true
 fi
 
@@ -237,7 +256,7 @@ if ! ln -sf "$INSTALL_DIR/screenpipe" "$HOME/.local/bin/screenpipe"; then
     exit 1
 fi
 
-echo "Adding ~/.local/bin to PATH..."
+echo "adding ~/.local/bin to path..."
 
 # Detect shell and update appropriate config file
 SHELL_CONFIG=""
@@ -250,7 +269,7 @@ case "$SHELL" in
         ;;
 esac
 
-echo "SHELL_CONFIG: $SHELL_CONFIG"
+echo "shell_config: $SHELL_CONFIG"
 
 if [ -n "$SHELL_CONFIG" ]; then
     echo "" >>"$SHELL_CONFIG"
@@ -264,4 +283,20 @@ fi
 cd || exit 1
 rm -rf "$TMP_DIR"
 
-echo "Installation complete!"
+echo "
+███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗
+██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║██╔══██╗██╔════╝
+███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║██████╔╝██║██████╔╝█████╗  
+╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔═══╝ ██║██╔═══╝ ██╔══╝  
+███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║██║     ██║██║     ███████╗
+╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝     ╚══════╝
+"
+
+echo "installation complete! 🚀"
+echo "to get started:"
+echo "1. restart your terminal or run: source $SHELL_CONFIG"
+echo "2. run: screenpipe"
+echo "3. allow permissions on macos (screen, mic) if needed"
+echo ""
+echo "join our discord: https://discord.gg/dU9EBuw7Uq"
+echo "check the docs: https://docs.screenpi.pe"
