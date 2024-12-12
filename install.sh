@@ -110,10 +110,8 @@ fi
 
 # Check macOS dependencies
 if [ "$(uname)" = "Darwin" ]; then
-
     # Check if Xcode tools are installed
-    xcode-select -p &
-    >/dev/null
+    xcode-select -p &>/dev/null
     if [ $? -ne 0 ]; then
         echo "Command Line Tools for Xcode not found. Installing from softwareupdate…"
         # This temporary file prompts the 'softwareupdate' utility to list the Command Line Tools
@@ -180,14 +178,26 @@ if ! mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
     exit 1
 fi
 
-# Copy files
+# Download and install libraries for macOS
 if [ "$(uname)" = "Darwin" ]; then
-    if ! cp lib/libscreenpipe_arm64.dylib "$INSTALL_DIR/screenpipe-vision/lib/"; then
-        echo "Failed to copy library"
-        exit 1
+    echo "Downloading required libraries..."
+    
+    if [ "$arch" = "aarch64" ]; then
+        LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
+        if ! curl -L "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"; then
+            echo "Failed to download arm64 library"
+            exit 1
+        fi
+    elif [ "$arch" = "x86_64" ]; then
+        LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"
+        if ! curl -L "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"; then
+            echo "Failed to download x86_64 library"
+            exit 1
+        fi
     fi
 fi
 
+# Copy binary
 if ! cp bin/screenpipe "$INSTALL_DIR/"; then
     echo "Failed to copy binary"
     exit 1
@@ -205,10 +215,13 @@ if [ "$(uname)" = "Darwin" ]; then
     install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
 
     # Change the library path in the binary
-    install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
-
-    # Also try changing the library id
-    install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
+    if [ "$arch" = "aarch64" ]; then
+        install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
+        install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
+    elif [ "$arch" = "x86_64" ]; then
+        install_name_tool -change "screenpipe-vision/lib/libscreenpipe_x86_64.dylib" "@rpath/libscreenpipe_x86_64.dylib" "./screenpipe"
+        install_name_tool -id "@rpath/libscreenpipe_x86_64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"
+    fi
 fi
 
 # Remove quarantine attributes on macOS
