@@ -61,8 +61,8 @@ async fn transcribe_with_deepgram(
         let spec = WavSpec {
             channels: 1,
             sample_rate: match sample_rate {
-                88200 => 16000,       // Deepgram expects 16kHz for 88.2kHz
-                _ => sample_rate / 3, // Fallback for other sample rates
+                88200 => 16000,   // Deepgram expects 16kHz for 88.2kHz
+                _ => sample_rate, // Fallback for other sample rates
             },
             bits_per_sample: 32,
             sample_format: hound::SampleFormat::Float,
@@ -77,7 +77,7 @@ async fn transcribe_with_deepgram(
     // Get the WAV data from the cursor
     let wav_data = cursor.into_inner();
 
-    let mut query_params = String::from("model=nova-2&smart_format=true");
+    let mut query_params = String::from("model=nova-2&smart_format=true&sample_rate=16000");
 
     if !languages.is_empty() {
         query_params = [
