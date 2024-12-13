@@ -1,6 +1,21 @@
 use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
+
+#[cfg(target_os = "windows")]
+fn is_process_alive(pid: u32) -> bool {
+    unsafe {
+        let process: HANDLE = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid);
+        if process.is_invalid() {
+            return false;
+        }
+        CloseHandle(process);
+        true
+    }
+}
+
 
 pub async fn watch_pid(pid: u32) -> bool {
     println!("starting to watch for app termination (pid: {})", pid);
@@ -8,23 +23,7 @@ pub async fn watch_pid(pid: u32) -> bool {
     loop {
         #[cfg(target_os = "windows")]
         {
-            // Check both PID and process name
-            let pid_output = Command::new("tasklist")
-                .args(&["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
-                .output()
-                .expect("failed to check pid");
-
-            let app_output = Command::new("tasklist")
-                .args(&["/FI", "IMAGENAME eq screenpipe-app.exe", "/NH", "/FO", "CSV"])
-                .output()
-                .expect("failed to check app name");
-
-            let pid_alive = String::from_utf8_lossy(&pid_output.stdout).contains(&pid.to_string());
-            let app_alive = !String::from_utf8_lossy(&app_output.stdout).is_empty();
-
-            println!("pid alive: {}, app alive: {}", pid_alive, app_alive);
-
-            if !pid_alive || !app_alive {
+            if !is_process_alive(pid) {
                 return true;
             }
         }
