@@ -426,25 +426,9 @@ pub async fn stt(
         process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
-    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let sanitized_device_name = device.replace(['/', '\\'], "_");
-    let file_path = PathBuf::from(output_path)
-        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
-        .to_str()
-        .expect("Failed to create valid path")
-        .to_string();
-    let file_path_clone = file_path.clone();
-    // Run FFmpeg in a separate task
-    if !skip_encoding {
-        encode_single_audio(
-            bytemuck::cast_slice(audio),
-            sample_rate,
-            1,
-            &file_path.into(),
-        )?;
-    }
+    let file_path = write_audio_to_file(audio, sample_rate, output_path, device, skip_encoding)?;
 
-    Ok((transcription?, file_path_clone))
+    Ok((transcription?, file_path))
 }
 
 pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
@@ -722,4 +706,31 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
         (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
         _ => None,
     }
+}
+
+pub fn write_audio_to_file(
+    audio: &[f32],
+    sample_rate: u32,
+    output_path: &PathBuf,
+    device: &str,
+    skip_encoding: bool,
+) -> Result<String> {
+    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let sanitized_device_name = device.replace(['/', '\\'], "_");
+    let file_path = PathBuf::from(output_path)
+        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string();
+    let file_path_clone = file_path.clone();
+    // Run FFmpeg in a separate task
+    if !skip_encoding {
+        encode_single_audio(
+            bytemuck::cast_slice(audio),
+            sample_rate,
+            1,
+            &file_path.into(),
+        )?;
+    }
+    Ok(file_path_clone)
 }
