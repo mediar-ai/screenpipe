@@ -226,6 +226,8 @@ export default function IdentifySpeakers({
               {
                 path: longestAudioSample?.path || "",
                 transcript: longestAudioSample?.transcript || "",
+                startTime: longestAudioSample?.startTime,
+                endTime: longestAudioSample?.endTime,
               },
             ],
           },
@@ -269,7 +271,7 @@ export default function IdentifySpeakers({
         async (speaker: Speaker) => {
           const durations: Map<string, number> = new Map();
           for (const sample of speaker.metadata?.audioSamples || []) {
-            const size = await getFileSize(sample.path);
+            const size = (sample.endTime ?? 0) - (sample.startTime ?? 0);
             durations.set(sample.path, size);
           }
 
@@ -637,6 +639,8 @@ export default function IdentifySpeakers({
                             <VideoComponent
                               key={index}
                               filePath={sample.path}
+                              startTime={sample.startTime}
+                              endTime={sample.endTime}
                               customDescription={`transcript: ${sample.transcript}`}
                             />
                           ))}
@@ -681,6 +685,8 @@ export default function IdentifySpeakers({
                                     <VideoComponent
                                       key={sample.path}
                                       filePath={sample.path}
+                                      startTime={sample.startTime}
+                                      endTime={sample.endTime}
                                       customDescription={`transcript: ${sample.transcript}`}
                                       className="max-w-[300px]"
                                     />
@@ -1078,6 +1084,8 @@ export default function IdentifySpeakers({
                               key={index}
                               filePath={sample.path}
                               customDescription={`transcript: ${sample.transcript}`}
+                              startTime={sample.startTime}
+                              endTime={sample.endTime}
                             />
                           ))}
                       </div>
@@ -1123,6 +1131,8 @@ export default function IdentifySpeakers({
                                       filePath={sample.path}
                                       customDescription={`transcript: ${sample.transcript}`}
                                       className="max-w-[300px]"
+                                      startTime={sample.startTime}
+                                      endTime={sample.endTime}
                                     />
                                   )
                                 )}

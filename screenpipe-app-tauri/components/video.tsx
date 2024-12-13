@@ -7,10 +7,14 @@ export const VideoComponent = memo(function VideoComponent({
   filePath,
   customDescription,
   className,
+  startTime,
+  endTime,
 }: {
   filePath: string;
   customDescription?: string;
   className?: string;
+  startTime?: number;
+  endTime?: number;
 }) {
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,10 +32,9 @@ export const VideoComponent = memo(function VideoComponent({
   }, []);
 
   const renderFileLink = () => (
-    // TODO button open link
-    <p className={"mt-2 text-center text-xs text-gray-500"}>
+    <div className="mt-2 text-center text-xs text-gray-500">
       {customDescription || filePath}
-    </p>
+    </div>
   );
 
   const getMimeType = (path: string): string => {
@@ -58,17 +61,17 @@ export const VideoComponent = memo(function VideoComponent({
         console.log("Loading media:", filePath);
         const sanitizedPath = await sanitizeFilePath(filePath);
         console.log("Sanitized path:", sanitizedPath);
-        if (!sanitizedPath) {
-          throw new Error("Invalid file path");
-        }
 
+        const mediaData = await readFile(sanitizedPath);
+        const mimeType = getMimeType(sanitizedPath);
+
+        // Set isAudio based on path check
         setIsAudio(
           sanitizedPath.toLowerCase().includes("input") ||
             sanitizedPath.toLowerCase().includes("output")
         );
 
-        const mediaData = await readFile(sanitizedPath);
-        const mimeType = getMimeType(sanitizedPath);
+        // Create blob URL directly
         const blob = new Blob([mediaData], { type: mimeType });
         setMediaSrc(URL.createObjectURL(blob));
       } catch (error) {
@@ -113,7 +116,40 @@ export const VideoComponent = memo(function VideoComponent({
     <div className={cn("w-full max-w-2xl text-center", className)}>
       {isAudio ? (
         <div className="bg-gray-100 p-4 rounded-md">
-          <audio controls className="w-full">
+          <audio
+            controls
+            className="w-full"
+            onLoadedMetadata={(e) => {
+              const audio = e.target as HTMLAudioElement;
+              if (startTime !== undefined) {
+                console.log("Setting start time:", startTime);
+                audio.currentTime = startTime;
+              }
+            }}
+            onPlay={(e) => {
+              const audio = e.target as HTMLAudioElement;
+              if (startTime !== undefined) {
+                audio.currentTime = startTime;
+              }
+              if (endTime !== undefined) {
+                const checkTime = () => {
+                  if (audio.currentTime >= endTime) {
+                    audio.pause();
+                    audio.currentTime = startTime ?? 0;
+                  }
+                };
+                audio.addEventListener("timeupdate", checkTime);
+                // Cleanup listener when audio ends
+                audio.addEventListener(
+                  "ended",
+                  () => {
+                    audio.removeEventListener("timeupdate", checkTime);
+                  },
+                  { once: true }
+                );
+              }
+            }}
+          >
             <source src={mediaSrc} type="audio/mpeg" />
             Your browser does not support the audio element.
           </audio>
