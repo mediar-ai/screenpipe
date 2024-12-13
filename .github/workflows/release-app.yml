@@ -364,7 +364,7 @@ jobs:
 
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
+        shell: powershell
         run: |
           # Ensure target directory exists
           $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
