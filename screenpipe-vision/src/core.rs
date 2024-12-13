@@ -2,24 +2,32 @@
 use crate::apple::parse_apple_ocr_result;
 #[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
+use crate::capture_screenshot_by_window::CapturedWindow;
+use crate::capture_screenshot_by_window::WindowFilters;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
-use crate::utils::{capture_screenshot, compare_with_previous_image, save_text_files};
+use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde_json;
+use std::sync::Arc;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
+
+#[cfg(target_os = "macos")]
+use xcap_macos::Monitor;
+
+#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
 pub struct CaptureResult {
@@ -41,7 +49,7 @@ pub struct WindowOcrResult {
 
 pub struct OcrTaskData {
     pub image: DynamicImage,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
+    pub window_images: Vec<CapturedWindow>,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
@@ -50,12 +58,11 @@ pub struct OcrTaskData {
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
-    save_text_files_flag: bool,
     ocr_engine: OcrEngine,
     monitor_id: u32,
-    ignore_list: &[String],
-    include_list: &[String],
+    window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
+    capture_unfocused_windows: bool,
 ) {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
@@ -75,19 +82,20 @@ pub async fn continuous_capture(
                 continue;
             }
         };
-        let capture_result = match capture_screenshot(&monitor, ignore_list, include_list).await {
-            Ok((image, window_images, image_hash, _capture_duration)) => {
-                debug!(
-                    "Captured screenshot on monitor {} with hash: {}",
-                    monitor_id, image_hash
-                );
-                Some((image, window_images, image_hash))
-            }
-            Err(e) => {
-                error!("Failed to capture screenshot: {}", e);
-                None
-            }
-        };
+        let capture_result =
+            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
+                Ok((image, window_images, image_hash, _capture_duration)) => {
+                    debug!(
+                        "Captured screenshot on monitor {} with hash: {}",
+                        monitor_id, image_hash
+                    );
+                    Some((image, window_images, image_hash))
+                }
+                Err(e) => {
+                    error!("Failed to capture screenshot: {}", e);
+                    None
+                }
+            };
 
         if let Some((image, window_images, image_hash)) = capture_result {
             let current_average = match compare_with_previous_image(
@@ -146,13 +154,8 @@ pub async fn continuous_capture(
                     result_tx: max_avg_frame.result_tx,
                 };
 
-                if let Err(e) = process_ocr_task(
-                    ocr_task_data,
-                    save_text_files_flag,
-                    &ocr_engine,
-                    languages.clone(),
-                )
-                .await
+                if let Err(e) =
+                    process_ocr_task(ocr_task_data, &ocr_engine, languages.clone()).await
                 {
                     error!("Error processing OCR task: {}", e);
                 }
@@ -171,7 +174,7 @@ pub async fn continuous_capture(
 
 pub struct MaxAverageFrame {
     pub image: DynamicImage,
-    pub window_images: Vec<(DynamicImage, String, String, bool)>,
+    pub window_images: Vec<CapturedWindow>,
     pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
@@ -181,7 +184,6 @@ pub struct MaxAverageFrame {
 
 pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
-    save_text_files_flag: bool,
     ocr_engine: &OcrEngine,
     languages: Vec<Language>,
 ) -> Result<(), std::io::Error> {
@@ -203,20 +205,23 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
-    for (window_image, window_app_name, window_name, focused) in window_images {
+    for captured_window in window_images {
         let (window_text, window_json_output, confidence) = match ocr_engine {
-            OcrEngine::Unstructured => perform_ocr_cloud(&window_image, languages.clone())
+            OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            OcrEngine::Tesseract => perform_ocr_tesseract(&window_image, languages.clone()),
+            OcrEngine::Tesseract => {
+                perform_ocr_tesseract(&captured_window.image, languages.clone())
+            }
             #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&window_image)
+            OcrEngine::WindowsNative => perform_ocr_windows(&captured_window.image)
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => {
-                parse_apple_ocr_result(&perform_ocr_apple(&window_image, languages.clone()))
-            }
+            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(
+                &captured_window.image,
+                languages.clone(),
+            )),
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -231,26 +236,14 @@ pub async fn process_ocr_task(
         }
 
         window_ocr_results.push(WindowOcrResult {
-            image: window_image,
-            window_name,
-            app_name: window_app_name,
+            image: captured_window.image,
+            window_name: captured_window.window_name,
+            app_name: captured_window.app_name,
             text: window_text,
             text_json: parse_json_output(&window_json_output),
-            focused,
+            focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
         });
-    }
-
-    if save_text_files_flag {
-        for (index, window_result) in window_ocr_results.iter().enumerate() {
-            save_text_files(
-                frame_number * 1000 + index as u64,
-                &window_result.text_json,
-                &window_result.text_json,
-                &None,
-            )
-            .await;
-        }
     }
 
     let capture_result = CaptureResult {

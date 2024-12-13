@@ -29,8 +29,12 @@ export function CliCommandDialog({ localSettings }: CliCommandDialogProps) {
     let args = [];
 
     if (localSettings.audioTranscriptionEngine !== "default") {
+      const audioTranscriptionEngine =
+        localSettings.audioTranscriptionEngine === "screenpipe-cloud"
+          ? "deepgram"
+          : localSettings.audioTranscriptionEngine;
       args.push(
-        `--audio-transcription-engine ${localSettings.audioTranscriptionEngine}`
+        `--audio-transcription-engine ${audioTranscriptionEngine}`
       );
     }
     if (localSettings.ocrEngine !== "default") {

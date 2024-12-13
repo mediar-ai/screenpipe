@@ -31,7 +31,6 @@ pub async fn start_continuous_recording(
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     audio_disabled: bool,
-    save_text_files: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     monitor_ids: Vec<u32>,
@@ -45,6 +44,7 @@ pub async fn start_continuous_recording(
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
+    capture_unfocused_windows: bool,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -67,7 +67,6 @@ pub async fn start_continuous_recording(
                         output_path_video,
                         fps,
                         is_running_video,
-                        save_text_files,
                         ocr_engine,
                         monitor_id,
                         use_pii_removal,
@@ -75,6 +74,7 @@ pub async fn start_continuous_recording(
                         &include_windows_video,
                         video_chunk_duration,
                         languages.clone(),
+                        capture_unfocused_windows,
                     )
                     .await
                 })
@@ -165,7 +165,6 @@ async fn record_video(
     output_path: Arc<String>,
     fps: f64,
     is_running: Arc<AtomicBool>,
-    save_text_files: bool,
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     use_pii_removal: bool,
@@ -173,6 +172,7 @@ async fn record_video(
     include_windows: &[String],
     video_chunk_duration: Duration,
     languages: Vec<Language>,
+    capture_unfocused_windows: bool,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -203,12 +203,12 @@ async fn record_video(
         fps,
         video_chunk_duration,
         new_chunk_callback,
-        save_text_files,
         Arc::clone(&ocr_engine),
         monitor_id,
         ignored_windows,
         include_windows,
         languages,
+        capture_unfocused_windows,
     );
 
     while is_running.load(Ordering::SeqCst) {

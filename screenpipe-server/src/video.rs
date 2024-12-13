@@ -4,7 +4,9 @@ use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
-use screenpipe_vision::{continuous_capture, CaptureResult, OcrEngine};
+use screenpipe_vision::{
+    capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
+};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -31,12 +33,12 @@ impl VideoCapture {
         fps: f64,
         video_chunk_duration: Duration,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
-        save_text_files: bool,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
         ignore_list: &[String],
         include_list: &[String],
         languages: Vec<Language>,
+        capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
@@ -53,22 +55,20 @@ impl VideoCapture {
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
-        let ignore_list_clone = ignore_list.to_vec();
-        let include_list_clone = include_list.to_vec();
+        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
+        let window_filters_clone = Arc::clone(&window_filters);
         let _capture_thread = tokio::spawn(async move {
             continuous_capture(
                 result_sender,
                 interval,
-                save_text_files,
                 *ocr_engine,
                 monitor_id,
-                &ignore_list_clone,
-                &include_list_clone,
+                window_filters_clone,
                 languages.clone(),
+                capture_unfocused_windows,
             )
             .await;
         });
-
 
         // In the _queue_thread
         let _queue_thread = tokio::spawn(async move {
@@ -170,7 +170,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
     // TODO: issue on macos https://github.com/mediar-ai/screenpipe/pull/580
     #[cfg(target_os = "macos")]
     args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-    
+
     #[cfg(not(target_os = "macos"))]
     args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
 

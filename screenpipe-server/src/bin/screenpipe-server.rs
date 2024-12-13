@@ -444,7 +444,6 @@ async fn main() -> anyhow::Result<()> {
                     vision_control_clone.clone(),
                     audio_devices_control.clone(),
                     cli.disable_audio,
-                    cli.save_text_files,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
                     monitor_ids_clone.clone(),
@@ -458,6 +457,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
+                    cli.capture_unfocused_windows,
                 );
 
                 let result = tokio::select! {
@@ -540,7 +540,6 @@ async fn main() -> anyhow::Result<()> {
     println!("│ port                │ {:<34} │", cli.port);
     println!("│ audio disabled      │ {:<34} │", cli.disable_audio);
     println!("│ vision disabled     │ {:<34} │", cli.disable_vision);
-    println!("│ save text files     │ {:<34} │", cli.save_text_files);
     println!(
         "│ audio engine        │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
