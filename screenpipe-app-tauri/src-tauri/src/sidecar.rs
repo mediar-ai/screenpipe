@@ -2,7 +2,6 @@ use crate::{get_base_dir, SidecarState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
-use std::process;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;

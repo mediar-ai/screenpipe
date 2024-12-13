@@ -1,7 +1,9 @@
 use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
+#[cfg(target_os = "windows")]
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
 
 #[cfg(target_os = "windows")]
