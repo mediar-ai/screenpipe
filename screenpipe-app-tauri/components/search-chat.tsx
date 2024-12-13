@@ -295,6 +295,16 @@ export function SearchChat({
   const [speakerSearchQuery, setSpeakerSearchQuery] = useState("");
 
   useEffect(() => {
+    if (Object.keys(selectedSpeakers).length > 0) {
+      setSelectedTypes({
+        ocr: false,
+        ui: false,
+        audio: true,
+      });
+    }
+  }, [selectedSpeakers]);
+
+  useEffect(() => {
     setCurrentPlatform(platform());
   }, []);
 
@@ -337,6 +347,14 @@ export function SearchChat({
   const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
     const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
     setSelectedTypes(newTypes);
+
+    if (Object.keys(selectedSpeakers).length > 0) {
+      setSelectedTypes({
+        ocr: false,
+        ui: false,
+        audio: true,
+      });
+    }
 
     // Convert checkbox state to content type
     if (!newTypes.ocr && !newTypes.audio && !newTypes.ui) {
@@ -1532,6 +1550,20 @@ export function SearchChat({
               <SpeechIcon className="h-4 w-4" />
               <span>speakers</span>
             </Label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>
+                    select the speakers to include in the search results. this
+                    will only show results from the selected speakers. note:
+                    only audio results can be returned
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Popover open={openSpeakers} onOpenChange={setOpenSpeakers}>
               <PopoverTrigger asChild>
                 <Button
