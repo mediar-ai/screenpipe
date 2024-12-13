@@ -968,7 +968,7 @@ impl DatabaseManager {
             ContentType::Audio => {
                 format!(
                     r#"
-                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id, audio_transcriptions.start_time, audio_transcriptions.end_time)
+                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
                     FROM audio_transcriptions_fts 
                     JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
                     WHERE {}
