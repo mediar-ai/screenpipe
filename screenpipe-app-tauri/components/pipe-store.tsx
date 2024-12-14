@@ -108,6 +108,14 @@ const corePipes: CorePipe[] = [
     credits: 0,
     paid: false,
   },
+  {
+    id: "pipe-search",
+    name: "search",
+    description: "search through your screen recordings and audio transcripts with AI",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+    credits: 0,
+    paid: false,
+  },
 ];
 
 const getAuthorFromSource = (source: string): string => {

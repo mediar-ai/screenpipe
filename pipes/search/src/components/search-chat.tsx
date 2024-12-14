@@ -298,6 +298,7 @@ export function SearchChat() {
         ui: false,
         audio: true,
       });
+      setContentType("audio");
     }
   }, [selectedSpeakers]);
 
@@ -359,6 +360,7 @@ export function SearchChat() {
         ui: false,
         audio: true,
       });
+      setContentType("audio");
     }
 
     // Convert checkbox state to content type
@@ -382,6 +384,8 @@ export function SearchChat() {
   };
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
+
+  console.log("content type", contentType);
 
   useEffect(() => {
     const updateDates = () => {
