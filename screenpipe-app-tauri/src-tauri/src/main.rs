@@ -167,6 +167,7 @@ async fn main() {
             commands::show_search,
             commands::show_meetings,
             commands::show_identify_speakers,
+            commands::open_pipe_window,
         ])
         .setup(|app| {
             // Logging setup

@@ -15,6 +15,7 @@ import {
   Power,
   Puzzle,
   X,
+  Loader2,
 } from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -44,6 +45,7 @@ export interface Pipe {
   fullDescription: string;
   config?: Record<string, any>;
   author?: string;
+  port?: number;
 }
 
 interface CorePipe {
@@ -111,7 +113,8 @@ const corePipes: CorePipe[] = [
   {
     id: "pipe-search",
     name: "search",
-    description: "search through your screen recordings and audio transcripts with AI",
+    description:
+      "search through your screen recordings and audio transcripts with AI",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
     credits: 0,
     paid: false,
@@ -243,7 +246,9 @@ const PipeStore: React.FC = () => {
           pipe.fullDescription = "no description available for this pipe.";
         }
       }
+      console.log("pipes", pipes);
       setPipes(pipes);
+      return pipes;
     } catch (error) {
       console.error("Error fetching installed pipes:", error);
       toast({
@@ -319,6 +324,18 @@ const PipeStore: React.FC = () => {
         enabled: !pipe.enabled,
       });
 
+      // Then replace the loading toast with this:
+      const t = toast({
+        title: "loading pipe",
+        description: "please wait...",
+        action: (
+          <div className="flex items-center">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </div>
+        ),
+        duration: 4000,
+      });
+
       const endpoint = pipe.enabled ? "disable" : "enable";
       const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
         method: "POST",
@@ -333,24 +350,33 @@ const PipeStore: React.FC = () => {
         throw new Error(data.error);
       }
 
-      // Immediately update the local state
-      setPipes((prevPipes) =>
-        prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
-        )
-      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // If we're in the details view, update the selected pipe too
-      setSelectedPipe((prev) =>
-        prev?.id === pipe.id ? { ...prev, enabled: !prev.enabled } : prev
-      );
+      const freshPipes = await fetchInstalledPipes();
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Immediately update the local state
+      // setPipes((prevPipes) =>
+      //   prevPipes.map((p) =>
+      //     p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
+      //   )
+      // );
+
+      // find the pipe in the list, and set it as selected with the proper enabled state
+      const freshPipe = freshPipes.find((p: Pipe) => p.id === pipe.id);
+      console.log("fresh pipes", freshPipes);
+      console.log("fresh pipe", freshPipe);
+      if (freshPipe) {
+        setSelectedPipe(freshPipe);
+      }
+      console.log("selected pipe", selectedPipe);
 
       toast({
         title: `pipe ${endpoint}d`,
       });
 
       // Still fetch the latest state from the server to ensure consistency
-      await fetchInstalledPipes();
     } catch (error) {
       console.error(
         `Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`,
@@ -675,15 +701,40 @@ const PipeStore: React.FC = () => {
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-medium">pipe ui</h3>
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(`http://localhost:${selectedPipe.config!.port}`)
-                      }
-                    >
-                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                      open in browser
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          openUrl(
+                            `http://localhost:${selectedPipe.config!.port}`
+                          )
+                        }
+                      >
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        open in browser
+                      </Button>
+                      <Button
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await invoke("open_pipe_window", {
+                              port: selectedPipe.config!.port,
+                              title: selectedPipe.id,
+                            });
+                          } catch (err) {
+                            console.error("failed to open pipe window:", err);
+                            toast({
+                              title: "error opening pipe window",
+                              description: "please try again or check the logs",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        <Puzzle className="mr-2 h-3.5 w-3.5" />
+                        open as app
+                      </Button>
+                    </div>
                   </div>
                   <div className="rounded-lg border overflow-hidden bg-background">
                     <iframe

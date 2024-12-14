@@ -48,7 +48,6 @@ export function useUser() {
 
     try {
       const userData = await verifyUserToken(token);
-      console.log("userData", userData);
       // skip if user data did not change
       if (userData.id === user?.id) return;
       setUser(userData);

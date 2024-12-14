@@ -329,3 +329,20 @@ pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
         .unwrap();
     }
 }
+
+
+#[tauri::command]
+pub async fn open_pipe_window(app_handle: tauri::AppHandle<tauri::Wry>, port: u16, title: String) -> Result<(), String> {
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        format!("pipe-{}", port),
+        tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap())
+    )
+    .title(title)
+    .inner_size(800.0, 600.0)
+    .build()
+    .map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
