@@ -71,15 +71,15 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 function AccountSection() {
   const { user, loadUser } = useUser();
-  const { localSettings, setLocalSettings } = useSettings();
+  const { settings, updateSettings, resetSetting } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefreshCredits = async () => {
-    if (!localSettings.user?.token) return;
+    if (!settings.user?.token) return;
 
     setIsRefreshing(true);
     try {
-      await loadUser(localSettings.user.token);
+      await loadUser(settings.user.token);
       toast({
         title: "credits refreshed",
         description: "your credit balance has been updated",
@@ -155,16 +155,14 @@ function AccountSection() {
               <div className=" flex gap-2">
                 <Input
                   id="key"
-                  value={localSettings.user?.token || ""}
+                  value={settings.user?.token || ""}
                   onChange={(e) => {
                     const newValue = e.target.value;
-                    setLocalSettings((prev) => ({
-                      ...prev,
+                    updateSettings({
                       user: {
-                        ...prev.user,
                         token: newValue,
                       },
-                    }));
+                    });
                   }}
                   placeholder="enter your key"
                   autoCorrect="off"
@@ -175,7 +173,7 @@ function AccountSection() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    loadUser(localSettings.user?.token || "");
+                    loadUser(settings.user?.token || "");
                     toast({
                       title: "key updated",
                       description: "your key has been updated",
@@ -228,8 +226,6 @@ export function Settings({ className }: { className?: string }) {
     updateSettings,
     resetSetting,
     resetSettings,
-    localSettings,
-    setLocalSettings,
   } = useSettings();
   const { user } = useUser();
   const { credits } = user || {};
@@ -295,7 +291,6 @@ export function Settings({ className }: { className?: string }) {
     const newShortcut = [...selectedModifiers, nonModifierKey]
       .filter(Boolean)
       .join("+");
-    setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
     updateSettings({ showScreenpipeShortcut: newShortcut });
     registerShortcuts({
       showScreenpipeShortcut: newShortcut,
@@ -315,13 +310,11 @@ export function Settings({ className }: { className?: string }) {
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, openaiApiKey: newValue });
     updateSettings({ openaiApiKey: newValue });
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, aiModel: newValue });
     updateSettings({ aiModel: newValue });
   };
 
@@ -329,7 +322,6 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, customPrompt: newValue });
     updateSettings({ customPrompt: newValue });
   };
 
@@ -339,14 +331,16 @@ export function Settings({ className }: { className?: string }) {
 
   const handleMaxContextCharsChange = (value: number[]) => {
     const newValue = value[0];
-    setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
     updateSettings({ aiMaxContextChars: newValue });
   };
 
   const handleEmbeddedLLMChange = (checked: boolean) => {
-    const newValue = { ...localSettings.embeddedLLM, enabled: checked };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
-    updateSettings({ embeddedLLM: newValue });
+
+    updateSettings({ embeddedLLM: {
+      enabled: checked,
+      model: settings.embeddedLLM.model,
+      port: settings.embeddedLLM.port,
+    } });
     if (!checked) {
       setOllamaStatus("idle");
     }
@@ -356,12 +350,7 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newModel = e.target.value;
-    const newEmbeddedLLM = { ...localSettings.embeddedLLM, model: newModel };
-    setLocalSettings({
-      ...localSettings,
-      embeddedLLM: newEmbeddedLLM,
-      aiModel: newModel, // Update the general AI model as well
-    });
+    const newEmbeddedLLM = { ...settings.embeddedLLM, model: newModel };
     updateSettings({
       embeddedLLM: newEmbeddedLLM,
       aiModel: newModel, // Update the general AI model in the global settings
@@ -372,10 +361,9 @@ export function Settings({ className }: { className?: string }) {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = {
-      ...localSettings.embeddedLLM,
+      ...settings.embeddedLLM,
       port: parseInt(e.target.value, 10),
     };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
     updateSettings({ embeddedLLM: newValue });
   };
 
@@ -390,13 +378,13 @@ export function Settings({ className }: { className?: string }) {
     try {
       console.log(
         "starting ollama sidecar with settings:",
-        localSettings.embeddedLLM
+        settings.embeddedLLM
       );
       const result = await invoke<string>("start_ollama_sidecar", {
         settings: {
-          enabled: localSettings.embeddedLLM.enabled,
-          model: localSettings.embeddedLLM.model,
-          port: localSettings.embeddedLLM.port,
+          enabled: settings.embeddedLLM.enabled,
+          model: settings.embeddedLLM.model,
+          port: settings.embeddedLLM.port,
         },
       });
 
@@ -404,12 +392,12 @@ export function Settings({ className }: { className?: string }) {
       setEmbeddedAIStatus("running");
       toast({
         title: "ai ready",
-        description: `${localSettings.embeddedLLM.model} is running.`,
+        description: `${settings.embeddedLLM.model} is running.`,
       });
 
       // Show the LLM test result in a toast
       toast({
-        title: `${localSettings.embeddedLLM.model} wants to tell you a joke.`,
+        title: `${settings.embeddedLLM.model} wants to tell you a joke.`,
         description: result,
         duration: 10000,
       });
@@ -447,7 +435,7 @@ export function Settings({ className }: { className?: string }) {
 
   const handleAiProviderChange = (newValue: AIProviderType) => {
     let newUrl = "";
-    let newModel = localSettings.aiModel;
+    let newModel = settings.aiModel;
 
     if (newValue === "screenpipe-cloud" && !credits?.amount) {
       openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
@@ -461,23 +449,17 @@ export function Settings({ className }: { className?: string }) {
         newUrl = "http://localhost:11434/v1";
         break;
       case "embedded":
-        newUrl = `http://localhost:${localSettings.embeddedLLM.port}/v1`;
-        newModel = localSettings.embeddedLLM.model;
+        newUrl = `http://localhost:${settings.embeddedLLM.port}/v1`;
+        newModel = settings.embeddedLLM.model;
         break;
       case "screenpipe-cloud":
         newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
         break;
       case "custom":
-        newUrl = localSettings.aiUrl; // Keep the existing custom URL
+        newUrl = settings.aiUrl; // Keep the existing custom URL
         break;
     }
 
-    setLocalSettings({
-      ...localSettings,
-      aiProviderType: newValue,
-      aiUrl: newUrl,
-      aiModel: newModel,
-    });
     updateSettings({
       aiProviderType: newValue,
       aiUrl: newUrl,
@@ -486,12 +468,12 @@ export function Settings({ className }: { className?: string }) {
   };
 
   const isApiKeyRequired =
-    localSettings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
-    localSettings.aiUrl !== "http://localhost:11434/v1" &&
-    localSettings.aiUrl !== "embedded";
+    settings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
+    settings.aiUrl !== "http://localhost:11434/v1" &&
+    settings.aiUrl !== "embedded";
 
   const getProviderTooltipContent = () => {
-    switch (localSettings.aiUrl) {
+    switch (settings.aiUrl) {
       case "https://ai-proxy.i-f9f.workers.dev/v1":
         return (
           <p>
@@ -572,7 +554,7 @@ export function Settings({ className }: { className?: string }) {
   };
 
   const getModelTooltipContent = () => {
-    switch (localSettings.aiUrl) {
+    switch (settings.aiUrl) {
       case "https://api.openai.com/v1":
       case "https://ai-proxy.i-f9f.workers.dev/v1":
         return (
@@ -613,10 +595,10 @@ export function Settings({ className }: { className?: string }) {
 
   // Add this function to check the embedded AI status
   const checkEmbeddedAIStatus = useCallback(async () => {
-    if (localSettings.embeddedLLM.enabled) {
+    if (settings.embeddedLLM.enabled) {
       try {
         const response = await fetch(
-          `http://localhost:${localSettings.embeddedLLM.port}/api/tags`,
+          `http://localhost:${settings.embeddedLLM.port}/api/tags`,
           {
             method: "GET",
           }
@@ -633,14 +615,14 @@ export function Settings({ className }: { className?: string }) {
     } else {
       setEmbeddedAIStatus("idle");
     }
-  }, [localSettings.embeddedLLM.enabled, localSettings.embeddedLLM.port]);
+  }, [settings.embeddedLLM.enabled, settings.embeddedLLM.port]);
 
   // Use the useInterval hook to periodically check the status
   useInterval(checkEmbeddedAIStatus, 10000); // Check every 10 seconds
 
   const handleShortcutToggle = (checked: boolean) => {
     console.log("handleShortcutToggle", checked);
-    let newDisabledShortcuts = [...localSettings.disabledShortcuts];
+    let newDisabledShortcuts = [...settings.disabledShortcuts];
     if (!checked) {
       newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
     } else {
@@ -649,8 +631,7 @@ export function Settings({ className }: { className?: string }) {
       );
     }
 
-    setLocalSettings({
-      ...localSettings,
+    updateSettings({
       disabledShortcuts: newDisabledShortcuts,
     });
     updateSettings({
@@ -712,10 +693,7 @@ export function Settings({ className }: { className?: string }) {
         </DialogHeader>
         <div className="mt-8 space-y-6">
           <AccountSection />
-          <RecordingSettings
-            localSettings={localSettings}
-            setLocalSettings={setLocalSettings}
-          />
+          <RecordingSettings/>
 
           <Separator />
 
@@ -732,7 +710,7 @@ export function Settings({ className }: { className?: string }) {
                   <div className="flex-grow flex items-center">
                     <Select
                       onValueChange={handleAiProviderChange}
-                      value={localSettings.aiProviderType}
+                      value={settings.aiProviderType}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select AI provider" />
@@ -765,7 +743,7 @@ export function Settings({ className }: { className?: string }) {
                   </TooltipProvider>
                 </div>
               </div>
-              {localSettings.aiProviderType === "custom" && (
+              {settings.aiProviderType === "custom" && (
                 <div className="w-full">
                   <div className="flex items-center gap-4 mb-4">
                     <Label
@@ -776,10 +754,9 @@ export function Settings({ className }: { className?: string }) {
                     </Label>
                     <Input
                       id="customAiUrl"
-                      value={localSettings.aiUrl}
+                      value={settings.aiUrl}
                       onChange={(e) => {
                         const newUrl = e.target.value;
-                        setLocalSettings({ ...localSettings, aiUrl: newUrl });
                         updateSettings({ aiUrl: newUrl });
                       }}
                       className="flex-grow"
@@ -805,7 +782,7 @@ export function Settings({ className }: { className?: string }) {
                       <Input
                         id="aiApiKey"
                         type={showApiKey ? "text" : "password"}
-                        value={localSettings.openaiApiKey}
+                        value={settings.openaiApiKey}
                         onChange={handleApiKeyChange}
                         className="pr-10"
                         placeholder="enter your ai api key"
@@ -830,7 +807,7 @@ export function Settings({ className }: { className?: string }) {
                   </div>
                 </div>
               )}
-              {localSettings.aiProviderType !== "embedded" && (
+              {settings.aiProviderType !== "embedded" && (
                 <div className="w-full">
                   <div className="flex items-center gap-4 mb-4">
                     <Label
@@ -842,11 +819,11 @@ export function Settings({ className }: { className?: string }) {
                     <div className="flex-grow relative">
                       <Input
                         id="aiModel"
-                        value={localSettings.aiModel}
+                        value={settings.aiModel}
                         onChange={handleModelChange}
                         className="flex-grow"
                         placeholder={
-                          localSettings.aiProviderType === "native-ollama"
+                          settings.aiProviderType === "native-ollama"
                             ? "e.g., llama3.2:3b-instruct-q4_K_M"
                             : "e.g., gpt-4o"
                         }
@@ -880,7 +857,7 @@ export function Settings({ className }: { className?: string }) {
                   <div className="flex-grow relative">
                     <Textarea
                       id="customPrompt"
-                      value={localSettings.customPrompt}
+                      value={settings.customPrompt}
                       onChange={handleCustomPromptChange}
                       className="min-h-[100px]"
                       placeholder="enter your custom prompt here"
@@ -913,12 +890,12 @@ export function Settings({ className }: { className?: string }) {
                       min={1000}
                       max={128000}
                       step={1000}
-                      value={[localSettings.aiMaxContextChars]}
+                      value={[settings.aiMaxContextChars]}
                       onValueChange={handleMaxContextCharsChange}
                       className="flex-grow"
                     />
                     <span className="ml-2 min-w-[60px] text-right">
-                      {localSettings.aiMaxContextChars.toLocaleString()}
+                      {settings.aiMaxContextChars.toLocaleString()}
                     </span>
                     <TooltipProvider>
                       <Tooltip>
@@ -992,10 +969,10 @@ export function Settings({ className }: { className?: string }) {
                   <div className="flex items-center gap-4">
                     <Switch
                       id="embeddedLLM"
-                      checked={localSettings.embeddedLLM.enabled}
+                      checked={settings.embeddedLLM.enabled}
                       onCheckedChange={handleEmbeddedLLMChange}
                     />
-                    {localSettings.embeddedLLM.enabled && (
+                    {settings.embeddedLLM.enabled && (
                       <>
                         <Button
                           onClick={startOllamaSidecar}
@@ -1033,7 +1010,7 @@ export function Settings({ className }: { className?: string }) {
                 </div>
               </div>
 
-              {localSettings.embeddedLLM.enabled && (
+              {settings.embeddedLLM.enabled && (
                 <>
                   <div className="w-full">
                     <div className="flex items-center gap-4 mb-4">
@@ -1046,7 +1023,7 @@ export function Settings({ className }: { className?: string }) {
                       <div className="flex-grow flex items-center">
                         <Input
                           id="embeddedLLMModel"
-                          value={localSettings.embeddedLLM.model}
+                          value={settings.embeddedLLM.model}
                           onChange={handleEmbeddedLLMModelChange}
                           className="flex-grow"
                           placeholder="enter embedded llm model"
@@ -1083,7 +1060,7 @@ export function Settings({ className }: { className?: string }) {
                       <Input
                         id="embeddedLLMPort"
                         type="number"
-                        value={localSettings.embeddedLLM.port}
+                        value={settings.embeddedLLM.port}
                         onChange={handleEmbeddedLLMPortChange}
                         className="flex-grow"
                         placeholder="enter embedded llm port"

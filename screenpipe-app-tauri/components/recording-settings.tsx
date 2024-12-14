@@ -65,6 +65,8 @@ import { CliCommandDialog } from "./cli-command-dialog";
 import { ToastAction } from "@/components/ui/toast";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { useImmer } from "use-immer";
+
 type PermissionsStatus = {
   screenRecording: string;
   microphone: string;
@@ -84,13 +86,7 @@ interface MonitorDevice {
   height: number;
 }
 
-export function RecordingSettings({
-  localSettings,
-  setLocalSettings,
-}: {
-  localSettings: Settings;
-  setLocalSettings: (settings: Settings) => void;
-}) {
+export function RecordingSettings() {
   const { settings, updateSettings, getDataDir } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
@@ -154,20 +150,20 @@ export function RecordingSettings({
         console.log("audioDevices", audioDevices);
         setAvailableAudioDevices(audioDevices);
 
-        console.log("localSettings", localSettings);
+        console.log("settings", settings);
 
         // Update monitors
         const availableMonitorIds = monitors.map((monitor) =>
           monitor.id.toString()
         );
-        let updatedMonitorIds = localSettings.monitorIds.filter((id) =>
+        let updatedMonitorIds = settings.monitorIds.filter((id) =>
           availableMonitorIds.includes(id)
         );
 
         if (
           updatedMonitorIds.length === 0 ||
-          (localSettings.monitorIds.length === 1 &&
-            localSettings.monitorIds[0] === "default" &&
+          (settings.monitorIds.length === 1 &&
+            settings.monitorIds[0] === "default" &&
             monitors.length > 0)
         ) {
           updatedMonitorIds = [
@@ -179,14 +175,14 @@ export function RecordingSettings({
         const availableAudioDeviceNames = audioDevices.map(
           (device) => device.name
         );
-        let updatedAudioDevices = localSettings.audioDevices.filter((device) =>
+        let updatedAudioDevices = settings.audioDevices.filter((device) =>
           availableAudioDeviceNames.includes(device)
         );
 
         if (
           updatedAudioDevices.length === 0 ||
-          (localSettings.audioDevices.length === 1 &&
-            localSettings.audioDevices[0] === "default" &&
+          (settings.audioDevices.length === 1 &&
+            settings.audioDevices[0] === "default" &&
             audioDevices.length > 0)
         ) {
           updatedAudioDevices = audioDevices
@@ -194,8 +190,7 @@ export function RecordingSettings({
             .map((device) => device.name);
         }
 
-        setLocalSettings({
-          ...localSettings,
+        updateSettings({
           monitorIds: updatedMonitorIds,
           audioDevices: updatedAudioDevices,
         });
@@ -205,7 +200,7 @@ export function RecordingSettings({
     };
 
     loadDevices();
-  }, [settings]);
+  }, [settings.audioDevices, settings.monitorIds]);
 
   const handleUpdate = async () => {
     setIsUpdating(true);
@@ -215,34 +210,9 @@ export function RecordingSettings({
     });
 
     try {
-      console.log("localSettings", localSettings);
-      // Only update specific fields
-      const settingsToUpdate = {
-        audioTranscriptionEngine: localSettings.audioTranscriptionEngine,
-        ocrEngine: localSettings.ocrEngine,
-        monitorIds: localSettings.monitorIds,
-        audioDevices: localSettings.audioDevices,
-        usePiiRemoval: localSettings.usePiiRemoval,
-        disableAudio: localSettings.disableAudio,
-        ignoredWindows: localSettings.ignoredWindows,
-        includedWindows: localSettings.includedWindows,
-        deepgramApiKey: localSettings.deepgramApiKey,
-        fps: localSettings.fps,
-        vadSensitivity: localSettings.vadSensitivity,
-        audioChunkDuration: localSettings.audioChunkDuration,
-        analyticsEnabled: localSettings.analyticsEnabled,
-        useChineseMirror: localSettings.useChineseMirror,
-        languages: localSettings.languages,
-        enableBeta: localSettings.enableBeta,
-        enableFrameCache: localSettings.enableFrameCache,
-        enableUiMonitoring: localSettings.enableUiMonitoring,
-        dataDir: localSettings.dataDir,
-        port: localSettings.port,
-      };
-      console.log("Settings to update:", settingsToUpdate);
-      await updateSettings(settingsToUpdate);
+      console.log("settings", settings);
 
-      if (!localSettings.analyticsEnabled) {
+      if (!settings.analyticsEnabled) {
         posthog.capture("telemetry", {
           enabled: false,
         });
@@ -290,14 +260,13 @@ export function RecordingSettings({
     const lowerCaseValue = value.toLowerCase();
     if (
       value &&
-      !localSettings.ignoredWindows
+      !settings.ignoredWindows
         .map((w) => w.toLowerCase())
         .includes(lowerCaseValue)
     ) {
-      setLocalSettings({
-        ...localSettings,
-        ignoredWindows: [...localSettings.ignoredWindows, value],
-        includedWindows: localSettings.includedWindows.filter(
+      updateSettings({
+        ignoredWindows: [...settings.ignoredWindows, value],
+        includedWindows: settings.includedWindows.filter(
           (w) => w.toLowerCase() !== lowerCaseValue
         ),
       });
@@ -305,9 +274,8 @@ export function RecordingSettings({
   };
 
   const handleRemoveIgnoredWindow = (value: string) => {
-    setLocalSettings({
-      ...localSettings,
-      ignoredWindows: localSettings.ignoredWindows.filter((w) => w !== value),
+    updateSettings({
+      ignoredWindows: settings.ignoredWindows.filter((w) => w !== value),
     });
   };
 
@@ -315,14 +283,13 @@ export function RecordingSettings({
     const lowerCaseValue = value.toLowerCase();
     if (
       value &&
-      !localSettings.includedWindows
+      !settings.includedWindows
         .map((w) => w.toLowerCase())
         .includes(lowerCaseValue)
     ) {
-      setLocalSettings({
-        ...localSettings,
-        includedWindows: [...localSettings.includedWindows, value],
-        ignoredWindows: localSettings.ignoredWindows.filter(
+      updateSettings({
+        includedWindows: [...settings.includedWindows, value],
+        ignoredWindows: settings.ignoredWindows.filter(
           (w) => w.toLowerCase() !== lowerCaseValue
         ),
       });
@@ -330,9 +297,8 @@ export function RecordingSettings({
   };
 
   const handleRemoveIncludedWindow = (value: string) => {
-    setLocalSettings({
-      ...localSettings,
-      includedWindows: localSettings.includedWindows.filter((w) => w !== value),
+    updateSettings({
+      includedWindows: settings.includedWindows.filter((w) => w !== value),
     });
   };
 
@@ -343,53 +309,52 @@ export function RecordingSettings({
     }
 
     if (value === "screenpipe-cloud") {
-      setLocalSettings({
-        ...localSettings,
+      updateSettings({
         audioTranscriptionEngine: value,
       });
     } else {
-      setLocalSettings({ ...localSettings, audioTranscriptionEngine: value });
+      updateSettings({ audioTranscriptionEngine: value });
     }
   };
 
   const handleOcrModelChange = (value: string) => {
-    setLocalSettings({ ...localSettings, ocrEngine: value });
+    updateSettings({ ocrEngine: value });
   };
 
   const handleMonitorChange = (currentValue: string) => {
-    const updatedMonitors = localSettings.monitorIds.includes(currentValue)
-      ? localSettings.monitorIds.filter((id) => id !== currentValue)
-      : [...localSettings.monitorIds, currentValue];
+    const updatedMonitors = settings.monitorIds.includes(currentValue)
+      ? settings.monitorIds.filter((id) => id !== currentValue)
+      : [...settings.monitorIds, currentValue];
 
-    setLocalSettings({ ...localSettings, monitorIds: updatedMonitors });
+    updateSettings({ monitorIds: updatedMonitors });
   };
 
   const handleLanguageChange = (currentValue: Language) => {
-    const updatedLanguages = localSettings.languages.includes(currentValue)
-      ? localSettings.languages.filter((id) => id !== currentValue)
-      : [...localSettings.languages, currentValue];
+    const updatedLanguages = settings.languages.includes(currentValue)
+      ? settings.languages.filter((id) => id !== currentValue)
+      : [...settings.languages, currentValue];
 
-    setLocalSettings({ ...localSettings, languages: updatedLanguages });
+    updateSettings({ languages: updatedLanguages });
   };
 
   const handleAudioDeviceChange = (currentValue: string) => {
-    const updatedDevices = localSettings.audioDevices.includes(currentValue)
-      ? localSettings.audioDevices.filter((device) => device !== currentValue)
-      : [...localSettings.audioDevices, currentValue];
+    const updatedDevices = settings.audioDevices.includes(currentValue)
+      ? settings.audioDevices.filter((device) => device !== currentValue)
+      : [...settings.audioDevices, currentValue];
 
-    setLocalSettings({ ...localSettings, audioDevices: updatedDevices });
+    updateSettings({ audioDevices: updatedDevices });
   };
 
   const handlePiiRemovalChange = (checked: boolean) => {
-    setLocalSettings({ ...localSettings, usePiiRemoval: checked });
+    updateSettings({ usePiiRemoval: checked });
   };
 
   const handleDisableAudioChange = (checked: boolean) => {
-    setLocalSettings({ ...localSettings, disableAudio: checked });
+    updateSettings({ disableAudio: checked });
   };
 
   const handleFpsChange = (value: number[]) => {
-    setLocalSettings({ ...localSettings, fps: value[0] });
+    updateSettings({ fps: value[0] });
   };
 
   const handleVadSensitivityChange = (value: number[]) => {
@@ -398,8 +363,7 @@ export function RecordingSettings({
       1: "medium",
       0: "low",
     };
-    setLocalSettings({
-      ...localSettings,
+    updateSettings({
       vadSensitivity: sensitivityMap[value[0]],
     });
   };
@@ -414,7 +378,7 @@ export function RecordingSettings({
   };
 
   const handleAudioChunkDurationChange = (value: number[]) => {
-    setLocalSettings({ ...localSettings, audioChunkDuration: value[0] });
+    updateSettings({ audioChunkDuration: value[0] });
   };
 
   const renderOcrEngineOptions = () => {
@@ -436,11 +400,11 @@ export function RecordingSettings({
 
   const handleAnalyticsToggle = (checked: boolean) => {
     const newValue = checked;
-    setLocalSettings({ ...localSettings, analyticsEnabled: newValue });
+    updateSettings({ analyticsEnabled: newValue });
   };
 
   const handleChineseMirrorToggle = async (checked: boolean) => {
-    setLocalSettings({ ...localSettings, useChineseMirror: checked });
+    updateSettings({ useChineseMirror: checked });
     if (checked) {
       // Trigger setup when the toggle is turned on
       await runSetup();
@@ -474,7 +438,7 @@ export function RecordingSettings({
         // TODO: check permission of selected dir for server to write into
 
         if (selected) {
-          setLocalSettings({ ...localSettings, dataDir: selected });
+          updateSettings({ dataDir: selected });
         } else {
           console.log("canceled");
         }
@@ -494,7 +458,7 @@ export function RecordingSettings({
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, dataDir: newValue });
+    updateSettings({ dataDir: newValue });
   };
 
   const handleDataDirInputBlur = () => {
@@ -514,7 +478,7 @@ export function RecordingSettings({
 
   const validateDataDirInput = async () => {
     try {
-      if (await exists(localSettings.dataDir)) {
+      if (await exists(settings.dataDir)) {
         return;
       }
     } catch (err) {}
@@ -526,7 +490,7 @@ export function RecordingSettings({
       duration: 3000,
     });
 
-    setLocalSettings({ ...localSettings, dataDir: settings.dataDir });
+    updateSettings({ dataDir: settings.dataDir });
   };
 
   const runSetup = async () => {
@@ -578,15 +542,14 @@ export function RecordingSettings({
         variant: "destructive",
       });
       // Revert the toggle if setup fails
-      setLocalSettings({ ...localSettings, useChineseMirror: false });
+      updateSettings({ useChineseMirror: false });
     } finally {
       setIsSetupRunning(false);
     }
   };
 
   const handleFrameCacheToggle = (checked: boolean) => {
-    setLocalSettings({
-      ...localSettings,
+    updateSettings({
       enableFrameCache: checked,
     });
   };
@@ -618,10 +581,7 @@ export function RecordingSettings({
       }
 
       // Just update the local setting - the update button will handle the restart
-      setLocalSettings({
-        ...localSettings,
-        enableUiMonitoring: checked,
-      });
+      updateSettings({ enableUiMonitoring: checked });
     } catch (error) {
       console.error("failed to toggle ui monitoring:", error);
       toast({
@@ -655,7 +615,7 @@ export function RecordingSettings({
                     onClick={handleUpdate}
                     disabled={settings.devMode || isUpdating}
                   >
-                    {isUpdating ? "updating..." : "save and restart"}
+                    {isUpdating ? "updating..." : "restart to apply"}
                   </Button>
                   {settings.devMode ? (
                     <span className="text-xs text-gray-500 text-center">
@@ -668,7 +628,7 @@ export function RecordingSettings({
                     </span>
                   )}
                 </div>
-                <CliCommandDialog localSettings={localSettings} />
+                <CliCommandDialog />
               </div>
             </div>
           </CardHeader>
@@ -683,7 +643,7 @@ export function RecordingSettings({
               </Label>
               <Select
                 onValueChange={handleAudioTranscriptionModelChange}
-                value={localSettings.audioTranscriptionEngine}
+                value={settings.audioTranscriptionEngine}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="select audio transcription engine" />
@@ -716,7 +676,7 @@ export function RecordingSettings({
                 </SelectContent>
               </Select>
 
-              {localSettings.audioTranscriptionEngine === "deepgram" && (
+              {settings.audioTranscriptionEngine === "deepgram" && (
                 <div className="mt-2">
                   <div className="flex items-center gap-4">
                     <Label
@@ -729,13 +689,9 @@ export function RecordingSettings({
                       <Input
                         id="deepgramApiKey"
                         type={showApiKey ? "text" : "password"}
-                        value={localSettings.deepgramApiKey}
+                        value={settings.deepgramApiKey}
                         onChange={(e) => {
                           const newValue = e.target.value;
-                          setLocalSettings({
-                            ...localSettings,
-                            deepgramApiKey: newValue,
-                          });
                           updateSettings({ deepgramApiKey: newValue });
                         }}
                         className="pr-10 w-full"
@@ -782,7 +738,7 @@ export function RecordingSettings({
               </Label>
               <Select
                 onValueChange={handleOcrModelChange}
-                defaultValue={localSettings.ocrEngine}
+                defaultValue={settings.ocrEngine}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="select ocr engine" />
@@ -807,8 +763,8 @@ export function RecordingSettings({
                     aria-expanded={openMonitors}
                     className="w-full justify-between"
                   >
-                    {localSettings.monitorIds.length > 0
-                      ? `${localSettings.monitorIds.length} monitor(s) selected`
+                    {settings.monitorIds.length > 0
+                      ? `${settings.monitorIds.length} monitor(s) selected`
                       : "select monitors"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -831,7 +787,7 @@ export function RecordingSettings({
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  localSettings.monitorIds.includes(
+                                  settings.monitorIds.includes(
                                     monitor.id.toString()
                                   )
                                     ? "opacity-100"
@@ -879,8 +835,8 @@ export function RecordingSettings({
                     aria-expanded={openAudioDevices}
                     className="w-full justify-between"
                   >
-                    {localSettings.audioDevices.length > 0
-                      ? `${localSettings.audioDevices.length} device(s) selected`
+                    {settings.audioDevices.length > 0
+                      ? `${settings.audioDevices.length} device(s) selected`
                       : "select audio devices"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -901,9 +857,7 @@ export function RecordingSettings({
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  localSettings.audioDevices.includes(
-                                    device.name
-                                  )
+                                  settings.audioDevices.includes(device.name)
                                     ? "opacity-100"
                                     : "opacity-0"
                                 )}
@@ -945,8 +899,8 @@ export function RecordingSettings({
                     aria-expanded={openLanguages}
                     className="w-full justify-between"
                   >
-                    {localSettings.languages.length > 0
-                      ? `${localSettings.languages.join(", ")}`
+                    {settings.languages.length > 0
+                      ? `${settings.languages.join(", ")}`
                       : "select languages"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -967,7 +921,7 @@ export function RecordingSettings({
                               <Check
                                 className={cn(
                                   "mr-2 h-4 w-4",
-                                  localSettings.languages.includes(id)
+                                  settings.languages.includes(id)
                                     ? "opacity-100"
                                     : "opacity-0"
                                 )}
@@ -1013,7 +967,7 @@ export function RecordingSettings({
                     {!!settings.dataDir
                       ? "change directory"
                       : "select directory"}
-                    {localSettings.dataDir === settings.dataDir ? (
+                    {settings.dataDir === settings.dataDir ? (
                       <span className="text-muted-foreground text-sm">
                         {" "}
                         current at: {settings.dataDir || "default directory"}
@@ -1021,8 +975,7 @@ export function RecordingSettings({
                     ) : (
                       <span className="text-muted-foreground text-sm">
                         {" "}
-                        change to:{" "}
-                        {localSettings.dataDir || "default directory"}
+                        change to: {settings.dataDir || "default directory"}
                       </span>
                     )}
                   </div>
@@ -1033,7 +986,7 @@ export function RecordingSettings({
                   id="dataDir"
                   type="text"
                   autoFocus={true}
-                  value={localSettings.dataDir}
+                  value={settings.dataDir}
                   onChange={handleDataDirInputChange}
                   onBlur={handleDataDirInputBlur}
                   onKeyDown={handleDataDirInputKeyDown}
@@ -1045,7 +998,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-2">
                 <Switch
                   id="piiRemoval"
-                  checked={localSettings.usePiiRemoval}
+                  checked={settings.usePiiRemoval}
                   onCheckedChange={handlePiiRemovalChange}
                 />
                 <Label
@@ -1080,7 +1033,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-2">
                 <Switch
                   id="disableAudio"
-                  checked={localSettings.disableAudio}
+                  checked={settings.disableAudio}
                   onCheckedChange={handleDisableAudioChange}
                 />
                 <Label
@@ -1131,7 +1084,7 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
               <div className="flex flex-wrap gap-2 mb-2">
-                {localSettings.ignoredWindows.map((window) => (
+                {settings.ignoredWindows.map((window) => (
                   <Badge
                     key={window}
                     variant="secondary"
@@ -1199,7 +1152,7 @@ export function RecordingSettings({
                 </TooltipProvider>
               </Label>
               <div className="flex flex-wrap gap-2 mb-2">
-                {localSettings.includedWindows.map((window) => (
+                {settings.includedWindows.map((window) => (
                   <Badge
                     key={window}
                     variant="secondary"
@@ -1269,12 +1222,12 @@ export function RecordingSettings({
                   min={0.1}
                   max={10}
                   step={0.1}
-                  value={[localSettings.fps]}
+                  value={[settings.fps]}
                   onValueChange={handleFpsChange}
                   className="flex-grow"
                 />
                 <span className="w-12 text-right">
-                  {localSettings.fps.toFixed(1)}
+                  {settings.fps.toFixed(1)}
                 </span>
               </div>
             </div>
@@ -1312,12 +1265,12 @@ export function RecordingSettings({
                   min={0}
                   max={2}
                   step={1}
-                  value={[vadSensitivityToNumber(localSettings.vadSensitivity)]}
+                  value={[vadSensitivityToNumber(settings.vadSensitivity)]}
                   onValueChange={handleVadSensitivityChange}
                   className="flex-grow"
                 />
                 <span className="w-16 text-right">
-                  {localSettings.vadSensitivity}
+                  {settings.vadSensitivity}
                 </span>
               </div>
               <div className="flex justify-between text-xs text-gray-500">
@@ -1360,19 +1313,19 @@ export function RecordingSettings({
                   min={5}
                   max={3000}
                   step={1}
-                  value={[localSettings.audioChunkDuration]}
+                  value={[settings.audioChunkDuration]}
                   onValueChange={handleAudioChunkDurationChange}
                   className="flex-grow"
                 />
                 <span className="w-12 text-right">
-                  {localSettings.audioChunkDuration} s
+                  {settings.audioChunkDuration} s
                 </span>
               </div>
             </div>
             <div className="flex items-center space-x-2">
               <Switch
                 id="analytics-toggle"
-                checked={localSettings.analyticsEnabled}
+                checked={settings.analyticsEnabled}
                 onCheckedChange={handleAnalyticsToggle}
               />
               <Label
@@ -1416,7 +1369,7 @@ export function RecordingSettings({
             <div className="flex items-center space-x-2">
               <Switch
                 id="chinese-mirror-toggle"
-                checked={localSettings.useChineseMirror}
+                checked={settings.useChineseMirror}
                 onCheckedChange={handleChineseMirrorToggle}
               />
               <Label
@@ -1449,7 +1402,7 @@ export function RecordingSettings({
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="frame-cache-toggle"
-                    checked={localSettings.enableFrameCache}
+                    checked={settings.enableFrameCache}
                     onCheckedChange={handleFrameCacheToggle}
                   />
                   <Label
@@ -1480,7 +1433,7 @@ export function RecordingSettings({
               <div className="flex items-center space-x-2">
                 <Switch
                   id="ui-monitoring-toggle"
-                  checked={localSettings.enableUiMonitoring}
+                  checked={settings.enableUiMonitoring}
                   onCheckedChange={handleUiMonitoringToggle}
                 />
                 <Label

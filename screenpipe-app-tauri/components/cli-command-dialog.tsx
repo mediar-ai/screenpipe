@@ -12,95 +12,92 @@ import { CodeBlock } from "./ui/codeblock";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
-import { Settings } from "@/lib/hooks/use-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { getCliPath } from "@/lib/utils";
 
-interface CliCommandDialogProps {
-  localSettings: Settings;
-}
-
-export function CliCommandDialog({ localSettings }: CliCommandDialogProps) {
+export function CliCommandDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const { toast } = useToast();
+  const { settings } = useSettings();
 
   const generateCliCommand = () => {
     const cliPath = getCliPath();
     let args = [];
 
-    if (localSettings.audioTranscriptionEngine !== "default") {
+    if (settings.audioTranscriptionEngine !== "default") {
       const audioTranscriptionEngine =
-        localSettings.audioTranscriptionEngine === "screenpipe-cloud"
+        settings.audioTranscriptionEngine === "screenpipe-cloud"
           ? "deepgram"
-          : localSettings.audioTranscriptionEngine;
+          : settings.audioTranscriptionEngine;
       args.push(
         `--audio-transcription-engine ${audioTranscriptionEngine}`
       );
     }
-    if (localSettings.ocrEngine !== "default") {
-      args.push(`--ocr-engine ${localSettings.ocrEngine}`);
+    if (settings.ocrEngine !== "default") {
+      args.push(`--ocr-engine ${settings.ocrEngine}`);
     }
     if (
-      localSettings.monitorIds.length > 0 &&
-      localSettings.monitorIds[0] !== "default"
+      settings.monitorIds.length > 0 &&
+      settings.monitorIds[0] !== "default"
     ) {
-      localSettings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
+      settings.monitorIds.forEach((id) => args.push(`--monitor-id ${id}`));
     }
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
+    if (settings.languages.length > 0) {
+      settings.languages.forEach((id) => args.push(`--language ${id}`));
     }
     if (
-      localSettings.audioDevices.length > 0 &&
-      localSettings.audioDevices[0] !== "default"
+      settings.audioDevices.length > 0 &&
+      settings.audioDevices[0] !== "default"
     ) {
-      localSettings.audioDevices.forEach((device) =>
+      settings.audioDevices.forEach((device) =>
         args.push(`--audio-device "${device}"`)
       );
     }
-    if (localSettings.usePiiRemoval) {
+    if (settings.usePiiRemoval) {
       args.push("--use-pii-removal");
     }
-    if (localSettings.restartInterval > 0) {
-      args.push(`--restart-interval ${localSettings.restartInterval}`);
+    if (settings.restartInterval > 0) {
+      args.push(`--restart-interval ${settings.restartInterval}`);
     }
-    if (localSettings.disableAudio) {
+    if (settings.disableAudio) {
       args.push("--disable-audio");
     }
-    localSettings.ignoredWindows.forEach((window) =>
+    settings.ignoredWindows.forEach((window) =>
       args.push(`--ignored-windows "${window}"`)
     );
-    localSettings.includedWindows.forEach((window) =>
+    settings.includedWindows.forEach((window) =>
       args.push(`--included-windows "${window}"`)
     );
     if (
-      localSettings.deepgramApiKey &&
-      localSettings.deepgramApiKey !== "default"
+      settings.deepgramApiKey &&
+      settings.deepgramApiKey !== "default"
     ) {
-      args.push(`--deepgram-api-key "${localSettings.deepgramApiKey}"`);
+      args.push(`--deepgram-api-key "${settings.deepgramApiKey}"`);
     }
-    if (localSettings.fps !== 0.2) {
-      args.push(`--fps ${localSettings.fps}`);
+    if (settings.fps !== 0.2) {
+      args.push(`--fps ${settings.fps}`);
     }
-    if (localSettings.vadSensitivity !== "high") {
-      args.push(`--vad-sensitivity ${localSettings.vadSensitivity}`);
+    if (settings.vadSensitivity !== "high") {
+      args.push(`--vad-sensitivity ${settings.vadSensitivity}`);
     }
 
-    if (!localSettings.analyticsEnabled) {
+    if (!settings.analyticsEnabled) {
       args.push("--disable-telemetry");
     }
-    if (localSettings.audioChunkDuration !== 30) {
-      args.push(`--audio-chunk-duration ${localSettings.audioChunkDuration}`);
+    if (settings.audioChunkDuration !== 30) {
+      args.push(`--audio-chunk-duration ${settings.audioChunkDuration}`);
     }
 
-    if (localSettings.languages.length > 0) {
-      localSettings.languages.forEach((id) => args.push(`--language ${id}`));
+    if (settings.languages.length > 0) {
+      settings.languages.forEach((id) => args.push(`--language ${id}`));
     }
 
-    if (localSettings.enableFrameCache) {
+    if (settings.enableFrameCache) {
       args.push("--enable-frame-cache");
     }
 
-    if (localSettings.enableUiMonitoring) {
+    if (settings.enableUiMonitoring) {
       args.push("--enable-ui-monitoring");
     }
 

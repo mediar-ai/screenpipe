@@ -1,17 +1,7 @@
 import { useEffect, useState } from "react";
-import { createStore } from "@tauri-apps/plugin-store";
-import { localDataDir, join } from "@tauri-apps/api/path";
 import { User, useSettings } from "./use-settings";
 import { useInterval } from "./use-interval";
 import { fetch } from "@tauri-apps/plugin-http";
-
-let store: Awaited<ReturnType<typeof createStore>> | null = null;
-
-async function initStore() {
-  const dataDir = await localDataDir();
-  const storePath = await join(dataDir, "screenpipe", "store.bin");
-  store = await createStore(storePath);
-}
 
 async function verifyUserToken(token: string): Promise<User> {
   const response = await fetch("https://screenpi.pe/api/tauri", {
@@ -44,14 +34,12 @@ export function useUser() {
   }, 3000);
 
   const loadUser = async (token: string) => {
-    if (!store) await initStore();
-
     try {
       const userData = await verifyUserToken(token);
       // skip if user data did not change
       if (userData.id === user?.id) return;
       setUser(userData);
-      await updateSettings({ user: userData });
+      updateSettings({ user: userData });
     } catch (err) {
       console.error("failed to load user:", err);
       setError(err instanceof Error ? err.message : "failed to load user");
