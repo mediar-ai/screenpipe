@@ -24,11 +24,12 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use xcap_macoswin::Monitor;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use xcap::Monitor;
+
 
 pub struct CaptureResult {
     pub image: DynamicImage,
