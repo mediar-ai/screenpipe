@@ -37,6 +37,7 @@ import { useUser } from "@/lib/hooks/use-user";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { Progress } from "@/components/ui/progress";
 
 export interface Pipe {
   enabled: boolean;
@@ -264,10 +265,36 @@ const PipeStore: React.FC = () => {
       posthog.capture("download_pipe", {
         pipe_id: url,
       });
-      toast({
+
+      // Create initial toast with progress bar
+      const t = toast({
         title: "downloading pipe",
-        description: "please wait...",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">starting download...</p>
+          </div>
+        ),
+        duration: 100000, // long duration
       });
+
+      let value = 0;
+
+      // Update progress periodically
+      const progressInterval = setInterval(() => {
+        value += 3;
+        t.update({
+          id: t.id,
+          title: "downloading pipe",
+          description: (
+            <div className="space-y-2">
+              <Progress value={value} className="h-1" />
+              <p className="text-xs">installing dependencies...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }, 500);
 
       const response = await fetch("http://localhost:3030/pipes/download", {
         method: "POST",
@@ -278,13 +305,24 @@ const PipeStore: React.FC = () => {
       });
       const data = await response.json();
 
+      clearInterval(progressInterval);
+
       if (!data.success) {
         throw new Error(data.error || "Failed to download pipe");
       }
 
-      toast({
+      t.update({
+        id: t.id,
         title: "pipe downloaded",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
       });
+
       await fetchInstalledPipes();
     } catch (error) {
       console.error("Failed to download pipe:", error);
