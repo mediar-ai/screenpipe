@@ -3,11 +3,7 @@
   "description": "permissions that were migrated from v1",
   "local": true,
   "windows": [
-    "main",
-    "timeline",
-    "search",
-    "meetings",
-    "identify-speakers"
+    "*"
   ],
   "permissions": [
     "core:event:allow-listen",
@@ -345,11 +341,27 @@
       "allow": [
         {
           "url": "http://**/*",
-          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
         },
         {
           "url": "https://**/*",
-          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
         }
       ]
     }

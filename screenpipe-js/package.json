@@ -1,30 +1,31 @@
 {
     "name": "@screenpipe/js",
-    "version": "0.1.10-beta.11",
+    "version": "0.1.10-beta.18",
     "type": "module",
     "main": "./dist/main.cjs",
     "module": "./dist/main.js",
     "types": "./dist/main.d.ts",
     "files": [
-        "dist",
-        "index.d.ts"
+        "dist"
     ],
     "exports": {
         ".": {
             "types": "./dist/main.d.ts",
+            "browser": "./dist/browser.js",
+            "node": "./dist/node.js",
             "import": "./dist/main.js",
             "require": "./dist/main.cjs",
-            "default": "./dist/main.js"
+            "default": "./dist/browser.js"
         }
     },
     "scripts": {
-        "build": "tsup main.ts --format esm,cjs --dts --clean",
+        "build": "tsup main.ts browser.ts node.ts next.ts types.ts --format esm,cjs --dts --clean",
         "test": "bun test",
         "prepublishOnly": "npm run build"
     },
     "devDependencies": {
-        "bun-types": "latest",
         "@types/node": "^22.10.2",
+        "bun-types": "latest",
         "tsup": "^8.0.0"
     },
     "dependencies": {

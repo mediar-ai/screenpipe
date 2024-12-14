@@ -4,7 +4,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": [
-      "bun-types"
+      "bun-types",
+      "node"
     ],
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -14,11 +15,12 @@
     "outDir": "dist"
   },
   "include": [
-    "src/**/*",
+    "*.ts",
     "index.d.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "create-pipe"
   ]
 }
