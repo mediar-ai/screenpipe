@@ -120,7 +120,7 @@ export const VideoComponent = memo(function VideoComponent({
         </div>
       ) : (
         <video controls className="w-full rounded-md">
-          <source src={mediaSrc} type="video/mp4" />
+          <source src={mediaSrc} type="video/mp4; codecs=hvc1" />
           Your browser does not support the video tag.
         </video>
       )}
