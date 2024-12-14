@@ -424,10 +424,11 @@ export async function queryScreenpipe(
 ): Promise<ScreenpipeResponse | null> {
   const queryParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined) {
+    if (value !== undefined && value !== '') {
       if (key === 'speakerIds' && Array.isArray(value)) {
-        // Convert speaker IDs array to comma-separated string
-        queryParams.append(toSnakeCase(key), value.join(','));
+        if (value.length > 0) {
+          queryParams.append(toSnakeCase(key), value.join(','));
+        }
       } else {
         const snakeKey = toSnakeCase(key);
         queryParams.append(snakeKey, value.toString());

@@ -213,6 +213,7 @@
     "core:path:default",
     "process:default",
     "store:default",
+    "core:webview:allow-internal-toggle-devtools",
     {
       "identifier": "shell:allow-execute",
       "allow": [
