@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": [
@@ -10,10 +10,12 @@
     "skipLibCheck": true,
     "strict": true,
     "declaration": true,
+    "declarationDir": "./dist",
     "outDir": "dist"
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "index.d.ts"
   ],
   "exclude": [
     "node_modules",

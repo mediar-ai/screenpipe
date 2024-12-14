@@ -1,27 +1,31 @@
 {
     "name": "@screenpipe/js",
-    "version": "0.1.5",
-    "module": "main.ts",
+    "version": "0.1.10-beta.9",
     "type": "module",
+    "main": "./dist/main.cjs",
+    "module": "./dist/main.js",
+    "types": "./dist/main.d.ts",
     "files": [
-        "main.ts",
-        "dist"
+        "dist",
+        "index.d.ts"
     ],
     "exports": {
         ".": {
+            "types": "./dist/main.d.ts",
             "import": "./dist/main.js",
             "require": "./dist/main.cjs",
-            "types": "./dist/main.d.ts"
+            "default": "./dist/main.js"
         }
     },
     "scripts": {
-        "build": "bun build ./main.ts --outdir ./dist --target node",
+        "build": "tsup main.ts --format esm,cjs --dts --clean",
         "test": "bun test",
-        "prepublishOnly": "bun run build"
+        "prepublishOnly": "npm run build"
     },
     "devDependencies": {
         "bun-types": "latest",
-        "@types/node": "^22.8.4"
+        "@types/node": "^22.10.2",
+        "tsup": "^8.0.0"
     },
     "dependencies": {
         "@scarf/scarf": "^1.4.0",
@@ -33,5 +37,8 @@
     },
     "peerDependencies": {
         "typescript": "^5.0.0"
+    },
+    "publishConfig": {
+        "access": "public"
     }
 }

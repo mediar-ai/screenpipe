@@ -1,9 +1,25 @@
-import * as fs from "node:fs";
-import cron, { type ScheduledTask } from "node-cron";
-import express, { Request, Response, NextFunction } from "express";
-import * as fsPromises from "node:fs/promises";
-import * as path from "node:path";
-import * as os from "node:os";
+// Environment detection
+const isNode = typeof process !== 'undefined' && 
+  process.versions != null && 
+  process.versions.node != null;
+
+
+function assertNode(functionName: string) {
+  if (!isNode) {
+    throw new Error(`${functionName} is only available in Node.js environment`);
+  }
+}
+
+// create a helper for dynamic imports
+async function requireNodeModule(moduleName: string) {
+  if (!isNode) return null;
+  try {
+    return await import(moduleName);
+  } catch (e) {
+    console.error(`failed to import ${moduleName}:`, e);
+    return null;
+  }
+}
 
 // Type definitions
 export interface PipeConfig {
@@ -78,20 +94,6 @@ export interface AudioContent {
   speaker?: Speaker;
 }
 
-/**
- * Structure of Full Text Search content.
- */
-export interface FTSContent {
-  textId: number;
-  matchedText: string;
-  frameId: number;
-  timestamp: string;
-  appName: string;
-  windowName: string;
-  filePath: string;
-  originalFrameText?: string;
-  tags: string[];
-}
 
 /**
  * Structure of UI content.
@@ -171,6 +173,7 @@ export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
   aiModel: string;
+  aiUrl: string;
   customPrompt: string;
   port: number;
   dataDir: string;
@@ -181,12 +184,14 @@ export interface Settings {
   embeddedLLM: EmbeddedLLMConfig;
   enableFrameCache: boolean;
   enableUiMonitoring: boolean;
+  aiMaxContextChars: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   openaiApiKey: "",
   deepgramApiKey: "",
   aiModel: "gpt-4",
+  aiUrl: "https://api.openai.com/v1",
   customPrompt: `Rules:
 - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
 - Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
@@ -205,34 +210,37 @@ const DEFAULT_SETTINGS: Settings = {
   },
   enableFrameCache: true,
   enableUiMonitoring: false,
+  aiMaxContextChars: 128000,
 };
 
-export class SettingsManager {
+/**
+ * Settings Manager for Screenpipe configuration.
+ * Works in: Node.js only
+ */
+class SettingsManager {
   private settings: Settings;
   private storePath: string;
   private initialized: boolean = false;
 
   constructor() {
+    assertNode('SettingsManager');
     this.settings = DEFAULT_SETTINGS;
-    this.storePath = this.getStorePath();
+    this.storePath = ''; // will be set in init()
   }
 
-  private getStorePath(): string {
+  private async getStorePath(): Promise<string> {
+    const os = await requireNodeModule('os');
+    const path = await requireNodeModule('path');
+    if (!os || !path) throw new Error('failed to load required modules');
+
     const platform = process.platform;
     const home = os.homedir();
 
     switch (platform) {
       case "darwin":
-        return path.join(
-          home,
-          "Library",
-          "Application Support",
-          "screenpipe",
-          "store.bin"
-        );
+        return path.join(home, "Library", "Application Support", "screenpipe", "store.bin");
       case "linux":
-        const xdgData =
-          process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
+        const xdgData = process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
         return path.join(xdgData, "screenpipe", "store.bin");
       case "win32":
         return path.join(
@@ -245,22 +253,22 @@ export class SettingsManager {
     }
   }
 
-  private async ensureStoreDirectory(): Promise<void> {
-    const dir = path.dirname(this.storePath);
-    await fsPromises.mkdir(dir, { recursive: true });
-  }
-
   async init(): Promise<void> {
     if (this.initialized) return;
 
+    const fs = await requireNodeModule('fs/promises');
+    const path = await requireNodeModule('path');
+    if (!fs || !path) throw new Error('failed to load required modules');
+
+    this.storePath = await this.getStorePath();
+
     try {
-      await this.ensureStoreDirectory();
-      const data = await fsPromises.readFile(this.storePath);
+      await fs.mkdir(path.dirname(this.storePath), { recursive: true });
+      const data = await fs.readFile(this.storePath);
       this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(data.toString()) };
       this.initialized = true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        // file doesn't exist, use defaults
         await this.save();
         this.initialized = true;
       } else {
@@ -270,11 +278,10 @@ export class SettingsManager {
   }
 
   async save(): Promise<void> {
-    await this.ensureStoreDirectory();
-    await fsPromises.writeFile(
-      this.storePath,
-      JSON.stringify(this.settings, null, 2)
-    );
+    const fs = await requireNodeModule('fs/promises');
+    const path = await requireNodeModule('path');
+    await fs.mkdir(path.dirname(this.storePath), { recursive: true });
+    await fs.writeFile(this.storePath, JSON.stringify(this.settings, null, 2));
   }
 
   async get<K extends keyof Settings>(key: K): Promise<Settings[K]> {
@@ -346,11 +353,19 @@ function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 }
 
+/**
+ * Send a desktop notification to the user.
+ * Works in: Both Browser and Node.js
+ * 
+ * @example
+ * ```typescript
+ * pipe.sendDesktopNotification({ title: "Task Completed", body: "Your task has been completed." });
+ * ```
+ */
 export async function sendDesktopNotification(
   options: NotificationOptions
 ): Promise<boolean> {
-  const notificationApiUrl =
-    process.env.SCREENPIPE_SERVER_URL || "http://localhost:11435";
+  const notificationApiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:11435";
   try {
     await fetch(`${notificationApiUrl}/notify`, {
       method: "POST",
@@ -364,20 +379,29 @@ export async function sendDesktopNotification(
   }
 }
 
+/**
+ * Load the pipe configuration that can be set through the screenpipe app or the pipe.json file.
+ * Works in: Node.js only
+ * 
+ * @example
+ * ```typescript
+ * pipe.loadPipeConfig();
+ * ```
+ */
 export function loadPipeConfig(): PipeConfig {
+  assertNode('loadPipeConfig');
   try {
-    // Try to get path from env vars, fallback to current directory
+    const fs = require('fs');
+    const path = require('path');
     const baseDir = process.env.SCREENPIPE_DIR || process.cwd();
-    const pipeId =
-      process.env.PIPE_ID || require("path").basename(process.cwd());
+    const pipeId = process.env.PIPE_ID || path.basename(process.cwd());
     const configPath = `${baseDir}/pipes/${pipeId}/pipe.json`;
 
     const configContent = fs.readFileSync(configPath, "utf8");
     const parsedConfig: ParsedConfig = JSON.parse(configContent);
     const config: PipeConfig = {};
     parsedConfig.fields.forEach((field) => {
-      config[field.name] =
-        field.value !== undefined ? field.value : field.default;
+      config[field.name] = field.value !== undefined ? field.value : field.default;
     });
     return config;
   } catch (error) {
@@ -386,6 +410,15 @@ export function loadPipeConfig(): PipeConfig {
   }
 }
 
+/**
+ * Query the screenpipe API.
+ * Works in: Both Browser and Node.js
+ * 
+ * @example
+ * ```typescript
+ * pipe.queryScreenpipe({ q: "squirrel", contentType: "ocr", limit: 10 });
+ * ```
+ */
 export async function queryScreenpipe(
   params: ScreenpipeQueryParams
 ): Promise<ScreenpipeResponse | null> {
@@ -442,6 +475,8 @@ export interface InboxMessageAction {
   callback: () => Promise<void>;
 }
 
+type ScheduledTask = any;
+
 class Task {
   private _name: string;
   private _interval: string | number;
@@ -450,6 +485,7 @@ class Task {
   private _cronTask: ScheduledTask | null = null;
 
   constructor(name: string) {
+    assertNode('Task');
     this._name = name;
     this._interval = 0;
   }
@@ -469,11 +505,13 @@ class Task {
     return this;
   }
 
-  schedule(): void {
+  async schedule(): Promise<void> {
     if (!this._handler) {
       throw new Error(`No handler defined for task: ${this._name}`);
     }
 
+    assertNode('Task.schedule');
+    const cron = await requireNodeModule('node-cron');
     const cronExpression = this.toCronExpression();
 
     this._cronTask = cron.schedule(cronExpression, this._handler, {
@@ -482,7 +520,8 @@ class Task {
   }
 
   stop(): void {
-    return this._cronTask!.stop();
+    assertNode('Task.stop');
+    return this._cronTask?.stop();
   }
 
   private toCronExpression(): string {
@@ -511,8 +550,34 @@ class Task {
   }
 }
 
+/**
+ * Scheduler for running tasks at specific times or intervals.
+ * Works in: Node.js only
+ * 
+ * @example
+ * ```typescript
+ * pipe.scheduler.task("dailyReport")
+ *   .every("1 day")
+ *   .at("00:00")
+ *   .do(async () => {
+ *     console.log("running daily report");
+ *   });
+ * 
+ * pipe.scheduler.task("everyFiveMinutes")
+ *   .every("5 minutes")
+ *   .do(async () => {
+ *     console.log("running task every 5 minutes");
+ *   });
+ * 
+ * pipe.scheduler.start();
+ * ```
+ */
 class Scheduler {
   private tasks: Task[] = [];
+
+  constructor() {
+    assertNode('Scheduler');
+  }
 
   task(name: string): Task {
     const task = new Task(name);
@@ -524,8 +589,12 @@ class Scheduler {
     this.tasks.forEach((task) => task.schedule());
   }
 
-  stop(): void {
-    cron.getTasks().forEach((task) => task.stop());
+  async stop(): Promise<void> {
+    assertNode('Scheduler.stop');
+    if (isNode) {
+      const cron = await requireNodeModule('node-cron');
+      cron.getTasks().forEach((task: any) => task.stop());
+    }
     this.tasks = [];
   }
 }
@@ -563,20 +632,26 @@ async function getAvailablePort(): Promise<number> {
 
 export class InboxManager {
   private actionServerPort?: number;
-  private actionServer?: express.Express;
+  private actionServerProcess?: any;
 
   async send(message: InboxMessage): Promise<boolean> {
-    // Ensure action server is running and we have a port
     if (!this.actionServerPort) {
       this.actionServerPort = await getAvailablePort();
-      this.actionServer = await this.startActionServer();
+      // spawn the server as a separate process
+      if (isNode) {
+        const { fork } = await requireNodeModule('child_process');
+        this.actionServerProcess = fork('./inbox-server.js', [this.actionServerPort.toString()]);
+      }
     }
 
     // Generate unique IDs for actions and store their callbacks
     if (message.actions) {
+      if (!isNode) {
+        console.warn('inbox actions are currently not supported in browser');
+        return false;
+      }
       message.actions = message.actions.map((action) => {
         const actionId = crypto.randomUUID();
-        actionCallbacks.set(actionId, action.callback);
         return {
           label: action.label,
           action: actionId,
@@ -603,178 +678,59 @@ export class InboxManager {
       return false;
     }
   }
-
-  private async startActionServer(): Promise<express.Express> {
-    const app = express();
-    app.use(express.json());
-
-    // Add CORS middleware
-    app.use((req: Request, res: Response, next: NextFunction): void => {
-      res.header("Access-Control-Allow-Origin", "*");
-      res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      res.header("Access-Control-Allow-Headers", "Content-Type");
-
-      if (req.method === "OPTIONS") {
-        res.sendStatus(200);
-        return;
-      }
-      next();
-    });
-
-    app.post("/action", (req, res) => {
-      const { action } = req.body as ActionResponse;
-      const callback = actionCallbacks.get(action);
-      if (callback) {
-        callback()
-          .then(() => {
-            res.json({ success: true });
-            actionCallbacks.delete(action);
-          })
-          .catch((error) => {
-            console.error("action callback failed:", error);
-            res.status(500).json({ success: false, error: error.message });
-          });
-      } else {
-        res.status(404).json({ success: false, error: "action not found" });
-      }
-    });
-
-    return new Promise((resolve) => {
-      app.listen(this.actionServerPort, () => {
-        console.log(`action server listening on port ${this.actionServerPort}`);
-        resolve(app);
-      });
-    });
-  }
 }
 
-// Export a singleton instance
-export const settingsManager = new SettingsManager();
+/**
+ * Input control methods for simulating user input.
+ * Works in: Both Browser and Node.js
+ * 
+ * @example
+ * ```typescript
+ * // Type text
+ * pipe.input.type("Hello, Screenpipe!");
+ * 
+ * // Press a key
+ * pipe.input.press("enter");
+ * 
+ * // Move mouse
+ * pipe.input.moveMouse(100, 200);
+ * 
+ * // Click
+ * pipe.input.click("left");
+ * ```
+ */
+const input = {
+  // ... existing implementation
+}
 
+/**
+ * Main Screenpipe API object.
+ * Different methods work in different environments as documented above.
+ * 
+ * @example
+ * ```typescript
+ * // Works in both Browser and Node.js
+ * await pipe.sendDesktopNotification({ title: "Hello", body: "World" });
+ * 
+ * // Works only in Node.js
+ * const config = pipe.loadPipeConfig();
+ * ```
+ */
 export const pipe = {
-  /**
-   * Send a desktop notification to the user.
-   *
-   * @example
-   * ```typescript
-   * pipe.sendDesktopNotification({ title: "Task Completed", body: "Your task has been completed." });
-   * ```
-   */
   sendDesktopNotification,
-  /**
-   * Load the pipe configuration that can be set through the screenpipe app or the pipe.json file.
-   *
-   * @example
-   * ```typescript
-   * pipe.loadPipeConfig();
-   * ```
-   */
   loadPipeConfig,
-  /**
-   * Query the screenpipe API.
-   *
-   * @example
-   * ```typescript
-   * pipe.queryScreenpipe({ q: "squirrel", contentType: "ocr", limit: 10 });
-   * ```
-   */
   queryScreenpipe,
-  /**
-   * Send a notification to the user's AI inbox.
-   *
-   * @example
-   * ```typescript
-   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed." });
-   * ```
-   *
-   * or with actions:
-   * ```typescript
-   * pipe.inbox.send({ title: "Task Completed", body: "Your task has been completed.", actions: [{ id: "view", label: "view details", callback: async () => { console.log("viewing details"); } }] });
-   * ```
-   */
   inbox: new InboxManager(),
-  /**
-   * Scheduler for running tasks at specific times or intervals.
-   *
-   * @example
-   * ```typescript
-   * pipe.scheduler.task("dailyReport")
-   *   .every("1 day")
-   *   .at("00:00")
-   *   .do(async () => {
-   *     console.log("running daily report");
-   *   });
-   *
-   * pipe.scheduler.task("everyFiveMinutes")
-   *   .every("5 minutes")
-   *   .do(async () => {
-   *     console.log("running task every 5 minutes");
-   *   });
-   *
-   * pipe.scheduler.start();
-   * ```
-   */
-  scheduler: new Scheduler(),
-  /**
-   * Experimental input control methods.
-   * Use with caution as these directly manipulate input devices.
-   */
+  scheduler: isNode ? new Scheduler() : undefined,
   input: {
-    /**
-     * Simulate typing text.
-     * @example
-     * pipe.input.type("Hello, Screenpipe!");
-     */
-    type: (text: string): Promise<boolean> => {
-      return sendInputControl({ type: "WriteText", data: text });
-    },
-
-    /**
-     * Simulate a key press.
-     * @example
-     * pipe.input.press("enter");
-     */
-    press: (key: string): Promise<boolean> => {
-      return sendInputControl({ type: "KeyPress", data: key });
-    },
-
-    /**
-     * Move the mouse to absolute coordinates.
-     * @example
-     * pipe.input.moveMouse(100, 200);
-     */
-    moveMouse: (x: number, y: number): Promise<boolean> => {
-      return sendInputControl({ type: "MouseMove", data: { x, y } });
-    },
-
-    /**
-     * Simulate a mouse click.
-     * @example
-     * pipe.input.click("left");
-     */
-    click: (button: "left" | "right" | "middle"): Promise<boolean> => {
-      return sendInputControl({ type: "MouseClick", data: button });
-    },
-
-    /**
-     * Access settings management functionality
-     * @example
-     * ```typescript
-     * // Get a specific setting
-     * const apiKey = await pipe.settings.get("openaiApiKey");
-     *
-     * // Update multiple settings
-     * await pipe.settings.update({
-     *   openaiApiKey: "new-key",
-     *   aiModel: "gpt-4"
-     * });
-     *
-     * // Reset all settings
-     * await pipe.settings.reset();
-     * ```
-     */
-    settings: settingsManager,
+    type: (text: string) => sendInputControl({ type: "WriteText", data: text }),
+    press: (key: string) => sendInputControl({ type: "KeyPress", data: key }),
+    moveMouse: (x: number, y: number) => 
+      sendInputControl({ type: "MouseMove", data: { x, y } }),
+    click: (button: "left" | "right" | "middle") => 
+      sendInputControl({ type: "MouseClick", data: button }),
   },
+  settings: isNode ? new SettingsManager() : undefined,
 };
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
