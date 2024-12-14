@@ -362,6 +362,11 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
+      - uses: actions/setup-python@v5
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        with:
+          python-version: '3.13'
+
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
@@ -378,6 +383,7 @@ jobs:
           } else {
             Write-Host "no existing dlls found, trying pip install..."
             mkdir omp
+            python -m ensurepip --upgrade
             python -m pip install intel-openmp --target omp
             Get-ChildItem -Path ./omp -Recurse -Filter *.dll | Copy-Item -Destination $mkl_dir -Force
           }
@@ -388,6 +394,7 @@ jobs:
           if ($dll_count -eq 0) {
             throw "No DLLs found in target directory!"
           }
+
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
