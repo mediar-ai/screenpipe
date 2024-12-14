@@ -88,11 +88,11 @@ path = "examples/websocket.rs"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
-xcap = "0.0.12"
+xcap-macoswin = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-xcap-macos = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
+xcap-macoswin = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"

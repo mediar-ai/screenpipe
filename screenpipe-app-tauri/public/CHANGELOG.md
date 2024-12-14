@@ -1,13 +1,10 @@
-### **New Features:**
-- **Added H.265 support for macOS:** Enabled H.265 support on macOS for improved video compression.
-- **Made screenpipe-js Next.js client/server compatible:** Ensured compatibility with Next.js framework for a smoother client/server experience.
-
 ### **Improvements:**
-- **Enhanced search functionality:** Fixed issue with search and pipe store for better search results.
-- **Improved speaker argument in screenpipe-js:** Resolved speaker argument issue in screenpipe-js for better audio handling.
+- **Improved pipe download user experience (UX):** Enhancements made to the pipe download process for a better user experience.
 
 ### **Fixes:**
-- No relevant fixes were identified from the provided commits.
+- **Fixed self-hosted builds:** Addressed issues with self-hosted builds for smoother deployment process.
+- **Fixed compatibility with node/browser:** Updated screenpipe-js to be compatible with both node and browsers.
+- **Fixed search functionality:** Resolved issues with the search feature for more accurate results.
 
-#### **Full Changelog:** [ddac8..34f5e](https://github.com/mediar-ai/screenpipe/compare/ddac8..34f5e)
+#### **Full Changelog:** [cabec..d24be](https://github.com/mediar-ai/screenpipe/compare/cabec..d24be)
 

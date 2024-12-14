@@ -8,10 +8,10 @@ use log::{debug, error, warn};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
 
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
+#[cfg(not(target_os = "linux"))]
+use xcap_macoswin::Monitor;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 use xcap::Monitor;
 
 #[derive(Clone, Debug, Copy)]

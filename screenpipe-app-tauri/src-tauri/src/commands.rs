@@ -333,9 +333,18 @@ pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
 
 #[tauri::command]
 pub async fn open_pipe_window(app_handle: tauri::AppHandle<tauri::Wry>, port: u16, title: String) -> Result<(), String> {
+    let window_label = format!("pipe-{}", port);
+    
+    // Close existing window if it exists
+    if let Some(existing_window) = app_handle.get_webview_window(&window_label) {
+        let _ = existing_window.close();
+        // Give it a moment to properly close
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+
     let _window = tauri::WebviewWindowBuilder::new(
         &app_handle,
-        format!("pipe-{}", port),
+        window_label,
         tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap())
     )
     .title(title)

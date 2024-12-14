@@ -4,7 +4,7 @@ import React, { JSX, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { queryScreenpipe, ContentItem } from "@screenpipe/js";
+import { pipe, ContentItem } from "@screenpipe/js";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -72,10 +72,16 @@ import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { SqlAutocompleteInput } from "@/components/sql-autocomplete-input";
 import { cn, removeDuplicateSelections } from "@/lib/utils";
-import { ExampleSearch, ExampleSearchCards } from "@/components/example-search-cards";
+import {
+  ExampleSearch,
+  ExampleSearchCards,
+} from "@/components/example-search-cards";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { SearchHistory, useSearchHistory } from "@/lib/hooks/use-search-history";
+import {
+  SearchHistory,
+  useSearchHistory,
+} from "@/lib/hooks/use-search-history";
 import {
   CommandInput,
   CommandList,
@@ -85,10 +91,12 @@ import {
   Command,
 } from "./ui/command";
 import { Speaker } from "@screenpipe/js";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
-
-
 
 interface Agent {
   id: string;
@@ -230,6 +238,7 @@ export function SearchChat() {
   const [offset, setOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const { settings } = useSettings();
+  console.log("settings", settings);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);
@@ -305,12 +314,14 @@ export function SearchChat() {
   useEffect(() => {
     // More reliable OS detection
     const platform = window.navigator.platform.toLowerCase();
-    const os = 
-      platform.includes('mac') ? 'macos' :
-      platform.includes('win') ? 'windows' :
-      platform.includes('linux') ? 'linux' : 
-      'unknown';
-      
+    const os = platform.includes("mac")
+      ? "macos"
+      : platform.includes("win")
+      ? "windows"
+      : platform.includes("linux")
+      ? "linux"
+      : "unknown";
+
     setCurrentPlatform(os);
   }, []);
 
@@ -385,8 +396,6 @@ export function SearchChat() {
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
 
-  console.log("content type", contentType);
-
   useEffect(() => {
     const updateDates = () => {
       const now = new Date();
@@ -416,7 +425,6 @@ export function SearchChat() {
   }, []);
 
   const handleExampleSelect = async (example: ExampleSearch) => {
-
     const newWindowName = example.windowName || "";
     const newAppName = example.appName || "";
     const newLimit = example.limit || limit;
@@ -599,7 +607,6 @@ export function SearchChat() {
       return;
     }
 
-
     const userMessage = {
       id: generateId(),
       role: "user" as const,
@@ -620,8 +627,6 @@ export function SearchChat() {
         dangerouslyAllowBrowser: true,
       });
       console.log("openai", settings.openaiApiKey, settings.aiUrl);
-
-
 
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
@@ -732,24 +737,26 @@ export function SearchChat() {
     setResults([]);
     setSimilarityThreshold(1); // Reset similarity threshold to 1
 
-
     try {
       const searchParams = {
         q: query || undefined,
         contentType: overrides.contentType || contentType,
         limit: overrides.limit || limit,
         offset: newOffset,
-        startTime: overrides.startDate?.toISOString() || startDate.toISOString(),
+        startTime:
+          overrides.startDate?.toISOString() || startDate.toISOString(),
         endTime: endDate.toISOString(),
         appName: overrides.appName || appName || undefined,
         windowName: overrides.windowName || windowName || undefined,
         includeFrames: includeFrames,
         minLength: overrides.minLength || minLength,
         maxLength: maxLength,
-        speakerIds: Object.values(selectedSpeakers).map((speaker) => speaker.id)
+        speakerIds: Object.values(selectedSpeakers).map(
+          (speaker) => speaker.id
+        ),
       };
 
-      const response = await queryScreenpipe(searchParams);
+      const response = await pipe.queryScreenpipe(searchParams);
 
       // Add debug logging
       console.log("search response:", response);
@@ -911,7 +918,10 @@ export function SearchChat() {
                           <Badge
                             className="text-xs cursor-pointer"
                             onClick={() =>
-                              handleBadgeClick(item.content.windowName, "window")
+                              handleBadgeClick(
+                                item.content.windowName,
+                                "window"
+                              )
                             }
                           >
                             {item.content.windowName}
@@ -1023,13 +1033,13 @@ export function SearchChat() {
                   </Badge>
                 </div>
               )}
-              {'tags' in item.content && item.content.tags && (
+              {"tags" in item.content &&
+                item.content.tags &&
                 item.content.tags.map((tag, index) => (
                   <Badge key={index} className="text-xs">
                     {tag}
                   </Badge>
-                ))
-              )}
+                ))}
             </div>
           </CardContent>
         </Card>
