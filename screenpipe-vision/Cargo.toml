@@ -88,7 +88,7 @@ path = "examples/websocket.rs"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
-xcap-win = { package = "xcap", git = "https://github.com/nashaofu/xcap", branch = "fix-pr" }
+xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
