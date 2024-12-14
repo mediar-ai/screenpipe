@@ -1,5 +1,8 @@
-#[cfg(not(target_os = "linux"))]
-use xcap_macoswin::Monitor;
+#[cfg(target_os = "macos")]
+use xcap_macos::Monitor;
+
+#[cfg(target_os = "windows")]
+use xcap_win::Monitor;
 
 #[cfg(target_os = "linux")]
 use xcap::Monitor;
