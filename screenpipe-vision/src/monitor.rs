@@ -1,7 +1,7 @@
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
+#[cfg(not(target_os = "linux"))]
+use xcap_macoswin::Monitor;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 use xcap::Monitor;
 
 pub async fn list_monitors() -> Vec<Monitor> {
