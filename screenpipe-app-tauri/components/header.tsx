@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-user";
+import { useRouter } from 'next/navigation'
+
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -139,6 +141,8 @@ export default function Header() {
   const handleShowIdentifySpeakers = async () => {
     await invoke("show_identify_speakers");
   };
+
+  const router = useRouter()
 
   return (
     <div>
@@ -278,6 +282,12 @@ export default function Header() {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
+          </div>
+          <div className="flex space-x-4 absolute top-4 left-4">
+            <Button variant="outline" onClick={() => router.push("/user-data")}>
+              <User className="mr-2 h-4 w-4" />
+              <span>user data</span>
+            </Button>
           </div>
           {showInbox && (
             <div className="absolute right-4 top-16 z-50 bg-white shadow-lg rounded-lg">
