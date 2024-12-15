@@ -8,7 +8,10 @@ import {
   Action,
   persist,
   createTypedHooks,
+  PersistStorage,
 } from "easy-peasy";
+import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
+import { localDataDir } from "@tauri-apps/api/path";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -171,8 +174,9 @@ export interface StoreModel {
   resetSetting: Action<StoreModel, keyof Settings>;
 }
 
-function createDefaultSettingsObject(currentPlatform: string): Settings {
+function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
+  const currentPlatform = platform();
 
   const ocrModel =
     currentPlatform === "macos"
@@ -193,11 +197,99 @@ function createDefaultSettingsObject(currentPlatform: string): Settings {
   return defaultSettings;
 }
 
+// Create a singleton store instance
+let storePromise: Promise<LazyStore> | null = null;
+
+const getStore = async () => {
+  if (!storePromise) {
+    storePromise = (async () => {
+      const dir = await localDataDir();
+      return new TauriStore(`${dir}/screenpipe/store.bin`);
+    })();
+  }
+  return storePromise;
+};
+
+// Helper functions to flatten/unflatten objects
+const flattenObject = (obj: any, prefix = ""): Record<string, any> => {
+  return Object.keys(obj).reduce((acc: Record<string, any>, k: string) => {
+    const pre = prefix.length ? prefix + "." : "";
+    if (
+      typeof obj[k] === "object" &&
+      obj[k] !== null &&
+      !Array.isArray(obj[k])
+    ) {
+      Object.assign(acc, flattenObject(obj[k], pre + k));
+    } else {
+      acc[pre + k] = obj[k];
+    }
+    return acc;
+  }, {});
+};
+
+const unflattenObject = (obj: Record<string, any>): any => {
+  const result: any = {};
+  for (const key in obj) {
+    const keys = key.split(".");
+    let current = result;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (i === keys.length - 1) {
+        current[k] = obj[key];
+      } else {
+        current[k] = current[k] || {};
+        current = current[k];
+      }
+    }
+  }
+  return result;
+};
+
+const tauriStorage: PersistStorage = {
+  getItem: async (_key: string) => {
+    const tauriStore = await getStore();
+    const allKeys = await tauriStore.keys();
+    const values: Record<string, any> = {};
+
+    for (const k of allKeys) {
+      values[k] = await tauriStore.get(k);
+    }
+
+    return { settings: unflattenObject(values) };
+  },
+  setItem: async (_key: string, value: any) => {
+    const tauriStore = await getStore();
+
+    const flattenedValue = flattenObject(value.settings);
+
+    // Delete all existing keys first
+    const existingKeys = await tauriStore.keys();
+    for (const key of existingKeys) {
+      await tauriStore.delete(key);
+    }
+
+    // Set new flattened values
+    for (const [key, val] of Object.entries(flattenedValue)) {
+      await tauriStore.set(key, val);
+    }
+
+    await tauriStore.save();
+  },
+  removeItem: async (_key: string) => {
+    const tauriStore = await getStore();
+    const keys = await tauriStore.keys();
+    for (const key of keys) {
+      await tauriStore.delete(key);
+    }
+    await tauriStore.save();
+  },
+};
+
 // Export the store directly
 export const store = createStoreEasyPeasy<StoreModel>(
   persist(
     {
-      settings: DEFAULT_SETTINGS as Settings, // Start empty, will be populated in initStore
+      settings: createDefaultSettingsObject(),
       setSettings: action((state, payload) => {
         state.settings = {
           ...state.settings,
@@ -205,31 +297,25 @@ export const store = createStoreEasyPeasy<StoreModel>(
         };
       }),
       resetSettings: action((state) => {
-        state.settings = createDefaultSettingsObject(state.settings.platform);
+        state.settings = createDefaultSettingsObject();
       }),
       resetSetting: action((state, key) => {
-        const defaultValue = createDefaultSettingsObject(state.settings.platform)[key];
+        const defaultValue = createDefaultSettingsObject()[key];
         (state.settings as any)[key] = defaultValue;
       }),
     },
     {
-      storage: 'localStorage',
-      mergeStrategy: 'mergeDeep',
+      storage: tauriStorage,
+      mergeStrategy: "mergeDeep",
     }
-  ),
-  {
-    name: 'screenpipe-settings',
-    version: 1,
-  }
+  )
 );
 
 const typedHooks = createTypedHooks<StoreModel>();
 export const useStoreActions = typedHooks.useStoreActions;
 export const useStoreState = typedHooks.useStoreState;
 
-
 export function useSettings() {
-  
   const settings = useStoreState((state) => state.settings);
   const setSettings = useStoreActions((actions) => actions.setSettings);
   const resetSettings = useStoreActions((actions) => actions.resetSettings);

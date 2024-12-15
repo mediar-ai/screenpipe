@@ -200,7 +200,7 @@ export function RecordingSettings() {
     };
 
     loadDevices();
-  }, [settings.audioDevices, settings.monitorIds]);
+  }, []);
 
   const handleUpdate = async () => {
     setIsUpdating(true);

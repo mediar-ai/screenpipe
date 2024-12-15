@@ -68,6 +68,7 @@ import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { useDebounce } from "use-debounce";
 
 function AccountSection() {
   const { user, loadUser } = useUser();
@@ -318,12 +319,14 @@ export function Settings({ className }: { className?: string }) {
     updateSettings({ aiModel: newValue });
   };
 
-  const handleCustomPromptChange = (
-    e: React.ChangeEvent<HTMLTextAreaElement>
-  ) => {
-    const newValue = e.target.value;
-    updateSettings({ customPrompt: newValue });
-  };
+  const handleCustomPromptChange = useDebounce(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newValue = e.target.value;
+      console.log("newValue", newValue);
+      updateSettings({ customPrompt: newValue });
+    },
+    1000
+  )[0];
 
   const handleResetCustomPrompt = () => {
     resetSetting("customPrompt");
@@ -681,8 +684,11 @@ export function Settings({ className }: { className?: string }) {
           </div>
         </div>
       </DialogTrigger>
-
-      <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto">
+      {/* Fixes spacebar not registering inside Dialog for TextArea https://github.com/shadcn-ui/ui/issues/2105#issuecomment-1900024158 */}
+      <DialogContent
+        className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-y-auto"
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <DialogHeader>
           <DialogTitle>
             <div className="flex items-center gap-4">settings</div>
