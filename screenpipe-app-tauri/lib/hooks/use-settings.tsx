@@ -12,6 +12,7 @@ import {
 } from "easy-peasy";
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
+import { flattenObject, unflattenObject } from "../utils";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -210,41 +211,6 @@ const getStore = async () => {
   return storePromise;
 };
 
-// Helper functions to flatten/unflatten objects
-const flattenObject = (obj: any, prefix = ""): Record<string, any> => {
-  return Object.keys(obj).reduce((acc: Record<string, any>, k: string) => {
-    const pre = prefix.length ? prefix + "." : "";
-    if (
-      typeof obj[k] === "object" &&
-      obj[k] !== null &&
-      !Array.isArray(obj[k])
-    ) {
-      Object.assign(acc, flattenObject(obj[k], pre + k));
-    } else {
-      acc[pre + k] = obj[k];
-    }
-    return acc;
-  }, {});
-};
-
-const unflattenObject = (obj: Record<string, any>): any => {
-  const result: any = {};
-  for (const key in obj) {
-    const keys = key.split(".");
-    let current = result;
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      if (i === keys.length - 1) {
-        current[k] = obj[key];
-      } else {
-        current[k] = current[k] || {};
-        current = current[k];
-      }
-    }
-  }
-  return result;
-};
-
 const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     const tauriStore = await getStore();
@@ -285,7 +251,6 @@ const tauriStorage: PersistStorage = {
   },
 };
 
-// Export the store directly
 export const store = createStoreEasyPeasy<StoreModel>(
   persist(
     {
@@ -312,8 +277,8 @@ export const store = createStoreEasyPeasy<StoreModel>(
 );
 
 const typedHooks = createTypedHooks<StoreModel>();
-export const useStoreActions = typedHooks.useStoreActions;
-export const useStoreState = typedHooks.useStoreState;
+const useStoreActions = typedHooks.useStoreActions;
+const useStoreState = typedHooks.useStoreState;
 
 export function useSettings() {
   const settings = useStoreState((state) => state.settings);
