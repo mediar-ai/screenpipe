@@ -325,7 +325,7 @@ export function Settings({ className }: { className?: string }) {
       console.log("newValue", newValue);
       updateSettings({ customPrompt: newValue });
     },
-    1000
+    100
   )[0];
 
   const handleResetCustomPrompt = () => {
