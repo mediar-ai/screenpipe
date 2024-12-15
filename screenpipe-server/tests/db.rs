@@ -13,6 +13,13 @@ mod tests {
     async fn setup_test_db() -> DatabaseManager {
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
 
+        // Apply migrations explicitly during test setup
+        sqlx::migrate!("../src/migrations")
+        .run(&db.pool)
+        .await
+        .unwrap();
+        eprintln!("Current working directory: {:?}", std::env::current_dir().unwrap());
+
         db
     }
 

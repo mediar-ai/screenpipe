@@ -730,8 +730,8 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
                 AND (?4 IS NULL OR LENGTH(ocr_text.text) >= ?4)
                 AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
-                AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
-                AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
+                AND (?6 IS NULL OR ocr_text_fts MATCH 'app_name:' || quote(?6))
+                AND (?7 IS NULL OR ocr_text_fts MATCH 'window_name:' || quote(?7))
             GROUP BY ocr_text.frame_id
             ORDER BY frames.timestamp DESC
             LIMIT ?8 OFFSET ?9
@@ -929,8 +929,8 @@ impl DatabaseManager {
                     WHERE {}
                         AND (?2 IS NULL OR frames.timestamp >= ?2)
                         AND (?3 IS NULL OR frames.timestamp <= ?3)
-                        AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                        AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
+                        AND (?4 IS NULL OR ocr_text_fts MATCH 'app_name:' || quote(?4))
+                        AND (?5 IS NULL OR ocr_text_fts MATCH 'window_name:' || quote(?5))
                         AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
                         AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
                     "#,
@@ -970,8 +970,8 @@ impl DatabaseManager {
                     WHERE {}
                         AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
                         AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                        AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                        AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
+                        AND (?4 IS NULL OR ui_monitoring_fts MATCH 'app:' || quote(?4))
+                        AND (?5 IS NULL OR ui_monitoring_fts MATCH 'window:' || quote(?5))
                         AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
                         AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
                     "#,
@@ -992,8 +992,8 @@ impl DatabaseManager {
                         WHERE {}
                             AND (?2 IS NULL OR frames.timestamp >= ?2)
                             AND (?3 IS NULL OR frames.timestamp <= ?3)
-                            AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                            AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
+                            AND (?4 IS NULL OR ocr_text_fts MATCH 'app_name:' || quote(?4))
+                            AND (?5 IS NULL OR ocr_text_fts MATCH 'window_name:' || quote(?5))
                             AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
                             AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
                             AND ocr_text.text != 'No text found'
@@ -1017,8 +1017,8 @@ impl DatabaseManager {
                         WHERE {}
                             AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
                             AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                            AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                            AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
+                            AND (?4 IS NULL OR ui_monitoring_fts MATCH 'app:' || quote(?4))
+                            AND (?5 IS NULL OR ui_monitoring_fts MATCH 'window:' || quote(?5))
                             AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
                             AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
                             AND ui_monitoring.text_output != ''
