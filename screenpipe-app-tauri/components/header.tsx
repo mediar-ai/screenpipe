@@ -23,6 +23,7 @@ import {
   Book,
   User,
   Fingerprint,
+  Table,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -142,6 +143,10 @@ export default function Header() {
     await invoke("show_identify_speakers");
   };
 
+  const handleShowDataTables = async () => {
+    await invoke("show_data_tables");
+  };
+
   const router = useRouter()
 
   return (
@@ -157,6 +162,15 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
+            <Button
+              variant="ghost" 
+              size="icon"
+              onClick={handleShowDataTables}
+              className="cursor-pointer h-8 w-8 p-0"
+            >
+              <Table className="h-4 w-4" />
+              <span className="sr-only">data tables</span>
+            </Button>
 
             <Button
               variant="ghost"
@@ -282,12 +296,6 @@ export default function Header() {
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-          <div className="flex space-x-4 absolute top-4 left-4">
-            <Button variant="outline" onClick={() => router.push("/user-data")}>
-              <User className="mr-2 h-4 w-4" />
-              <span>user data</span>
-            </Button>
           </div>
           {showInbox && (
             <div className="absolute right-4 top-16 z-50 bg-white shadow-lg rounded-lg">

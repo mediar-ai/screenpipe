@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { DatabaseSidebar } from "@/components/user-data/database-sidebar"
-import { OcrDataTable } from "@/components/user-data/ocr-data-table"
-import { VideoChunksTable } from "@/components/user-data/video-chunks-table"
-import { AudioTranscriptionsTable } from "@/components/user-data/audio-transcriptions-table"
+import { DatabaseSidebar } from "@/components/data-tables/database-sidebar"
+import { OcrDataTable } from "@/components/data-tables/ocr-data-table"
+import { VideoChunksTable } from "@/components/data-tables/video-chunks-table"
+import { AudioTranscriptionsTable } from "@/components/data-tables/audio-transcriptions-table"
 
 export default function DataPage() {
   const [currentTable, setCurrentTable] = useState("ocr_text")
@@ -23,12 +23,14 @@ export default function DataPage() {
   }
 
   return (
-    <div className="flex h-screen">
-      <DatabaseSidebar 
-        currentTable={currentTable} 
-        onTableSelect={setCurrentTable} 
-      />
-      <div className="flex-1 p-8 max-w-[1200px] min-w-[1200px]">
+    <div className="flex h-screen w-full">
+      <div className="w-[20%]">
+        <DatabaseSidebar 
+          currentTable={currentTable} 
+          onTableSelect={setCurrentTable} 
+        />
+      </div>
+      <div className="w-[80%] p-8">
         <div className="w-full">
           {renderTable()}
         </div>

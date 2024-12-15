@@ -1,6 +1,6 @@
 "use client";
 
-import DataPage from "@/components/user-data/page";
+import DataPage from "@/components/data-tables/page";
 
 export default function UserDataPage() {
 
