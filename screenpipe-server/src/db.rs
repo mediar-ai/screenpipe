@@ -986,8 +986,9 @@ impl DatabaseManager {
                 format!(
                     r#"
                     SELECT COUNT(*) FROM (
-                        SELECT DISTINCT frames.id 
-                        FROM {}
+                        SELECT DISTINCT frames.id AS result_id
+                        FROM ocr_text_fts
+                        JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id 
                         JOIN frames ON ocr_text.frame_id = frames.id
                         WHERE {}
                             AND (?2 IS NULL OR frames.timestamp >= ?2)
@@ -1000,8 +1001,9 @@ impl DatabaseManager {
 
                         UNION ALL
 
-                        SELECT DISTINCT audio_transcriptions.id
-                        FROM {}
+                        SELECT DISTINCT audio_transcriptions.audio_chunk_id AS result_id
+                        FROM audio_transcriptions_fts 
+                        JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
                         WHERE {}
                             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
@@ -1012,8 +1014,9 @@ impl DatabaseManager {
 
                         UNION ALL
 
-                        SELECT DISTINCT ui_monitoring.id
-                        FROM {}
+                        SELECT DISTINCT ui_monitoring.id AS result_id
+                        FROM ui_monitoring_fts 
+                        JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id
                         WHERE {}
                             AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
                             AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
