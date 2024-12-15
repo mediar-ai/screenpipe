@@ -27,7 +27,7 @@ candle = { package = "candle-core", version = "0.7.2" }
 candle-nn = { package = "candle-nn", version = "0.7.2" }
 candle-transformers = { package = "candle-transformers", version = "0.7.2" }
 tokenizers = "0.20.0"
-hf-hub = "0.3.0"
+hf-hub = "0.3.2"
 
 log = "0.4"
 tracing = "0.1.40"
@@ -44,8 +44,8 @@ cc = "1.0"
 once_cell = "1.20.2"
 
 [patch.crates-io]
-# enables chinese mirror (hf is banned in china)
-hf-hub = { git = "https://github.com/king-jingxiang/hf-hub" }
+# enables chinese mirror (hf is banned in china) and native-tls
+hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
 
 [workspace.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"
