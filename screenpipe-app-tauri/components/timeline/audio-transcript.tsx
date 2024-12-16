@@ -44,7 +44,7 @@ export function AudioTranscript({
     if (!frames.length) return;
 
     const currentFrame = frames[currentIndex];
-    const currentTime = new Date(currentFrame.timestamp);
+    const currentTime = new Date(currentFrame?.timestamp);
     const windowStart = new Date(currentTime.getTime() - groupingWindowMs);
     const windowEnd = new Date(currentTime.getTime() + groupingWindowMs);
 

@@ -52,6 +52,7 @@ export default function Timeline() {
   const [frames, setFrames] = useState<StreamTimeSeriesResponse[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout>();
@@ -62,6 +63,7 @@ export default function Timeline() {
   const { settings } = useSettings();
   const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
   const aiPanelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({
     x: 0,
     y: 0,
@@ -92,15 +94,28 @@ export default function Timeline() {
     });
 
     console.log("starting stream:", url);
+    setMessage("connecting to the server...");
 
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
+
+    const connectionTimeout = setTimeout(() => {
+      if (eventSource.readyState !== EventSource.OPEN) {
+        console.error("Connection timeout: Unable to establish connection, make sure screenpipe is running");
+        setIsLoading(false);
+        setMessage(null);
+        setError("unable to establish connection, is screenpipe running?");
+        eventSource.close();
+      }
+    }, 5000);
 
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data === "keep-alive-text") {
+          setError(null);
           setIsLoading(false);
+          setMessage("please wait, we are collecting data to stream timeline...");
           return;
         }
 
@@ -145,6 +160,8 @@ export default function Timeline() {
 
           setCurrentFrame((prev) => prev || data.devices[0]);
           setIsLoading(false);
+          setError(null);
+          setMessage(null);
         }
       } catch (error) {
         console.error("failed to parse frame data:", error);
@@ -152,8 +169,10 @@ export default function Timeline() {
     };
 
     eventSource.onerror = (error) => {
+    clearTimeout(connectionTimeout);
       if (eventSource.readyState === EventSource.CLOSED) {
         console.log("stream ended (expected behavior)", error);
+        setMessage(null);
         setIsLoading(false);
         return;
       }
@@ -164,28 +183,33 @@ export default function Timeline() {
 
     eventSource.onopen = () => {
       console.log("eventsource connection opened");
+      clearTimeout(connectionTimeout);
       setError(null);
+      setMessage(null)
+      setIsLoading(true);
     };
   };
 
   useEffect(() => {
     setupEventSource();
+    const currentRetryTimeout = retryTimeoutRef.current;
 
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current);
+      if (currentRetryTimeout) {
+        clearTimeout(currentRetryTimeout);
       }
       setIsLoading(false);
       setError(null);
+      setMessage(null);
     };
   }, []);
 
   const handleScroll = useMemo(
     () =>
-      throttle((e: React.WheelEvent<HTMLDivElement>) => {
+      throttle((e: WheelEvent) => {
         const isWithinAiPanel = document
           .querySelector(".ai-panel")
           ?.contains(e.target as Node);
@@ -197,6 +221,7 @@ export default function Timeline() {
           ?.contains(e.target as Node);
 
         if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
+          e.preventDefault();
           e.stopPropagation();
           return;
         }
@@ -270,22 +295,31 @@ export default function Timeline() {
     setFrames([]);
     setCurrentFrame(null);
     setCurrentIndex(0);
-    setIsLoading(true);
+    setError(null);
+    setMessage(null);
+    setIsLoading(false);
+    setMessage("connecting to the server...");
     setupEventSource();
   };
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleScroll, { passive: false });
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('wheel', handleScroll);
+      }
+    };
+  }, [handleScroll]);
 
   return (
     <TimelineProvider>
       <div
+        ref={containerRef}
         className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden relative"
-        onWheel={(e) => {
-          const isWithinAiPanel = aiPanelRef.current?.contains(
-            e.target as Node
-          );
-          if (!isWithinAiPanel) {
-            handleScroll(e);
-          }
-        }}
         style={{
           height: "100vh",
           overscrollBehavior: "none",
@@ -307,6 +341,14 @@ export default function Timeline() {
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
                 <p>loading frames...</p>
+                <Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
+              </div>
+            </div>
+          )}
+          {message && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
+                <p>{message}</p>
                 <Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
               </div>
             </div>
