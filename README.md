@@ -75,8 +75,9 @@
 
 # how it works?
 
-we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
-
+- we record everything 24/7
+- we index it into an api
+- dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
 <img src="./content/diagram2.png" width="800" />
 
