@@ -1,5 +1,6 @@
+use crate::icons::AppIcon;
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
@@ -15,6 +16,7 @@ use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -71,6 +73,12 @@ struct AuthData {
     user_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct AppIconQuery {
+    name: String,
+    path: Option<String>,
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let state = ServerState { app_handle };
 
@@ -85,6 +93,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/inbox", axum::routing::post(send_inbox_message))
         .route("/log", axum::routing::post(log_message))
         .route("/auth", axum::routing::post(handle_auth))
+        .route("/app-icon", axum::routing::get(get_app_icon_handler))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -216,6 +225,35 @@ async fn handle_auth(
         success: true,
         message: "auth data stored successfully".to_string(),
     }))
+}
+
+async fn get_app_icon_handler(
+    State(_): State<ServerState>,
+    Query(app_name): Query<AppIconQuery>,
+) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+    info!("received app icon request: {:?}", app_name);
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
+            Ok(icon) => Ok(Json(icon)),
+            Err(e) => {
+                error!("failed to get app icon: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to get app icon: {}", e),
+                ))
+            }
+        }
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Err((
+            StatusCode::NOT_IMPLEMENTED,
+            "app icon retrieval not supported on this platform".to_string(),
+        ))
+    }
 }
 
 pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()> {

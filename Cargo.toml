@@ -3,18 +3,16 @@ members = [
     "screenpipe-core",
     "screenpipe-vision",
     "screenpipe-audio",
-    "screenpipe-server", 
+    "screenpipe-server",
     "screenpipe-integrations",
     "screenpipe-actions",
 ]
-exclude = [
-    "screenpipe-app-tauri/src-tauri",
-]
+exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 
 [workspace.package]
-version = "0.2.16"
+version = "0.2.17"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -27,8 +25,9 @@ candle = { package = "candle-core", version = "0.7.2" }
 candle-nn = { package = "candle-nn", version = "0.7.2" }
 candle-transformers = { package = "candle-transformers", version = "0.7.2" }
 tokenizers = "0.20.0"
-hf-hub = "0.3.0"
-
+hf-hub = { version = "0.3.2", git = "https://github.com/neo773/hf-hub", features = [
+    "native-tls",
+] }
 log = "0.4"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
@@ -44,11 +43,10 @@ cc = "1.0"
 once_cell = "1.20.2"
 
 [patch.crates-io]
-# enables chinese mirror (hf is banned in china)
-hf-hub = { git = "https://github.com/king-jingxiang/hf-hub" }
+# enables chinese mirror (hf is banned in china) and native-tls
+hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
 
 [workspace.metadata.vcpkg]
 git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
-

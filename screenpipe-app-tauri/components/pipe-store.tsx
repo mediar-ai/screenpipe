@@ -38,6 +38,8 @@ import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
+import supabase from "@/lib/supabase/client";
+import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
 
 export interface Pipe {
   enabled: boolean;
@@ -59,6 +61,23 @@ interface CorePipe {
 }
 
 const corePipes: CorePipe[] = [
+  {
+    id: "data-table",
+    name: "data table",
+    description: "explore your data in a powerful table view with filtering, sorting, and more",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/data-table",
+    credits: 0,
+    paid: false,
+  },
+  {
+    id: "timeline",
+    name: "timeline",
+    description:
+      "visualize your day with a beautiful AI-powered timeline of your activities, perfect for time tracking and productivity analysis",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
+    credits: 20,
+    paid: true,
+  },
   {
     id: "pipe-linkedin-ai-assistant",
     name: "linkedin ai assistant (preview)",
@@ -112,7 +131,7 @@ const corePipes: CorePipe[] = [
     paid: false,
   },
   {
-    id: "pipe-search",
+    id: "search",
     name: "search",
     description:
       "search through your screen recordings and audio transcripts with AI",
@@ -188,6 +207,11 @@ const getFriendlyName = (id: string, corePipes: CorePipe[]): string => {
     .join(" ");
 };
 
+const normalizeId = (id: string): string => {
+  // Remove 'pipe-' prefix if it exists and convert to lowercase
+  return id.replace(/^pipe-/, "").toLowerCase();
+};
+
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -196,7 +220,8 @@ const PipeStore: React.FC = () => {
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
+  const [showCreditDialog, setShowCreditDialog] = useState(false);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -324,6 +349,13 @@ const PipeStore: React.FC = () => {
       });
 
       await fetchInstalledPipes();
+
+      const freshPipe = pipes.find(
+        (p) => normalizeId(p.id) === normalizeId(url)
+      );
+      if (freshPipe) {
+        setSelectedPipe(freshPipe);
+      }
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
@@ -334,9 +366,25 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const checkExistingSubscription = async (pipeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("pipe_id", pipeId)
+        .eq("user_id", user?.id)
+        .single();
+
+      if (error) throw error;
+      return !!data; // returns true if subscription exists
+    } catch (error) {
+      console.error("failed to check subscription:", error);
+      return false;
+    }
+  };
+
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
-      // Add payment check for paid pipes
       const corePipe = corePipes.find((cp) => cp.id === pipe.id);
       if (corePipe?.paid && !pipe.enabled) {
         // Check if user exists AND has valid token
@@ -350,10 +398,29 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        const userCredits = user.credits?.amount || 0;
-        if (userCredits < corePipe.credits) {
-          openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
-          return;
+        // Check if user already purchased this pipe
+        const hasSubscription = await checkExistingSubscription(pipe.id);
+        if (!hasSubscription) {
+          const userCredits = user.credits?.amount || 0;
+          if (userCredits < corePipe.credits) {
+            // Show the dialog instead of redirecting
+            setShowCreditDialog(true);
+            return;
+          }
+
+          // If enough credits, proceed with purchase
+          const purchaseSuccess = await handlePipePurchase(
+            pipe,
+            corePipe.credits
+          );
+          if (!purchaseSuccess) {
+            toast({
+              title: "purchase failed",
+              description: "something went wrong, please try again",
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
 
@@ -394,21 +461,11 @@ const PipeStore: React.FC = () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Immediately update the local state
-      // setPipes((prevPipes) =>
-      //   prevPipes.map((p) =>
-      //     p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
-      //   )
-      // );
-
       // find the pipe in the list, and set it as selected with the proper enabled state
       const freshPipe = freshPipes.find((p: Pipe) => p.id === pipe.id);
-      console.log("fresh pipes", freshPipes);
-      console.log("fresh pipe", freshPipe);
       if (freshPipe) {
         setSelectedPipe(freshPipe);
       }
-      console.log("selected pipe", selectedPipe);
 
       toast({
         title: `pipe ${endpoint}d`,
@@ -570,7 +627,9 @@ const PipeStore: React.FC = () => {
   const allPipes = [
     ...pipes,
     ...corePipes
-      .filter((cp) => !pipes.some((p) => p.id === cp.id))
+      .filter(
+        (cp) => !pipes.some((p) => normalizeId(p.id) === normalizeId(cp.id))
+      )
       .map((cp) => ({
         id: cp.id,
         fullDescription: cp.description,
@@ -595,6 +654,17 @@ const PipeStore: React.FC = () => {
 
     return (
       <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
+        <CreditPurchaseDialog
+          open={showCreditDialog}
+          onOpenChange={setShowCreditDialog}
+          requiredCredits={
+            selectedPipe !== null
+              ? corePipes.find((cp) => cp.id === selectedPipe.id)?.credits || 0
+              : 0
+          }
+          currentCredits={user?.credits?.amount || 0}
+          onCreditsUpdated={refreshUser}
+        />
         <div className="flex items-center justify-between p-4 border-b bg-muted/30 flex-shrink-0">
           <div className="flex items-center gap-3">
             <Button
@@ -891,6 +961,39 @@ const PipeStore: React.FC = () => {
     } else {
       const installedPipe = pipes.find((p) => p.id === pipe.id);
       setSelectedPipe(installedPipe || pipe);
+    }
+  };
+
+  const handlePipePurchase = async (pipe: Pipe, requiredCredits: number) => {
+    try {
+      // Start a Supabase transaction using RPC
+      const { data, error } = await supabase.rpc("purchase_pipe", {
+        v_user_id: user?.id,
+        p_pipe_id: pipe.id,
+        p_credits_spent: requiredCredits,
+      });
+
+      if (error) throw error;
+
+      // Update local user credits state
+      if (user?.credits) {
+        user.credits.amount -= requiredCredits;
+      }
+
+      toast({
+        title: "pipe purchased",
+        description: `${requiredCredits} credits deducted`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error("purchase failed:", error);
+      toast({
+        title: "purchase failed",
+        description: "please try again or contact support",
+        variant: "destructive",
+      });
+      return false;
     }
   };
 

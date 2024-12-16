@@ -37,7 +37,11 @@ export function useUser() {
     try {
       const userData = await verifyUserToken(token);
       // skip if user data did not change
-      if (userData.id === user?.id) return;
+      if (
+        userData.id === user?.id &&
+        userData.credits?.amount === user?.credits?.amount
+      )
+        return;
       setUser(userData);
       updateSettings({ user: userData });
     } catch (err) {
@@ -45,6 +49,13 @@ export function useUser() {
       setError(err instanceof Error ? err.message : "failed to load user");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // explicit refresh function
+  const refreshUser = async () => {
+    if (settings.user?.token) {
+      await loadUser(settings.user.token);
     }
   };
 
@@ -61,5 +72,6 @@ export function useUser() {
     isLoading,
     error,
     loadUser,
+    refreshUser, // expose the refresh function
   };
 }

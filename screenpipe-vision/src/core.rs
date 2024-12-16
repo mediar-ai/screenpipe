@@ -24,10 +24,10 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-#[cfg(not(target_os = "linux"))]
-use xcap_macoswin::Monitor;
+#[cfg(target_os = "macos")]
+use xcap_macos::Monitor;
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
 pub struct CaptureResult {
