@@ -4966,7 +4966,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "0.17.6"
+version = "0.17.9"
 dependencies = [
  "anyhow",
  "axum",
