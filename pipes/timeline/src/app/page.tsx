@@ -2,7 +2,6 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
-import posthog from "posthog-js";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
 import { AIPanel } from "@/components/timeline/ai-panel";
@@ -101,7 +100,9 @@ export default function Timeline() {
 
     const connectionTimeout = setTimeout(() => {
       if (eventSource.readyState !== EventSource.OPEN) {
-        console.error("Connection timeout: Unable to establish connection, make sure screenpipe is running");
+        console.error(
+          "Connection timeout: Unable to establish connection, make sure screenpipe is running"
+        );
         setIsLoading(false);
         setMessage(null);
         setError("unable to establish connection, is screenpipe running?");
@@ -115,7 +116,9 @@ export default function Timeline() {
         if (data === "keep-alive-text") {
           setError(null);
           setIsLoading(false);
-          setMessage("please wait, we are collecting data to stream timeline...");
+          setMessage(
+            "please wait, we are collecting data to stream timeline..."
+          );
           return;
         }
 
@@ -169,7 +172,7 @@ export default function Timeline() {
     };
 
     eventSource.onerror = (error) => {
-    clearTimeout(connectionTimeout);
+      clearTimeout(connectionTimeout);
       if (eventSource.readyState === EventSource.CLOSED) {
         console.log("stream ended (expected behavior)", error);
         setMessage(null);
@@ -185,7 +188,7 @@ export default function Timeline() {
       console.log("eventsource connection opened");
       clearTimeout(connectionTimeout);
       setError(null);
-      setMessage(null)
+      setMessage(null);
       setIsLoading(true);
     };
   };
@@ -289,8 +292,6 @@ export default function Timeline() {
   }, []);
 
   const handleRefresh = () => {
-    posthog.capture("timeline_refresh");
-
     window.location.reload();
     setFrames([]);
     setCurrentFrame(null);
@@ -305,12 +306,12 @@ export default function Timeline() {
   useEffect(() => {
     const container = containerRef.current;
     if (container) {
-      container.addEventListener('wheel', handleScroll, { passive: false });
+      container.addEventListener("wheel", handleScroll, { passive: false });
     }
 
     return () => {
       if (container) {
-        container.removeEventListener('wheel', handleScroll);
+        container.removeEventListener("wheel", handleScroll);
       }
     };
   }, [handleScroll]);

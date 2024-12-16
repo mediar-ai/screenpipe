@@ -123,10 +123,6 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
-  const handleShowTimeline = async () => {
-    await invoke("show_timeline");
-  };
-
   const handleShowMeetingHistory = async () => {
     await invoke("show_meetings");
   };
@@ -186,18 +182,6 @@ export default function Header() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowTimeline}
-                    disabled={
-                      !settings.enableFrameCache ||
-                      !health ||
-                      health.status === "error"
-                    }
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    <span>timeline</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem
                     className="cursor-pointer"
                     onClick={handleShowMeetingHistory}
