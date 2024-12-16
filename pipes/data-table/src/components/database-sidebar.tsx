@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Database } from "lucide-react"
+import { JSX } from "react"
 
 interface TableItem {
   name: string

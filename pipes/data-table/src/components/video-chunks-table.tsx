@@ -8,13 +8,10 @@ import {
   VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import {
-  AppWindow,
   ArrowUpDown,
   ChevronDown,
   MoreHorizontal,
@@ -39,109 +36,77 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { SqlAutocompleteInput } from "../sql-autocomplete-input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-interface OcrText {
-  frame_id: number;
-  text: string;
-  text_json: string | null;
-  app_name: string;
-  ocr_engine: string;
-  window_name: string | null;
-  focused: boolean;
+interface VideoChunk {
+  id: number;
+  file_path: string;
+  device_name: string;
 }
 
-const columns: ColumnDef<OcrText>[] = [
+interface MonitorDevice {
+  id: string;
+  name: string;
+  is_default: boolean;
+  width: number;
+  height: number;
+}
+
+const columns: ColumnDef<VideoChunk>[] = [
   {
-    accessorKey: "frame_id",
+    accessorKey: "id",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Frame ID
+          ID
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
   },
   {
-    accessorKey: "text",
+    accessorKey: "file_path",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Text Content
+          File Path
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
-    cell: ({ row }) => (
-      <div className="max-w-[500px] truncate font-mono">
-        {row.getValue("text")}
-      </div>
-    ),
   },
   {
-    accessorKey: "app_name",
+    accessorKey: "device_name",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Application
+          Device Name
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
-    cell: ({ row }) => (
-      <Badge variant="outline">{row.getValue("app_name")}</Badge>
-    ),
-  },
-  {
-    accessorKey: "window_name",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Window
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => (
-      <div className="max-w-[200px] truncate">
-        {row.getValue("window_name") || "N/A"}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "ocr_engine",
-    header: "Engine",
-    cell: ({ row }) => (
-      <Badge variant="secondary">{row.getValue("ocr_engine")}</Badge>
-    ),
-  },
-  {
-    accessorKey: "focused",
-    header: "Focused",
-    cell: ({ row }) => (
-      <Badge variant={row.getValue("focused") ? "default" : "outline"}>
-        {row.getValue("focused") ? "yes" : "no"}
-      </Badge>
-    ),
   },
   {
     id: "actions",
     cell: ({ row }) => {
-      const ocrText = row.original;
+      const videoChunk = row.original;
 
       return (
         <DropdownMenu>
@@ -154,20 +119,15 @@ const columns: ColumnDef<OcrText>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(ocrText.text)}
-            >
-              copy text
-            </DropdownMenuItem>
-            <DropdownMenuItem
               onClick={() =>
-                navigator.clipboard.writeText(ocrText.text_json || "")
+                navigator.clipboard.writeText(videoChunk.file_path)
               }
             >
-              copy json
+              copy path
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(ocrText, null, 2))
+                navigator.clipboard.writeText(JSON.stringify(videoChunk))
               }
             >
               copy raw data
@@ -179,10 +139,10 @@ const columns: ColumnDef<OcrText>[] = [
   },
 ];
 
-export function OcrDataTable() {
-  const [data, setData] = React.useState<OcrText[]>([]);
+export function VideoChunksTable() {
+  const [data, setData] = React.useState<VideoChunk[]>([]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+  const [columnFilters] = React.useState<ColumnFiltersState>(
     []
   );
   const [columnVisibility, setColumnVisibility] =
@@ -193,24 +153,24 @@ export function OcrDataTable() {
   const [pageSize, setPageSize] = React.useState(10);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
-
-  const [textFilter, setTextFilter] = React.useState("");
-  const [appFilter, setAppFilter] = React.useState("");
+  const [filePathFilter] = React.useState("");
+  const [deviceFilter, setDeviceFilter] = React.useState("");
+  const [availableMonitors, setAvailableMonitors] = React.useState<
+    MonitorDevice[]
+  >([]);
 
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const filterClauses = [
-        "text IS NOT NULL",
-        "trim(text) != ''",
-        textFilter
-          ? `LOWER(text) LIKE '%${textFilter
+        filePathFilter
+          ? `LOWER(file_path) LIKE '%${filePathFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
-        appFilter
-          ? `LOWER(app_name) LIKE '%${appFilter
+        deviceFilter
+          ? `LOWER(device_name) LIKE '%${deviceFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
@@ -218,59 +178,43 @@ export function OcrDataTable() {
         .filter(Boolean)
         .join(" AND ");
 
+      const whereClause = filterClauses ? `WHERE ${filterClauses}` : "";
+
+      // Get total count
       const countResponse = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: `
-            SELECT COUNT(*) as total
-            FROM ocr_text 
-            WHERE ${filterClauses}
-          `,
+          query: `SELECT COUNT(*) as total FROM video_chunks ${whereClause}`,
         }),
       });
 
-      if (!countResponse.ok) {
-        throw new Error("failed to fetch count");
-      }
-
+      if (!countResponse.ok) throw new Error("failed to fetch count");
       const countResult = await countResponse.json();
       setTotalRows(countResult[0].total);
 
+      // Get paginated data
       const response = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: `
-            SELECT 
-              frame_id,
-              text,
-              text_json,
-              app_name,
-              ocr_engine,
-              window_name,
-              focused
-            FROM ocr_text 
-            WHERE ${filterClauses}
-            ORDER BY frame_id DESC
+            SELECT * FROM video_chunks 
+            ${whereClause}
+            ORDER BY id DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,
         }),
       });
-      if (!response.ok) {
-        throw new Error("failed to fetch data");
-      }
+
+      if (!response.ok) throw new Error("failed to fetch data");
       const result = await response.json();
       setData(result);
     } catch (error) {
       console.error("error fetching data:", error);
       setError(
-        `failed to load ocr data: ${
+        `failed to load video chunks: ${
           error instanceof Error ? error.message : "unknown error"
         }`
       );
@@ -279,14 +223,34 @@ export function OcrDataTable() {
     }
   };
 
+  // Add monitor loading function
+  const loadMonitors = async () => {
+    try {
+      const response = await fetch("http://localhost:3030/vision/list", {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("failed to fetch monitors");
+      const monitors: MonitorDevice[] = await response.json();
+      setAvailableMonitors(monitors);
+    } catch (error) {
+      console.error("failed to load monitors:", error);
+    }
+  };
+
+  // Add useEffect for monitors
+  React.useEffect(() => {
+    loadMonitors();
+  }, []);
+
   React.useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [textFilter, appFilter, pageIndex, pageSize]);
+  }, [filePathFilter, deviceFilter, pageIndex, pageSize]);
 
+  // Modify the table configuration
   const table = useReactTable({
     data,
     columns,
@@ -297,10 +261,7 @@ export function OcrDataTable() {
     pageCount: Math.ceil(totalRows / pageSize),
     onPaginationChange: (updater) => {
       if (typeof updater === "function") {
-        const newState = updater({
-          pageIndex,
-          pageSize,
-        });
+        const newState = updater({ pageIndex, pageSize });
         setPageIndex(newState.pageIndex);
         setPageSize(newState.pageSize);
       }
@@ -309,6 +270,7 @@ export function OcrDataTable() {
     onColumnVisibilityChange: setColumnVisibility,
     state: {
       sorting,
+      columnFilters,
       columnVisibility,
       pagination: {
         pageIndex,
@@ -322,26 +284,39 @@ export function OcrDataTable() {
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-4">
           <Input
-            placeholder="filter by text content..."
-            value={textFilter}
-            onChange={(event) => {
-              setTextFilter(event.target.value);
-              setPageIndex(0);
-            }}
+            placeholder="filter by file path..."
+            value={
+              (table.getColumn("file_path")?.getFilterValue() as string) ?? ""
+            }
+            onChange={(event) =>
+              table.getColumn("file_path")?.setFilterValue(event.target.value)
+            }
             className="max-w-sm"
           />
-          <SqlAutocompleteInput
-            id="appFilter"
-            type="app"
-            icon={<AppWindow className="h-4 w-4" />}
-            value={appFilter}
-            onChange={(value) => {
-              setAppFilter(value);
-              setPageIndex(0);
-            }}
-            placeholder="filter by app..."
-            className="w-[300px]"
-          />
+          {availableMonitors.length > 0 && (
+            <Select
+              value={deviceFilter}
+              onValueChange={(value) => {
+                setDeviceFilter(value);
+                setPageIndex(0);
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="filter by device..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>monitors</SelectLabel>
+                  {availableMonitors.map((monitor) => (
+                    <SelectItem key={monitor.id} value={`monitor_${monitor.id}`}>
+                      {monitor.name} {monitor.is_default && "(default)"}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
           <Button
             variant="outline"
             size="icon"

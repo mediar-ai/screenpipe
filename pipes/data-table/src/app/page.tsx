@@ -1,8 +1,8 @@
-"use client";
+// "use client";
 
-import DataPage from "@/components/data-tables/page";
+import DataPage from "@/components/page";
 
-export default function UserDataPage() {
+export default function SearchPage() {
 
   return (
     <div className="flex flex-col gap-4 items-center justify-center h-full mt-12">

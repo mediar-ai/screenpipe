@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { DatabaseSidebar } from "@/components/data-tables/database-sidebar"
-import { OcrDataTable } from "@/components/data-tables/ocr-data-table"
-import { VideoChunksTable } from "@/components/data-tables/video-chunks-table"
-import { AudioTranscriptionsTable } from "@/components/data-tables/audio-transcriptions-table"
+import { DatabaseSidebar } from "./database-sidebar"
+import { OcrDataTable } from "./ocr-data-table"
+import { VideoChunksTable } from "./video-chunks-table"
+import { AudioTranscriptionsTable } from "./audio-transcriptions-table"
 
 export default function DataPage() {
   const [currentTable, setCurrentTable] = useState("ocr_text")

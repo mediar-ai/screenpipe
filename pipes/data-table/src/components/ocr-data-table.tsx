@@ -3,20 +3,17 @@
 import * as React from "react";
 import {
   ColumnDef,
-  ColumnFiltersState,
   SortingState,
   VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import {
+  AppWindow,
   ArrowUpDown,
   ChevronDown,
-  Mic,
   MoreHorizontal,
   RefreshCw,
 } from "lucide-react";
@@ -40,122 +37,108 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { SqlAutocompleteInput } from "../sql-autocomplete-input";
-import { useSettings } from "@/lib/hooks/use-settings";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "../ui/select";
+import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 
-interface AudioTranscription {
-  id: number;
-  audio_chunk_id: number;
-  offset_index: number;
-  timestamp: string;
-  transcription: string;
-  device: string;
-  is_input_device: boolean;
-  speaker_id: number | null;
-  transcription_engine: string;
-}
-interface AudioDevice {
-  name: string;
-  is_default: boolean;
+interface OcrText {
+  frame_id: number;
+  text: string;
+  text_json: string | null;
+  app_name: string;
+  ocr_engine: string;
+  window_name: string | null;
+  focused: boolean;
 }
 
-interface MonitorDevice {
-  id: string;
-  name: string;
-  is_default: boolean;
-  width: number;
-  height: number;
-}
-
-const columns: ColumnDef<AudioTranscription>[] = [
+const columns: ColumnDef<OcrText>[] = [
   {
-    accessorKey: "id",
+    accessorKey: "frame_id",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          ID
+          Frame ID
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
   },
   {
-    accessorKey: "timestamp",
+    accessorKey: "text",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Time
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
-      );
-    },
-    cell: ({ row }) => {
-      const timestamp = new Date(row.getValue("timestamp"));
-      return timestamp.toLocaleString();
-    },
-  },
-  {
-    accessorKey: "transcription",
-    header: ({ column }) => {
-      return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Transcription
+          Text Content
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
     cell: ({ row }) => (
       <div className="max-w-[500px] truncate font-mono">
-        {row.getValue("transcription")}
+        {row.getValue("text")}
       </div>
     ),
   },
   {
-    accessorKey: "device",
-    header: "Device",
+    accessorKey: "app_name",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Application
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => (
-      <Badge variant="outline">
-        {row.getValue("device")}
-        {row.original.is_input_device ? " (input)" : " (output)"}
-      </Badge>
+      <Badge variant="outline">{row.getValue("app_name")}</Badge>
     ),
   },
   {
-    accessorKey: "speaker_id",
-    header: "Speaker",
+    accessorKey: "window_name",
+    header: ({ column }) => {
+      return (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Window
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      );
+    },
     cell: ({ row }) => (
-      <Badge variant="secondary">
-        {row.getValue("speaker_id") ?? "unknown"}
-      </Badge>
+      <div className="max-w-[200px] truncate">
+        {row.getValue("window_name") || "N/A"}
+      </div>
     ),
   },
   {
-    accessorKey: "transcription_engine",
+    accessorKey: "ocr_engine",
     header: "Engine",
-    cell: ({ row }) => <Badge>{row.getValue("transcription_engine")}</Badge>,
+    cell: ({ row }) => (
+      <Badge variant="secondary">{row.getValue("ocr_engine")}</Badge>
+    ),
+  },
+  {
+    accessorKey: "focused",
+    header: "Focused",
+    cell: ({ row }) => (
+      <Badge variant={row.getValue("focused") ? "default" : "outline"}>
+        {row.getValue("focused") ? "yes" : "no"}
+      </Badge>
+    ),
   },
   {
     id: "actions",
     cell: ({ row }) => {
-      const transcription = row.original;
+      const ocrText = row.original;
 
       return (
         <DropdownMenu>
@@ -168,17 +151,20 @@ const columns: ColumnDef<AudioTranscription>[] = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() =>
-                navigator.clipboard.writeText(transcription.transcription)
-              }
+              onClick={() => navigator.clipboard.writeText(ocrText.text)}
             >
               copy text
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
-                navigator.clipboard.writeText(
-                  JSON.stringify(transcription, null, 2)
-                )
+                navigator.clipboard.writeText(ocrText.text_json || "")
+              }
+            >
+              copy json
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                navigator.clipboard.writeText(JSON.stringify(ocrText, null, 2))
               }
             >
               copy raw data
@@ -190,8 +176,8 @@ const columns: ColumnDef<AudioTranscription>[] = [
   },
 ];
 
-export function AudioTranscriptionsTable() {
-  const [data, setData] = React.useState<AudioTranscription[]>([]);
+export function OcrDataTable() {
+  const [data, setData] = React.useState<OcrText[]>([]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -202,30 +188,23 @@ export function AudioTranscriptionsTable() {
   const [pageIndex, setPageIndex] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
 
-  const [transcriptionFilter, setTranscriptionFilter] = React.useState("");
-  const [deviceFilter, setDeviceFilter] = React.useState("");
-  const [availableMonitors, setAvailableMonitors] = React.useState<
-    MonitorDevice[]
-  >([]);
-  const [availableAudioDevices, setAvailableAudioDevices] = React.useState<
-    AudioDevice[]
-  >([]);
-
-  const { settings, updateSettings } = useSettings();
+  const [textFilter, setTextFilter] = React.useState("");
+  const [appFilter, setAppFilter] = React.useState("");
 
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const filterClauses = [
-        "transcription IS NOT NULL",
-        transcriptionFilter
-          ? `LOWER(transcription) LIKE '%${transcriptionFilter
+        "text IS NOT NULL",
+        "trim(text) != ''",
+        textFilter
+          ? `LOWER(text) LIKE '%${textFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
-        deviceFilter
-          ? `LOWER(device) LIKE '%${deviceFilter
+        appFilter
+          ? `LOWER(app_name) LIKE '%${appFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
@@ -233,7 +212,6 @@ export function AudioTranscriptionsTable() {
         .filter(Boolean)
         .join(" AND ");
 
-      // Get total count first
       const countResponse = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
         headers: {
@@ -242,7 +220,7 @@ export function AudioTranscriptionsTable() {
         body: JSON.stringify({
           query: `
             SELECT COUNT(*) as total
-            FROM audio_transcriptions 
+            FROM ocr_text 
             WHERE ${filterClauses}
           `,
         }),
@@ -255,7 +233,6 @@ export function AudioTranscriptionsTable() {
       const countResult = await countResponse.json();
       setTotalRows(countResult[0].total);
 
-      // Then get the actual data
       const response = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
         headers: {
@@ -264,24 +241,21 @@ export function AudioTranscriptionsTable() {
         body: JSON.stringify({
           query: `
             SELECT 
-              id,
-              audio_chunk_id,
-              offset_index,
-              timestamp,
-              transcription,
-              device,
-              is_input_device,
-              speaker_id,
-              transcription_engine
-            FROM audio_transcriptions 
+              frame_id,
+              text,
+              text_json,
+              app_name,
+              ocr_engine,
+              window_name,
+              focused
+            FROM ocr_text 
             WHERE ${filterClauses}
-            ORDER BY timestamp DESC
+            ORDER BY frame_id DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,
         }),
       });
-
       if (!response.ok) {
         throw new Error("failed to fetch data");
       }
@@ -290,7 +264,7 @@ export function AudioTranscriptionsTable() {
     } catch (error) {
       console.error("error fetching data:", error);
       setError(
-        `failed to load audio transcriptions: ${
+        `failed to load ocr data: ${
           error instanceof Error ? error.message : "unknown error"
         }`
       );
@@ -298,99 +272,14 @@ export function AudioTranscriptionsTable() {
       setIsLoading(false);
     }
   };
-  const loadDevices = async () => {
-    try {
-      // Fetch monitors
-      const monitorsResponse = await fetch(
-        "http://localhost:3030/vision/list",
-        {
-          method: "POST",
-        }
-      );
-      if (!monitorsResponse.ok) {
-        throw new Error("Failed to fetch monitors");
-      }
-      const monitors: MonitorDevice[] = await monitorsResponse.json();
-      console.log("monitors", monitors);
-      setAvailableMonitors(monitors);
 
-      // Fetch audio devices
-      const audioDevicesResponse = await fetch(
-        "http://localhost:3030/audio/list"
-      );
-      if (!audioDevicesResponse.ok) {
-        throw new Error("Failed to fetch audio devices");
-      }
-      const audioDevices: AudioDevice[] = await audioDevicesResponse.json();
-      console.log("audioDevices", audioDevices);
-      setAvailableAudioDevices(
-        audioDevices.map((device) => ({
-          name: device.name
-            .replace("(input)", "")
-            .replace("(default)", "")
-            .trimEnd(),
-          is_default: device.is_default,
-        }))
-      );
-
-      // Update monitors
-      const availableMonitorIds = monitors.map((monitor) =>
-        monitor.id.toString()
-      );
-      let updatedMonitorIds = settings.monitorIds.filter((id) =>
-        availableMonitorIds.includes(id)
-      );
-
-      if (
-        updatedMonitorIds.length === 0 ||
-        (settings.monitorIds.length === 1 &&
-          settings.monitorIds[0] === "default" &&
-          monitors.length > 0)
-      ) {
-        updatedMonitorIds = [
-          monitors.find((monitor) => monitor.is_default)!.id!.toString(),
-        ];
-      }
-
-      // Update audio devices
-      const availableAudioDeviceNames = audioDevices.map(
-        (device) => device.name
-      );
-      let updatedAudioDevices = settings.audioDevices.filter((device) =>
-        availableAudioDeviceNames.includes(device)
-      );
-
-      if (
-        updatedAudioDevices.length === 0 ||
-        (settings.audioDevices.length === 1 &&
-          settings.audioDevices[0] === "default" &&
-          audioDevices.length > 0)
-      ) {
-        updatedAudioDevices = audioDevices
-          .filter((device) => device.is_default)
-          .map((device) => device.name);
-      }
-
-      updateSettings({
-        ...settings,
-        monitorIds: updatedMonitorIds,
-        audioDevices: updatedAudioDevices,
-      });
-    } catch (error) {
-      console.error("Failed to load devices:", error);
-    }
-  };
   React.useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [transcriptionFilter, deviceFilter, pageIndex, pageSize]);
-
-  React.useEffect(() => {
-    loadDevices();
-  }, []);
+  }, [textFilter, appFilter, pageIndex, pageSize]);
 
   const table = useReactTable({
     data,
@@ -427,38 +316,26 @@ export function AudioTranscriptionsTable() {
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-4">
           <Input
-            placeholder="filter transcription..."
-            value={transcriptionFilter}
+            placeholder="filter by text content..."
+            value={textFilter}
             onChange={(event) => {
-              setTranscriptionFilter(event.target.value);
+              setTextFilter(event.target.value);
               setPageIndex(0);
             }}
             className="max-w-sm"
           />
-          {availableAudioDevices.length > 0 && (
-            <Select
-              value={deviceFilter}
-              onValueChange={(value) => {
-                setDeviceFilter(value);
-                setPageIndex(0);
-              }}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="filter by device..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>audio devices</SelectLabel>
-                  {availableAudioDevices.map((device) => (
-                    <SelectItem key={device.name} value={device.name}>
-                      {device.name} {device.is_default && "(default)"}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          )}
-
+          <SqlAutocompleteInput
+            id="appFilter"
+            type="app"
+            icon={<AppWindow className="h-4 w-4" />}
+            value={appFilter}
+            onChange={(value) => {
+              setAppFilter(value);
+              setPageIndex(0);
+            }}
+            placeholder="filter by app..."
+            className="w-[300px]"
+          />
           <Button
             variant="outline"
             size="icon"

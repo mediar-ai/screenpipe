@@ -3,13 +3,10 @@
 import * as React from "react";
 import {
   ColumnDef,
-  ColumnFiltersState,
   SortingState,
   VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
@@ -38,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -46,23 +44,25 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
-} from "../ui/select";
+} from "@/components/ui/select";
 
-interface VideoChunk {
+interface AudioTranscription {
   id: number;
-  file_path: string;
-  device_name: string;
+  audio_chunk_id: number;
+  offset_index: number;
+  timestamp: string;
+  transcription: string;
+  device: string;
+  is_input_device: boolean;
+  speaker_id: number | null;
+  transcription_engine: string;
 }
-
-interface MonitorDevice {
-  id: string;
+interface AudioDevice {
   name: string;
   is_default: boolean;
-  width: number;
-  height: number;
 }
 
-const columns: ColumnDef<VideoChunk>[] = [
+const columns: ColumnDef<AudioTranscription>[] = [
   {
     accessorKey: "id",
     header: ({ column }) => {
@@ -78,37 +78,70 @@ const columns: ColumnDef<VideoChunk>[] = [
     },
   },
   {
-    accessorKey: "file_path",
+    accessorKey: "timestamp",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          File Path
+          Time
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
+    },
+    cell: ({ row }) => {
+      const timestamp = new Date(row.getValue("timestamp"));
+      return timestamp.toLocaleString();
     },
   },
   {
-    accessorKey: "device_name",
+    accessorKey: "transcription",
     header: ({ column }) => {
       return (
         <Button
           variant="ghost"
           onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
         >
-          Device Name
+          Transcription
           <ArrowUpDown className="ml-2 h-4 w-4" />
         </Button>
       );
     },
+    cell: ({ row }) => (
+      <div className="max-w-[500px] truncate font-mono">
+        {row.getValue("transcription")}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "device",
+    header: "Device",
+    cell: ({ row }) => (
+      <Badge variant="outline">
+        {row.getValue("device")}
+        {row.original.is_input_device ? " (input)" : " (output)"}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "speaker_id",
+    header: "Speaker",
+    cell: ({ row }) => (
+      <Badge variant="secondary">
+        {row.getValue("speaker_id") ?? "unknown"}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "transcription_engine",
+    header: "Engine",
+    cell: ({ row }) => <Badge>{row.getValue("transcription_engine")}</Badge>,
   },
   {
     id: "actions",
     cell: ({ row }) => {
-      const videoChunk = row.original;
+      const transcription = row.original;
 
       return (
         <DropdownMenu>
@@ -122,14 +155,16 @@ const columns: ColumnDef<VideoChunk>[] = [
             <DropdownMenuLabel>actions</DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() =>
-                navigator.clipboard.writeText(videoChunk.file_path)
+                navigator.clipboard.writeText(transcription.transcription)
               }
             >
-              copy path
+              copy text
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(videoChunk))
+                navigator.clipboard.writeText(
+                  JSON.stringify(transcription, null, 2)
+                )
               }
             >
               copy raw data
@@ -141,12 +176,9 @@ const columns: ColumnDef<VideoChunk>[] = [
   },
 ];
 
-export function VideoChunksTable() {
-  const [data, setData] = React.useState<VideoChunk[]>([]);
+export function AudioTranscriptionsTable() {
+  const [data, setData] = React.useState<AudioTranscription[]>([]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
-  );
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
   const [isLoading, setIsLoading] = React.useState(false);
@@ -155,10 +187,11 @@ export function VideoChunksTable() {
   const [pageSize, setPageSize] = React.useState(10);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
-  const [filePathFilter, setFilePathFilter] = React.useState("");
+
+  const [transcriptionFilter, setTranscriptionFilter] = React.useState("");
   const [deviceFilter, setDeviceFilter] = React.useState("");
-  const [availableMonitors, setAvailableMonitors] = React.useState<
-    MonitorDevice[]
+  const [availableAudioDevices, setAvailableAudioDevices] = React.useState<
+    AudioDevice[]
   >([]);
 
   const fetchData = async () => {
@@ -166,13 +199,14 @@ export function VideoChunksTable() {
     setError(null);
     try {
       const filterClauses = [
-        filePathFilter
-          ? `LOWER(file_path) LIKE '%${filePathFilter
+        "transcription IS NOT NULL",
+        transcriptionFilter
+          ? `LOWER(transcription) LIKE '%${transcriptionFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
         deviceFilter
-          ? `LOWER(device_name) LIKE '%${deviceFilter
+          ? `LOWER(device) LIKE '%${deviceFilter
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
@@ -180,43 +214,64 @@ export function VideoChunksTable() {
         .filter(Boolean)
         .join(" AND ");
 
-      const whereClause = filterClauses ? `WHERE ${filterClauses}` : "";
-
-      // Get total count
+      // Get total count first
       const countResponse = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          query: `SELECT COUNT(*) as total FROM video_chunks ${whereClause}`,
+          query: `
+            SELECT COUNT(*) as total
+            FROM audio_transcriptions 
+            WHERE ${filterClauses}
+          `,
         }),
       });
 
-      if (!countResponse.ok) throw new Error("failed to fetch count");
+      if (!countResponse.ok) {
+        throw new Error("failed to fetch count");
+      }
+
       const countResult = await countResponse.json();
       setTotalRows(countResult[0].total);
 
-      // Get paginated data
+      // Then get the actual data
       const response = await fetch("http://localhost:3030/raw_sql", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           query: `
-            SELECT * FROM video_chunks 
-            ${whereClause}
-            ORDER BY id DESC
+            SELECT 
+              id,
+              audio_chunk_id,
+              offset_index,
+              timestamp,
+              transcription,
+              device,
+              is_input_device,
+              speaker_id,
+              transcription_engine
+            FROM audio_transcriptions 
+            WHERE ${filterClauses}
+            ORDER BY timestamp DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,
         }),
       });
 
-      if (!response.ok) throw new Error("failed to fetch data");
+      if (!response.ok) {
+        throw new Error("failed to fetch data");
+      }
       const result = await response.json();
       setData(result);
     } catch (error) {
       console.error("error fetching data:", error);
       setError(
-        `failed to load video chunks: ${
+        `failed to load audio transcriptions: ${
           error instanceof Error ? error.message : "unknown error"
         }`
       );
@@ -224,35 +279,42 @@ export function VideoChunksTable() {
       setIsLoading(false);
     }
   };
-
-  // Add monitor loading function
-  const loadMonitors = async () => {
+  const loadDevices = async () => {
     try {
-      const response = await fetch("http://localhost:3030/vision/list", {
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("failed to fetch monitors");
-      const monitors: MonitorDevice[] = await response.json();
-      setAvailableMonitors(monitors);
+      // Fetch audio devices
+      const audioDevicesResponse = await fetch(
+        "http://localhost:3030/audio/list"
+      );
+      if (!audioDevicesResponse.ok) {
+        throw new Error("Failed to fetch audio devices");
+      }
+      const audioDevices: AudioDevice[] = await audioDevicesResponse.json();
+      console.log("audioDevices", audioDevices);
+      setAvailableAudioDevices(
+        audioDevices.map((device) => ({
+          name: device.name
+            .replace("(input)", "")
+            .replace("(default)", "")
+            .trimEnd(),
+          is_default: device.is_default,
+        }))
+      );
     } catch (error) {
-      console.error("failed to load monitors:", error);
+      console.error("Failed to load devices:", error);
     }
   };
-
-  // Add useEffect for monitors
-  React.useEffect(() => {
-    loadMonitors();
-  }, []);
-
   React.useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [filePathFilter, deviceFilter, pageIndex, pageSize]);
+  }, [transcriptionFilter, deviceFilter, pageIndex, pageSize]);
 
-  // Modify the table configuration
+  React.useEffect(() => {
+    loadDevices();
+  }, []);
+
   const table = useReactTable({
     data,
     columns,
@@ -263,7 +325,10 @@ export function VideoChunksTable() {
     pageCount: Math.ceil(totalRows / pageSize),
     onPaginationChange: (updater) => {
       if (typeof updater === "function") {
-        const newState = updater({ pageIndex, pageSize });
+        const newState = updater({
+          pageIndex,
+          pageSize,
+        });
         setPageIndex(newState.pageIndex);
         setPageSize(newState.pageSize);
       }
@@ -272,7 +337,6 @@ export function VideoChunksTable() {
     onColumnVisibilityChange: setColumnVisibility,
     state: {
       sorting,
-      columnFilters,
       columnVisibility,
       pagination: {
         pageIndex,
@@ -286,16 +350,15 @@ export function VideoChunksTable() {
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-4">
           <Input
-            placeholder="filter by file path..."
-            value={
-              (table.getColumn("file_path")?.getFilterValue() as string) ?? ""
-            }
-            onChange={(event) =>
-              table.getColumn("file_path")?.setFilterValue(event.target.value)
-            }
+            placeholder="filter transcription..."
+            value={transcriptionFilter}
+            onChange={(event) => {
+              setTranscriptionFilter(event.target.value);
+              setPageIndex(0);
+            }}
             className="max-w-sm"
           />
-          {availableMonitors.length > 0 && (
+          {availableAudioDevices.length > 0 && (
             <Select
               value={deviceFilter}
               onValueChange={(value) => {
@@ -308,10 +371,10 @@ export function VideoChunksTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel>monitors</SelectLabel>
-                  {availableMonitors.map((monitor) => (
-                    <SelectItem key={monitor.id} value={`monitor_${monitor.id}`}>
-                      {monitor.name} {monitor.is_default && "(default)"}
+                  <SelectLabel>audio devices</SelectLabel>
+                  {availableAudioDevices.map((device) => (
+                    <SelectItem key={device.name} value={device.name}>
+                      {device.name} {device.is_default && "(default)"}
                     </SelectItem>
                   ))}
                 </SelectGroup>
