@@ -111,17 +111,6 @@
         "minWidth": 1200,
         "minHeight": 850,
         "resizable": true
-      },
-      {
-        "title": "data tables",
-        "url": "/data-tables",
-        "label": "data-tables",
-        "visible": false,
-        "width": 1200,
-        "height": 850,
-        "minWidth": 1200,
-        "minHeight": 850,
-        "resizable": true
       }
     ],
     "security": {

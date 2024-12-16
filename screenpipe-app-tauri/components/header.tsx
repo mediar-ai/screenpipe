@@ -22,7 +22,6 @@ import {
   Book,
   User,
   Fingerprint,
-  Table,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -48,8 +47,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-user";
-import { useRouter } from 'next/navigation'
-
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -133,8 +130,6 @@ export default function Header() {
   const handleShowIdentifySpeakers = async () => {
     await invoke("show_identify_speakers");
   };
-
-  const router = useRouter()
 
   return (
     <div>
