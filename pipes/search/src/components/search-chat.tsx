@@ -238,7 +238,6 @@ export function SearchChat() {
   const [offset, setOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const { settings } = useSettings();
-  console.log("settings", settings);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);

@@ -307,51 +307,27 @@ pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Resul
 }
 
 #[tauri::command]
-pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
-    if let Some(window) = app_handle.get_webview_window("search") {
-        #[cfg(target_os = "macos")]
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-        let _ = window.set_decorations(true);
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            "search",
-            tauri::WebviewUrl::App("search.html".into()),
-        )
-        .title("search")
-        .decorations(true)
-        .transparent(true)
-        .center()
-        .build()
-        .unwrap();
-    }
-}
-
-
-#[tauri::command]
-pub async fn open_pipe_window(app_handle: tauri::AppHandle<tauri::Wry>, port: u16, title: String) -> Result<(), String> {
-    let window_label = format!("pipe-{}", port);
-    
+pub async fn open_pipe_window(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    port: u16,
+    title: String,
+) -> Result<(), String> {
     // Close existing window if it exists
-    if let Some(existing_window) = app_handle.get_webview_window(&window_label) {
-        let _ = existing_window.close();
+    if let Some(existing_window) = app_handle.get_webview_window(&title) {
+        let _ = existing_window.destroy();
         // Give it a moment to properly close
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
     let _window = tauri::WebviewWindowBuilder::new(
         &app_handle,
-        window_label,
-        tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap())
+        &title,
+        tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap()),
     )
     .title(title)
     .inner_size(800.0, 600.0)
     .build()
     .map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
-

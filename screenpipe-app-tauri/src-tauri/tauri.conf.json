@@ -103,18 +103,6 @@
         "label": "timeline"
       },
       {
-        "title": "search",
-        "url": "/search",
-        "label": "search",
-        "width": 1200,
-        "height": 1000,
-        "minWidth": 1000,
-        "minHeight": 600,
-        "visible": false,
-        "decorations": true,
-        "transparent": true
-      },
-      {
         "title": "meetings",
         "url": "/meetings",
         "label": "meetings",
