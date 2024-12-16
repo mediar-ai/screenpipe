@@ -1,4 +1,4 @@
-import { StreamTimeSeriesResponse } from "@/app/timeline/page";
+import { StreamTimeSeriesResponse } from "@/app/page";
 import OpenAI from "openai";
 import { ChatCompletionMessageParam } from "openai/resources/index.mjs";
 

@@ -19,7 +19,6 @@ import {
   Bell,
   Play,
   Folder,
-  Search,
   Book,
   User,
   Fingerprint,
@@ -127,14 +126,6 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
-  const handleShowTimeline = async () => {
-    await invoke("show_timeline");
-  };
-
-  const handleShowSearch = async () => {
-    await invoke("show_search");
-  };
-
   const handleShowMeetingHistory = async () => {
     await invoke("show_meetings");
   };
@@ -196,26 +187,6 @@ export default function Header() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowSearch}
-                    disabled={!health || health.status === "error"}
-                  >
-                    <Search className="mr-2 h-4 w-4" />
-                    <span>search</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowTimeline}
-                    disabled={
-                      !settings.enableFrameCache ||
-                      !health ||
-                      health.status === "error"
-                    }
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    <span>timeline</span>
-                  </DropdownMenuItem>
                   <DropdownMenuItem
                     className="cursor-pointer"
                     onClick={handleShowMeetingHistory}

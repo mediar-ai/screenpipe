@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { AudioData, StreamTimeSeriesResponse } from "@/app/timeline/page";
+import { AudioData, StreamTimeSeriesResponse } from "@/app/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Play, Pause, Volume2, GripHorizontal, X } from "lucide-react";
@@ -44,7 +44,7 @@ export function AudioTranscript({
     if (!frames.length) return;
 
     const currentFrame = frames[currentIndex];
-    const currentTime = new Date(currentFrame.timestamp);
+    const currentTime = new Date(currentFrame?.timestamp);
     const windowStart = new Date(currentTime.getTime() - groupingWindowMs);
     const windowEnd = new Date(currentTime.getTime() + groupingWindowMs);
 
@@ -55,8 +55,8 @@ export function AudioTranscript({
     });
 
     // Check if any nearby frames have audio
-    const hasNearbyAudio = nearbyFrames.some(frame => 
-      frame.devices.some(device => device.audio.length > 0)
+    const hasNearbyAudio = nearbyFrames.some((frame) =>
+      frame.devices.some((device) => device.audio.length > 0)
     );
 
     // Show/hide panel based on nearby audio

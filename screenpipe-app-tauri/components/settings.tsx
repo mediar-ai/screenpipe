@@ -2,19 +2,12 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+
 import { Button } from "@/components/ui/button";
 import {
-  useSettings,
   AIProviderType,
   Shortcut,
+  useSettings,
 } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
@@ -36,21 +29,16 @@ import { Badge } from "@/components/ui/badge"; // Add this import
 import { cn, parseKeyboardShortcut } from "@/lib/utils"; // Add this import
 
 import {
-  Eye,
-  EyeOff,
   HelpCircle,
   RefreshCw,
   Settings2,
+  EyeOff,
+  Eye,
   Check,
   X,
   Play,
   Loader2,
-  Coins,
-  UserCog,
 } from "lucide-react";
-import { RecordingSettings } from "./recording-settings";
-import { Switch } from "./ui/switch";
-import { LogFileButton } from "./log-file-button";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
@@ -68,159 +56,18 @@ import { useInterval } from "@/lib/hooks/use-interval";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-
-function AccountSection() {
-  const { user, loadUser } = useUser();
-  const { localSettings, setLocalSettings } = useSettings();
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleRefreshCredits = async () => {
-    if (!localSettings.user?.token) return;
-
-    setIsRefreshing(true);
-    try {
-      await loadUser(localSettings.user.token);
-      toast({
-        title: "credits refreshed",
-        description: "your credit balance has been updated",
-      });
-    } catch (error) {
-      toast({
-        title: "failed to refresh credits",
-        description: "please try again later",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle>account</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-[240px]"
-            onClick={() => invoke("open_auth_window")}
-          >
-            <UserCog className="w-4 h-4 mr-2" />
-            manage account
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Separator className="my-4" />
-
-        <div className="flex flex-col w-full gap-2">
-          <div className="flex w-full gap-2 items-center">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground w-[275px]">
-              <Coins className="w-4 h-4" />
-              <span className="font-mono">{user?.credits?.amount || 0}</span>
-              <span>credits available</span>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() =>
-                openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ")
-              }
-            >
-              <div className="flex items-center gap-2">
-                <Coins className="w-4 h-4" />
-                get credits
-              </div>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8"
-              onClick={handleRefreshCredits}
-              disabled={isRefreshing}
-            >
-              <RefreshCw
-                className={cn("w-4 h-4", { "animate-spin": isRefreshing })}
-              />
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Label htmlFor="key">key</Label>
-            <div className="w-full flex items-center gap-2">
-              <div className=" flex gap-2">
-                <Input
-                  id="key"
-                  value={localSettings.user?.token || ""}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setLocalSettings((prev) => ({
-                      ...prev,
-                      user: {
-                        ...prev.user,
-                        token: newValue,
-                      },
-                    }));
-                  }}
-                  placeholder="enter your key"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  autoComplete="off"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    loadUser(localSettings.user?.token || "");
-                    toast({
-                      title: "key updated",
-                      description: "your key has been updated",
-                    });
-                  }}
-                >
-                  update
-                </Button>
-              </div>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[300px]">
-                    <p>
-                      your key is used to sync your credits and settings across
-                      devices. you can find it in your dashboard.{" "}
-                      <span className="text-destructive font-semibold">
-                        do not share this key with anyone.
-                      </span>
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 w-[275px]"
-            disabled
-          >
-            <div className="flex items-center gap-2">
-              connect stripe
-              <Badge variant="outline" className="ml-1 uppercase text-xs">
-                soon
-              </Badge>
-            </div>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { RecordingSettings } from "./recording-settings";
+import { Switch } from "./ui/switch";
+import { LogFileButton } from "./log-file-button";
+import { AccountSection } from "./settings/account-section";
 
 export function Settings({ className }: { className?: string }) {
   const {
@@ -712,6 +559,7 @@ export function Settings({ className }: { className?: string }) {
         </DialogHeader>
         <div className="mt-8 space-y-6">
           <AccountSection />
+          <Separator />
           <RecordingSettings
             localSettings={localSettings}
             setLocalSettings={setLocalSettings}

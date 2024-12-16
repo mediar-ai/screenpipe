@@ -17,7 +17,7 @@ else
   CN_CMD=cn
 fi
 
-LAST_RELEASE=$($CN_CMD release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0] | select(.status == "Published")')
+LAST_RELEASE=$($CN_CMD release list mediar/screenpipe --api-key $CN_API_KEY --format json | jq '.[0] | select(.status == "Published")')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 
 # Format date for git (remove quotes if present)
@@ -54,7 +54,7 @@ CONTENT=$(
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $OPENAI_API_KEY" \
     -d "{
-      \"model\": \"gpt-3.5-turbo\",
+      \"model\": \"gpt-4o-mini\",
       \"messages\": [
         {
           \"role\": \"system\",
