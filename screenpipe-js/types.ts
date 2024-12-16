@@ -58,6 +58,8 @@ export interface AudioContent {
   deviceName: string;
   deviceType: string;
   speaker?: Speaker;
+  startTime?: number;
+  endTime?: number;
 }
 
 /**
