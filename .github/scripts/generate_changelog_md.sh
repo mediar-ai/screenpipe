@@ -17,7 +17,7 @@ else
   CN_CMD=cn
 fi
 
-LAST_RELEASE=$($CN_CMD release list screenpipe --api-key $CN_API_KEY --format json | jq '.[0] | select(.status == "Published")')
+LAST_RELEASE=$($CN_CMD release list mediar/screenpipe --api-key $CN_API_KEY --format json | jq '.[0] | select(.status == "Published")')
 COMMIT_DATE_LAST_RELEASE=$(echo $LAST_RELEASE | jq '.createdAt')
 
 # Format date for git (remove quotes if present)
