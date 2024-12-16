@@ -1,36 +1,16 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+search, review, summarize, get specific answer to specific questions over your life digital context 
 
-First, run the development server:
+audio
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+<img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/05b48d11-7c89-4f88-afba-76da91691f61" />
+<img width="1142" alt="Screenshot 2024-12-16 at 12 39 52 PM" src="https://github.com/user-attachments/assets/3f6eb8fe-1bde-42cd-8f84-0b8e597431d2" />
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+keyword filtering
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+<img width="1142" alt="Screenshot 2024-12-16 at 12 40 52 PM" src="https://github.com/user-attachments/assets/5eae6be7-db50-4ae3-990a-4cb2c934843f" />
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+window/app filtering
 
-## Learn More
+<img width="1142" alt="Screenshot 2024-12-16 at 12 41 14 PM" src="https://github.com/user-attachments/assets/d799a1da-4b22-4956-b917-f8bdf90187a4" />
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
