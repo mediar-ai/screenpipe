@@ -14,7 +14,7 @@
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
    <p align="center">one API to get all user desktop data  (local, cross platform, 24/7, screen, voice, keyboard, mouse, camera recording)</p>
-   <p align="center">sandboxed js plugin system. keyboard and mouse control</p>
+   <p align="center">sandboxed js plugin system. keyboard and mouse control. deploy and monetize desktop agents in seconds</p>
 </p>
 
 <!-- Slogan -->
