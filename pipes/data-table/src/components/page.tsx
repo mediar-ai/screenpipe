@@ -5,6 +5,7 @@ import { DatabaseSidebar } from "./database-sidebar"
 import { OcrDataTable } from "./ocr-data-table"
 import { VideoChunksTable } from "./video-chunks-table"
 import { AudioTranscriptionsTable } from "./audio-transcriptions-table"
+import { UiMonitoringTable } from "./ui-monitoring-table"
 
 export default function DataPage() {
   const [currentTable, setCurrentTable] = useState("ocr_text")
@@ -17,6 +18,8 @@ export default function DataPage() {
         return <VideoChunksTable />
       case "audio_transcriptions":
         return <AudioTranscriptionsTable />
+      case "ui_monitoring":
+        return <UiMonitoringTable />
       default:
         return <div>select a table</div>
     }

@@ -11,6 +11,7 @@ interface TableItem {
 }
 
 const tables: TableItem[] = [
+  { name: "ui_monitoring", icon: <Database className="h-4 w-4" /> },
   { name: "video_chunks", icon: <Database className="h-4 w-4" /> },
   { name: "ocr_text", icon: <Database className="h-4 w-4" /> },
   { name: "audio_transcriptions", icon: <Database className="h-4 w-4" /> },
