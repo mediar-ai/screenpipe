@@ -62,6 +62,14 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "data-table",
+    name: "data table",
+    description: "explore your data in a powerful table view with filtering, sorting, and more",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/data-table",
+    credits: 0,
+    paid: false,
+  },
+  {
     id: "timeline",
     name: "timeline",
     description:
