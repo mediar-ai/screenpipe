@@ -3,13 +3,11 @@ members = [
     "screenpipe-core",
     "screenpipe-vision",
     "screenpipe-audio",
-    "screenpipe-server", 
+    "screenpipe-server",
     "screenpipe-integrations",
     "screenpipe-actions",
 ]
-exclude = [
-    "screenpipe-app-tauri/src-tauri",
-]
+exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 
@@ -27,8 +25,9 @@ candle = { package = "candle-core", version = "0.7.2" }
 candle-nn = { package = "candle-nn", version = "0.7.2" }
 candle-transformers = { package = "candle-transformers", version = "0.7.2" }
 tokenizers = "0.20.0"
-hf-hub = "0.3.2"
-
+hf-hub = { version = "0.3.2", git = "https://github.com/neo773/hf-hub", features = [
+    "native-tls",
+] }
 log = "0.4"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
@@ -51,4 +50,3 @@ hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
 git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
-

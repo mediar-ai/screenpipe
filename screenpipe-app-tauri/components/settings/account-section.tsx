@@ -153,13 +153,20 @@ export function AccountSection() {
                       <Badge variant="secondary" className="px-1.5 text-xs">
                         monthly
                       </Badge>
-                      <span className="text-sm font-mono">15 credits/m, unlimited screenpipe cloud, priority support</span>
+                      <span className="text-sm font-mono">
+                        15 credits/m, unlimited screenpipe cloud, priority
+                        support
+                      </span>
                     </div>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ")
+                        openUrl(
+                          `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(
+                            user?.email ?? ""
+                          )}`
+                        )
                       }
                     >
                       $30/mo
@@ -181,7 +188,11 @@ export function AccountSection() {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        openUrl("https://buy.stripe.com/eVaeVD45UbfYeswcNd")
+                        openUrl(
+                          `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(
+                            user?.email ?? ""
+                          )}`
+                        )
                       }
                     >
                       $50

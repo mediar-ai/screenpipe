@@ -39,6 +39,7 @@ import { PublishDialog } from "./publish-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
 import supabase from "@/lib/supabase/client";
+import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
 
 export interface Pipe {
   enabled: boolean;
@@ -60,6 +61,15 @@ interface CorePipe {
 }
 
 const corePipes: CorePipe[] = [
+  {
+    id: "timeline",
+    name: "timeline",
+    description:
+      "visualize your day with a beautiful AI-powered timeline of your activities, perfect for time tracking and productivity analysis",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
+    credits: 20,
+    paid: true,
+  },
   {
     id: "pipe-linkedin-ai-assistant",
     name: "linkedin ai assistant (preview)",
@@ -113,7 +123,7 @@ const corePipes: CorePipe[] = [
     paid: false,
   },
   {
-    id: "pipe-search",
+    id: "search",
     name: "search",
     description:
       "search through your screen recordings and audio transcripts with AI",
@@ -189,6 +199,11 @@ const getFriendlyName = (id: string, corePipes: CorePipe[]): string => {
     .join(" ");
 };
 
+const normalizeId = (id: string): string => {
+  // Remove 'pipe-' prefix if it exists and convert to lowercase
+  return id.replace(/^pipe-/, "").toLowerCase();
+};
+
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -197,7 +212,8 @@ const PipeStore: React.FC = () => {
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const { health } = useHealthCheck();
   const { getDataDir } = useSettings();
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
+  const [showCreditDialog, setShowCreditDialog] = useState(false);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -325,6 +341,13 @@ const PipeStore: React.FC = () => {
       });
 
       await fetchInstalledPipes();
+
+      const freshPipe = pipes.find(
+        (p) => normalizeId(p.id) === normalizeId(url)
+      );
+      if (freshPipe) {
+        setSelectedPipe(freshPipe);
+      }
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
@@ -367,18 +390,17 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        // NEW: Check if they already purchased
+        // Check if user already purchased this pipe
         const hasSubscription = await checkExistingSubscription(pipe.id);
         if (!hasSubscription) {
           const userCredits = user.credits?.amount || 0;
-
-          // If not enough credits, redirect to buy more
           if (userCredits < corePipe.credits) {
-            openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+            // Show the dialog instead of redirecting
+            setShowCreditDialog(true);
             return;
           }
 
-          // If they have enough credits, try to purchase
+          // If enough credits, proceed with purchase
           const purchaseSuccess = await handlePipePurchase(
             pipe,
             corePipe.credits
@@ -436,7 +458,6 @@ const PipeStore: React.FC = () => {
       if (freshPipe) {
         setSelectedPipe(freshPipe);
       }
-
 
       toast({
         title: `pipe ${endpoint}d`,
@@ -598,7 +619,9 @@ const PipeStore: React.FC = () => {
   const allPipes = [
     ...pipes,
     ...corePipes
-      .filter((cp) => !pipes.some((p) => p.id === cp.id))
+      .filter(
+        (cp) => !pipes.some((p) => normalizeId(p.id) === normalizeId(cp.id))
+      )
       .map((cp) => ({
         id: cp.id,
         fullDescription: cp.description,
@@ -623,6 +646,17 @@ const PipeStore: React.FC = () => {
 
     return (
       <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
+        <CreditPurchaseDialog
+          open={showCreditDialog}
+          onOpenChange={setShowCreditDialog}
+          requiredCredits={
+            selectedPipe !== null
+              ? corePipes.find((cp) => cp.id === selectedPipe.id)?.credits || 0
+              : 0
+          }
+          currentCredits={user?.credits?.amount || 0}
+          onCreditsUpdated={refreshUser}
+        />
         <div className="flex items-center justify-between p-4 border-b bg-muted/30 flex-shrink-0">
           <div className="flex items-center gap-3">
             <Button
