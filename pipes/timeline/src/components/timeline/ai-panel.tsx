@@ -1,14 +1,12 @@
 import { useRef, useState, useEffect } from "react";
 import { Message, generateId } from "ai";
 import { OpenAI } from "openai";
-import { ChatMessage } from "@/components/chat-message-v2";
+import { ChatMessage } from "@/components/chat-message";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Send, Square, X, GripHorizontal } from "lucide-react";
-import { StreamTimeSeriesResponse } from "@/app/timeline/page";
-import { platform } from "@tauri-apps/plugin-os";
-import posthog from "posthog-js";
+import { StreamTimeSeriesResponse } from "@/app/page";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Agent } from "./agents";
 
@@ -53,7 +51,7 @@ export function AIPanel({
   const { selectionRange, setSelectionRange } = useTimelineSelection();
 
   useEffect(() => {
-    setOsType(platform());
+    setOsType(window.navigator.platform);
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -147,9 +145,7 @@ export function AIPanel({
 
   const handleAgentChange = (agentId: string) => {
     const newAgent = agents.find((a) => a.id === agentId) || agents[0];
-    posthog.capture("timeline_change_agent", {
-      agent: newAgent.name,
-    });
+
     setSelectedAgent(newAgent);
   };
 

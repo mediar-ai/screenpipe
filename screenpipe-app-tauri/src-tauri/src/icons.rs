@@ -6,7 +6,6 @@ pub struct AppIcon {
     pub path: Option<String>,
 }
 
-#[tauri::command]
 #[cfg(target_os = "macos")]
 pub async fn get_app_icon(
     app_name: &str,
@@ -18,7 +17,6 @@ pub async fn get_app_icon(
     use objc::{class, msg_send, sel, sel_impl};
 
     unsafe {
-        // Create autorelease pool
         let pool = NSAutoreleasePool::new(nil);
 
         let result = (|| {
@@ -29,7 +27,6 @@ pub async fn get_app_icon(
             } else {
                 let ns_app_name = NSString::alloc(nil).init_str(app_name);
                 let path: id = msg_send![workspace, fullPathForApplication: ns_app_name];
-                // Release the NSString we created
                 let _: () = msg_send![ns_app_name, release];
 
                 if path == nil {
@@ -49,7 +46,6 @@ pub async fn get_app_icon(
                 return Ok(None);
             }
 
-            // Rest of the conversion logic remains the same
             let tiff_data: id = msg_send![icon, TIFFRepresentation];
             let image_rep: id = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff_data];
             let png_data: id = msg_send![image_rep, representationUsingType:4 properties:nil];
@@ -66,7 +62,6 @@ pub async fn get_app_icon(
             }))
         })();
 
-        // Drain the autorelease pool
         let _: () = msg_send![pool, drain];
 
         result
@@ -79,12 +74,12 @@ use lazy_static::lazy_static;
 use std::sync::Arc;
 #[cfg(target_os = "windows")]
 use tokio::sync::Semaphore;
+
 #[cfg(target_os = "windows")]
 lazy_static! {
     static ref SEMAPHORE: Arc<Semaphore> = Arc::new(Semaphore::new(5));
 }
 
-#[tauri::command]
 #[cfg(target_os = "windows")]
 pub async fn get_app_icon(
     app_name: &str,
@@ -310,7 +305,6 @@ async fn get_exe_by_appx(app_name: &str) -> Option<String> {
     None
 }
 
-#[tauri::command]
 #[cfg(target_os = "linux")]
 pub async fn get_app_icon(
     app_name: &str,
@@ -337,7 +331,6 @@ pub async fn get_app_icon(
         None => find_icon_path(app_name).ok_or_else(|| "could not find icon path".to_string())?,
     };
 
-    // base64 will be in svg!
     let icon_data = fs::read(&path).map_err(|e| e.to_string())?;
     let base64 = STANDARD.encode(&icon_data);
 

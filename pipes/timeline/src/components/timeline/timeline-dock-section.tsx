@@ -1,8 +1,6 @@
 import localforage from "localforage";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
-import { platform } from "@tauri-apps/plugin-os";
-import { invoke } from "@tauri-apps/api/core";
-import { StreamTimeSeriesResponse } from "@/app/timeline/page";
+import { StreamTimeSeriesResponse } from "@/app/page";
 import { stringToColor } from "@/lib/utils";
 import { motion, useAnimation } from "framer-motion";
 import {
@@ -12,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Button } from "@/components/ui/button";
 import { MessageSquarePlus, Volume2 } from "lucide-react";
@@ -30,15 +29,50 @@ interface ProcessedBlock {
   }>;
 }
 
+interface AppIcon {
+  base64: string;
+  path?: string;
+}
+
+async function getAppIcon(
+  appName: string,
+  appPath?: string
+): Promise<AppIcon | null> {
+  const params = new URLSearchParams({
+    name: appName,
+    ...(appPath && { path: appPath }),
+  });
+
+  try {
+    const response = await fetch(`http://localhost:11435/app-icon?${params}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`failed to get app icon: ${error}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("error getting app icon:", error);
+    return null;
+  }
+}
+
 export function TimelineIconsSection({
   blocks,
 }: {
   blocks: StreamTimeSeriesResponse[];
 }) {
-  const os = platform();
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
-  const [iconInvocationCount, setIconInvocationCount] = useState<{ [key: string]: number }>({});
+  const [iconInvocationCount, setIconInvocationCount] = useState<{
+    [key: string]: number;
+  }>({});
   const { setSelectionRange } = useTimelineSelection();
 
   // Get the visible time range
@@ -55,27 +89,31 @@ export function TimelineIconsSection({
 
     // Process audio groups first
     const audioGroups = blocks
-      .flatMap(frame => 
-        frame.devices.flatMap(device => 
-          device.audio.map(audio => ({
+      .flatMap((frame) =>
+        frame.devices.flatMap((device) =>
+          device.audio.map((audio) => ({
             deviceName: audio.device_name,
             isInput: audio.is_input,
             timestamp: new Date(frame.timestamp),
             duration: audio.duration_secs,
-            percentThroughDay: 
-              ((new Date(frame.timestamp).getTime() - timeRange.start.getTime()) /
-              (timeRange.end.getTime() - timeRange.start.getTime())) * 100
+            percentThroughDay:
+              ((new Date(frame.timestamp).getTime() -
+                timeRange.start.getTime()) /
+                (timeRange.end.getTime() - timeRange.start.getTime())) *
+              100,
           }))
         )
       )
-      .filter(audio => {
+      .filter((audio) => {
         const timestamp = audio.timestamp;
         return timestamp >= timeRange.start && timestamp <= timeRange.end;
       })
       .filter((audio, index, array) => {
         if (index === 0) return true;
         const prevAudio = array[index - 1];
-        return Math.abs(audio.percentThroughDay - prevAudio.percentThroughDay) > 0.25;
+        return (
+          Math.abs(audio.percentThroughDay - prevAudio.percentThroughDay) > 0.25
+        );
       });
 
     // Process app blocks (existing logic)
@@ -166,9 +204,12 @@ export function TimelineIconsSection({
         .filter((block, index, array) => {
           if (index === 0) return true;
           const prevBlock = array[index - 1];
-          return Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) > 0.25;
+          return (
+            Math.abs(block.percentThroughDay - prevBlock.percentThroughDay) >
+            0.25
+          );
         }),
-      processedAudioGroups: audioGroups
+      processedAudioGroups: audioGroups,
     };
   }, [blocks, iconCache, timeRange]);
 
@@ -188,10 +229,7 @@ export function TimelineIconsSection({
 
         if (iconInvocationCount[appName] >= 100) return;
 
-        const icon = await invoke<{ base64: string; path: string } | null>(
-          "get_app_icon",
-          { appName, appPath }
-        );
+        const icon = await getAppIcon(appName, appPath);
 
         if (icon?.base64) {
           // Add null check for base64
@@ -217,7 +255,6 @@ export function TimelineIconsSection({
 
   useEffect(() => {
     const loadIcons = async () => {
-
       // Load icons for unique app names only
       processedBlocks.forEach((block) => {
         loadAppIcon(block.appName);
@@ -264,9 +301,9 @@ export function TimelineIconsSection({
                 >
                   <img
                     src={
-                      os === "linux" 
-                      ? `data:image/svg+xml;base64,${block.iconSrc}`
-                      : `data:image/png;base64,${block.iconSrc}`
+                      window.navigator.platform === "Linux"
+                        ? `data:image/svg+xml;base64,${block.iconSrc}`
+                        : `data:image/png;base64,${block.iconSrc}`
                     }
                     className="w-full h-full opacity-70"
                     alt={block.appName}
@@ -328,9 +365,9 @@ export function TimelineIconsSection({
                 {selectedApp?.iconSrc && (
                   <img
                     src={
-                      os === "linux"
-                      ? `data:image/svg+xml;base64,${selectedApp.iconSrc}`
-                      : `data:image/png;base64,${selectedApp.iconSrc}`
+                      window.navigator.platform === "Linux"
+                        ? `data:image/svg+xml;base64,${selectedApp.iconSrc}`
+                        : `data:image/png;base64,${selectedApp.iconSrc}`
                     }
                     className="w-6 h-6"
                     alt={selectedApp.appName}
