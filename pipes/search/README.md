@@ -14,3 +14,9 @@ window/app filtering
 
 <img width="1142" alt="Screenshot 2024-12-16 at 12 41 14 PM" src="https://github.com/user-attachments/assets/d799a1da-4b22-4956-b917-f8bdf90187a4" />
 
+speaker fitlering (we identify people you speak to 24/7)
+
+<img width="1170" alt="Screenshot 2024-12-16 at 12 48 02 PM" src="https://github.com/user-attachments/assets/dc2f13e0-8745-40a5-be8d-5b34dfa97493" />
+
+
+etc.
