@@ -38,6 +38,7 @@ import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
+import supabase from "@/lib/supabase/client";
 
 export interface Pipe {
   enabled: boolean;
@@ -334,9 +335,25 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const checkExistingSubscription = async (pipeId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("pipe_id", pipeId)
+        .eq("user_id", user?.id)
+        .single();
+
+      if (error) throw error;
+      return !!data; // returns true if subscription exists
+    } catch (error) {
+      console.error("failed to check subscription:", error);
+      return false;
+    }
+  };
+
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
-      // Add payment check for paid pipes
       const corePipe = corePipes.find((cp) => cp.id === pipe.id);
       if (corePipe?.paid && !pipe.enabled) {
         // Check if user exists AND has valid token
@@ -350,10 +367,30 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        const userCredits = user.credits?.amount || 0;
-        if (userCredits < corePipe.credits) {
-          openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
-          return;
+        // NEW: Check if they already purchased
+        const hasSubscription = await checkExistingSubscription(pipe.id);
+        if (!hasSubscription) {
+          const userCredits = user.credits?.amount || 0;
+
+          // If not enough credits, redirect to buy more
+          if (userCredits < corePipe.credits) {
+            openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+            return;
+          }
+
+          // If they have enough credits, try to purchase
+          const purchaseSuccess = await handlePipePurchase(
+            pipe,
+            corePipe.credits
+          );
+          if (!purchaseSuccess) {
+            toast({
+              title: "purchase failed",
+              description: "something went wrong, please try again",
+              variant: "destructive",
+            });
+            return;
+          }
         }
       }
 
@@ -394,21 +431,12 @@ const PipeStore: React.FC = () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Immediately update the local state
-      // setPipes((prevPipes) =>
-      //   prevPipes.map((p) =>
-      //     p.id === pipe.id ? { ...p, enabled: !p.enabled } : p
-      //   )
-      // );
-
       // find the pipe in the list, and set it as selected with the proper enabled state
       const freshPipe = freshPipes.find((p: Pipe) => p.id === pipe.id);
-      console.log("fresh pipes", freshPipes);
-      console.log("fresh pipe", freshPipe);
       if (freshPipe) {
         setSelectedPipe(freshPipe);
       }
-      console.log("selected pipe", selectedPipe);
+
 
       toast({
         title: `pipe ${endpoint}d`,
@@ -891,6 +919,39 @@ const PipeStore: React.FC = () => {
     } else {
       const installedPipe = pipes.find((p) => p.id === pipe.id);
       setSelectedPipe(installedPipe || pipe);
+    }
+  };
+
+  const handlePipePurchase = async (pipe: Pipe, requiredCredits: number) => {
+    try {
+      // Start a Supabase transaction using RPC
+      const { data, error } = await supabase.rpc("purchase_pipe", {
+        v_user_id: user?.id,
+        p_pipe_id: pipe.id,
+        p_credits_spent: requiredCredits,
+      });
+
+      if (error) throw error;
+
+      // Update local user credits state
+      if (user?.credits) {
+        user.credits.amount -= requiredCredits;
+      }
+
+      toast({
+        title: "pipe purchased",
+        description: `${requiredCredits} credits deducted`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error("purchase failed:", error);
+      toast({
+        title: "purchase failed",
+        description: "please try again or contact support",
+        variant: "destructive",
+      });
+      return false;
     }
   };
 
