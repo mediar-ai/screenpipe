@@ -220,7 +220,7 @@ export function RecordingSettings({
             .map((device) => device.name);
         }
 
-        handleSettingsChange({
+        updateSettings({
           ...localSettings,
           monitorIds: updatedMonitorIds,
           audioDevices: updatedAudioDevices,
