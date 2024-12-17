@@ -713,7 +713,7 @@ export function RecordingSettings({
         <div className={cn(isDisabled && "opacity-50 pointer-events-none")}>
           <h1 className="text-2xl font-bold mb-4">Recording</h1>
 
-          <h4 className="text-lg font-medium my-4">Video</h4>
+          <h4 className="text-lg font-semibold my-4">Video</h4>
           <div className="flex flex-col space-y-6">
             <div className="flex flex-col space-y-2">
               <Label
@@ -926,7 +926,7 @@ export function RecordingSettings({
           </div>
           <Separator className="my-6" />
 
-          <h4 className="text-lg font-medium my-4">Audio</h4>
+          <h4 className="text-lg font-semibold my-4">Audio</h4>
 
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -1185,7 +1185,7 @@ export function RecordingSettings({
                 htmlFor="vadSensitivity"
                 className="flex items-center space-x-2"
               >
-                <span>vad sensitivity</span>
+                <span>Voice Activity Detection sensitivity</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -1233,7 +1233,7 @@ export function RecordingSettings({
                 htmlFor="audioChunkDuration"
                 className="flex items-center space-x-2"
               >
-                <span>audio chunk duration (seconds)</span>
+                <span>Audio chunk duration (seconds)</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -1274,7 +1274,7 @@ export function RecordingSettings({
 
           <Separator className="my-6" />
 
-          <h4 className="text-lg font-medium my-4">Misc</h4>
+          <h4 className="text-lg font-semibold my-4">Misc</h4>
 
           <div className="space-y-8 py-4">
             <div className="space-y-6">

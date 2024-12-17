@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Settings2, Brain, Video, Keyboard, User } from "lucide-react";
+import { Settings2, Brain, Video, Keyboard, User, ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
 import { cn } from "@/lib/utils";
 import { RecordingSettings } from "./recording-settings";
@@ -14,7 +14,7 @@ type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings({ className }: { className?: string }) {
   const { localSettings, setLocalSettings } = useSettings();
-
+  const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
 
   const renderSection = () => {
@@ -37,11 +37,8 @@ export function Settings({ className }: { className?: string }) {
 
   return (
     <Dialog
-      onOpenChange={(open) => {
-        if (!open) {
-          window.location.reload();
-        }
-      }}
+      open={open}
+      onOpenChange={setOpen}
     >
       <DialogTrigger asChild>
         <div
@@ -58,12 +55,14 @@ export function Settings({ className }: { className?: string }) {
         </div>
       </DialogTrigger>
 
-      <DialogContent className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0">
+      <DialogContent  className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0 [&>button]:hidden">
         <div className="flex h-full">
           {/* Sidebar */}
-          <div className="w-64 border-r bg-muted/10">
+          <div className="w-64 border-r bg-[#f3f3f3]">
+            <div className="flex items-center gap-4 ml-6 mt-4">
+              <h1 className="text-2xl font-bold">Settings</h1>
+            </div>
             <div className="flex flex-col space-y-1 p-4">
-              <h1 className="text-2xl font-bold ml-2 mb-2">Settings</h1>
               {[
                 {
                   id: "account",
@@ -86,17 +85,16 @@ export function Settings({ className }: { className?: string }) {
                   icon: <Keyboard className="h-4 w-4" />,
                 },
               ].map((section) => (
-
                   <button
                     key={section.id}
                     onClick={() =>
                       setActiveSection(section.id as SettingsSection)
                     }
                     className={cn(
-                      "flex items-center space-x-2 px-4 py-2 rounded-md transition-colors",
+                      "flex items-center space-x-2 px-4 py-1.5 rounded-lg transition-colors",
                       activeSection === section.id
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-accent/50"
+                        ? "bg-black/90 text-white"
+                        : "hover:bg-black/10"
                     )}
                   >
                     {section.icon}
@@ -108,7 +106,7 @@ export function Settings({ className }: { className?: string }) {
 
           {/* Content - Updated styles */}
           <div className="flex-1 flex flex-col h-full max-h-[80vh]">
-            <div className="flex-1 overflow-y-auto py-4 px-4">
+            <div className="flex-1 overflow-y-auto px-4">
               <div className="max-h-full">{renderSection()}</div>
             </div>
           </div>

@@ -38,8 +38,13 @@ import { useUser } from "@/lib/hooks/use-user";
 import { Button } from "../ui/button";
 
 const AISection = () => {
-  const { settings, updateSettings, localSettings, setLocalSettings, resetSetting } =
-    useSettings();
+  const {
+    settings,
+    updateSettings,
+    localSettings,
+    setLocalSettings,
+    resetSetting,
+  } = useSettings();
 
   const [ollamaStatus, setOllamaStatus] = useState<
     "idle" | "running" | "error"
@@ -352,7 +357,7 @@ const AISection = () => {
   };
 
   return (
-    <div className="w-full max-w-xl space-y-6 py-4">
+    <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">AI Settings</h1>
       <div className="w-full">
         <div className="flex items-center gap-4 mb-4">
@@ -578,74 +583,59 @@ const AISection = () => {
 
       <Separator className="my-4" />
 
-      <div className="w-full">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center min-w-[80px] justify-end">
-            <Label htmlFor="embeddedLLM" className="text-right mr-2">
-              embedded ai
-            </Label>
-            <Badge variant="outline" className="ml-2">
-              experimental
-            </Badge>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 cursor-help ml-2" />
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-[300px]">
-                  <p>
-                    enable this to use local ai features in screenpipe. this is
-                    an experimental feature that may be unstable or change in
-                    future updates. you can use it through search or pipes for
-                    enhanced functionality without relying on external services.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <div className="flex items-center gap-4">
-            <Switch
-              id="embeddedLLM"
-              checked={localSettings.embeddedLLM.enabled}
-              onCheckedChange={handleEmbeddedLLMChange}
-            />
-            {localSettings.embeddedLLM.enabled && (
-              <>
-                <Button
-                  onClick={startOllamaSidecar}
-                  disabled={ollamaStatus === "running"}
-                  className="ml-auto"
-                >
-                  {ollamaStatus === "running" ? (
-                    <Check className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "error" ? (
+
+        <div className="flex items-center gap-4 mb-4 w-full">
+          <div className="flex items-center justify-between w-full">
+            <div className="space-y-1">
+              <h4 className="font-medium">Embedded AI</h4>
+              <p className="text-sm text-muted-foreground">
+                Enable this to use local ai features in screenpipe.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="embeddedLLM"
+                checked={localSettings.embeddedLLM.enabled}
+                onCheckedChange={handleEmbeddedLLMChange}
+              />
+              {localSettings.embeddedLLM.enabled && (
+                <>
+                  <Button
+                    onClick={startOllamaSidecar}
+                    disabled={ollamaStatus === "running"}
+                    className="ml-auto"
+                  >
+                    {ollamaStatus === "running" ? (
+                      <Check className="h-4 w-4 mr-2" />
+                    ) : ollamaStatus === "error" ? (
+                      <X className="h-4 w-4 mr-2" />
+                    ) : ollamaStatus === "idle" ? (
+                      <Play className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    )}
+                    {ollamaStatus === "running"
+                      ? "running"
+                      : ollamaStatus === "error"
+                      ? "error"
+                      : "start ai"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleStopLLM}
+                    className="ml-auto"
+                  >
                     <X className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "idle" ? (
-                    <Play className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  {ollamaStatus === "running"
-                    ? "running"
-                    : ollamaStatus === "error"
-                    ? "error"
-                    : "start ai"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleStopLLM}
-                  className="ml-auto"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  stop ai
-                </Button>
-                <LogFileButton isAppLog={true} />
-                <Badge>{embeddedAIStatus}</Badge>
-              </>
-            )}
+                    stop ai
+                  </Button>
+                  <LogFileButton isAppLog={true} />
+                  <Badge>{embeddedAIStatus}</Badge>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+
 
       {localSettings.embeddedLLM.enabled && (
         <>
