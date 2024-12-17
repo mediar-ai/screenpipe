@@ -9,12 +9,8 @@ import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 
 const ShortcutSection = () => {
-  const {
-    settings,
-    updateSettings,
-    localSettings,
-    setLocalSettings,
-  } = useSettings();
+  const { settings, updateSettings, localSettings, setLocalSettings } =
+    useSettings();
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [nonModifierKey, setNonModifierKey] = useState<string>("");
   const [currentShortcut, setCurrentShortcut] = useState<string>(
@@ -39,7 +35,6 @@ const ShortcutSection = () => {
     setNonModifierKey(key);
   }, [settings.showScreenpipeShortcut]);
 
-
   useEffect(() => {
     if (!isRecording) return;
 
@@ -48,26 +43,35 @@ const ShortcutSection = () => {
 
       // Get modifiers
       const modifiers: string[] = [];
-      if (e.metaKey) modifiers.push('super');
-      if (e.ctrlKey) modifiers.push('ctrl');
-      if (e.altKey) modifiers.push('alt');
-      if (e.shiftKey) modifiers.push('shift');
+      if (e.metaKey) modifiers.push("super");
+      if (e.ctrlKey) modifiers.push("ctrl");
+      if (e.altKey) modifiers.push("alt");
+      if (e.shiftKey) modifiers.push("shift");
 
       // Get the main key
       const key = e.key.toUpperCase();
-      
+
       // Update pressed keys in real-time
       setPressedKeys([...new Set([...modifiers, key])]);
 
-      const isModifierKey = ['CONTROL', 'ALT', 'SHIFT', 'META', 'COMMAND'].includes(key);
-      
+      const isModifierKey = [
+        "CONTROL",
+        "ALT",
+        "SHIFT",
+        "META",
+        "COMMAND",
+      ].includes(key);
+
       if (!isModifierKey) {
         setSelectedModifiers(modifiers);
         setNonModifierKey(key);
-        
+
         // Auto save after successful recording
-        const newShortcut = [...modifiers, key].join('+');
-        setLocalSettings({ ...localSettings, showScreenpipeShortcut: newShortcut });
+        const newShortcut = [...modifiers, key].join("+");
+        setLocalSettings({
+          ...localSettings,
+          showScreenpipeShortcut: newShortcut,
+        });
         updateSettings({ showScreenpipeShortcut: newShortcut });
         setCurrentShortcut(newShortcut);
         setIsRecording(false);
@@ -78,8 +82,10 @@ const ShortcutSection = () => {
         });
 
         toast({
-          title: 'shortcut updated',
-          description: `new shortcut set to: ${parseKeyboardShortcut(newShortcut)}`,
+          title: "shortcut updated",
+          description: `new shortcut set to: ${parseKeyboardShortcut(
+            newShortcut
+          )}`,
         });
       }
     };
@@ -90,15 +96,20 @@ const ShortcutSection = () => {
       setPressedKeys([]);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [isRecording, localSettings, updateSettings, disabledShortcuts, setLocalSettings]);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
 
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [
+    isRecording,
+    localSettings,
+    updateSettings,
+    disabledShortcuts,
+    setLocalSettings,
+  ]);
 
   const handleShortcutToggle = (checked: boolean) => {
     console.log("handleShortcutToggle", checked);
@@ -126,71 +137,75 @@ const ShortcutSection = () => {
   };
 
   return (
-    <div className='w-full space-y-6 py-4'>
-      <h1 className='text-2xl font-bold'>Shortcuts</h1>
-      <div className='flex items-center justify-between'>
-        <div className='space-y-1'>
-          <h3 className='text-sm font-medium'>Toggle Screenpipe Overlay</h3>
-          <p className='text-xs text-muted-foreground'>
+    <div className="w-full space-y-6 py-4">
+      <h1 className="text-2xl font-bold">Shortcuts</h1>
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h4 className="font-medium">Toggle Screenpipe Overlay</h4>
+          <p className="text-sm text-muted-foreground">
             Global shortcut to show/hide the main interface
           </p>
         </div>
-
-        <div className='flex items-center gap-4'>
+        <div className="flex items-center gap-4">
           <button
             onClick={() => setIsRecording(true)}
             className={cn(
-              'relative min-w-[140px] rounded-md border px-3 py-2 text-sm',
-              'bg-muted/50 hover:bg-muted/70 transition-colors',
-              'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring',
-              isRecording && 'border-primary'
+              "relative min-w-[140px] rounded-md border px-3 py-2 text-sm",
+              "bg-muted/50 hover:bg-muted/70 transition-colors",
+              "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring",
+              isRecording && "border-primary"
             )}
           >
             {isRecording ? (
-              <span className='animate-pulse'>recording...</span>
+              <span className="animate-pulse">recording...</span>
             ) : (
-              <span className='flex items-center justify-between gap-2'>
-                {currentShortcut ? (
-                  parseKeyboardShortcut(currentShortcut)
-                ) : (
-                  'click to record'
-                )}
-                <Pencil className='h-3 w-3 opacity-50' />
+              <span className="flex items-center justify-between gap-2">
+                {currentShortcut
+                  ? parseKeyboardShortcut(currentShortcut)
+                  : "click to record"}
+                <Pencil className="h-3 w-3 opacity-50" />
               </span>
             )}
           </button>
 
           <Switch
-            id='shortcutEnabled'
-            checked={!settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)}
+            id="shortcutEnabled"
+            checked={
+              !settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
+            }
             onCheckedChange={handleShortcutToggle}
           />
         </div>
       </div>
 
       {isRecording && (
-        <div className='rounded-lg border bg-muted/50 p-4'>
-          <p className='text-xs text-center text-muted-foreground mb-3'>
+        <div className="rounded-lg border bg-muted/50 p-4">
+          <p className="text-xs text-center text-muted-foreground mb-3">
             press your desired key combination
           </p>
-          <div className='flex justify-center gap-1'>
+          <div className="flex justify-center gap-1">
             {pressedKeys.length > 0 ? (
               pressedKeys.map((key) => (
-                <kbd key={key} className='px-2 py-1 text-xs rounded bg-background'>
+                <kbd
+                  key={key}
+                  className="px-2 py-1 text-xs rounded bg-background"
+                >
                   {parseKeyboardShortcut(key)}
                 </kbd>
               ))
             ) : (
-              <span className='text-xs text-muted-foreground'>waiting for input...</span>
+              <span className="text-xs text-muted-foreground">
+                waiting for input...
+              </span>
             )}
           </div>
-          <div className='mt-4 flex justify-end gap-2'>
+          <div className="mt-4 flex justify-end gap-2">
             <button
               onClick={() => {
                 setIsRecording(false);
                 setPressedKeys([]);
               }}
-              className='text-xs text-muted-foreground hover:text-foreground'
+              className="text-xs text-muted-foreground hover:text-foreground"
             >
               cancel
             </button>

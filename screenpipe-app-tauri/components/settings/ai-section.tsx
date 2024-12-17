@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import { AIProviderType, useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "@/components/ui/label";
 import {
@@ -25,6 +26,7 @@ import {
   X,
   Play,
   Loader2,
+  Cpu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import React, { useState } from "react";
@@ -36,6 +38,63 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useUser } from "@/lib/hooks/use-user";
 import { Button } from "../ui/button";
+import { cn } from "@/lib/utils";
+import { Card, CardContent } from "../ui/card";
+
+interface AIProviderCardProps {
+  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
+  title: string;
+  description: string;
+  imageSrc: string;
+  selected: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  warningText?: string;
+  imageClassName?: string;
+}
+
+const AIProviderCard = ({
+  type,
+  title,
+  description,
+  imageSrc,
+  selected,
+  onClick,
+  disabled,
+  warningText,
+  imageClassName,
+}: AIProviderCardProps) => {
+  return (
+    <Card
+      onClick={onClick}
+      className={cn(
+        "flex py-4 px-4 rounded-lg hover:bg-accent transition-colors h-[145px] w-full cursor-pointer",
+        selected ? "border-black/60 border-[1.5px]" : "",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}
+    >
+      <CardContent className="flex flex-col p-0 w-full">
+        <div className="flex items-center gap-2 mb-2">
+          <img
+            src={imageSrc}
+            alt={title}
+            className={cn(
+              "rounded-lg shrink-0 size-8",
+              type === "native-ollama" &&
+                "outline outline-gray-300 outline-1 outline-offset-2",
+              imageClassName
+            )}
+          />
+          <span className="text-lg font-medium truncate">{title}</span>
+        </div>
+        <p className="text-sm text-muted-foreground line-clamp-3">
+          {description}
+        </p>
+        {warningText && <Badge className="w-fit mt-2">{warningText}</Badge>}
+      </CardContent>
+    </Card>
+  );
+};
 
 const AISection = () => {
   const {
@@ -235,87 +294,6 @@ const AISection = () => {
     localSettings.aiUrl !== "http://localhost:11434/v1" &&
     localSettings.aiUrl !== "embedded";
 
-  const getProviderTooltipContent = () => {
-    switch (localSettings.aiUrl) {
-      case "https://ai-proxy.i-f9f.workers.dev/v1":
-        return (
-          <p>
-            {credits?.amount ? (
-              <>
-                screenpipe cloud doesn&apos;t require an API key.
-                <br />
-                you have {credits.amount} credits left.
-              </>
-            ) : (
-              <>
-                you need credits to use screenpipe cloud.
-                <br />
-                <a
-                  href="https://buy.stripe.com/5kA6p79qefweacg5kJ"
-                  target="_blank"
-                  className="text-primary hover:underline"
-                >
-                  get credits here
-                </a>
-              </>
-            )}
-          </p>
-        );
-      case "https://api.openai.com/v1":
-        return (
-          <p>
-            openai requires an API key.
-            <br />
-            note: using this option may involve sending data to openai servers.
-            <br />
-            please review openai&apos;s data privacy policy for more
-            information.
-            <br />
-            find openai key here:{" "}
-            <a
-              href="https://platform.openai.com/account/api-keys"
-              target="_blank"
-              className="text-primary hover:underline"
-            >
-              openai
-            </a>
-          </p>
-        );
-      case "http://localhost:11434/v1":
-        return (
-          <p>
-            choose your ai provider. for local providers like ollama, make sure
-            it&apos;s running on your machine.
-            <br />
-            note: on windows, you may need to run ollama with:
-            <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
-            </pre>
-          </p>
-        );
-      case "embedded":
-        return (
-          <p>
-            use the embedded ai provided by screenpipe.
-            <br />
-            no api key required. model is predefined.
-          </p>
-        );
-      default:
-        return (
-          <p>
-            choose your ai provider. for local providers like ollama, make sure
-            it&apos;s running on your machine.
-            <br />
-            note: on windows, you may need to run ollama with:
-            <pre className="bg-gray-100 p-1 rounded-md">
-              OLLAMA_ORIGINS=* ollama run llama3.2:3b-instruct-q4_K_M
-            </pre>
-          </p>
-        );
-    }
-  };
-
   const getModelTooltipContent = () => {
     switch (localSettings.aiUrl) {
       case "https://api.openai.com/v1":
@@ -360,48 +338,64 @@ const AISection = () => {
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">AI Settings</h1>
       <div className="w-full">
-        <div className="flex items-center gap-4 mb-4">
-          <Label htmlFor="aiUrl" className="min-w-[80px] text-right">
-            ai provider
-          </Label>
-          <div className="flex-grow flex items-center">
-            <Select
-              onValueChange={handleAiProviderChange}
-              value={localSettings.aiProviderType}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select AI provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="screenpipe-cloud">
-                  screenpipe cloud {!credits?.amount && "(requires credits)"}
-                </SelectItem>
-                <SelectItem value="openai">openai</SelectItem>
-                <SelectItem value="native-ollama">ollama (local)</SelectItem>
-                <SelectItem value="custom">custom</SelectItem>
-                {embeddedAIStatus === "running" && (
-                  <SelectItem value="embedded">embedded ai</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                {getProviderTooltipContent()}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        <Label htmlFor="aiUrl" className="min-w-[80px]">
+          AI Provider
+        </Label>
+        <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
+          <AIProviderCard
+            type="screenpipe-cloud"
+            title="Screenpipe Cloud"
+            description="Fastest with built-in context awareness and streaming support"
+            imageSrc="/images/screenpipe.png"
+            selected={localSettings.aiProviderType === "screenpipe-cloud"}
+            onClick={() => handleAiProviderChange("screenpipe-cloud")}
+            warningText={!credits?.amount ? "requires credits" : undefined}
+          />
+
+          <AIProviderCard
+            type="openai"
+            title="OpenAI"
+            description="Use your own OpenAI API key for GPT-4 and other models"
+            imageSrc="/images/openai.png"
+            selected={localSettings.aiProviderType === "openai"}
+            onClick={() => handleAiProviderChange("openai")}
+          />
+
+          <AIProviderCard
+            type="native-ollama"
+            title="Ollama"
+            description="Run AI models locally using your existing ollama installation"
+            imageSrc="/images/ollama.png"
+            selected={localSettings.aiProviderType === "native-ollama"}
+            onClick={() => handleAiProviderChange("native-ollama")}
+          />
+
+          <AIProviderCard
+            type="custom"
+            title="Custom"
+            description="Connect to your own AI provider or self-hosted models"
+            imageSrc="/images/custom.png"
+            selected={localSettings.aiProviderType === "custom"}
+            onClick={() => handleAiProviderChange("custom")}
+          />
+
+          {embeddedAIStatus === "running" && (
+            <AIProviderCard
+              type="embedded"
+              title="embedded ai"
+              description="use the built-in ai engine for offline processing"
+              imageSrc="/images/embedded.png"
+              selected={localSettings.aiProviderType === "embedded"}
+              onClick={() => handleAiProviderChange("embedded")}
+            />
+          )}
         </div>
       </div>
       {localSettings.aiProviderType === "custom" && (
         <div className="w-full">
-          <div className="flex items-center gap-4 mb-4">
-            <Label htmlFor="customAiUrl" className="min-w-[80px] text-right">
-              custom url
+          <div className="flex flex-col gap-4 mb-4">
+            <Label htmlFor="customAiUrl">
+              Custom URL
             </Label>
             <Input
               id="customAiUrl"
@@ -423,10 +417,8 @@ const AISection = () => {
       )}
       {isApiKeyRequired && (
         <div className="w-full">
-          <div className="flex items-center gap-4 mb-4">
-            <Label htmlFor="aiApiKey" className="min-w-[80px] text-right">
-              api key
-            </Label>
+          <div className="flex flex-col gap-4 mb-4 w-full">
+            <Label htmlFor="aiApiKey">API Key</Label>
             <div className="flex-grow relative">
               <Input
                 id="aiApiKey"
@@ -458,10 +450,8 @@ const AISection = () => {
       )}
       {localSettings.aiProviderType !== "embedded" && (
         <div className="w-full">
-          <div className="flex items-center gap-4 mb-4">
-            <Label htmlFor="aiModel" className="min-w-[80px] text-right">
-              ai model
-            </Label>
+          <div className="flex flex-col gap-4 mb-4 w-full">
+            <Label htmlFor="aiModel">AI model</Label>
             <div className="flex-grow relative">
               <Input
                 id="aiModel"
@@ -478,25 +468,13 @@ const AISection = () => {
                 autoComplete="off"
               />
             </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="ml-2 h-4 w-4 cursor-default" />
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  {getModelTooltipContent()}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           </div>
         </div>
       )}
 
       <div className="w-full">
-        <div className="flex items-center gap-4 mb-4">
-          <Label htmlFor="customPrompt" className="min-w-[80px] text-right">
-            prompt
-          </Label>
+        <div className="flex flex-col gap-4 mb-4 w-full">
+          <Label htmlFor="customPrompt">Prompt</Label>
           <div className="flex-grow relative">
             <Textarea
               id="customPrompt"
@@ -520,26 +498,9 @@ const AISection = () => {
       </div>
 
       <div className="w-full">
-        <div className="flex items-center gap-4 mb-4">
-          <Label
-            htmlFor="aiMaxContextChars"
-            className="min-w-[80px] text-right"
-          >
-            max context
-          </Label>
-          <div className="flex-grow flex items-center">
-            <Slider
-              id="aiMaxContextChars"
-              min={1000}
-              max={128000}
-              step={1000}
-              value={[localSettings.aiMaxContextChars]}
-              onValueChange={handleMaxContextCharsChange}
-              className="flex-grow"
-            />
-            <span className="ml-2 min-w-[60px] text-right">
-              {localSettings.aiMaxContextChars.toLocaleString()}
-            </span>
+        <div className="flex flex-col gap-4 mb-4 w-full">
+          <Label htmlFor="aiMaxContextChars" className="flex items-center">
+            Max Context{" "}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -557,85 +518,75 @@ const AISection = () => {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          </Label>
+          <div className="flex-grow flex items-center">
+            <Slider
+              id="aiMaxContextChars"
+              min={1000}
+              max={128000}
+              step={1000}
+              value={[localSettings.aiMaxContextChars]}
+              onValueChange={handleMaxContextCharsChange}
+              className="flex-grow"
+            />
+            <span className="ml-2 min-w-[60px] text-right">
+              {localSettings.aiMaxContextChars.toLocaleString()}
+            </span>
           </div>
         </div>
       </div>
 
-      <Separator />
-
-      <p className="mt-2 text-sm text-muted-foreground text-center">
-        enter your ai provider details here. for openai, you can get an api key
-        from{" "}
-        <a
-          href="https://platform.openai.com/api-keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-        >
-          openai&apos;s website
-        </a>
-        .
-      </p>
-      <p className="mt-2 text-sm text-muted-foreground text-center">
-        for ollama, or any other provider, use the url running on your local
-        machine or elsewhere and the exact model name.
-      </p>
-
-      <Separator className="my-4" />
-
-
-        <div className="flex items-center gap-4 mb-4 w-full">
-          <div className="flex items-center justify-between w-full">
-            <div className="space-y-1">
-              <h4 className="font-medium">Embedded AI</h4>
-              <p className="text-sm text-muted-foreground">
-                Enable this to use local ai features in screenpipe.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="embeddedLLM"
-                checked={localSettings.embeddedLLM.enabled}
-                onCheckedChange={handleEmbeddedLLMChange}
-              />
-              {localSettings.embeddedLLM.enabled && (
-                <>
-                  <Button
-                    onClick={startOllamaSidecar}
-                    disabled={ollamaStatus === "running"}
-                    className="ml-auto"
-                  >
-                    {ollamaStatus === "running" ? (
-                      <Check className="h-4 w-4 mr-2" />
-                    ) : ollamaStatus === "error" ? (
-                      <X className="h-4 w-4 mr-2" />
-                    ) : ollamaStatus === "idle" ? (
-                      <Play className="h-4 w-4 mr-2" />
-                    ) : (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    )}
-                    {ollamaStatus === "running"
-                      ? "running"
-                      : ollamaStatus === "error"
-                      ? "error"
-                      : "start ai"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleStopLLM}
-                    className="ml-auto"
-                  >
+      <div className="flex items-center gap-4 mb-4 w-full">
+        <div className="flex items-center justify-between w-full">
+          <div className="space-y-1">
+            <h4 className="font-medium">Embedded AI</h4>
+            <p className="text-sm text-muted-foreground">
+              Enable this to use local ai features in screenpipe.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="embeddedLLM"
+              checked={localSettings.embeddedLLM.enabled}
+              onCheckedChange={handleEmbeddedLLMChange}
+            />
+            {localSettings.embeddedLLM.enabled && (
+              <>
+                <Button
+                  onClick={startOllamaSidecar}
+                  disabled={ollamaStatus === "running"}
+                  className="ml-auto"
+                >
+                  {ollamaStatus === "running" ? (
+                    <Check className="h-4 w-4 mr-2" />
+                  ) : ollamaStatus === "error" ? (
                     <X className="h-4 w-4 mr-2" />
-                    stop ai
-                  </Button>
-                  <LogFileButton isAppLog={true} />
-                  <Badge>{embeddedAIStatus}</Badge>
-                </>
-              )}
-            </div>
+                  ) : ollamaStatus === "idle" ? (
+                    <Play className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  {ollamaStatus === "running"
+                    ? "running"
+                    : ollamaStatus === "error"
+                    ? "error"
+                    : "start ai"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleStopLLM}
+                  className="ml-auto"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  stop ai
+                </Button>
+                <LogFileButton isAppLog={true} />
+                <Badge>{embeddedAIStatus}</Badge>
+              </>
+            )}
           </div>
         </div>
-
+      </div>
 
       {localSettings.embeddedLLM.enabled && (
         <>
