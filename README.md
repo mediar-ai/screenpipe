@@ -89,7 +89,8 @@
 
 # why?
 
-every second you are not recording is a missing context for AGI
+1. data is the biggest bottleneck in AI right now
+2. every second you are not recording is a missing context for AGI
 
 ## get started
 
