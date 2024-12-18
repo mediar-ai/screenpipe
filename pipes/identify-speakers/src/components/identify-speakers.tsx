@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { getFileSize, keysToCamelCase } from "@/lib/utils";
+import { keysToCamelCase } from "@/lib/utils";
+import { getFileSize } from "@/lib/actions/video-actions";
 import { VideoComponent } from "@/components/video";
 import {
   Card,

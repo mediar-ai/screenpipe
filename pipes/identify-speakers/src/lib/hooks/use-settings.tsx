@@ -46,7 +46,21 @@ export function useSettings() {
         setLoading(false);
       }
     };
+
+    // Initial load
     loadSettings();
+
+    // Refresh on window focus
+    const onFocus = () => loadSettings();
+    window.addEventListener("focus", onFocus);
+
+    // Optional: periodic refresh every 30s
+    const interval = setInterval(loadSettings, 30000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const updateSetting = async <T extends keyof Settings>(

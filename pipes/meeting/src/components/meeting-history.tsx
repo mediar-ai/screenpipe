@@ -240,7 +240,10 @@ export default function MeetingHistory({
 
     try {
       const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
+        apiKey:
+          settings.aiProviderType === "screenpipe-cloud"
+            ? settings.user.token
+            : settings.openaiApiKey,
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });

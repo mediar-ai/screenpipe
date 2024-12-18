@@ -136,7 +136,7 @@ class SettingsManager {
   }
 
   async getAll(): Promise<Settings> {
-    if (!this.initialized) await this.init();
+    await this.init();
     return { ...this.settings };
   }
 

@@ -38,7 +38,6 @@ export async function GET() {
       throw new Error("settingsManager not found");
     }
     const rawSettings = await settingsManager.getAll();
-    console.log("rawSettings", rawSettings);
     return NextResponse.json(rawSettings);
   } catch (error) {
     console.error("failed to get settings:", error);

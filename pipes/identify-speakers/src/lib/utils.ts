@@ -56,3 +56,5 @@ export function stringToColor(str: string): string {
   }
   return color;
 }
+
+
