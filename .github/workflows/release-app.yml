@@ -160,6 +160,14 @@ jobs:
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
+      - name: setup rust path
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          rustc --version # verify rust is available
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -362,18 +370,41 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
+      - uses: actions/setup-python@v5
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        with:
+          python-version: '3.13'
+
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         run: |
-          mkdir omp
-          python -m pip install intel-openmp --target omp
-          # Create mkl directory if it doesn't exist (ignore error if it does)
-          mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
-          ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
+          # Ensure target directory exists
+          $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+          mkdir -Force $mkl_dir
+
+          # Copy from temp directory if it exists, otherwise try pip install
+          $temp_mkl = "C:/temp_mkl_setup"
+          if (Test-Path "$temp_mkl/*.dll") {
+            Write-Host "found existing dlls in temp dir, copying..."
+            Get-ChildItem -Path $temp_mkl -Recurse -Filter *.dll | Copy-Item -Destination $mkl_dir -Force
+          } else {
+            Write-Host "no existing dlls found, trying pip install..."
+            mkdir omp
+            python -m ensurepip --upgrade
+            python -m pip install intel-openmp --target omp
+            Get-ChildItem -Path ./omp -Recurse -Filter *.dll | Copy-Item -Destination $mkl_dir -Force
+          }
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $mkl_dir -Filter *.dll).Count
+          Write-Host "found $dll_count dlls in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -611,7 +642,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}

@@ -34,7 +34,6 @@ export function PipeStoreMarkdown({
 
             return match ? (
               <div className="relative group">
-                
                 <CodeBlock
                   key={Math.random()}
                   language={(match && match[1]) || ""}
@@ -44,13 +43,16 @@ export function PipeStoreMarkdown({
               </div>
             ) : (
               <span className="relative group inline-block">
-                <code className="py-0.5 px-1 rounded-sm font-mono text-sm  text-zinc-100" {...props}>
+                <code
+                  className="py-0.5 px-1 rounded-sm font-mono text-sm  text-grey-900"
+                  {...props}
+                >
                   {content}
                 </code>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                  className="absolute -right-3 -top-3 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
                   onClick={() => copyToClipboard(content)}
                 >
                   {isCopied ? (

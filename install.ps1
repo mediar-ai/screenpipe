@@ -5,13 +5,13 @@ try {
     $releases = Invoke-RestMethod "https://api.github.com/repos/mediar-ai/screenpipe/releases"
     $latestRelease = $releases | Where-Object { -not $_.prerelease } | Select-Object -First 1
     if (-not $latestRelease) {
-        throw "No releases found"
+        throw "no releases found"
     }
     
     # Find the Windows asset
     $asset = $latestRelease.assets | Where-Object { $_.name -like "*-x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
     if (-not $asset) {
-        throw "No Windows release found in version $($latestRelease.tag_name)"
+        throw "no Windows release found in version $($latestRelease.tag_name)"
     }
     
     $url = $asset.browser_download_url
@@ -51,7 +51,28 @@ try {
     Write-Host "installing bun..."
     powershell -c "irm bun.sh/install.ps1|iex"
 
-    Write-Host "screenpipe installed successfully! restart your terminal and run 'screenpipe'" -ForegroundColor Green
+    Write-Host @"
+
+███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗
+██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║██╔══██╗██╔════╝
+███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╔╝██║██████╔╝█████╗  
+╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔═══╝ ██║██╔═══╝ ██╔══╝  
+███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║██║     ██║██║     ███████╗
+╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝     ╚══════╝
+"@
+
+    Write-Host "installation complete! 🚀"
+    Write-Host "to get started:"
+    Write-Host "1. restart your terminal"
+    Write-Host "2. run: screenpipe"
+    Write-Host ""
+    Write-Host "╭──────────────────────────────────────────╮"
+    Write-Host "│  join our discord:                       │"
+    Write-Host "│  --> https://discord.gg/dU9EBuw7Uq       │"
+    Write-Host "│                                          │"
+    Write-Host "│  check the docs:                         │"
+    Write-Host "│  --> https://docs.screenpi.pe            │"
+    Write-Host "╰──────────────────────────────────────────╯"
 } catch {
     Write-Host "installation failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

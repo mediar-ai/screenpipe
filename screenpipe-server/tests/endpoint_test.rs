@@ -71,6 +71,8 @@ mod tests {
                 "",
                 &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -82,6 +84,8 @@ mod tests {
                 0,
                 "",
                 &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                None,
+                None,
                 None,
             )
             .await
@@ -205,6 +209,8 @@ mod tests {
                 "",
                 &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -215,6 +221,8 @@ mod tests {
                 0,
                 "",
                 &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                None,
+                None,
                 None,
             )
             .await
@@ -387,6 +395,8 @@ mod tests {
                 0,
                 "",
                 &AudioDevice::new("test".to_string(), DeviceType::Input),
+                None,
+                None,
                 None,
             )
             .await

@@ -19,7 +19,6 @@ import {
   Bell,
   Play,
   Folder,
-  Search,
   Book,
   User,
   Fingerprint,
@@ -48,7 +47,6 @@ import {
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-user";
-import { AuthButton } from "./auth";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -125,21 +123,6 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
-  const handleShowTimeline = async () => {
-    await invoke("show_timeline");
-  };
-
-  const handleShowSearch = async () => {
-    await invoke("show_search");
-  };
-
-  const handleShowMeetingHistory = async () => {
-    await invoke("show_meetings");
-  };
-
-  const handleShowIdentifySpeakers = async () => {
-    await invoke("show_identify_speakers");
-  };
 
   return (
     <div>
@@ -154,7 +137,7 @@ export default function Header() {
           </div>
           <div className="flex space-x-4 absolute top-4 right-4">
             <HealthStatus className="mt-3 cursor-pointer" />
-            
+
             <Button
               variant="ghost"
               size="icon"
@@ -179,10 +162,6 @@ export default function Header() {
                 <DropdownMenuLabel>account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem className="cursor-pointer p-0">
-                    <AuthButton />
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="cursor-pointer p-0"
                     onClick={(e) => {
@@ -192,44 +171,6 @@ export default function Header() {
                     }}
                   >
                     <Settings />
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowSearch}
-                    disabled={!health || health.status === "error"}
-                  >
-                    <Search className="mr-2 h-4 w-4" />
-                    <span>search</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowTimeline}
-                    disabled={
-                      !settings.enableFrameCache ||
-                      !health ||
-                      health.status === "error"
-                    }
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    <span>timeline</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowMeetingHistory}
-                    disabled={!health || health.status === "error"}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    <span>meetings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowIdentifySpeakers}
-                  >
-                    <Fingerprint className="mr-2 h-4 w-4" />
-                    <span>identify speakers</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

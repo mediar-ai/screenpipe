@@ -428,12 +428,7 @@ if (!process.env.GITHUB_ENV) {
 		console.log(`cd ${relativePath}`)
 	}
 	console.log('bun install')
-	if (platform == 'windows') {
-		console.log(`$env:FFMPEG_DIR = "${exports.ffmpeg}"`)
-		console.log(`$env:OPENBLAS_PATH = "${exports.openBlas}"`)
-		console.log(`$env:LIBCLANG_PATH = "${exports.libClang}"`)
-		console.log(`$env:PATH += "${exports.cmake}"`)
-	}
+
 	if (!process.env.GITHUB_ENV) {
 		console.log('bun tauri build')
 	}

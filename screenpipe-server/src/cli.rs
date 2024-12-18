@@ -136,10 +136,6 @@ pub struct Cli {
     #[arg(long)]
     pub debug: bool,
 
-    /// Save text files
-    #[arg(long, default_value_t = false)]
-    pub save_text_files: bool,
-
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
     /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
@@ -238,6 +234,10 @@ pub struct Cli {
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
+
+    /// Capture windows that are not focused (default: false)
+    #[arg(long, default_value_t = false)]
+    pub capture_unfocused_windows: bool,
 
     #[command(subcommand)]
     pub command: Option<Command>,

@@ -1,0 +1,22 @@
+# Set Rust as primary
+*.rs linguist-detectable=true
+*.rs linguist-language=Rust
+
+# Set TypeScript as secondary but still detected
+*.ts linguist-detectable=true
+*.ts linguist-language=TypeScript
+
+# Ignore build outputs and vendored code
+dist/* linguist-vendored
+target/* linguist-vendored
+node_modules/* linguist-vendored
+
+# Ignore documentation
+*.md linguist-documentation
+*.txt linguist-documentation
+
+# Ignore configuration files
+*.toml linguist-detectable=false
+*.json linguist-detectable=false
+*.yaml linguist-detectable=false
+*.yml linguist-detectable=false 

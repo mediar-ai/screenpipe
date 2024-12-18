@@ -150,37 +150,24 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return `there might be an issue with ${issues.join(" and ")}`;
   };
 
-  if (!health) {
-    return (
-      <Badge
-        variant="outline"
-        className="cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
-      >
-        <Activity className="mr-2 h-4 w-4" />
-        status{" "}
-        <span className="ml-1 w-2 h-2 rounded-full bg-yellow-500 inline-block animate-pulse" />
-      </Badge>
-    );
-  }
-
   const formatTimestamp = (timestamp: string | null) => {
     return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
   };
 
   const statusColor = getStatusColor(
-    health.status,
-    health.frame_status,
-    health.audio_status,
-    health.ui_status,
+    health?.status ?? "",
+    health?.frame_status ?? "",
+    health?.audio_status ?? "",
+    health?.ui_status ?? "",
     settings.disableAudio,
     settings.enableUiMonitoring
   );
   const statusMessage = getStatusMessage(
-    health.status,
-    health.frame_status,
-    health.audio_status,
-    health.ui_status,
-    settings.disableAudio,
+    health?.status ?? "",
+    health?.frame_status ?? "",
+    health?.audio_status ?? "",
+    health?.ui_status ?? "",
+    settings.disableAudio ?? "",
     settings.enableUiMonitoring
   );
 
@@ -313,15 +300,15 @@ const HealthStatus = ({ className }: { className?: string }) => {
                 <div className="flex items-center gap-2">
                   <div
                     className={`w-2 h-2 rounded-full ${
-                      health.frame_status === "ok"
+                      health?.frame_status === "ok"
                         ? "bg-green-500"
                         : "bg-red-500"
                     }`}
                   />
                   <span className="text-sm">screen recording</span>
                   <span className="text-sm text-muted-foreground">
-                    status: {health.frame_status}, last update:{" "}
-                    {formatTimestamp(health.last_frame_timestamp)}
+                    status: {health ? health.frame_status : "error"}, last update:{" "}
+                    {formatTimestamp(health?.last_frame_timestamp ?? null)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -352,7 +339,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     className={`w-2 h-2 rounded-full ${
                       settings.disableAudio
                         ? "bg-gray-400"
-                        : health.audio_status === "ok"
+                        : health?.audio_status === "ok"
                         ? "bg-green-500"
                         : "bg-red-500"
                     }`}
@@ -360,11 +347,11 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <span className="text-sm">audio recording</span>
                   <span className="text-sm text-muted-foreground">
                     status:{" "}
-                    {settings.disableAudio ? "turned off" : health.audio_status}
+                    {settings.disableAudio ? "turned off" : health ? health.audio_status : "error"}
                     , last update:{" "}
                     {settings.disableAudio
                       ? "n/a"
-                      : formatTimestamp(health.last_audio_timestamp)}
+                      : formatTimestamp(health?.last_audio_timestamp ?? null)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -395,15 +382,15 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <div className="flex items-center gap-2">
                     <div
                       className={`w-2 h-2 rounded-full ${
-                        health.ui_status === "ok"
+                        health?.ui_status === "ok"
                           ? "bg-green-500"
                           : "bg-red-500"
                       }`}
                     />
                     <span className="text-sm">ui monitoring</span>
                     <span className="text-sm text-muted-foreground">
-                      status: {health.ui_status}, last update:{" "}
-                      {formatTimestamp(health.last_ui_timestamp)}
+                      status: {health?.ui_status}, last update:{" "}
+                      {formatTimestamp(health ? health.last_ui_timestamp : "error" )}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

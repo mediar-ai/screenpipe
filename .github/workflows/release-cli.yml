@@ -286,38 +286,9 @@ jobs:
           name: screenpipe-linux-${{ matrix.target }}
           path: screenpipe-*.tar.gz
 
-  update-homebrew:
-    needs: [build-macos, build-linux, build-windows]
-    runs-on: macos-latest
-    steps:
-      - name: Set version
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
-          fi
-          if [[ -z "$VERSION" ]]; then
-            VERSION="0.0.0"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Set version to: $VERSION"
-
-      - name: Update Homebrew Formula
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.PAT }}
-        run: |
-          brew update
-          brew bump-formula-pr screenpipe \
-            --version="${VERSION}" \
-            --message="Automated update to version ${VERSION}" \
-            --no-browse \
-            --force || true
-
   release:
     runs-on: ubuntu-latest
-    needs: [build-macos, build-windows, build-linux, update-homebrew]
+    needs: [build-macos, build-windows, build-linux]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

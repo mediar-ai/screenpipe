@@ -1,9 +1,16 @@
 use image::DynamicImage;
 use log::error;
+use once_cell::sync::Lazy;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 use std::time::Duration;
 use tokio::time;
+
+#[cfg(target_os = "macos")]
+use xcap_macos::{Monitor, Window, XCapError};
+
+#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window, XCapError};
 
 #[derive(Debug)]
@@ -30,11 +37,165 @@ impl From<XCapError> for CaptureError {
     }
 }
 
+// Platform specific skip lists
+#[cfg(target_os = "macos")]
+static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Window Server",
+        "SystemUIServer",
+        "ControlCenter",
+        "Dock",
+        "NotificationCenter",
+        "loginwindow",
+        "WindowManager",
+        "Contexts",
+    ])
+});
+
+#[cfg(target_os = "windows")]
+static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Windows Shell Experience Host",
+        "Microsoft Text Input Application",
+        "Windows Explorer",
+        "Program Manager",
+        "Microsoft Store",
+        "Search",
+        "TaskBar",
+    ])
+});
+
+#[cfg(target_os = "linux")]
+static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Gnome-shell",
+        "Plasma",
+        "Xfdesktop",
+        "Polybar",
+        "i3bar",
+        "Plank",
+        "Dock",
+    ])
+});
+
+#[cfg(target_os = "macos")]
+static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Item-0",
+        "App Icon Window",
+        "Dock",
+        "NowPlaying",
+        "FocusModes",
+        "Shortcuts",
+        "AudioVideoModule",
+        "Clock",
+        "WiFi",
+        "Battery",
+        "BentoBox",
+        "Menu Bar",
+        "Notification Center",
+        "Control Center",
+        "Spotlight",
+        "Mission Control",
+        "Desktop",
+        "Screen Sharing",
+        "Touch Bar",
+        "Status Bar",
+        "Menu Extra",
+        "System Settings",
+    ])
+});
+
+#[cfg(target_os = "windows")]
+static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Program Manager",
+        "Windows Input Experience",
+        "Microsoft Text Input Application",
+        "Task View",
+        "Start",
+        "System Tray",
+        "Notification Area",
+        "Action Center",
+        "Task Bar",
+        "Desktop",
+    ])
+});
+
+#[cfg(target_os = "linux")]
+static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    HashSet::from([
+        "Desktop",
+        "Panel",
+        "Top Bar",
+        "Status Bar",
+        "Dock",
+        "Dashboard",
+        "Activities",
+        "System Tray",
+        "Notification Area",
+    ])
+});
+
+#[derive(Debug, Clone)]
+pub struct CapturedWindow {
+    pub image: DynamicImage,
+    pub app_name: String,
+    pub window_name: String,
+    pub is_focused: bool,
+}
+
+pub struct WindowFilters {
+    ignore_set: HashSet<String>,
+    include_set: HashSet<String>,
+}
+
+impl WindowFilters {
+    pub fn new(ignore_list: &[String], include_list: &[String]) -> Self {
+        Self {
+            ignore_set: ignore_list.iter().map(|s| s.to_lowercase()).collect(),
+            include_set: include_list.iter().map(|s| s.to_lowercase()).collect(),
+        }
+    }
+
+    // O(n) - we could figure out a better way to do this
+    pub fn is_valid(&self, app_name: &str, title: &str) -> bool {
+        let app_name_lower = app_name.to_lowercase();
+        let title_lower = title.to_lowercase();
+
+        // If include list is empty, we're done
+        if self.include_set.is_empty() {
+            return true;
+        }
+
+        // Check include list
+        if self
+            .include_set
+            .iter()
+            .any(|include| app_name_lower.contains(include) || title_lower.contains(include))
+        {
+            return true;
+        }
+
+        // Check ignore list first (usually smaller)
+        if !self.ignore_set.is_empty()
+            && self
+                .ignore_set
+                .iter()
+                .any(|ignore| app_name_lower.contains(ignore) || title_lower.contains(ignore))
+        {
+            return false;
+        }
+
+        false
+    }
+}
+
 pub async fn capture_all_visible_windows(
     monitor: &Monitor,
-    ignore_list: &[String],
-    include_list: &[String],
-) -> Result<Vec<(DynamicImage, String, String, bool)>, Box<dyn Error>> {
+    window_filters: &WindowFilters,
+    capture_unfocused_windows: bool,
+) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
     let mut all_captured_images = Vec::new();
 
     let windows = retry_with_backoff(
@@ -51,85 +212,74 @@ pub async fn capture_all_visible_windows(
     )
     .await?;
 
-    let focused_window = windows
-        .iter()
-        .find(|&w| is_valid_window(w, monitor, ignore_list, include_list));
-
     for window in &windows {
-        if is_valid_window(window, monitor, ignore_list, include_list) {
-            let app_name = window.app_name();
-            let window_name = window.title();
-            let is_focused = focused_window
-                .as_ref()
-                .map_or(false, |fw| fw.id() == window.id());
+        let is_valid = is_valid_window(window, monitor, window_filters, capture_unfocused_windows);
 
-            match window.capture_image() {
-                Ok(buffer) => {
-                    let image = DynamicImage::ImageRgba8(
-                        image::ImageBuffer::from_raw(
-                            buffer.width() as u32,
-                            buffer.height() as u32,
-                            buffer.into_raw(),
-                        )
-                        .unwrap(),
-                    );
+        if !is_valid {
+            continue;
+        }
 
-                    all_captured_images.push((
-                        image,
-                        app_name.to_string(),
-                        window_name.to_string(),
-                        is_focused,
-                    ));
-                }
-                Err(e) => error!(
-                    "Failed to capture image for window {} on monitor {}: {}",
-                    window_name,
-                    monitor.name(),
-                    e
-                ),
+        let app_name = window.app_name();
+        let window_name = window.title();
+
+        match window.capture_image() {
+            Ok(buffer) => {
+                let image = DynamicImage::ImageRgba8(
+                    image::ImageBuffer::from_raw(
+                        buffer.width() as u32,
+                        buffer.height() as u32,
+                        buffer.into_raw(),
+                    )
+                    .unwrap(),
+                );
+
+                all_captured_images.push(CapturedWindow {
+                    image,
+                    app_name: app_name.to_string(),
+                    window_name: window_name.to_string(),
+                    is_focused: is_valid,
+                });
             }
+            Err(e) => error!(
+                "Failed to capture image for window {} on monitor {}: {}",
+                window_name,
+                monitor.name(),
+                e
+            ),
         }
     }
 
     Ok(all_captured_images)
 }
 
-fn is_valid_window(
+pub fn is_valid_window(
     window: &Window,
     monitor: &Monitor,
-    ignore_list: &[String],
-    include_list: &[String],
+    filters: &WindowFilters,
+    capture_unfocused_windows: bool,
 ) -> bool {
-    // Early returns for simple checks
-    if window.current_monitor().id() != monitor.id() 
-        || window.is_minimized() 
-        || window.app_name() == "Window Server"
-        || window.app_name() == "Contexts"
-        || window.title().is_empty() {
+    if !capture_unfocused_windows {
+        // Early returns for simple checks
+        #[cfg(target_os = "macos")]
+        let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
+
+        #[cfg(not(target_os = "macos"))]
+        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
+
+        if !is_focused {
+            return false;
+        }
+    }
+
+    // Fast O(1) lookups using HashSet
+    let app_name = window.app_name();
+    let title = window.title();
+
+    if SKIP_APPS.contains(app_name) || SKIP_TITLES.contains(title) {
         return false;
     }
 
-    // Cache lowercase strings to avoid multiple conversions
-    let app_name_lower = window.app_name().to_lowercase();
-    let title_lower = window.title().to_lowercase();
-
-    // Check ignore list first (might exit early)
-    if ignore_list.iter().any(|ignore| {
-        let ignore_lower = ignore.to_lowercase();
-        app_name_lower.contains(&ignore_lower) || title_lower.contains(&ignore_lower)
-    }) {
-        return false;
-    }
-
-    // If include list is empty, return true
-    if include_list.is_empty() {
-        return true;
-    }
-
-    return include_list.iter().any(|include| {
-        let include_lower = include.to_lowercase();
-        app_name_lower.contains(&include_lower) || title_lower.contains(&include_lower)
-    });
+    filters.is_valid(app_name, title)
 }
 
 async fn retry_with_backoff<F, T, E>(
