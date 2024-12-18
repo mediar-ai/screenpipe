@@ -1,0 +1,19 @@
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "screenpipe-mcp"
+version = "0.1.0"
+description = "MCP server for screenpipe search"
+requires-python = ">=3.9"
+dependencies = [
+    "mcp",
+    "httpx",
+    "nest-asyncio"
+]
+
+[project.scripts]
+screenpipe-mcp = "screenpipe_mcp:main"
