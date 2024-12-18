@@ -43,6 +43,8 @@ use std::env;
 lazy_static! {
     static ref DEEPGRAM_API_URL: String = env::var("DEEPGRAM_API_URL")
         .unwrap_or_else(|_| "https://api.deepgram.com/v1/listen".to_string());
+    static ref CUSTOM_DEEPGRAM_API_TOKEN: String =
+        env::var("CUSTOM_DEEPGRAM_API_TOKEN").unwrap_or_else(|_| String::new());
 }
 
 async fn transcribe_with_deepgram(
@@ -54,6 +56,12 @@ async fn transcribe_with_deepgram(
 ) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();
+
+    // Use token from env var
+    let custom_api_key = CUSTOM_DEEPGRAM_API_TOKEN.as_str();
+    if custom_api_key.is_empty() {
+        return Err(anyhow!("CUSTOM_DEEPGRAM_API_TOKEN not set"));
+    }
 
     // Create a WAV file in memory
     let mut cursor = Cursor::new(Vec::new());
@@ -92,10 +100,16 @@ async fn transcribe_with_deepgram(
         .concat();
     }
 
+    let api_key_to_use = if custom_api_key.is_empty() {
+        api_key
+    } else {
+        custom_api_key
+    };
+
     let response = client
         .post(format!("{}?{}", *DEEPGRAM_API_URL, query_params))
         .header("Content-Type", "audio/wav")
-        .header("Authorization", format!("Token {}", api_key))
+        .header("Authorization", format!("Token {}", api_key_to_use))
         .body(wav_data)
         .send();
 
