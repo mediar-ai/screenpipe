@@ -168,9 +168,3 @@ windows = { version = "0.58", features = [
     "Win32_System_Threading",
     "Win32_Foundation",
 ] }
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true

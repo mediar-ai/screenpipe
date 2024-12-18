@@ -57,9 +57,3 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 beta = ["dep:screenpipe-actions"]
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true
