@@ -2,11 +2,12 @@
 #[cfg(feature = "pipes")]
 mod pipes {
     use regex::Regex;
+    use std::future::Future;
     use std::path::PathBuf;
+    use std::pin::Pin;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
-    
     use serde_json::Value;
 
     use anyhow::Result;
@@ -252,14 +253,43 @@ mod pipes {
 
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
         let source = source.trim();
+
+        // Handle local path
+        if let Ok(local_path) = PathBuf::from(source).canonicalize() {
+            if local_path.is_dir() {
+                let pipe_name = sanitize_pipe_name(
+                    local_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_str()
+                        .unwrap_or_default(),
+                );
+                let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+                let temp_dir = dest_dir.with_extension("_temp");
+
+                // Copy to temp location first
+                tokio::fs::create_dir_all(&temp_dir).await?;
+                copy_dir_all(&local_path, &temp_dir).await?;
+
+                // Move to final location
+                if dest_dir.exists() {
+                    tokio::fs::remove_dir_all(&dest_dir).await?;
+                }
+                tokio::fs::rename(&temp_dir, &dest_dir).await?;
+
+                return Ok(dest_dir);
+            }
+        }
+
+        // Rest of the GitHub URL handling code...
         let parsed_url = url::Url::parse(source)?;
         let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-        
+
         // Extract repo URL and subdirectory path
         let (repo_url, subdir_path) = if path_segments.contains(&"tree") {
             let tree_index = path_segments.iter().position(|&s| s == "tree").unwrap();
             let repo = format!("{}/{}", path_segments[0], path_segments[1]);
-            let subdir = path_segments[tree_index+2..].join("/");
+            let subdir = path_segments[tree_index + 2..].join("/");
             (format!("https://github.com/{}", repo), subdir)
         } else {
             (source.to_string(), String::new())
@@ -268,43 +298,51 @@ mod pipes {
         println!("cloning from repo url: {}", repo_url);
         println!("subdirectory path: {}", subdir_path);
 
-        let pipe_name = sanitize_pipe_name(Path::new(&subdir_path).file_name().unwrap().to_str().unwrap());
+        let pipe_name = sanitize_pipe_name(
+            Path::new(&subdir_path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        );
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
         let temp_dir = dest_dir.with_extension("_temp");
 
         // Clone with optimizations to only get what we need
         let temp_repo_dir = temp_dir.with_extension("_full_repo");
-        
+
         // First init and set up sparse checkout
         let status = Command::new("git")
             .args(&[
                 "clone",
                 "--filter=blob:none", // Only get metadata
                 "--sparse",           // Enable sparse checkout
-                "--depth=1",         // Shallow clone
+                "--depth=1",          // Shallow clone
                 &repo_url,
-                temp_repo_dir.to_str().unwrap()
+                temp_repo_dir.to_str().unwrap(),
             ])
             .status()
             .await?;
 
         if !status.success() {
-            anyhow::bail!("git clone failed with status code: {}", status.code().unwrap_or(0));
+            anyhow::bail!(
+                "git clone failed with status code: {}",
+                status.code().unwrap_or(0)
+            );
         }
 
         // Set up sparse-checkout for the specific subdirectory
         let status = Command::new("git")
             .current_dir(&temp_repo_dir)
-            .args(&[
-                "sparse-checkout",
-                "set",
-                &subdir_path
-            ])
+            .args(&["sparse-checkout", "set", &subdir_path])
             .status()
             .await?;
 
         if !status.success() {
-            anyhow::bail!("git sparse-checkout failed with status code: {}", status.code().unwrap_or(0));
+            anyhow::bail!(
+                "git sparse-checkout failed with status code: {}",
+                status.code().unwrap_or(0)
+            );
         }
 
         // Move only the specific subdirectory to the final temp location
@@ -322,6 +360,69 @@ mod pipes {
         tokio::fs::rename(&temp_dir, &dest_dir).await?;
 
         Ok(dest_dir)
+    }
+
+    async fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+        let src = src.as_ref();
+        let dst = dst.as_ref();
+        debug!("copy_dir_all: src={:?}, dst={:?}", src, dst);
+
+        tokio::fs::create_dir_all(&dst).await?;
+        debug!("Created destination directory: {:?}", dst);
+
+        let mut entries = tokio::fs::read_dir(src).await?;
+        debug!("Reading source directory: {:?}", src);
+
+        while let Some(entry) = entries.next_entry().await? {
+            let ty = entry.file_type().await?;
+            let src_path = entry.path();
+            let dst_path = dst.join(entry.file_name());
+
+            debug!("Processing entry: {:?}", src_path);
+
+            if should_ignore(&entry.file_name()) {
+                debug!("Skipping ignored file/directory: {:?}", entry.file_name());
+                continue;
+            }
+
+            if ty.is_dir() {
+                debug!("Entry is a directory, recursing: {:?}", src_path);
+                copy_dir_all_boxed(src_path, dst_path).await?;
+            } else {
+                debug!("Copying file: {:?} to {:?}", src_path, dst_path);
+                tokio::fs::copy(&src_path, &dst_path).await?;
+            }
+        }
+
+        debug!("Finished copying directory: {:?}", src);
+        Ok(())
+    }
+
+    fn copy_dir_all_boxed(
+        src: impl AsRef<Path> + Send + 'static,
+        dst: impl AsRef<Path> + Send + 'static,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
+        Box::pin(copy_dir_all(src, dst))
+    }
+
+    fn should_ignore(file_name: &std::ffi::OsStr) -> bool {
+        let ignore_list = [
+            "node_modules",
+            ".git",
+            ".next",
+            "dist",
+            "build",
+            ".DS_Store",
+            "Thumbs.db",
+            ".env",
+            ".env.local",
+            ".env.development.local",
+            ".env.test.local",
+            ".env.production.local",
+        ];
+
+        ignore_list.iter().any(|ignored| file_name == *ignored)
+            || file_name.to_str().map_or(false, |s| s.starts_with('.'))
     }
 
     fn find_pipe_file(pipe_dir: &Path) -> anyhow::Result<PathBuf> {
