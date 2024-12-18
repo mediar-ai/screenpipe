@@ -947,7 +947,7 @@ impl DatabaseManager {
                 format!(
                     r#"
                     SELECT COUNT(DISTINCT frames.id)
-                    FROM ocr_text_fts 
+                    FROM ocr_text_fts
                     JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id
                     JOIN frames ON ocr_text.frame_id = frames.id
                     WHERE {}
@@ -969,7 +969,7 @@ impl DatabaseManager {
                 format!(
                     r#"
                     SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
-                    FROM audio_transcriptions_fts 
+                    FROM audio_transcriptions_fts
                     JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
                     WHERE {}
                         AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
@@ -989,7 +989,7 @@ impl DatabaseManager {
                 format!(
                     r#"
                     SELECT COUNT(DISTINCT ui_monitoring.id)
-                    FROM ui_monitoring_fts 
+                    FROM ui_monitoring_fts
                     JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id
                     WHERE {}
                         AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
@@ -1010,7 +1010,7 @@ impl DatabaseManager {
                 format!(
                     r#"
                     SELECT COUNT(*) FROM (
-                        SELECT DISTINCT frames.id 
+                        SELECT DISTINCT frames.id
                         FROM {}
                         JOIN frames ON ocr_text.frame_id = frames.id
                         WHERE {}
@@ -1485,9 +1485,9 @@ impl DatabaseManager {
                 video_chunks.file_path,
                 frames.offset_index
             FROM {}
-            LEFT JOIN frames ON 
-                frames.timestamp BETWEEN 
-                    datetime(ui_monitoring.timestamp, '-1 seconds') 
+            LEFT JOIN frames ON
+                frames.timestamp BETWEEN
+                    datetime(ui_monitoring.timestamp, '-1 seconds')
                     AND datetime(ui_monitoring.timestamp, '+1 seconds')
             LEFT JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
             {}
@@ -1554,7 +1554,7 @@ impl DatabaseManager {
     ) -> Result<Vec<AudioChunksResponse>, sqlx::Error> {
         sqlx::query_as::<_, AudioChunksResponse>(
             r#"
-            SELECT 
+            SELECT
                 ac.*,
                 at.start_time,
                 at.end_time,
@@ -1611,10 +1611,10 @@ impl DatabaseManager {
                     LIMIT 3
                 )
             )
-            SELECT 
+            SELECT
                 s.id,
                 s.name,
-                CASE 
+                CASE
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
                     THEN json_object('audio_samples', json_group_array(
                         DISTINCT json_object(
@@ -1625,7 +1625,7 @@ impl DatabaseManager {
                         )
                     ))
                     ELSE json_patch(
-                        json(s.metadata), 
+                        json(s.metadata),
                         json_object('audio_samples', json_group_array(
                             DISTINCT json_object(
                                 'path', rap.file_path,
@@ -1697,7 +1697,7 @@ impl DatabaseManager {
 
     pub async fn search_speakers(&self, name_prefix: &str) -> Result<Vec<Speaker>, sqlx::Error> {
         sqlx::query_as::<_, Speaker>(
-            "SELECT * FROM speakers WHERE name LIKE ? || '%' AND hallucination = 0",
+            "SELECT DISTINCT * FROM speakers WHERE name LIKE ? || '%' AND hallucination = 0",
         )
         .bind(name_prefix)
         .fetch_all(&self.pool)
@@ -1777,10 +1777,10 @@ impl DatabaseManager {
             speaker_embedding AS (
                 SELECT embedding FROM speaker_embeddings WHERE speaker_id = ?1
             )
-            SELECT 
+            SELECT
                 s.id,
                 s.name,
-                CASE 
+                CASE
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
                     THEN json_object('audio_samples', json_group_array(DISTINCT json_object(
                         'path', rap.file_path,
@@ -1789,7 +1789,7 @@ impl DatabaseManager {
                         'end_time', rap.end_time
                     )))
                     ELSE json_patch(
-                        json(s.metadata), 
+                        json(s.metadata),
                         json_object('audio_samples', json_group_array(DISTINCT json_object(
                             'path', rap.file_path,
                             'transcript', rap.transcription,

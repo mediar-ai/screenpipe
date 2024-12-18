@@ -655,7 +655,7 @@ export function SearchChat() {
               results.filter((_, index) => selectedResults.has(index))
             )
           )}
-          
+
           User query: ${floatingInput}`,
         },
       ];
@@ -1577,7 +1577,7 @@ export function SearchChat() {
                   <CommandList>
                     <CommandEmpty>no speakers found.</CommandEmpty>
                     <CommandGroup>
-                      {speakers.map((speaker: Speaker) => (
+                      {[...new Set(speakers)].map((speaker: Speaker) => (
                         <CommandItem
                           key={speaker.id}
                           value={speaker.name}
