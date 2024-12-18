@@ -229,20 +229,25 @@ mod pipes {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if line.contains("Download")
-                    || line.starts_with("Task dev ")
-                    || line.starts_with("$ next dev")
-                    || line.contains("ready started server")
-                    || line.contains("Local:")
-                {
+                // List of patterns that should be treated as info logs
+                let info_patterns = [
+                    "Download",
+                    "Task dev ",
+                    "$ next dev",
+                    "ready started server",
+                    "Local:",
+                    "Webpack is configured",
+                    "See instructions",
+                    "https://nextjs.org",
+                ];
+
+                if info_patterns.iter().any(|pattern| line.contains(pattern)) {
                     info!("[{}] {}", pipe_clone, line);
                 } else {
                     error!("[{}] {}", pipe_clone, line);
                 }
             }
         });
-
-        // dont' wait for the child process to finish
 
         info!("pipe execution completed successfully");
         Ok(())
