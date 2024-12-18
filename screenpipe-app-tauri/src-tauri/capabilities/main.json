@@ -1,7 +1,7 @@
 {
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
-  "local": true,
+  "local": false,
   "windows": [
     "*"
   ],

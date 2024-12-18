@@ -139,6 +139,22 @@ const corePipes: CorePipe[] = [
     credits: 0,
     paid: false,
   },
+  {
+    id: "meeting",
+    name: "meeting assistant",
+    description: "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
+    credits: 15,
+    paid: true,
+  },
+  {
+    id: "identify-speakers",
+    name: "speaker identification",
+    description: "automatically identify and label different speakers in your recordings using AI voice recognition",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
+    credits: 10,
+    paid: true,
+  },
 ];
 
 const getAuthorFromSource = (source: string): string => {

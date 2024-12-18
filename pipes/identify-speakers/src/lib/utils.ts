@@ -1,10 +1,5 @@
-import { stat } from "@tauri-apps/plugin-fs";
-import { platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { ContentItem } from "./screenpipe";
-import levenshtein from "js-levenshtein";
-import { Duration } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -49,86 +44,6 @@ export const convertHtmlToMarkdown = (html: string) => {
   return convertedHtml.replace(/<[^>]*>/g, "");
 };
 
-export function getCliPath() {
-  const os = platform();
-  switch (os) {
-    case "windows":
-      return "%LOCALAPPDATA%\\screenpipe\\screenpipe.exe";
-    case "macos":
-      return "/Applications/screenpipe.app/Contents/MacOS/screenpipe";
-    case "linux":
-      return "/usr/local/bin/screenpipe";
-    default:
-      return "screenpipe";
-  }
-}
-
-// Add this pure function outside of the SearchChat component
-export const removeDuplicateSelections = (
-  results: ContentItem[],
-  selectedResults: Set<number>,
-  similarityThreshold: number = 0.9
-): Set<number> => {
-  const newSelectedResults = new Set<number>();
-  const seenContents: string[] = [];
-
-  const getSimilarity = (str1: string, str2: string): number => {
-    const maxLength = Math.max(str1.length, str2.length);
-    const distance = levenshtein(str1, str2);
-    return 1 - distance / maxLength;
-  };
-
-  const isDuplicate = (content: string): boolean => {
-    return seenContents.some(
-      (seenContent) =>
-        getSimilarity(content, seenContent) >= similarityThreshold
-    );
-  };
-
-  Array.from(selectedResults).forEach((index) => {
-    const item = results[index];
-    if (!item || !item.type) return;
-
-    let content = "";
-    if (item.type === "OCR") content = item.content.text;
-    else if (item.type === "Audio") content = item.content.transcription;
-    else if (item.type === "FTS") content = item.content.matched_text;
-
-    if (!isDuplicate(content)) {
-      seenContents.push(content);
-      newSelectedResults.add(index);
-    }
-  });
-
-  return newSelectedResults;
-};
-
-export function parseKeyboardShortcut(shortcut: string): string {
-  if (typeof window !== "undefined") {
-    const os = platform();
-
-    const uniqueKeys = new Set(
-      shortcut
-        .toLowerCase()
-        .split("+")
-        .map((key) => key.trim())
-    );
-
-    return Array.from(uniqueKeys)
-      .map((key) => {
-        if (key === "super") {
-          return os === "macos" ? "⌘" : "⊞";
-        }
-        if (key === "ctrl") return "⌃";
-        if (key === "alt") return os === "macos" ? "⌥" : "Alt";
-        if (key === "shift") return "⇧";
-        return key.charAt(0).toUpperCase() + key.slice(1);
-      })
-      .join(" + ");
-  }
-  return "";
-}
-
 export function stringToColor(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -140,10 +55,4 @@ export function stringToColor(str: string): string {
     color += ("00" + value.toString(16)).substr(-2);
   }
   return color;
-}
-
-export async function getFileSize(filePath: string): Promise<number> {
-  const { size } = await stat(filePath);
-
-  return size;
 }
