@@ -36,7 +36,6 @@ mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
-use tauri::Emitter;
 
 mod commands;
 mod llm_sidecar;
