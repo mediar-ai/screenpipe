@@ -64,7 +64,8 @@ const corePipes: CorePipe[] = [
   {
     id: "data-table",
     name: "data table",
-    description: "explore your data in a powerful table view with filtering, sorting, and more",
+    description:
+      "explore your data in a powerful table view with filtering, sorting, and more",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/data-table",
     credits: 0,
     paid: false,
@@ -142,7 +143,8 @@ const corePipes: CorePipe[] = [
   {
     id: "meeting",
     name: "meeting assistant",
-    description: "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
+    description:
+      "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
     credits: 15,
     paid: true,
@@ -150,7 +152,8 @@ const corePipes: CorePipe[] = [
   {
     id: "identify-speakers",
     name: "speaker identification",
-    description: "automatically identify and label different speakers in your recordings using AI voice recognition",
+    description:
+      "automatically identify and label different speakers in your recordings using AI voice recognition",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
     credits: 10,
     paid: true,
@@ -402,9 +405,19 @@ const PipeStore: React.FC = () => {
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       const corePipe = corePipes.find((cp) => cp.id === pipe.id);
+      console.log("attempting to toggle pipe:", {
+        pipeId: pipe.id,
+        isEnabled: pipe.enabled,
+        corePipe,
+        userToken: !!user?.token,
+        userCredits: user?.credits?.amount,
+      });
+
       if (corePipe?.paid && !pipe.enabled) {
-        // Check if user exists AND has valid token
+        console.log("handling paid pipe enable flow");
+
         if (!user?.token) {
+          console.log("user not authenticated, opening auth window");
           toast({
             title: "authentication required",
             description: "please sign in to use paid pipes",
@@ -414,21 +427,33 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        // Check if user already purchased this pipe
         const hasSubscription = await checkExistingSubscription(pipe.id);
+        console.log("subscription check:", {
+          hasSubscription,
+          pipeId: pipe.id,
+        });
+
         if (!hasSubscription) {
           const userCredits = user.credits?.amount || 0;
+          console.log("checking credits:", {
+            userCredits,
+            requiredCredits: corePipe.credits,
+            sufficient: userCredits >= corePipe.credits,
+          });
+
           if (userCredits < corePipe.credits) {
-            // Show the dialog instead of redirecting
+            console.log("insufficient credits, showing dialog");
             setShowCreditDialog(true);
             return;
           }
 
-          // If enough credits, proceed with purchase
+          console.log("attempting pipe purchase");
           const purchaseSuccess = await handlePipePurchase(
             pipe,
             corePipe.credits
           );
+          console.log("purchase result:", { purchaseSuccess });
+
           if (!purchaseSuccess) {
             toast({
               title: "purchase failed",
@@ -437,6 +462,11 @@ const PipeStore: React.FC = () => {
             });
             return;
           }
+
+          await refreshUser();
+          console.log("user refreshed after purchase:", {
+            newCredits: user?.credits?.amount,
+          });
         }
       }
 
@@ -445,7 +475,6 @@ const PipeStore: React.FC = () => {
         enabled: !pipe.enabled,
       });
 
-      // Then replace the loading toast with this:
       const t = toast({
         title: "loading pipe",
         description: "please wait...",
@@ -458,6 +487,8 @@ const PipeStore: React.FC = () => {
       });
 
       const endpoint = pipe.enabled ? "disable" : "enable";
+      console.log(`calling ${endpoint} endpoint for pipe`);
+
       const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
         method: "POST",
         headers: {
@@ -467,17 +498,16 @@ const PipeStore: React.FC = () => {
       });
 
       const data = await response.json();
+      console.log("toggle response:", data);
+
       if (!data.success) {
         throw new Error(data.error);
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
-
       const freshPipes = await fetchInstalledPipes();
-
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // find the pipe in the list, and set it as selected with the proper enabled state
       const freshPipe = freshPipes.find((p: Pipe) => p.id === pipe.id);
       if (freshPipe) {
         setSelectedPipe(freshPipe);
@@ -486,8 +516,6 @@ const PipeStore: React.FC = () => {
       toast({
         title: `pipe ${endpoint}d`,
       });
-
-      // Still fetch the latest state from the server to ensure consistency
     } catch (error) {
       console.error(
         `Failed to ${pipe.enabled ? "disable" : "enable"} pipe:`,
@@ -568,7 +596,6 @@ const PipeStore: React.FC = () => {
 
         await fetchInstalledPipes();
         setNewRepoUrl("");
-
       } catch (error) {
         console.error("failed to add custom pipe:", error);
         toast({
