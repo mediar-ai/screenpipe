@@ -229,12 +229,19 @@ mod pipes {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                if line.contains("Download")
-                    || line.starts_with("Task dev ")
-                    || line.starts_with("$ next dev")
-                    || line.contains("ready started server")
-                    || line.contains("Local:")
-                {
+                // List of patterns that should be treated as info logs
+                let info_patterns = [
+                    "Download",
+                    "Task dev ",
+                    "$ next dev",
+                    "ready started server",
+                    "Local:",
+                    "Webpack is configured",
+                    "See instructions",
+                    "https://nextjs.org",
+                ];
+
+                if info_patterns.iter().any(|pattern| line.contains(pattern)) {
                     info!("[{}] {}", pipe_clone, line);
                 } else {
                     error!("[{}] {}", pipe_clone, line);
@@ -242,10 +249,46 @@ mod pipes {
             }
         });
 
-        // dont' wait for the child process to finish
-
         info!("pipe execution completed successfully");
         Ok(())
+    }
+
+    // Add this helper function for retrying installations
+    async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Result<()> {
+        let mut attempt = 0;
+        let mut last_error = None;
+
+        while attempt < max_retries {
+            let mut install_child = Command::new(bun_path)
+                .arg("i")
+                .current_dir(dest_dir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+
+            // Stream logs for npm install
+            if let Ok(()) = stream_logs("bun install", &mut install_child).await {
+                let status = install_child.wait().await?;
+                if status.success() {
+                    return Ok(());
+                }
+            }
+
+            attempt += 1;
+            let delay = std::time::Duration::from_secs(2u64.pow(attempt)); // exponential backoff
+            error!(
+                "install attempt {} failed, retrying in {} seconds",
+                attempt,
+                delay.as_secs()
+            );
+            tokio::time::sleep(delay).await;
+            last_error = Some(anyhow::anyhow!(
+                "installation failed after {} attempts",
+                attempt
+            ));
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("installation failed")))
     }
 
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
@@ -364,16 +407,8 @@ mod pipes {
 
             let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
 
-            // Make bun install mandatory for all package.json pipes
-            let mut install_child = Command::new(&bun_path)
-                .arg("i")
-                .current_dir(&dest_dir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?;
-
-            // Stream logs for npm install
-            stream_logs("bun install", &mut install_child).await?;
+            // Make bun install mandatory for all package.json pipes with retries
+            retry_install(&bun_path, &dest_dir, 3).await?;
 
             if package_data["dependencies"].get("next").is_some() {
                 info!("Detected Next.js project, setting up for production");
@@ -647,7 +682,10 @@ mod pipes {
     }
 
     // Add this function to handle cron state persistence
-    pub async fn get_last_cron_execution(pipe_dir: &Path, path: &str) -> Result<Option<SystemTime>> {
+    pub async fn get_last_cron_execution(
+        pipe_dir: &Path,
+        path: &str,
+    ) -> Result<Option<SystemTime>> {
         let state_file = pipe_dir.join(".cron_state.json");
 
         if !state_file.exists() {

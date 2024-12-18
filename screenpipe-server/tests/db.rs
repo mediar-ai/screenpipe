@@ -72,6 +72,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -129,6 +131,8 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
+            None,
             None,
         )
         .await
@@ -214,6 +218,8 @@ mod tests {
             0,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
+            None,
             None,
         )
         .await
@@ -301,6 +307,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -334,6 +342,8 @@ mod tests {
                 1,
                 "",
                 &AudioDevice::new("test".to_string(), DeviceType::Output),
+                None,
+                None,
                 None,
             )
             .await;
@@ -480,6 +490,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -512,6 +524,8 @@ mod tests {
             1,
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
+            None,
             None,
         )
         .await
@@ -649,6 +663,8 @@ mod tests {
                     "",
                     &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();
@@ -711,6 +727,8 @@ mod tests {
                     "",
                     &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();
@@ -765,6 +783,8 @@ mod tests {
                     "",
                     &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
+                    None,
+                    None,
                 )
                 .await
                 .unwrap();
@@ -806,6 +826,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker.id),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -848,6 +870,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker.id),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -863,6 +887,8 @@ mod tests {
             "",
             &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker2.id),
+            None,
+            None,
         )
         .await
         .unwrap();

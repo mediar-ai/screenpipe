@@ -1,15 +1,19 @@
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState, useRef, useMemo } from "react";
+import { getMediaFile } from "@/lib/actions/video-actions";
 import { cn } from "@/lib/utils";
-import { getMediaFile } from '@/lib/actions/video-actions'
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
   customDescription,
   className,
+  startTime,
+  endTime,
 }: {
   filePath: string;
   customDescription?: string;
   className?: string;
+  startTime?: number;
+  endTime?: number;
 }) {
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,28 +32,10 @@ export const VideoComponent = memo(function VideoComponent({
 
   const renderFileLink = () => (
     // TODO button open link
-    <p className={"mt-2 text-center text-xs text-gray-500"}>
+    <div className="mt-2 text-center text-xs text-gray-500">
       {customDescription || filePath}
-    </p>
+    </div>
   );
-
-  const getMimeType = (path: string): string => {
-    const ext = path.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "mp4":
-        return "video/mp4";
-      case "webm":
-        return "video/webm";
-      case "ogg":
-        return "video/ogg";
-      case "mp3":
-        return "audio/mpeg";
-      case "wav":
-        return "audio/wav";
-      default:
-        return isAudio ? "audio/mpeg" : "video/mp4";
-    }
-  };
 
   useEffect(() => {
     async function loadMedia() {
@@ -57,10 +43,8 @@ export const VideoComponent = memo(function VideoComponent({
         console.log("Loading media:", filePath);
         const sanitizedPath = sanitizeFilePath(filePath);
         console.log("Sanitized path:", sanitizedPath);
-        if (!sanitizedPath) {
-          throw new Error("Invalid file path");
-        }
 
+        // Set isAudio based on path check
         setIsAudio(
           sanitizedPath.toLowerCase().includes("input") ||
             sanitizedPath.toLowerCase().includes("output")
@@ -115,12 +99,11 @@ export const VideoComponent = memo(function VideoComponent({
   return (
     <div className={cn("w-full max-w-2xl text-center", className)}>
       {isAudio ? (
-        <div className="bg-gray-100 p-4 rounded-md">
-          <audio controls className="w-full">
-            <source src={mediaSrc} type="audio/mpeg" />
-            Your browser does not support the audio element.
-          </audio>
-        </div>
+        <AudioPlayer
+          startTime={startTime}
+          endTime={endTime}
+          mediaSrc={mediaSrc}
+        />
       ) : (
         <video controls className="w-full rounded-md">
           <source src={mediaSrc} type="video/mp4" />
@@ -128,6 +111,168 @@ export const VideoComponent = memo(function VideoComponent({
         </video>
       )}
       {renderFileLink()}
+    </div>
+  );
+});
+
+const AudioPlayer = memo(function AudioPlayer({
+  startTime,
+  endTime,
+  mediaSrc,
+}: {
+  startTime?: number;
+  endTime?: number;
+  mediaSrc: string;
+}) {
+  const [duration, setDuration] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const audioElement = useMemo(
+    () => (
+      <audio
+        ref={audioRef}
+        className="w-full"
+        preload="auto"
+        onLoadedMetadata={(e) => {
+          const audio = e.target as HTMLAudioElement;
+          setDuration(audio.duration);
+          if (startTime !== undefined) {
+            audio.currentTime = startTime;
+          }
+        }}
+        onTimeUpdate={(e) => {
+          const audio = e.target as HTMLAudioElement;
+          if (Math.abs(audio.currentTime - currentTime) > 0.1) {
+            setCurrentTime(audio.currentTime);
+          }
+        }}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+      >
+        <source src={mediaSrc} type="audio/mpeg" />
+        Your browser does not support the audio element.
+      </audio>
+    ),
+    [mediaSrc, startTime, currentTime]
+  );
+
+  const togglePlay = async () => {
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        await audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    } catch (error) {
+      console.error("Playback failed:", error);
+      setIsPlaying(false);
+    }
+  };
+
+  const handleTimeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!audioRef.current) return;
+
+    const time = parseFloat(e.target.value);
+    const wasPlaying = isPlaying;
+
+    if (wasPlaying) {
+      audioRef.current.pause();
+    }
+
+    // Set the time directly on the audio element first
+    audioRef.current.currentTime = time;
+    // Then update the state
+    setCurrentTime(time);
+
+    if (wasPlaying) {
+      try {
+        await audioRef.current.play();
+      } catch (error) {
+        console.error("Playback failed:", error);
+        setIsPlaying(false);
+      }
+    }
+  };
+
+  return (
+    <div className="bg-gray-100 px-4 py-6 rounded-md">
+      <div className="relative">
+        {startTime !== null && (
+          <div
+            className="absolute top-[-8px] h-6 w-0.5 bg-black z-10"
+            style={{
+              left: `calc(88px + ${
+                (startTime || 0) / duration
+              } * calc(100% - 176px))`,
+            }}
+          >
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs">
+              Start
+            </div>
+          </div>
+        )}
+        {endTime !== null && (
+          <div
+            className="absolute top-[-8px] h-6 w-0.5 bg-black z-10"
+            style={{
+              left: `calc(88px + ${
+                (endTime || 0) / duration
+              } * calc(100% - 176px))`,
+            }}
+          >
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xs">
+              End
+            </div>
+          </div>
+        )}
+        <button
+          onClick={togglePlay}
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center bg-black hover:bg-gray-800 text-white rounded-full"
+        >
+          {isPlaying ? (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
+        </button>
+        <div className="mx-[88px] relative">
+          <div className="h-1 bg-gray-300 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-black"
+              style={{
+                width: `${(currentTime / duration) * 100}%`,
+              }}
+            />
+          </div>
+          <div
+            className="absolute top-1/2 -translate-x-1/3 -translate-y-1/2 w-2 h-2 bg-black rounded-full cursor-pointer hover:bg-gray-800 hover:h-4 hover:w-4"
+            style={{
+              left: `${(currentTime / duration) * 100}%`,
+            }}
+          />
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            value={currentTime}
+            onChange={handleTimeChange}
+            className="absolute inset-0 w-full opacity-0 cursor-pointer"
+            step="any"
+          />
+        </div>
+        {audioElement}
+      </div>
     </div>
   );
 });
