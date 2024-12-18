@@ -203,7 +203,7 @@ const AudioPlayer = memo(function AudioPlayer({
   return (
     <div className="bg-gray-100 px-4 py-6 rounded-md">
       <div className="relative">
-        {startTime !== undefined && startTime > 0 && (
+        {startTime !== null && (
           <div
             className="absolute top-[-8px] h-6 w-0.5 bg-black z-10"
             style={{
@@ -217,7 +217,7 @@ const AudioPlayer = memo(function AudioPlayer({
             </div>
           </div>
         )}
-        {endTime !== undefined && endTime < duration - 0.1 && (
+        {endTime !== null && (
           <div
             className="absolute top-[-8px] h-6 w-0.5 bg-black z-10"
             style={{
