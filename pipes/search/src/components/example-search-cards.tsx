@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Search, Mail, Clock, AlertCircle } from "lucide-react";
 import { Badge } from "./ui/badge";
@@ -24,33 +24,37 @@ interface ExampleSearchCardsProps {
   onSelect: (example: ExampleSearch) => void;
 }
 
-const exampleSearches: ExampleSearch[] = [
-  {
-    title: "summarize last hour meeting",
-    contentType: "audio",
-    limit: 120,
-    minLength: 10,
-    startDate: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-  },
-  {
-    title: "summarize my mails",
-    contentType: "ocr",
-    windowName: "gmail",
-    limit: 25,
-    minLength: 50,
-    startDate: new Date(new Date().setHours(0, 0, 0, 0)), // since midnight local time
-  },
-  {
-    title: "time spent last hour",
-    contentType: "ocr",
-    limit: 25,
-    minLength: 50,
-    startDate: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-  },
-];
-
 export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
+  const [exampleSearches, setExampleSearches] = useState<ExampleSearch[]>([]);
   const { health } = useHealthCheck();
+
+  useEffect(() => {
+    setExampleSearches([
+      {
+        title: "summarize last hour meeting",
+        contentType: "audio",
+        limit: 120,
+        minLength: 10,
+        startDate: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+      },
+      {
+        title: "summarize my mails",
+        contentType: "ocr",
+        windowName: "gmail",
+        limit: 25,
+        minLength: 50,
+        startDate: new Date(new Date().setHours(0, 0, 0, 0)), // since midnight local time
+      },
+      {
+        title: "time spent last hour",
+        contentType: "ocr",
+        limit: 25,
+        minLength: 50,
+        startDate: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
+      },
+    ]);
+  }, []);
+
   const getIcon = (title: string) => {
     switch (title) {
       case "summarize last hour meeting":

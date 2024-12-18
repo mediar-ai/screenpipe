@@ -169,11 +169,9 @@ pub fn stt_sync(
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
     languages: Vec<Language>,
-) -> Result<(String, String)> {
+) -> Result<String> {
     let mut whisper_model = whisper_model.clone();
-    let output_path = output_path.clone();
     let audio = audio.to_vec();
 
     let device = device.to_string();
@@ -187,8 +185,6 @@ pub fn stt_sync(
             &mut whisper_model,
             audio_transcription_engine,
             deepgram_api_key,
-            &output_path,
-            false,
             languages,
         ))
     });
@@ -301,22 +297,13 @@ fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut 
 }
 
 pub async fn prepare_segments(
-    audio_input: &AudioInput,
+    audio_data: &[f32],
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     segmentation_model_path: &PathBuf,
     embedding_manager: EmbeddingManager,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
+    device: &str,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    let audio_data = if audio_input.sample_rate != m::SAMPLE_RATE as u32 {
-        resample(
-            audio_input.data.as_ref(),
-            audio_input.sample_rate,
-            m::SAMPLE_RATE as u32,
-        )?
-    } else {
-        audio_input.data.as_ref().to_vec()
-    };
-
     let audio_data = normalize_v2(&audio_data);
 
     let frame_size = 1600;
@@ -352,7 +339,7 @@ pub async fn prepare_segments(
 
     info!(
         "device: {}, speech ratio: {}, min_speech_ratio: {}, audio_frames: {}, speech_frames: {}",
-        audio_input.device,
+        device,
         speech_ratio,
         min_speech_ratio,
         audio_frames.len(),
@@ -387,10 +374,8 @@ pub async fn stt(
     whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
-    skip_encoding: bool,
     languages: Vec<Language>,
-) -> Result<(String, String)> {
+) -> Result<String> {
     let model = &whisper_model.model;
 
     debug!("Loading mel filters");
@@ -426,25 +411,7 @@ pub async fn stt(
         process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
-    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let sanitized_device_name = device.replace(['/', '\\'], "_");
-    let file_path = PathBuf::from(output_path)
-        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
-        .to_str()
-        .expect("Failed to create valid path")
-        .to_string();
-    let file_path_clone = file_path.clone();
-    // Run FFmpeg in a separate task
-    if !skip_encoding {
-        encode_single_audio(
-            bytemuck::cast_slice(audio),
-            sample_rate,
-            1,
-            &file_path.into(),
-        )?;
-    }
-
-    Ok((transcription?, file_path_clone))
+    Ok(transcription?)
 }
 
 pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
@@ -488,6 +455,8 @@ pub struct TranscriptionResult {
     pub transcription: Option<String>,
     pub timestamp: u64,
     pub error: Option<String>,
+    pub start_time: f64,
+    pub end_time: f64,
 }
 
 impl TranscriptionResult {
@@ -572,14 +541,33 @@ pub async fn create_whisper_channel(
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
-                        Ok(audio) => {
+                        Ok(mut audio) => {
                             debug!("Received input from input_receiver");
                             let timestamp = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
                                 .expect("Time went backwards")
                                 .as_secs();
 
-                            let mut segments = match prepare_segments(&audio, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone()).await {
+                            let audio_data = if audio.sample_rate != m::SAMPLE_RATE as u32 {
+                                match resample(
+                                    audio.data.as_ref(),
+                                    audio.sample_rate,
+                                    m::SAMPLE_RATE as u32,
+                                ) {
+                                    Ok(data) => data,
+                                    Err(e) => {
+                                        error!("Error resampling audio: {:?}", e);
+                                        continue;
+                                    }
+                                }
+                            } else {
+                                audio.data.as_ref().to_vec()
+                            };
+
+                            audio.data = Arc::new(audio_data.clone());
+                            audio.sample_rate = m::SAMPLE_RATE as u32;
+
+                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
                                 Ok(segments) => segments,
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
@@ -587,14 +575,30 @@ pub async fn create_whisper_channel(
                                 }
                             };
 
+
+                            let path = match write_audio_to_file(
+                                &audio.data.to_vec(),
+                                audio.sample_rate,
+                                &output_path,
+                                &audio.device.to_string(),
+                                false,
+                            ) {
+                                Ok(file_path) => file_path,
+                                Err(e) => {
+                                    error!("Error writing audio to file: {:?}", e);
+                                    "".to_string()
+                                }
+                            };
+
                             while let Some(segment) = segments.recv().await {
+                                let path = path.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
                                     let timestamp = timestamp + segment.start.round() as u64;
                                     #[cfg(target_os = "macos")]
                                     {
                                         autoreleasepool(|| {
-                                            match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                                Ok((transcription, path)) => TranscriptionResult {
+                                            match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                                Ok(transcription) => TranscriptionResult {
                                                     input: AudioInput {
                                                         data: Arc::new(segment.samples),
                                                         sample_rate: segment.sample_rate,
@@ -606,6 +610,8 @@ pub async fn create_whisper_channel(
                                                     timestamp,
                                                     error: None,
                                                     speaker_embedding: segment.embedding.clone(),
+                                                    start_time: segment.start,
+                                                    end_time: segment.end,
                                                 },
                                                 Err(e) => {
                                                     error!("STT error for input {}: {:?}", audio.device, e);
@@ -617,10 +623,12 @@ pub async fn create_whisper_channel(
                                                             device: audio.device.clone(),
                                                         },
                                                         transcription: None,
-                                                        path: "".to_string(),
+                                                        path,
                                                         timestamp,
                                                         error: Some(e.to_string()),
                                                         speaker_embedding: Vec::new(),
+                                                        start_time: segment.start,
+                                                        end_time: segment.end,
                                                     }
                                                 },
                                             }
@@ -631,8 +639,8 @@ pub async fn create_whisper_channel(
                                         unreachable!("This code should not be reached on non-macOS platforms")
                                     }
                                 } else {
-                                    match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), &output_path, languages.clone()) {
-                                        Ok((transcription, path)) => TranscriptionResult {
+                                    match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
+                                        Ok(transcription) => TranscriptionResult {
                                             input: AudioInput {
                                                 data: Arc::new(segment.samples),
                                                 sample_rate: segment.sample_rate,
@@ -644,6 +652,8 @@ pub async fn create_whisper_channel(
                                             timestamp,
                                             error: None,
                                             speaker_embedding: segment.embedding.clone(),
+                                            start_time: segment.start,
+                                            end_time: segment.end,
                                         },
                                         Err(e) => {
                                             error!("STT error for input {}: {:?}", audio.device, e);
@@ -655,10 +665,12 @@ pub async fn create_whisper_channel(
                                                     device: audio.device.clone(),
                                                 },
                                                 transcription: None,
-                                                path: "".to_string(),
+                                                path,
                                                 timestamp,
                                                 error: Some(e.to_string()),
                                                 speaker_embedding: Vec::new(),
+                                                start_time: segment.start,
+                                                end_time: segment.end,
                                             }
                                         },
                                     }
@@ -722,4 +734,31 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
         (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
         _ => None,
     }
+}
+
+pub fn write_audio_to_file(
+    audio: &[f32],
+    sample_rate: u32,
+    output_path: &PathBuf,
+    device: &str,
+    skip_encoding: bool,
+) -> Result<String> {
+    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let sanitized_device_name = device.replace(['/', '\\'], "_");
+    let file_path = PathBuf::from(output_path)
+        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string();
+    let file_path_clone = file_path.clone();
+    // Run FFmpeg in a separate task
+    if !skip_encoding {
+        encode_single_audio(
+            bytemuck::cast_slice(audio),
+            sample_rate,
+            1,
+            &file_path.into(),
+        )?;
+    }
+    Ok(file_path_clone)
 }

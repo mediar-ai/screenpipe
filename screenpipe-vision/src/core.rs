@@ -296,3 +296,4 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
 
     Ok(())
 }
+ 

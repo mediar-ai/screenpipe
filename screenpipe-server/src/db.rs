@@ -21,7 +21,7 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioChunk, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
+    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
     OCRResultRaw, Speaker, TagContentType,
 };
 use crate::db_types::{ContentType, UiContent};
@@ -111,6 +111,22 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    async fn get_audio_chunk_id(&self, file_path: &str) -> Result<i64, sqlx::Error> {
+        let id = sqlx::query_scalar::<_, i64>("SELECT id FROM audio_chunks WHERE file_path = ?1")
+            .bind(file_path)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(id.unwrap_or(0))
+    }
+
+    pub async fn get_or_insert_audio_chunk(&self, file_path: &str) -> Result<i64, sqlx::Error> {
+        let mut id = self.get_audio_chunk_id(file_path).await?;
+        if id == 0 {
+            id = self.insert_audio_chunk(file_path).await?;
+        }
+        Ok(id)
+    }
+
     pub async fn insert_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -119,12 +135,14 @@ impl DatabaseManager {
         transcription_engine: &str,
         device: &AudioDevice,
         speaker_id: Option<i64>,
+        start_time: Option<f64>,
+        end_time: Option<f64>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -134,6 +152,8 @@ impl DatabaseManager {
         .bind(&device.name)
         .bind(device.device_type == DeviceType::Input)
         .bind(speaker_id)
+        .bind(start_time)
+        .bind(end_time)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -814,7 +834,9 @@ impl DatabaseManager {
                 GROUP_CONCAT(tags.name, ',') as tags,
                 audio_transcriptions.device as device_name,
                 audio_transcriptions.is_input_device,
-                audio_transcriptions.speaker_id
+                audio_transcriptions.speaker_id,
+                audio_transcriptions.start_time,
+                audio_transcriptions.end_time
             FROM {}
             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
             LEFT JOIN speakers on audio_transcriptions.speaker_id = speakers.id
@@ -873,6 +895,8 @@ impl DatabaseManager {
                     DeviceType::Output
                 },
                 speaker,
+                start_time: raw.start_time,
+                end_time: raw.end_time,
             })
         });
 
@@ -944,7 +968,7 @@ impl DatabaseManager {
             ContentType::Audio => {
                 format!(
                     r#"
-                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id)
+                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
                     FROM audio_transcriptions_fts 
                     JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
                     WHERE {}
@@ -1527,13 +1551,23 @@ impl DatabaseManager {
     pub async fn get_audio_chunks_for_speaker(
         &self,
         speaker_id: i64,
-    ) -> Result<Vec<AudioChunk>, sqlx::Error> {
-        sqlx::query_as::<_, AudioChunk>(
-            "SELECT * FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+    ) -> Result<Vec<AudioChunksResponse>, sqlx::Error> {
+        sqlx::query_as::<_, AudioChunksResponse>(
+            r#"
+            SELECT 
+                ac.*,
+                at.start_time,
+                at.end_time,
+                ac.file_path
+            FROM audio_chunks ac
+            JOIN audio_transcriptions at ON ac.id = at.audio_chunk_id
+            WHERE at.speaker_id = ?
+            ORDER BY at.start_time
+            "#,
         )
-            .bind(speaker_id)
-            .fetch_all(&self.pool)
-            .await
+        .bind(speaker_id)
+        .fetch_all(&self.pool)
+        .await
     }
 
     // get unnamed speakers
@@ -1548,7 +1582,9 @@ impl DatabaseManager {
                 SELECT DISTINCT
                     s.id as speaker_id,
                     ac.file_path,
-                    at.transcription
+                    at.transcription,
+                    at.start_time,
+                    at.end_time
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
@@ -1583,7 +1619,9 @@ impl DatabaseManager {
                     THEN json_object('audio_samples', json_group_array(
                         DISTINCT json_object(
                             'path', rap.file_path,
-                            'transcript', rap.transcription
+                            'transcript', rap.transcription,
+                            'start_time', rap.start_time,
+                            'end_time', rap.end_time
                         )
                     ))
                     ELSE json_patch(
@@ -1591,7 +1629,9 @@ impl DatabaseManager {
                         json_object('audio_samples', json_group_array(
                             DISTINCT json_object(
                                 'path', rap.file_path,
-                                'transcript', rap.transcription
+                                'transcript', rap.transcription,
+                                'start_time', rap.start_time,
+                                'end_time', rap.end_time
                             )
                         ))
                     )
@@ -1674,7 +1714,7 @@ impl DatabaseManager {
                 "audio transcriptions",
             ),
             (
-                "DELETE FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ?)",
+                "DELETE FROM audio_chunks WHERE id IN (SELECT audio_chunk_id FROM audio_transcriptions WHERE speaker_id = ? AND start_time IS NULL)",
                 "audio chunks",
             ),
             (
@@ -1719,7 +1759,9 @@ impl DatabaseManager {
                 SELECT DISTINCT
                     s.id as speaker_id,
                     ac.file_path,
-                    at.transcription
+                    at.transcription,
+                    at.start_time,
+                    at.end_time
                 FROM speakers s
                 JOIN audio_transcriptions at ON s.id = at.speaker_id
                 JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
@@ -1742,13 +1784,17 @@ impl DatabaseManager {
                     WHEN s.metadata = '' OR s.metadata IS NULL OR json_valid(s.metadata) = 0
                     THEN json_object('audio_samples', json_group_array(DISTINCT json_object(
                         'path', rap.file_path,
-                        'transcript', rap.transcription
+                        'transcript', rap.transcription,
+                        'start_time', rap.start_time,
+                        'end_time', rap.end_time
                     )))
                     ELSE json_patch(
                         json(s.metadata), 
                         json_object('audio_samples', json_group_array(DISTINCT json_object(
                             'path', rap.file_path,
-                            'transcript', rap.transcription
+                            'transcript', rap.transcription,
+                            'start_time', rap.start_time,
+                            'end_time', rap.end_time
                         )))
                     )
                 END as metadata

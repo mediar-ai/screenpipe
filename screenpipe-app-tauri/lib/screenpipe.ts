@@ -25,6 +25,8 @@ export type AudioContent = {
   device_name: string;
   device_type: string;
   speaker: Speaker;
+  start_time?: number;
+  end_time?: number;
 };
 
 export type FTSContent = {
