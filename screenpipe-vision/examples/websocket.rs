@@ -4,7 +4,7 @@ use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
 use image::ImageEncoder;
 use screenpipe_vision::{
-    continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
+    continuous_capture, capture_screenshot_by_window::WindowFilters, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -83,10 +83,16 @@ async fn main() -> Result<()> {
     let id = monitor.id();
 
     tokio::spawn(async move {
+
+        let windows_filter = Arc::new(WindowFilters::new(
+            &cli.ignored_windows,
+            &cli.included_windows,
+        ));
+    
+
         continuous_capture(
             result_tx,
             Duration::from_secs_f64(1.0 / cli.fps),
-            save_text_files,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
                 OcrEngine::AppleNative
@@ -96,9 +102,9 @@ async fn main() -> Result<()> {
                 OcrEngine::Tesseract
             },
             id,
-            &cli.ignored_windows,
-            &cli.included_windows,
+            windows_filter,
             vec![],
+            save_text_files, 
         )
         .await
     });

@@ -13,6 +13,9 @@ use xcap_macos::{Monitor, Window, XCapError};
 #[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window, XCapError};
 
+#[cfg(target_os = "windows")]
+use xcap_win::{Monitor, Window, XCapError};
+
 #[derive(Debug)]
 enum CaptureError {
     NoWindows,
