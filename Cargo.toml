@@ -7,7 +7,9 @@ members = [
     "screenpipe-integrations",
     "screenpipe-actions",
 ]
-exclude = ["screenpipe-app-tauri/src-tauri"]
+exclude = [
+    "screenpipe-app-tauri/src-tauri"
+]
 resolver = "2"
 
 

@@ -36,12 +36,14 @@ mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
+use tauri::Emitter;
 
 mod commands;
 mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod tray;
 mod updates;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
@@ -55,6 +57,23 @@ pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
+
+async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
+    // Fetch pipe config from API
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://localhost:3030/pipes/info/{}", pipe_id))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+
+    // Extract port from response
+    response["data"]["config"]["port"]
+        .as_u64()
+        .map(|p| p as u16)
+        .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
+}
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -255,6 +274,9 @@ async fn main() {
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
 
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(app_handle, false);
@@ -275,8 +297,6 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                                // bad UX: i use CLI and it kills my CLI because i updated app
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),
@@ -288,6 +308,22 @@ async fn main() {
                             });
                         });
                         update_manager.update_screenpipe();
+                    }
+                    id if id.starts_with("pipe_") => {
+                        let pipe_id = id.replace("pipe_", "");
+                        let app_handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            match get_pipe_port(&pipe_id).await {
+                                Ok(port) => {
+                                    if let Err(e) =
+                                        commands::open_pipe_window(app_handle, port, pipe_id).await
+                                    {
+                                        error!("Failed to open pipe window: {}", e);
+                                    }
+                                }
+                                Err(e) => error!("Failed to get pipe port: {}", e),
+                            }
+                        });
                     }
                     _ => (),
                 });
