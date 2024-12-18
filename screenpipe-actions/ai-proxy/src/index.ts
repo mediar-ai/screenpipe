@@ -1,6 +1,19 @@
 import { DurableObject } from 'cloudflare:workers';
-import { Env } from './types';
 import { Langfuse } from 'langfuse-node';
+import { verifyToken } from '@clerk/backend';
+import { Anthropic } from '@anthropic-ai/sdk';
+
+async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
+	try {
+		const payload = await verifyToken(token, {
+				secretKey: env.CLERK_SECRET_KEY,
+		});
+		return !!payload.sub;
+	} catch (error) {
+		console.error('clerk verification failed:', error);
+		return false;
+	}
+}
 
 export class RateLimiter {
 	private state: DurableObjectState;
@@ -115,6 +128,27 @@ export default {
 			const url = new URL(request.url);
 			const path = url.pathname;
 
+			// Add auth check for protected routes
+			if (path !== '/test') {
+				const authHeader = request.headers.get('Authorization');
+				if (!authHeader?.startsWith('Bearer ')) {
+					return new Response(JSON.stringify({ error: 'unauthorized' }), {
+						status: 401,
+						headers: corsHeaders,
+					});
+				}
+
+				const token = authHeader.split(' ')[1];
+				const isValid = await verifyClerkToken(env, token);
+
+				if (!isValid) {
+					return new Response(JSON.stringify({ error: 'invalid token' }), {
+						status: 401,
+						headers: corsHeaders,
+					});
+				}
+			}
+
 			if (path === '/test') {
 				return new Response('ai proxy is working!', {
 					status: 200,
@@ -131,25 +165,41 @@ export default {
 					temperature?: number;
 				};
 				const isStreaming = body.stream === true;
+				const isAnthropicModel = body.model.toLowerCase().includes('claude');
 
 				const trace = langfuse.trace({
 					id: 'ai_call_' + Date.now(),
 					name: 'ai_call',
-					metadata: { expectJson: body.response_format?.type === 'json_object', streaming: isStreaming },
+					metadata: {
+						expectJson: body.response_format?.type === 'json_object',
+						streaming: isStreaming,
+						provider: isAnthropicModel ? 'anthropic' : 'openai',
+					},
 				});
 
 				const generation = trace.generation({
-					name: 'openai_completion',
-					startTime: new Date(),
+					name: 'completion',
 					model: body.model,
 					modelParameters: {
 						temperature: body.temperature,
-						expectJson: body.response_format?.type === 'json_object',
 						streaming: isStreaming,
 					},
-					input: body.messages,
-					output: null,
+					input: JSON.stringify(body.messages),
 				});
+
+				// Convert messages to Anthropic format if needed
+				const anthropicMessages = isAnthropicModel
+					? {
+							messages: body.messages.map((msg) => ({
+								role: msg.role === 'user' ? 'user' : 'assistant',
+								content: msg.content,
+							})),
+							model: body.model,
+							stream: isStreaming,
+							temperature: body.temperature,
+							max_tokens: 8192,
+					  }
+					: null;
 
 				if (isStreaming) {
 					const { readable, writable } = new TransformStream();
@@ -158,29 +208,66 @@ export default {
 					ctx.waitUntil(
 						(async () => {
 							try {
-								const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-									method: 'POST',
-									headers: {
-										Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-										'Content-Type': 'application/json',
-									},
-									body: JSON.stringify(body),
-								});
+								if (isAnthropicModel) {
+									const anthropic = new Anthropic({
+										apiKey: env.ANTHROPIC_API_KEY,
+									});
 
-								if (!openaiResponse.ok) {
-									const errorData = await openaiResponse.json();
-									throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
-								}
+									try {
+										const stream = await anthropic.messages.create({
+											messages: body.messages.map(msg => ({
+													role: msg.role === 'user' ? 'user' : 'assistant',
+													content: msg.content,
+												})),
+												model: body.model,
+												stream: true,
+												max_tokens: 4096,
+											})
 
-								const reader = openaiResponse.body?.getReader();
-								if (!reader) {
-									throw new Error('Failed to get reader from OpenAI response');
-								}
+										for await (const chunk of stream) {
+											if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+												const openaiChunk = {
+													choices: [{
+														delta: {
+															content: chunk.delta.text
+														}
+													}]
+												};
+												await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
+											}
+										}
+										
+										await writer.write(new TextEncoder().encode('data: [DONE]\n\n'));
+									} catch (error) {
+										console.error('Error in Anthropic stream:', error);
+										throw error;
+									}
+								} else {
+									// Original OpenAI format - keep the fetch call only for OpenAI
+									const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+										method: 'POST',
+										headers: {
+											Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+											'Content-Type': 'application/json',
+										},
+										body: JSON.stringify(body),
+									});
 
-								while (true) {
-									const { done, value } = await reader.read();
-									if (done) break;
-									await writer.write(value);
+									if (!apiResponse.ok) {
+										const errorData = await apiResponse.json();
+										throw new Error(`API error: ${JSON.stringify(errorData)}`);
+									}
+
+									const reader = apiResponse.body?.getReader();
+									if (!reader) {
+										throw new Error('Failed to get reader from API response');
+									}
+
+									while (true) {
+										const { done, value } = await reader.read();
+										if (done) break;
+										await writer.write(value);
+									}
 								}
 
 								generation.end({
@@ -188,7 +275,7 @@ export default {
 									output: 'Streaming response completed',
 								});
 							} catch (error: any) {
-								console.error('Error in OpenAI stream:', error);
+								console.error('Error in API stream:', error);
 								generation.end({
 									completionStartTime: new Date(),
 									output: error.message,
@@ -211,35 +298,58 @@ export default {
 				} else {
 					// Non-streaming response
 					try {
-						const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-							method: 'POST',
-							headers: {
-								Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(body),
-						});
+						const apiResponse = await fetch(
+							isAnthropicModel ? 'https://api.anthropic.com/v1/messages' : 'https://api.openai.com/v1/chat/completions',
+							{
+								method: 'POST',
+								headers: {
+									...(isAnthropicModel
+										? {
+												'x-api-key': env.ANTHROPIC_API_KEY,
+												'anthropic-version': '2023-06-01',
+										  }
+										: {
+												Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+										  }),
+									'Content-Type': 'application/json',
+								},
+								body: JSON.stringify(isAnthropicModel ? anthropicMessages : body),
+							}
+						);
 
-						if (!openaiResponse.ok) {
-							const errorData = await openaiResponse.json();
-							throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+						if (!apiResponse.ok) {
+							const errorData = await apiResponse.json();
+							throw new Error(`API error: ${JSON.stringify(errorData)}`);
 						}
 
-						const data = (await openaiResponse.json()) as { choices: { message: { content: string } }[] };
+						const data = (await apiResponse.json()) as { choices: { message: { content: string } }[] };
+
+						// Normalize Anthropic response to match OpenAI format
+						const normalizedResponse = isAnthropicModel
+							? {
+									choices: [
+										{
+											message: {
+												content: data.choices[0].message.content,
+											},
+										},
+									],
+							  }
+							: data;
 
 						generation.end({
 							completionStartTime: new Date(),
-							output: data.choices[0]?.message?.content,
+							output: normalizedResponse.choices[0]?.message?.content,
 						});
 
-						return new Response(JSON.stringify(data), {
+						return new Response(JSON.stringify(normalizedResponse), {
 							headers: {
 								...corsHeaders,
 								'Content-Type': 'application/json',
 							},
 						});
 					} catch (error: any) {
-						console.error('Error in OpenAI request:', error);
+						console.error('Error in API request:', error);
 						generation.end({
 							completionStartTime: new Date(),
 							output: error.message,
@@ -328,6 +438,7 @@ interface Env {
 	ANTHROPIC_API_KEY: string;
 	DEEPGRAM_API_KEY: string;
 	RATE_LIMITER: DurableObjectNamespace;
+	CLERK_SECRET_KEY: string;
 }
 
 /*
@@ -340,6 +451,7 @@ wrangler dev
 terminal 2
 HOST=https://ai-proxy.i-f9f.workers.dev
 HOST=http://localhost:8787
+TOKEN=foobar (check app settings)
 
 curl $host/test
 
@@ -347,13 +459,36 @@ curl $host/test
 curl -X POST $HOST/v1/listen \
   -H "Content-Type: audio/wav" \
   -H "detect_language: en" \
+  -H "Authorization: Bearer $TOKEN" \
   --data-binary "@./screenpipe-audio/test_data/poetic_kapil_gupta.wav"
 
 curl -X POST $HOST/v1/chat/completions \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_API_KEY" \
+-H "Authorization: Bearer $TOKEN" \
 -d '{
 "model": "gpt-4o",
+"messages": [
+	{
+	"role": "system",
+	"content": "You are a helpful assistant."
+	},
+	{
+	"role": "user",
+	"content": "Tell me a short joke."
+	}
+],
+"stream": true
+}' | while read -r line; do
+echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
+done | tr -d '\n'
+
+using anthropic
+
+curl -X POST $HOST/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $TOKEN" \
+-d '{
+"model": "claude-3-5-sonnet-20240620",
 "messages": [
 	{
 	"role": "system",

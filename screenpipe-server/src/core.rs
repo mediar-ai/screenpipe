@@ -448,7 +448,7 @@ async fn process_audio_result(
             }
         }
     }
-    match db.insert_audio_chunk(&result.path).await {
+    match db.get_or_insert_audio_chunk(&result.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {
                 return Ok(Some(audio_chunk_id));
@@ -462,6 +462,8 @@ async fn process_audio_result(
                     &transcription_engine,
                     &result.input.device,
                     Some(speaker.id),
+                    Some(result.start_time),
+                    Some(result.end_time),
                 )
                 .await
             {

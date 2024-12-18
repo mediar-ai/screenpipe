@@ -123,13 +123,6 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
-  const handleShowMeetingHistory = async () => {
-    await invoke("show_meetings");
-  };
-
-  const handleShowIdentifySpeakers = async () => {
-    await invoke("show_identify_speakers");
-  };
 
   return (
     <div>
@@ -178,24 +171,6 @@ export default function Header() {
                     }}
                   >
                     <Settings />
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowMeetingHistory}
-                    disabled={!health || health.status === "error"}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    <span>meetings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={handleShowIdentifySpeakers}
-                  >
-                    <Fingerprint className="mr-2 h-4 w-4" />
-                    <span>identify speakers</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

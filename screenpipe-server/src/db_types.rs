@@ -82,6 +82,8 @@ pub struct AudioResultRaw {
     pub device_name: String,
     pub is_input_device: bool,
     pub speaker_id: Option<i64>,
+    pub start_time: Option<f64>,
+    pub end_time: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
@@ -103,6 +105,8 @@ pub struct AudioResult {
     pub device_name: String,
     pub device_type: DeviceType,
     pub speaker: Option<Speaker>,
+    pub start_time: Option<f64>,
+    pub end_time: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -178,6 +182,15 @@ impl ToString for ContentSource {
 #[derive(Debug, FromRow)]
 pub struct AudioChunk {
     pub id: i64,
+    pub file_path: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct AudioChunksResponse {
+    pub audio_chunk_id: i64,
+    pub start_time: Option<f64>,
+    pub end_time: Option<f64>,
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
 }
