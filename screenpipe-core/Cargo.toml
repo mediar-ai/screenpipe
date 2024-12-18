@@ -57,3 +57,6 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 beta = ["dep:screenpipe-actions"]
+
+[target.'cfg(windows)'.dependencies]
+powershell_script = "1.1.0"

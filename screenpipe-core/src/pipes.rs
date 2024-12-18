@@ -32,6 +32,9 @@ mod pipes {
     use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use std::str::FromStr;
 
+    #[cfg(target_os = "windows")]
+    use powershell_script::PsScriptBuilder;
+
     // Add this function to generate a secure cron secret
     fn generate_cron_secret() -> String {
         thread_rng()
@@ -251,7 +254,150 @@ mod pipes {
         Ok(())
     }
 
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    enum PackageManager {
+        Apt,    // Debian, Ubuntu
+        Dnf,    // Fedora, RHEL
+        Pacman, // Arch
+        Zypper, // openSUSE
+        Unknown,
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn detect_package_manager() -> Result<PackageManager> {
+        // Check for common package managers
+        if Command::new("apt-get")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Apt);
+        }
+        if Command::new("dnf").arg("--version").status().await.is_ok() {
+            return Ok(PackageManager::Dnf);
+        }
+        if Command::new("pacman")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Pacman);
+        }
+        if Command::new("zypper")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Zypper);
+        }
+
+        // If no known package manager is found
+        Ok(PackageManager::Unknown)
+    }
+
+    async fn ensure_git_installed() -> Result<()> {
+        // Check if git is already installed
+        if Command::new("git").arg("--version").status().await.is_ok() {
+            return Ok(());
+        }
+
+        info!("git not found, installing...");
+
+        #[cfg(target_os = "windows")]
+        {
+            // Windows installation logic (existing code)
+            let exe_dir = std::env::current_exe()?
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("failed to get executable directory"))?
+                .to_path_buf();
+            let script_path = exe_dir
+                .join("../scripts/install-git-cli-windows.ps1")
+                .canonicalize()?;
+
+            if !script_path.exists() {
+                anyhow::bail!("git installation script not found at {:?}", script_path);
+            }
+
+            let script_content = std::fs::read_to_string(&script_path)?;
+
+            let output = PsScriptBuilder::new()
+                .no_profile(true)
+                .non_interactive(true)
+                .hidden(true)
+                .print_commands(false)
+                .build()
+                .run(&script_content)
+                .unwrap();
+
+            if !output.success() {
+                error!("powershell output: {}", output.stdout().unwrap());
+                error!("powershell error: {}", output.stderr().unwrap());
+                anyhow::bail!("Failed to install Git. Please install Git manually from https://git-scm.com/download/win");
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Detect package manager and install git
+            let package_manager = detect_package_manager().await?;
+
+            let status = match package_manager {
+                PackageManager::Apt => {
+                    Command::new("sudo")
+                        .args(["apt-get", "update", "-y"])
+                        .status()
+                        .await?;
+                    Command::new("sudo")
+                        .args(["apt-get", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Dnf => {
+                    Command::new("sudo")
+                        .args(["dnf", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Pacman => {
+                    Command::new("sudo")
+                        .args(["pacman", "-Sy", "--noconfirm", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Zypper => {
+                    Command::new("sudo")
+                        .args(["zypper", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Unknown => {
+                    anyhow::bail!("unsupported linux distribution. please install git manually");
+                }
+            };
+
+            if !status.success() {
+                anyhow::bail!("failed to install git using package manager");
+            }
+        }
+
+        // Verify installation
+        let status = Command::new("git").arg("--version").status().await?;
+
+        if !status.success() {
+            anyhow::bail!("git installation verification failed");
+        }
+
+        info!("git installed successfully");
+        Ok(())
+    }
+
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
+        ensure_git_installed().await?;
+
         let source = source.trim();
 
         // Handle local path
