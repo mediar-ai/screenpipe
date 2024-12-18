@@ -52,6 +52,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableFrameCache: true,
   enableUiMonitoring: false,
   aiMaxContextChars: 128000,
+  user: {},
 };
 
 class SettingsManager {

@@ -299,6 +299,7 @@ export function SearchChat() {
 
   const [speakerSearchQuery, setSpeakerSearchQuery] = useState("");
 
+
   useEffect(() => {
     if (Object.keys(selectedSpeakers).length > 0) {
       setSelectedTypes({
@@ -672,6 +673,9 @@ export function SearchChat() {
         },
         {
           signal: abortControllerRef.current.signal,
+          headers: {
+            Authorization: `Bearer ${settings.user?.token}`,
+          },
         }
       );
 
@@ -687,6 +691,7 @@ export function SearchChat() {
       scrollToBottom();
 
       for await (const chunk of stream) {
+        console.log("chunk", chunk);
         const content = chunk.choices[0]?.delta?.content || "";
         fullResponse += content;
         // @ts-ignore
@@ -697,7 +702,13 @@ export function SearchChat() {
         scrollToBottom();
       }
     } catch (error: any) {
-      if (error.toString().includes("aborted")) {
+      if (error.toString().includes("unauthorized")) {
+        toast({
+          title: "Error",
+          description: "Please sign in to use AI features",
+          variant: "destructive",
+        });
+      } else if (error.toString().includes("aborted")) {
         console.log("Streaming was aborted");
       } else {
         console.error("Error generating AI response:", error);
@@ -1088,6 +1099,10 @@ export function SearchChat() {
     location.reload();
     // Add any other reset logic you need
   };
+
+  const isAiDisabled =
+    !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
@@ -1772,7 +1787,13 @@ export function SearchChat() {
                   type="submit"
                   className="w-12"
                   disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH ||
+                    isAiDisabled
+                  }
+                  title={
+                    isAiDisabled
+                      ? "Please sign in to use AI features"
+                      : undefined
                   }
                 >
                   {isStreaming ? (

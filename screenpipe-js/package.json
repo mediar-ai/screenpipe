@@ -1,6 +1,6 @@
 {
     "name": "@screenpipe/js",
-    "version": "0.1.10-beta.19",
+    "version": "0.1.10-beta.20",
     "type": "module",
     "main": "./dist/main.cjs",
     "module": "./dist/main.js",

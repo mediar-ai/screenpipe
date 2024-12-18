@@ -178,6 +178,18 @@ export interface EmbeddedLLMConfig {
   port: number;
 }
 
+export interface User {
+  id?: string;
+  email?: string;
+  name?: string;
+  image?: string;
+  token?: string;
+  clerk_id?: string;
+  credits?: {
+    amount: number;
+  };
+}
+
 export interface Settings {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -194,6 +206,7 @@ export interface Settings {
   enableFrameCache: boolean;
   enableUiMonitoring: boolean;
   aiMaxContextChars: number;
+  user: User;
 }
 
 /**

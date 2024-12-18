@@ -24,6 +24,9 @@ export function useSettings() {
     enableFrameCache: true,
     enableUiMonitoring: false,
     aiMaxContextChars: 128000,
+    user: {
+      token: "",
+    },
   };
 
   const [settings, setSettings] = useState<Settings>(defaultSettings);
