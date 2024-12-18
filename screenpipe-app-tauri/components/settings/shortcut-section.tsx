@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 
 const ShortcutSection = () => {
-  const { settings, updateSettings, localSettings, setLocalSettings } =
-    useSettings();
+  const { settings, updateSettings } = useSettings();
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [nonModifierKey, setNonModifierKey] = useState<string>("");
   const [currentShortcut, setCurrentShortcut] = useState<string>(
@@ -68,8 +67,7 @@ const ShortcutSection = () => {
 
         // Auto save after successful recording
         const newShortcut = [...modifiers, key].join("+");
-        setLocalSettings({
-          ...localSettings,
+        updateSettings({
           showScreenpipeShortcut: newShortcut,
         });
         updateSettings({ showScreenpipeShortcut: newShortcut });
@@ -105,15 +103,14 @@ const ShortcutSection = () => {
     };
   }, [
     isRecording,
-    localSettings,
+    settings,
     updateSettings,
     disabledShortcuts,
-    setLocalSettings,
   ]);
 
   const handleShortcutToggle = (checked: boolean) => {
     console.log("handleShortcutToggle", checked);
-    let newDisabledShortcuts = [...localSettings.disabledShortcuts];
+    let newDisabledShortcuts = [...settings.disabledShortcuts];
     if (!checked) {
       newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
     } else {
@@ -122,10 +119,6 @@ const ShortcutSection = () => {
       );
     }
 
-    setLocalSettings({
-      ...localSettings,
-      disabledShortcuts: newDisabledShortcuts,
-    });
     updateSettings({
       disabledShortcuts: newDisabledShortcuts,
     });

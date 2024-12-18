@@ -97,13 +97,7 @@ const AIProviderCard = ({
 };
 
 const AISection = () => {
-  const {
-    settings,
-    updateSettings,
-    localSettings,
-    setLocalSettings,
-    resetSetting,
-  } = useSettings();
+  const { settings, updateSettings, resetSetting } = useSettings();
 
   const [ollamaStatus, setOllamaStatus] = useState<
     "idle" | "running" | "error"
@@ -117,23 +111,21 @@ const AISection = () => {
   const { user } = useUser();
 
   const { credits } = user || {};
-
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, openaiApiKey: newValue });
-    updateSettings({ openaiApiKey: newValue });
+    updateSettings({ openaiApiKey: e.target.value });
   };
 
   const handleMaxContextCharsChange = (value: number[]) => {
-    const newValue = value[0];
-    setLocalSettings({ ...localSettings, aiMaxContextChars: newValue });
-    updateSettings({ aiMaxContextChars: newValue });
+    updateSettings({ aiMaxContextChars: value[0] });
   };
 
   const handleEmbeddedLLMChange = (checked: boolean) => {
-    const newValue = { ...localSettings.embeddedLLM, enabled: checked };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
-    updateSettings({ embeddedLLM: newValue });
+    updateSettings({
+      embeddedLLM: {
+        ...settings.embeddedLLM,
+        enabled: checked,
+      },
+    });
     if (!checked) {
       setOllamaStatus("idle");
     }
@@ -143,27 +135,24 @@ const AISection = () => {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newModel = e.target.value;
-    const newEmbeddedLLM = { ...localSettings.embeddedLLM, model: newModel };
-    setLocalSettings({
-      ...localSettings,
-      embeddedLLM: newEmbeddedLLM,
-      aiModel: newModel, // Update the general AI model as well
-    });
     updateSettings({
-      embeddedLLM: newEmbeddedLLM,
-      aiModel: newModel, // Update the general AI model in the global settings
+      embeddedLLM: {
+        ...settings.embeddedLLM,
+        model: newModel,
+      },
+      aiModel: newModel,
     });
   };
 
   const handleEmbeddedLLMPortChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const newValue = {
-      ...localSettings.embeddedLLM,
-      port: parseInt(e.target.value, 10),
-    };
-    setLocalSettings({ ...localSettings, embeddedLLM: newValue });
-    updateSettings({ embeddedLLM: newValue });
+    updateSettings({
+      embeddedLLM: {
+        ...settings.embeddedLLM,
+        port: parseInt(e.target.value, 10),
+      },
+    });
   };
 
   const startOllamaSidecar = async () => {
@@ -177,13 +166,13 @@ const AISection = () => {
     try {
       console.log(
         "starting ollama sidecar with settings:",
-        localSettings.embeddedLLM
+        settings.embeddedLLM
       );
       const result = await invoke<string>("start_ollama_sidecar", {
         settings: {
-          enabled: localSettings.embeddedLLM.enabled,
-          model: localSettings.embeddedLLM.model,
-          port: localSettings.embeddedLLM.port,
+          enabled: settings.embeddedLLM.enabled,
+          model: settings.embeddedLLM.model,
+          port: settings.embeddedLLM.port,
         },
       });
 
@@ -191,12 +180,12 @@ const AISection = () => {
       setEmbeddedAIStatus("running");
       toast({
         title: "ai ready",
-        description: `${localSettings.embeddedLLM.model} is running.`,
+        description: `${settings.embeddedLLM.model} is running.`,
       });
 
       // Show the LLM test result in a toast
       toast({
-        title: `${localSettings.embeddedLLM.model} wants to tell you a joke.`,
+        title: `${settings.embeddedLLM.model} wants to tell you a joke.`,
         description: result,
         duration: 10000,
       });
@@ -233,16 +222,13 @@ const AISection = () => {
   };
 
   const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, aiModel: newValue });
-    updateSettings({ aiModel: newValue });
+    updateSettings({ aiModel: e.target.value });
   };
+
   const handleCustomPromptChange = (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
-    const newValue = e.target.value;
-    setLocalSettings({ ...localSettings, customPrompt: newValue });
-    updateSettings({ customPrompt: newValue });
+    updateSettings({ customPrompt: e.target.value });
   };
 
   const handleResetCustomPrompt = () => {
@@ -251,7 +237,7 @@ const AISection = () => {
 
   const handleAiProviderChange = (newValue: AIProviderType) => {
     let newUrl = "";
-    let newModel = localSettings.aiModel;
+    let newModel = settings.aiModel;
 
     if (newValue === "screenpipe-cloud" && !credits?.amount) {
       openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
@@ -265,23 +251,17 @@ const AISection = () => {
         newUrl = "http://localhost:11434/v1";
         break;
       case "embedded":
-        newUrl = `http://localhost:${localSettings.embeddedLLM.port}/v1`;
-        newModel = localSettings.embeddedLLM.model;
+        newUrl = `http://localhost:${settings.embeddedLLM.port}/v1`;
+        newModel = settings.embeddedLLM.model;
         break;
       case "screenpipe-cloud":
         newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
         break;
       case "custom":
-        newUrl = localSettings.aiUrl; // Keep the existing custom URL
+        newUrl = settings.aiUrl;
         break;
     }
 
-    setLocalSettings({
-      ...localSettings,
-      aiProviderType: newValue,
-      aiUrl: newUrl,
-      aiModel: newModel,
-    });
     updateSettings({
       aiProviderType: newValue,
       aiUrl: newUrl,
@@ -290,12 +270,12 @@ const AISection = () => {
   };
 
   const isApiKeyRequired =
-    localSettings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
-    localSettings.aiUrl !== "http://localhost:11434/v1" &&
-    localSettings.aiUrl !== "embedded";
+    settings.aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
+    settings.aiUrl !== "http://localhost:11434/v1" &&
+    settings.aiUrl !== "embedded";
 
   const getModelTooltipContent = () => {
-    switch (localSettings.aiUrl) {
+    switch (settings.aiUrl) {
       case "https://api.openai.com/v1":
       case "https://ai-proxy.i-f9f.workers.dev/v1":
         return (
@@ -347,7 +327,7 @@ const AISection = () => {
             title="Screenpipe Cloud"
             description="Fastest with built-in context awareness and streaming support"
             imageSrc="/images/screenpipe.png"
-            selected={localSettings.aiProviderType === "screenpipe-cloud"}
+            selected={settings.aiProviderType === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
             warningText={!credits?.amount ? "requires credits" : undefined}
           />
@@ -357,7 +337,7 @@ const AISection = () => {
             title="OpenAI"
             description="Use your own OpenAI API key for GPT-4 and other models"
             imageSrc="/images/openai.png"
-            selected={localSettings.aiProviderType === "openai"}
+            selected={settings.aiProviderType === "openai"}
             onClick={() => handleAiProviderChange("openai")}
           />
 
@@ -366,7 +346,7 @@ const AISection = () => {
             title="Ollama"
             description="Run AI models locally using your existing ollama installation"
             imageSrc="/images/ollama.png"
-            selected={localSettings.aiProviderType === "native-ollama"}
+            selected={settings.aiProviderType === "native-ollama"}
             onClick={() => handleAiProviderChange("native-ollama")}
           />
 
@@ -375,7 +355,7 @@ const AISection = () => {
             title="Custom"
             description="Connect to your own AI provider or self-hosted models"
             imageSrc="/images/custom.png"
-            selected={localSettings.aiProviderType === "custom"}
+            selected={settings.aiProviderType === "custom"}
             onClick={() => handleAiProviderChange("custom")}
           />
 
@@ -385,24 +365,22 @@ const AISection = () => {
               title="embedded ai"
               description="use the built-in ai engine for offline processing"
               imageSrc="/images/embedded.png"
-              selected={localSettings.aiProviderType === "embedded"}
+              selected={settings.aiProviderType === "embedded"}
               onClick={() => handleAiProviderChange("embedded")}
             />
           )}
         </div>
       </div>
-      {localSettings.aiProviderType === "custom" && (
+      {settings.aiProviderType === "custom" && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4">
-            <Label htmlFor="customAiUrl">
-              Custom URL
-            </Label>
+            <Label htmlFor="customAiUrl">Custom URL</Label>
             <Input
               id="customAiUrl"
-              value={localSettings.aiUrl}
+              value={settings.aiUrl}
               onChange={(e) => {
                 const newUrl = e.target.value;
-                setLocalSettings({ ...localSettings, aiUrl: newUrl });
+                updateSettings({ aiUrl: newUrl });
                 updateSettings({ aiUrl: newUrl });
               }}
               className="flex-grow"
@@ -423,7 +401,7 @@ const AISection = () => {
               <Input
                 id="aiApiKey"
                 type={showApiKey ? "text" : "password"}
-                value={localSettings.openaiApiKey}
+                value={settings.openaiApiKey}
                 onChange={handleApiKeyChange}
                 className="pr-10"
                 placeholder="enter your ai api key"
@@ -448,18 +426,18 @@ const AISection = () => {
           </div>
         </div>
       )}
-      {localSettings.aiProviderType !== "embedded" && (
+      {settings.aiProviderType !== "embedded" && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4 w-full">
             <Label htmlFor="aiModel">AI model</Label>
             <div className="flex-grow relative">
               <Input
                 id="aiModel"
-                value={localSettings.aiModel}
+                value={settings.aiModel}
                 onChange={handleModelChange}
                 className="flex-grow"
                 placeholder={
-                  localSettings.aiProviderType === "native-ollama"
+                  settings.aiProviderType === "native-ollama"
                     ? "e.g., llama3.2:3b-instruct-q4_K_M"
                     : "e.g., gpt-4o"
                 }
@@ -478,7 +456,7 @@ const AISection = () => {
           <div className="flex-grow relative">
             <Textarea
               id="customPrompt"
-              value={localSettings.customPrompt}
+              value={settings.customPrompt}
               onChange={handleCustomPromptChange}
               className="min-h-[100px]"
               placeholder="enter your custom prompt here"
@@ -525,12 +503,12 @@ const AISection = () => {
               min={1000}
               max={128000}
               step={1000}
-              value={[localSettings.aiMaxContextChars]}
+              value={[settings.aiMaxContextChars]}
               onValueChange={handleMaxContextCharsChange}
               className="flex-grow"
             />
             <span className="ml-2 min-w-[60px] text-right">
-              {localSettings.aiMaxContextChars.toLocaleString()}
+              {settings.aiMaxContextChars.toLocaleString()}
             </span>
           </div>
         </div>
@@ -547,10 +525,10 @@ const AISection = () => {
           <div className="flex items-center gap-2">
             <Switch
               id="embeddedLLM"
-              checked={localSettings.embeddedLLM.enabled}
+              checked={settings.embeddedLLM.enabled}
               onCheckedChange={handleEmbeddedLLMChange}
             />
-            {localSettings.embeddedLLM.enabled && (
+            {settings.embeddedLLM.enabled && (
               <>
                 <Button
                   onClick={startOllamaSidecar}
@@ -588,7 +566,7 @@ const AISection = () => {
         </div>
       </div>
 
-      {localSettings.embeddedLLM.enabled && (
+      {settings.embeddedLLM.enabled && (
         <>
           <div className="w-full">
             <div className="flex items-center gap-4 mb-4">
@@ -601,7 +579,7 @@ const AISection = () => {
               <div className="flex-grow flex items-center">
                 <Input
                   id="embeddedLLMModel"
-                  value={localSettings.embeddedLLM.model}
+                  value={settings.embeddedLLM.model}
                   onChange={handleEmbeddedLLMModelChange}
                   className="flex-grow"
                   placeholder="enter embedded llm model"
@@ -634,7 +612,7 @@ const AISection = () => {
               <Input
                 id="embeddedLLMPort"
                 type="number"
-                value={localSettings.embeddedLLM.port}
+                value={settings.embeddedLLM.port}
                 onChange={handleEmbeddedLLMPortChange}
                 className="flex-grow"
                 placeholder="enter embedded llm port"

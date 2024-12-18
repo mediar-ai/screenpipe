@@ -82,16 +82,16 @@ function PlanCard({
 
 export function AccountSection() {
   const { user, loadUser } = useUser();
-  const { localSettings, setLocalSettings } = useSettings();
+  const { settings, setLocalSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   const handleRefreshCredits = async () => {
-    if (!localSettings.user?.token) return;
+    if (!settings.user?.token) return;
 
     setIsRefreshing(true);
     try {
-      await loadUser(localSettings.user.token);
+      await loadUser(settings.user.token);
       toast({
         title: "credits refreshed",
         description: "your credit balance has been updated",
@@ -198,7 +198,7 @@ export function AccountSection() {
 
             <div className="flex gap-2">
               <Input
-                value={localSettings.user?.token || ""}
+                value={settings.user?.token || ""}
                 onChange={(e) => {
                   setLocalSettings((prev) => ({
                     ...prev,
@@ -212,7 +212,7 @@ export function AccountSection() {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  loadUser(localSettings.user?.token || "");
+                  loadUser(settings.user?.token || "");
                   toast({ title: "key updated" });
                 }}
               >

@@ -13,7 +13,6 @@ import AISection from "./settings/ai-section";
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings({ className }: { className?: string }) {
-  const { localSettings, setLocalSettings } = useSettings();
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
 
@@ -24,12 +23,7 @@ export function Settings({ className }: { className?: string }) {
       case "account":
         return <AccountSection />;
       case "recording":
-        return (
-          <RecordingSettings
-            localSettings={localSettings}
-            setLocalSettings={setLocalSettings}
-          />
-        );
+        return <RecordingSettings />;
       case "shortcuts":
         return <ShortcutSection />;
     }
