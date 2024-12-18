@@ -992,7 +992,11 @@ export function SearchChat() {
                       {item.content.filePath &&
                       item.content.filePath.trim() !== "" ? (
                         <div className="flex justify-center mt-4">
-                          <VideoComponent filePath={item.content.filePath} />
+                          <VideoComponent
+                            filePath={item.content.filePath}
+                            startTime={item.content.startTime}
+                            endTime={item.content.endTime}
+                          />
                         </div>
                       ) : (
                         <p className="text-gray-500 italic mt-2">
