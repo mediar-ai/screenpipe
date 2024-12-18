@@ -119,3 +119,9 @@ harness = false
 
 [package.metadata.cargo-machete]
 ignored = ["ort-sys"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
