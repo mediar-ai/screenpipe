@@ -1,13 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { AIProviderType, useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +19,7 @@ import {
   X,
   Play,
   Loader2,
+  ChevronsUpDown,
   Cpu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +34,20 @@ import { useUser } from "@/lib/hooks/use-user";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "../ui/card";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -221,8 +229,8 @@ const AISection = () => {
     }
   };
 
-  const handleModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    updateSettings({ aiModel: e.target.value });
+  const handleModelChange = (value: string) => {
+    updateSettings({ aiModel: value });
   };
 
   const handleCustomPromptChange = (
@@ -274,45 +282,25 @@ const AISection = () => {
     settings.aiUrl !== "http://localhost:11434/v1" &&
     settings.aiUrl !== "embedded";
 
-  const getModelTooltipContent = () => {
-    switch (settings.aiUrl) {
-      case "https://api.openai.com/v1":
-      case "https://ai-proxy.i-f9f.workers.dev/v1":
-        return (
-          <p>
-            suggested models:
-            <br />- gpt-4o
-          </p>
-        );
-      case "http://localhost:11434/v1":
-        return (
-          <p>
-            suggested models:
-            <br />
-            - llama3.2:3b-instruct-q4_K_M
-            <br />
-            - mistral models
-            <br />
-            or find more models at:
-            <a
-              href="https://ollama.com/library"
-              target="_blank"
-              className="text-primary hover:underline"
-            >
-              ollama models
-            </a>
-          </p>
-        );
-      case "embedded":
-        return (
-          <p>the model for embedded ai is predefined and cannot be changed.</p>
-        );
+  const getModelSuggestions = (provider: AIProviderType) => {
+    switch (provider) {
+      case "native-ollama":
+        return [
+          "llama3.2:1B",
+          "llama3.2:3B",
+          "llama3.1:8B",
+          "llama3.3:70B",
+          "llama3.1:405B",
+        ];
+      case "screenpipe-cloud":
+        return ["gpt-4o", "gpt-4o-mini"];
+      case "openai":
+        return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
       default:
-        return (
-          <p>enter the model name appropriate for your custom AI provider.</p>
-        );
+        return [];
     }
   };
+  console.log(getModelSuggestions(settings.aiProviderType));
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -381,7 +369,6 @@ const AISection = () => {
               onChange={(e) => {
                 const newUrl = e.target.value;
                 updateSettings({ aiUrl: newUrl });
-                updateSettings({ aiUrl: newUrl });
               }}
               className="flex-grow"
               placeholder="enter custom ai url"
@@ -430,22 +417,41 @@ const AISection = () => {
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4 w-full">
             <Label htmlFor="aiModel">AI model</Label>
-            <div className="flex-grow relative">
-              <Input
-                id="aiModel"
-                value={settings.aiModel}
-                onChange={handleModelChange}
-                className="flex-grow"
-                placeholder={
-                  settings.aiProviderType === "native-ollama"
-                    ? "e.g., llama3.2:3b-instruct-q4_K_M"
-                    : "e.g., gpt-4o"
-                }
-                autoCorrect="off"
-                autoCapitalize="off"
-                autoComplete="off"
-              />
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between"
+                >
+                  {settings.aiModel || "select model..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-full p-0">
+                <Command>
+                  <CommandInput placeholder="select model" />
+                  <CommandList>
+                    <CommandEmpty>No results found.</CommandEmpty>
+                    <CommandGroup heading="Suggestions">
+                      {getModelSuggestions(settings.aiProviderType)?.map(
+                        (model) => (
+                          <CommandItem
+                            key={model}
+                            value={model}
+                            onSelect={() => {
+                              updateSettings({ aiModel: model });
+                            }}
+                          >
+                            {model}
+                          </CommandItem>
+                        )
+                      )}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       )}

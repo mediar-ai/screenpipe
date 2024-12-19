@@ -12,9 +12,8 @@ import AISection from "./settings/ai-section";
 
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
-export function Settings({ className }: { className?: string }) {
-  const [open, setOpen] = useState(false);
-  const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
+export function Settings() {
+  const [activeSection, setActiveSection] = useState<SettingsSection>("account");
 
   const renderSection = () => {
     switch (activeSection) {
@@ -30,26 +29,6 @@ export function Settings({ className }: { className?: string }) {
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={setOpen}
-    >
-      <DialogTrigger asChild>
-        <div
-          className={cn(
-            "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-            className
-          )}
-          onSelect={(e) => e.preventDefault()}
-        >
-          <div className="flex items-center">
-            <Settings2 className="mr-2 h-4 w-4" />
-            <span>settings</span>
-          </div>
-        </div>
-      </DialogTrigger>
-
-      <DialogContent  className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0 [&>button]:hidden">
         <div className="flex h-full">
           {/* Sidebar */}
           <div className="w-64 border-r bg-[#f3f3f3]">
@@ -105,7 +84,5 @@ export function Settings({ className }: { className?: string }) {
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
   );
 }
