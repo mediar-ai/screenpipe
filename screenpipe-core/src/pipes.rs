@@ -8,7 +8,6 @@ mod pipes {
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
 
-    use reqwest::Client;
     use serde_json::Value;
 
     use anyhow::Result;
@@ -17,7 +16,6 @@ mod pipes {
     use std::path::Path;
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tracing::{debug, error, info};
-    use url::Url;
     use which::which;
 
     // Add these imports at the top of the file
@@ -33,6 +31,9 @@ mod pipes {
     use rand::{thread_rng, Rng};
     use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use std::str::FromStr;
+
+    #[cfg(target_os = "windows")]
+    use powershell_script::PsScriptBuilder;
 
     // Add this function to generate a secure cron secret
     fn generate_cron_secret() -> String {
@@ -253,183 +254,257 @@ mod pipes {
         Ok(())
     }
 
-    // Add this helper function for retrying installations
-    async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Result<()> {
-        let mut attempt = 0;
-        let mut last_error = None;
+    #[cfg(target_os = "linux")]
+    #[derive(Debug)]
+    enum PackageManager {
+        Apt,    // Debian, Ubuntu
+        Dnf,    // Fedora, RHEL
+        Pacman, // Arch
+        Zypper, // openSUSE
+        Unknown,
+    }
 
-        while attempt < max_retries {
-            let mut install_child = Command::new(bun_path)
-                .arg("i")
-                .current_dir(dest_dir)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?;
-
-            // Stream logs for npm install
-            if let Ok(()) = stream_logs("bun install", &mut install_child).await {
-                let status = install_child.wait().await?;
-                if status.success() {
-                    return Ok(());
-                }
-            }
-
-            attempt += 1;
-            let delay = std::time::Duration::from_secs(2u64.pow(attempt)); // exponential backoff
-            error!(
-                "install attempt {} failed, retrying in {} seconds",
-                attempt,
-                delay.as_secs()
-            );
-            tokio::time::sleep(delay).await;
-            last_error = Some(anyhow::anyhow!(
-                "installation failed after {} attempts",
-                attempt
-            ));
+    #[cfg(target_os = "linux")]
+    async fn detect_package_manager() -> Result<PackageManager> {
+        // Check for common package managers
+        if Command::new("apt-get")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Apt);
+        }
+        if Command::new("dnf").arg("--version").status().await.is_ok() {
+            return Ok(PackageManager::Dnf);
+        }
+        if Command::new("pacman")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Pacman);
+        }
+        if Command::new("zypper")
+            .arg("--version")
+            .status()
+            .await
+            .is_ok()
+        {
+            return Ok(PackageManager::Zypper);
         }
 
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("installation failed")))
+        // If no known package manager is found
+        Ok(PackageManager::Unknown)
+    }
+
+    async fn ensure_git_installed() -> Result<()> {
+        // Check if git is already installed
+        if Command::new("git").arg("--version").status().await.is_ok() {
+            return Ok(());
+        }
+
+        info!("git not found, installing...");
+
+        #[cfg(target_os = "windows")]
+        {
+            // Windows installation logic (existing code)
+            let exe_dir = std::env::current_exe()?
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("failed to get executable directory"))?
+                .to_path_buf();
+            let script_path = exe_dir
+                .join("../scripts/install-git-cli-windows.ps1")
+                .canonicalize()?;
+
+            if !script_path.exists() {
+                anyhow::bail!("git installation script not found at {:?}", script_path);
+            }
+
+            let script_content = std::fs::read_to_string(&script_path)?;
+
+            let output = PsScriptBuilder::new()
+                .no_profile(true)
+                .non_interactive(true)
+                .hidden(true)
+                .print_commands(false)
+                .build()
+                .run(&script_content)
+                .unwrap();
+
+            if !output.success() {
+                error!("powershell output: {}", output.stdout().unwrap());
+                error!("powershell error: {}", output.stderr().unwrap());
+                anyhow::bail!("Failed to install Git. Please install Git manually from https://git-scm.com/download/win");
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            // Detect package manager and install git
+            let package_manager = detect_package_manager().await?;
+
+            let status = match package_manager {
+                PackageManager::Apt => {
+                    Command::new("sudo")
+                        .args(["apt-get", "update", "-y"])
+                        .status()
+                        .await?;
+                    Command::new("sudo")
+                        .args(["apt-get", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Dnf => {
+                    Command::new("sudo")
+                        .args(["dnf", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Pacman => {
+                    Command::new("sudo")
+                        .args(["pacman", "-Sy", "--noconfirm", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Zypper => {
+                    Command::new("sudo")
+                        .args(["zypper", "install", "-y", "git"])
+                        .status()
+                        .await?
+                }
+                PackageManager::Unknown => {
+                    anyhow::bail!("unsupported linux distribution. please install git manually");
+                }
+            };
+
+            if !status.success() {
+                anyhow::bail!("failed to install git using package manager");
+            }
+        }
+
+        // Verify installation
+        let status = Command::new("git").arg("--version").status().await?;
+
+        if !status.success() {
+            anyhow::bail!("git installation verification failed");
+        }
+
+        info!("git installed successfully");
+        Ok(())
     }
 
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
-        info!("Processing pipe from source: {}", source);
+        ensure_git_installed().await?;
 
-        let pipe_name =
-            sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
-        let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        let source = source.trim();
 
-        debug!("Destination directory: {:?}", dest_dir);
+        // Handle local path
+        if let Ok(local_path) = PathBuf::from(source).canonicalize() {
+            if local_path.is_dir() {
+                let pipe_name = sanitize_pipe_name(
+                    local_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_str()
+                        .unwrap_or_default(),
+                );
+                let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+                let temp_dir = dest_dir.with_extension("_temp");
 
-        // Save existing pipe.json content before downloading
-        let pipe_json_path = dest_dir.join("pipe.json");
-        let existing_config = if pipe_json_path.exists() {
-            debug!("Existing pipe.json found");
-            let content = tokio::fs::read_to_string(&pipe_json_path).await?;
-            Some(serde_json::from_str::<Value>(&content)?)
-        } else {
-            debug!("No existing pipe.json found");
-            None
-        };
+                // Copy to temp location first
+                tokio::fs::create_dir_all(&temp_dir).await?;
+                copy_dir_all(&local_path, &temp_dir).await?;
 
-        // Create temp directory for download
-        let temp_dir = dest_dir.with_extension("_temp");
-        tokio::fs::create_dir_all(&temp_dir).await?;
+                // Move to final location
+                if dest_dir.exists() {
+                    tokio::fs::remove_dir_all(&dest_dir).await?;
+                }
+                tokio::fs::rename(&temp_dir, &dest_dir).await?;
 
-        // Download to temp directory first
-        let download_result = if let Ok(parsed_url) = Url::parse(source) {
-            debug!("Source is a URL: {}", parsed_url);
-            if parsed_url.host_str() == Some("github.com") {
-                download_github_folder(&parsed_url, &temp_dir).await
-            } else {
-                anyhow::bail!("Unsupported URL format");
+                return Ok(dest_dir);
             }
-        } else {
-            debug!("Source is a local path");
-            let source_path = Path::new(source);
-            if !source_path.exists() || !source_path.is_dir() {
-                anyhow::bail!("Invalid local source path");
-            }
-            copy_dir_all(source_path, &temp_dir).await
-        };
-
-        // remove temp dir if download failed
-        if let Err(e) = download_result {
-            tokio::fs::remove_dir_all(&temp_dir).await?;
-            error!("Failed to download pipe: {}", e);
         }
 
-        // If download successful, move temp dir to final location
+        // Rest of the GitHub URL handling code...
+        let parsed_url = url::Url::parse(source)?;
+        let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
+
+        // Extract repo URL and subdirectory path
+        let (repo_url, subdir_path) = if path_segments.contains(&"tree") {
+            let tree_index = path_segments.iter().position(|&s| s == "tree").unwrap();
+            let repo = format!("{}/{}", path_segments[0], path_segments[1]);
+            let subdir = path_segments[tree_index + 2..].join("/");
+            (format!("https://github.com/{}", repo), subdir)
+        } else {
+            (source.to_string(), String::new())
+        };
+
+        println!("cloning from repo url: {}", repo_url);
+        println!("subdirectory path: {}", subdir_path);
+
+        let pipe_name = sanitize_pipe_name(
+            Path::new(&subdir_path)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        );
+        let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        let temp_dir = dest_dir.with_extension("_temp");
+
+        // Clone with optimizations to only get what we need
+        let temp_repo_dir = temp_dir.with_extension("_full_repo");
+
+        // First init and set up sparse checkout
+        let status = Command::new("git")
+            .args(&[
+                "clone",
+                "--filter=blob:none", // Only get metadata
+                "--sparse",           // Enable sparse checkout
+                "--depth=1",          // Shallow clone
+                &repo_url,
+                temp_repo_dir.to_str().unwrap(),
+            ])
+            .status()
+            .await?;
+
+        if !status.success() {
+            anyhow::bail!(
+                "git clone failed with status code: {}",
+                status.code().unwrap_or(0)
+            );
+        }
+
+        // Set up sparse-checkout for the specific subdirectory
+        let status = Command::new("git")
+            .current_dir(&temp_repo_dir)
+            .args(&["sparse-checkout", "set", &subdir_path])
+            .status()
+            .await?;
+
+        if !status.success() {
+            anyhow::bail!(
+                "git sparse-checkout failed with status code: {}",
+                status.code().unwrap_or(0)
+            );
+        }
+
+        // Move only the specific subdirectory to the final temp location
+        let source_dir = temp_repo_dir.join(&subdir_path);
+        tokio::fs::create_dir_all(&temp_dir).await?;
+        tokio::fs::rename(&source_dir, &temp_dir).await?;
+
+        // Cleanup the full repo
+        tokio::fs::remove_dir_all(&temp_repo_dir).await?;
+
+        // Move to final location
         if dest_dir.exists() {
             tokio::fs::remove_dir_all(&dest_dir).await?;
         }
         tokio::fs::rename(&temp_dir, &dest_dir).await?;
 
-        // Restore or merge pipe.json if needed
-        if let Some(ref existing_config) = existing_config {
-            let new_config_path = dest_dir.join("pipe.json");
-            if new_config_path.exists() {
-                let content = tokio::fs::read_to_string(&new_config_path).await?;
-                let new_json: Value = serde_json::from_str(&content)?;
-
-                // Create merged config
-                let mut merged_config = new_json.clone(); // Start with new schema
-
-                // If both configs have fields array, preserve user values
-                if let (Some(existing_obj), Some(new_obj)) =
-                    (existing_config.as_object(), merged_config.as_object_mut())
-                {
-                    // Copy over non-fields properties from existing config
-                    for (key, value) in existing_obj {
-                        if key != "fields" {
-                            new_obj.insert(key.clone(), value.clone());
-                        }
-                    }
-
-                    // For fields array, preserve user values while keeping new schema
-                    if let (Some(existing_fields), Some(new_fields)) = (
-                        existing_config["fields"].as_array(),
-                        new_obj.get_mut("fields").and_then(|f| f.as_array_mut()),
-                    ) {
-                        // For each field in the new schema
-                        for new_field in new_fields {
-                            if let Some(name) = new_field.get("name").and_then(Value::as_str) {
-                                // If this field existed in the old config, preserve its value
-                                if let Some(existing_field) = existing_fields
-                                    .iter()
-                                    .find(|f| f.get("name").and_then(Value::as_str) == Some(name))
-                                {
-                                    if let Some(user_value) = existing_field.get("value") {
-                                        if let Some(new_field_obj) = new_field.as_object_mut() {
-                                            new_field_obj
-                                                .insert("value".to_string(), user_value.clone());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let config_str = serde_json::to_string_pretty(&merged_config)?;
-                tokio::fs::write(&new_config_path, config_str).await?;
-            } else {
-                // If no new config exists, keep the existing one
-                let config_str = serde_json::to_string_pretty(&existing_config)?;
-                tokio::fs::write(&new_config_path, config_str).await?;
-            }
-        }
-
-        // After downloading/copying the pipe, check if it's a Next.js project
-        let package_json_path = dest_dir.join("package.json");
-        if package_json_path.exists() {
-            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
-            let package_data: Value = serde_json::from_str(&package_json)?;
-
-            let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
-
-            // Make bun install mandatory for all package.json pipes with retries
-            retry_install(&bun_path, &dest_dir, 3).await?;
-
-            if package_data["dependencies"].get("next").is_some() {
-                info!("Detected Next.js project, setting up for production");
-                // Update pipe.json to indicate it's a Next.js project
-                let mut pipe_config = if let Some(existing_json) = &existing_config {
-                    existing_json.clone()
-                } else if pipe_json_path.exists() {
-                    let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
-                    serde_json::from_str(&pipe_json)?
-                } else {
-                    json!({})
-                };
-
-                pipe_config["is_nextjs"] = json!(true);
-                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
-                let mut file = File::create(&pipe_json_path).await?;
-                file.write_all(updated_pipe_json.as_bytes()).await?;
-            }
-        }
-
-        info!("pipe copied successfully to: {:?}", dest_dir);
         Ok(dest_dir)
     }
 
@@ -494,95 +569,6 @@ mod pipes {
 
         ignore_list.iter().any(|ignored| file_name == *ignored)
             || file_name.to_str().map_or(false, |s| s.starts_with('.'))
-    }
-
-    fn download_github_folder(
-        url: &Url,
-        dest_dir: &Path,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> {
-        let url = url.clone();
-        let dest_dir = dest_dir.to_path_buf();
-
-        Box::pin(async move {
-            let client = Client::new();
-            let api_url = get_raw_github_url(url.as_str())?;
-
-            let response = client
-                .get(&api_url)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("User-Agent", "screenpipe")
-                .send()
-                .await?;
-
-            let contents: Value = response.json().await?;
-
-            if !contents.is_array() {
-                anyhow::bail!("invalid response from github api");
-            }
-
-            for item in contents.as_array().unwrap() {
-                let file_name = item["name"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("missing name in github response"))?;
-
-                if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
-                    let file_type = item["type"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("missing type in github response"))?;
-
-                    match file_type {
-                        "file" => {
-                            let download_url = item["download_url"].as_str().ok_or_else(|| {
-                                anyhow::anyhow!("missing download_url in github response")
-                            })?;
-
-                            let file_content =
-                                client.get(download_url).send().await?.bytes().await?;
-                            let file_path = dest_dir.join(file_name);
-                            tokio::fs::write(&file_path, &file_content).await?;
-                            debug!("downloaded file: {:?}", file_path);
-                        }
-                        "dir" => {
-                            let new_dest_dir = dest_dir.join(file_name);
-                            tokio::fs::create_dir_all(&new_dest_dir).await?;
-
-                            let new_url = format!("{}/{}", url.as_str(), file_name);
-                            download_github_folder(&Url::parse(&new_url)?, &new_dest_dir).await?;
-                            debug!("downloaded directory: {:?}", new_dest_dir);
-                        }
-                        _ => debug!("skipping unknown type: {}", file_type),
-                    }
-                } else {
-                    debug!("skipping hidden file: {}", file_name);
-                }
-            }
-
-            Ok(())
-        })
-    }
-
-    fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
-        info!("Attempting to get raw GitHub URL for: {}", url);
-        let parsed_url = Url::parse(url)?;
-        if parsed_url.host_str() == Some("github.com") {
-            let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-            if path_segments.len() >= 5 && path_segments[2] == "tree" {
-                let (owner, repo, _, branch) = (
-                    path_segments[0],
-                    path_segments[1],
-                    path_segments[2],
-                    path_segments[3],
-                );
-                let raw_path = path_segments[4..].join("/");
-                let raw_url = format!(
-                    "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-                    owner, repo, raw_path, branch
-                );
-                info!("Converted to GitHub API URL: {}", raw_url);
-                return Ok(raw_url);
-            }
-        }
-        anyhow::bail!("Invalid GitHub URL format")
     }
 
     fn find_pipe_file(pipe_dir: &Path) -> anyhow::Result<PathBuf> {
