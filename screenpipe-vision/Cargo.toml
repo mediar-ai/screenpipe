@@ -28,7 +28,6 @@ anyhow = "1.0.86"
 log = { workspace = true }
 
 image-compare = "0.4.1"
-strsim = "0.10.0"
 clap = { version = "4.0", features = ["derive"] }
 # tokio = { version = "1", features = ["full"] }
 
@@ -99,4 +98,3 @@ cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"
 xcap = "0.0.14"
-
