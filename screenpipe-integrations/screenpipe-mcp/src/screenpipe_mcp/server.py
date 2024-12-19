@@ -7,6 +7,12 @@ from mcp.server.models import InitializationOptions
 import mcp.types as types
 import mcp.server.stdio
 
+import logging
+import json
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
 # Enable nested event loops (needed for some environments)
 nest_asyncio.apply()
 
@@ -32,9 +38,9 @@ async def handle_list_tools() -> list[types.Tool]:
                     },
                     "content_type": {
                         "type": "string",
-                        "enum": ["all", "ocr", "audio", "ui"],
+                        "enum": ["ocr", "audio"],
                         "description": "Type of content to search",
-                        "default": "all"
+                        "default": "ocr"
                     },
                     "limit": {
                         "type": "integer",
@@ -88,9 +94,10 @@ async def handle_call_tool(
 
     if name == "search-content":
         async with httpx.AsyncClient() as client:
+            # Define the order of content types to try
+            results = []
             # Build query parameters
-            params = {k: v for k, v in arguments.items() if v is not None}
-            
+            params = {k: v for k, v in arguments.items() if v is not None}        
             # Make request to screenpipe API
             try:
                 response = await client.get(
@@ -99,29 +106,45 @@ async def handle_call_tool(
                     timeout=30.0
                 )
                 response.raise_for_status()
-                data = response.json()
+                try:
+                    data = json.loads(response.text)
+                    logging.debug(f"Response Data: {data}")
+                except json.JSONDecodeError as json_error:
+                    logging.error(f"JSON decoding failed: {json_error}")
+                    logging.error(f"Raw Response Content: {response.text}")
+                    return [types.TextContent(
+                        type="text",
+                        text=f"failed to parse JSON response: {json_error}"
+                    )]
+                results.extend(data.get("data", []))
+
+                    
             except Exception as e:
+                print(f"Exception: {str(e)}")
                 return [types.TextContent(
                     type="text",
                     text=f"failed to search screenpipe: {str(e)}"
                 )]
-
+                    
             # Format results
-            results = data.get("data", [])
             if not results:
                 return [types.TextContent(
                     type="text", 
-                    text="no results found"
+                    text="no results found by vivek"
                 )]
 
             # Format each result based on content type
             formatted_results = []
             for result in results:
                 if "content" not in result:
+                    logging.debug("Continew")
                     continue
                 
                 content = result["content"]
-                if content.get("type") == "OCR":
+                logging.debug(f"Content : {content}")
+
+                if result.get("type") == "OCR":
+                    logging.debug(f"OCR Content: {content}")
                     text = (
                         f"OCR Text: {content.get('text', 'N/A')}\n"
                         f"App: {content.get('app_name', 'N/A')}\n"
@@ -129,26 +152,26 @@ async def handle_call_tool(
                         f"Time: {content.get('timestamp', 'N/A')}\n"
                         "---\n"
                     )
-                elif content.get("type") == "Audio":
+                elif result.get("type") == "Audio":
                     text = (
                         f"Audio Transcription: {content.get('transcription', 'N/A')}\n"
                         f"Device: {content.get('device_name', 'N/A')}\n"
                         f"Time: {content.get('timestamp', 'N/A')}\n"
                         "---\n"
                     )
-                elif content.get("type") == "UI":
-                    text = (
-                        f"UI Text: {content.get('text', 'N/A')}\n"
-                        f"App: {content.get('app_name', 'N/A')}\n"
-                        f"Window: {content.get('window_name', 'N/A')}\n"
-                        f"Time: {content.get('timestamp', 'N/A')}\n"
-                        "---\n"
-                    )
+                # elif result.get("type") == "UI":
+                #     text = (
+                #         f"UI Text: {content.get('text', 'N/A')}\n"
+                #         f"App: {content.get('app_name', 'N/A')}\n"
+                #         f"Window: {content.get('window_name', 'N/A')}\n"
+                #         f"Time: {content.get('timestamp', 'N/A')}\n"
+                #         "---\n"
+                #     )
                 else:
                     continue
                 
                 formatted_results.append(text)
-
+                
             return [types.TextContent(
                 type="text",
                 text="Search Results:\n\n" + "\n".join(formatted_results)
@@ -174,3 +197,4 @@ async def run():
 
 if __name__ == "__main__":
     asyncio.run(run())
+
