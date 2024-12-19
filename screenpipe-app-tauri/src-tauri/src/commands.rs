@@ -300,7 +300,7 @@ pub async fn open_pipe_window(
         tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap()),
     )
     .title(title)
-    .inner_size(800.0, 600.0)
+    .inner_size(1200.0, 850.0)
     .always_on_top(true)
     .visible_on_all_workspaces(true)
     .build() {
