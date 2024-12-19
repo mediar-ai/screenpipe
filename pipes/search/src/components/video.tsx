@@ -129,6 +129,8 @@ export const VideoComponent = memo(function VideoComponent({
         />
       ) : (
         <video controls className="w-full rounded-md">
+          <source src={mediaSrc} type='video/mp4; codecs="hvc1"' />
+          <source src={mediaSrc} type='video/mp4; codecs="hvec"' />
           <source src={mediaSrc} type="video/mp4" />
           Your browser does not support the video tag.
         </video>
