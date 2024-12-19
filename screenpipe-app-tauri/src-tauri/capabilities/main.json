@@ -17,11 +17,7 @@
     "core:tray:default",
     "shell:default",
     "store:default",
-    "store:allow-create-store",
-    "store:allow-get",
-    "store:allow-set",
-    "store:allow-save",
-    "store:allow-load",
+
     "shell:allow-open",
     "fs:allow-watch",
     "fs:allow-open",
@@ -208,7 +204,6 @@
     "os:allow-os-type",
     "core:path:default",
     "process:default",
-    "store:default",
     "core:webview:allow-internal-toggle-devtools",
     {
       "identifier": "shell:allow-execute",

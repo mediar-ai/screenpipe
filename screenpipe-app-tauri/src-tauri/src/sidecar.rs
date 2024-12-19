@@ -123,7 +123,7 @@ pub async fn spawn_screenpipe(
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
     let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(&app.clone(), path).build();
+    let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
 
     let audio_transcription_engine = store
         .get("audioTranscriptionEngine")
@@ -504,7 +504,7 @@ impl SidecarManager {
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
         let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(&app.clone(), path).build();
+        let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
 
         let restart_interval = store
             .get("restartInterval")

@@ -104,3 +104,38 @@ export async function getFileSize(filePath: string): Promise<number> {
 
   return size;
 }
+
+// Helper functions to flatten/unflatten objects
+export const flattenObject = (obj: any, prefix = ""): Record<string, any> => {
+  return Object.keys(obj).reduce((acc: Record<string, any>, k: string) => {
+    const pre = prefix.length ? prefix + "." : "";
+    if (
+      typeof obj[k] === "object" &&
+      obj[k] !== null &&
+      !Array.isArray(obj[k])
+    ) {
+      Object.assign(acc, flattenObject(obj[k], pre + k));
+    } else {
+      acc[pre + k] = obj[k];
+    }
+    return acc;
+  }, {});
+};
+
+export const unflattenObject = (obj: Record<string, any>): any => {
+  const result: any = {};
+  for (const key in obj) {
+    const keys = key.split(".");
+    let current = result;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (i === keys.length - 1) {
+        current[k] = obj[key];
+      } else {
+        current[k] = current[k] || {};
+        current = current[k];
+      }
+    }
+  }
+  return result;
+};
