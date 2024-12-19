@@ -67,7 +67,7 @@ anyhow = "1.0.71"
 # System information
 sysinfo = "=0.29.0"
 
-# hakc 
+# hakc
 thiserror = "1.0.63"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
@@ -122,3 +122,9 @@ custom-protocol = ["tauri/custom-protocol"]
 [package.metadata.cargo-machete]
 ignored = ["tauri-utils"]
 
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
