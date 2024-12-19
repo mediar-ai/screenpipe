@@ -328,21 +328,6 @@ if (platform == 'macos') {
 			} else {
 				console.error("No suitable arm64 screenpipe binary found");
 			}
-			try {
-				// if the binary exists, hard code the fucking dylib
-				if (await fs.exists('screenpipe-aarch64-apple-darwin') && !isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @rpath/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-					console.log(`hard coded the dylib`);
-				} else if (await fs.exists('screenpipe-aarch64-apple-darwin') && isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_arm64.dylib @executable_path/../Frameworks/libscreenpipe_arm64.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @executable_path/../Frameworks/libscreenpipe.dylib ./screenpipe-aarch64-apple-darwin`
-					await $`install_name_tool -add_rpath @executable_path/../Frameworks ./screenpipe-aarch64-apple-darwin`
-					console.log(`Updated dylib paths for arm64 in dev mode`);
-				}
-			} catch (error) {
-				console.error('Error updating dylib paths:', error);
-			}
 		} else if (arch === 'x86_64') {
 			// copy screenpipe binary (more recent one)
 			const paths = [
@@ -355,16 +340,6 @@ if (platform == 'macos') {
 				console.log(`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`);
 			} else {
 				console.error("No suitable x86_64 screenpipe binary found");
-			}
-			try {
-				// hard code the dylib
-				if (await fs.exists('screenpipe-x86_64-apple-darwin') && !isDevMode) {
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe_x86_64.dylib @rpath/../Frameworks/libscreenpipe_x86_64.dylib ./screenpipe-x86_64-apple-darwin`
-					await $`install_name_tool -change screenpipe-vision/lib/libscreenpipe.dylib @rpath/../Frameworks/libscreenpipe.dylib ./screenpipe-x86_64-apple-darwin`
-					console.log(`hard coded the dylib`);
-				}
-			} catch (error) {
-				console.error('Error updating dylib paths:', error);
 			}
 		}
 		console.log(`screenpipe for ${arch} set up successfully.`);
@@ -380,14 +355,6 @@ if (platform == 'macos') {
 		console.log('FFMPEG already exists');
 	}
 
-	// // Move and rename ffmpeg and ffprobe binaries
-	// const ffmpegSrc = path.join(cwd, config.ffmpegRealname, 'bin', 'ffmpeg');
-
-	// // For x86_64
-	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-x86_64-apple-darwin'));
-
-	// // For arm64
-	// await fs.copyFile(ffmpegSrc, path.join(cwd, 'ffmpeg-aarch64-apple-darwin'));
 
 	console.log('Moved and renamed ffmpeg binary for externalBin');
 

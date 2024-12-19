@@ -17,7 +17,13 @@ use crate::{
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
-    video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
+    video_utils::{
+        merge_videos,
+        validate_media,
+        MergeVideosRequest,
+        MergeVideosResponse,
+        ValidateMediaParams
+    },
     DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
@@ -185,6 +191,8 @@ pub struct AudioContent {
     pub device_name: String,
     pub device_type: DeviceType,
     pub speaker: Option<Speaker>,
+    pub start_time: Option<f64>,
+    pub end_time: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -338,6 +346,8 @@ pub(crate) async fn search(
                 device_name: audio.device_name.clone(),
                 device_type: audio.device_type.clone(),
                 speaker: audio.speaker.clone(),
+                start_time: audio.start_time,
+                end_time: audio.end_time,
             }),
             SearchResult::UI(ui) => ContentItem::UI(UiContent {
                 id: ui.id,
@@ -521,7 +531,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let app_uptime = (now as i64) - (state.app_start_time.timestamp());
     let grace_period = 120; // 2 minutes in seconds
-    
+
     let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = if app_uptime < grace_period {
         true // Consider active during grace period
@@ -906,6 +916,22 @@ async fn merge_frames_handler(
     }
 }
 
+async fn validate_media_handler(
+    State(_state): State<Arc<AppState>>,
+    Query(params): Query<ValidateMediaParams>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+
+    match validate_media(&params.file_path).await {
+        Ok(_) => Ok(Json(json!({"status": "valid media file"}))),
+        Err(e) => {
+            Err((
+                StatusCode::EXPECTATION_FAILED,
+                Json(json!({"status": e.to_string()})),
+            ))
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct RawSqlQuery {
     query: String,
@@ -1060,6 +1086,8 @@ async fn add_transcription_to_db(
         -1,
         &transcription.transcription_engine,
         &device,
+        None,
+        None,
         None,
     )
     .await?;
@@ -1473,12 +1501,14 @@ async fn delete_speaker_handler(
 
     // delete all audio chunks from the file system
     for audio_chunk in audio_chunks {
-        std::fs::remove_file(audio_chunk.file_path).map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                JsonResponse(json!({"error": e.to_string()})),
-            )
-        })?;
+        if audio_chunk.start_time.is_some() && audio_chunk.end_time.is_some() {
+            std::fs::remove_file(audio_chunk.file_path).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": e.to_string()})),
+                )
+            })?;
+        }
     }
 
     Ok(JsonResponse(json!({"success": true})))
@@ -1581,6 +1611,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/merge", post(merge_speakers_handler))
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
+        .route("/experimental/validate/media", get(validate_media_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]

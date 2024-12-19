@@ -351,7 +351,6 @@ jobs:
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
           export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
           export PKG_CONFIG_ALLOW_CROSS=1
-          export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 

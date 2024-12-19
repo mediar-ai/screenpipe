@@ -52,6 +52,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableFrameCache: true,
   enableUiMonitoring: false,
   aiMaxContextChars: 128000,
+  user: {},
 };
 
 class SettingsManager {
@@ -135,7 +136,7 @@ class SettingsManager {
   }
 
   async getAll(): Promise<Settings> {
-    if (!this.initialized) await this.init();
+    await this.init();
     return { ...this.settings };
   }
 

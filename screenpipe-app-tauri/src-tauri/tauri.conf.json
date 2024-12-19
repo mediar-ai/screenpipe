@@ -88,29 +88,6 @@
         "minWidth": 1200,
         "minHeight": 850,
         "resizable": true
-      },
-      {
-        "title": "meetings",
-        "url": "/meetings",
-        "label": "meetings",
-        "width": 1200,
-        "height": 1000,
-        "minWidth": 1000,
-        "minHeight": 600,
-        "visible": false,
-        "decorations": true,
-        "transparent": true
-      },
-      {
-        "title": "identify speakers",
-        "url": "/identify-speakers",
-        "label": "identify-speakers",
-        "visible": false,
-        "width": 1200,
-        "height": 850,
-        "minWidth": 1200,
-        "minHeight": 850,
-        "resizable": true
       }
     ],
     "security": {
