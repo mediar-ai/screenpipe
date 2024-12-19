@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
 use std::fmt;
+use std::time::SystemTime;
 
 #[derive(Debug)]
 pub struct DatabaseError(pub String);
@@ -193,4 +194,12 @@ pub struct AudioChunksResponse {
     pub end_time: Option<f64>,
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug)]
+pub struct KeyboardChunk {
+    pub id: i64,
+    pub timestamp: SystemTime,
+    pub text: String,
+    pub event_type: String,
 }
