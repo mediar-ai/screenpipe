@@ -2,7 +2,7 @@ use crate::get_data_dir;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
-use tracing::info;
+use tracing::{info, error};
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -288,12 +288,13 @@ pub async fn open_pipe_window(
 ) -> Result<(), String> {
     // Close existing window if it exists
     if let Some(existing_window) = app_handle.get_webview_window(&title) {
-        let _ = existing_window.destroy();
-        // Give it a moment to properly close
+        if let Err(e) = existing_window.destroy() {
+            error!("failed to destroy existing window: {}", e);
+        }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let window = match tauri::WebviewWindowBuilder::new(
         &app_handle,
         &title,
         tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap()),
@@ -302,15 +303,26 @@ pub async fn open_pipe_window(
     .inner_size(800.0, 600.0)
     .always_on_top(true)
     .visible_on_all_workspaces(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .build() {
+        Ok(window) => window,
+        Err(e) => {
+            error!("failed to create window: {}", e);
+            return Err(format!("failed to create window: {}", e));
+        }
+    };
 
-    // Force focus and show
-    let _ = window.set_focus();
-    let _ = window.show();
+    // Only try to manipulate window if creation succeeded
+    if let Err(e) = window.set_focus() {
+        error!("failed to set window focus: {}", e);
+    }
+    if let Err(e) = window.show() {
+        error!("failed to show window: {}", e);
+    }
 
     #[cfg(target_os = "macos")]
-    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
+    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+        error!("failed to set activation policy: {}", e);
+    }
 
     Ok(())
 }
