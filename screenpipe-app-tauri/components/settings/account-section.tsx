@@ -60,7 +60,6 @@ function PlanCard({
       <div className="space-y-2 min-w-[200px]">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-medium opacity-80">{title}</h3>
-    
         </div>
         <p className="text-lg">{price}</p>
       </div>
@@ -82,7 +81,7 @@ function PlanCard({
 
 export function AccountSection() {
   const { user, loadUser } = useUser();
-  const { settings, setLocalSettings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
@@ -107,6 +106,10 @@ export function AccountSection() {
     }
   };
 
+  const clientRefId = `${user?.id}&customer_email=${encodeURIComponent(
+    user?.email ?? ""
+  )}`;
+
   const plans = [
     {
       title: "Monthly",
@@ -116,13 +119,13 @@ export function AccountSection() {
         "Unlimited ScreenPipe cloud",
         "Priority support",
       ],
-      url: "https://screenpi.pe/pricing",
+      url: `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${clientRefId}`,
     },
     {
       title: "One-time",
       price: "$50",
       features: ["50 credits", "Bever expires", "Basic OCR & STT"],
-      url: "https://screenpi.pe/pricing",
+      url: `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${clientRefId}`,
     },
     {
       title: "Enterprise",
@@ -132,12 +135,12 @@ export function AccountSection() {
         "Dedicated support",
         "Custom features",
       ],
-      url: "https://screenpi.pe/contact",
+      url: "https://cal.com/louis030195/screenpipe-for-businesses",
     },
   ];
 
   return (
-    <div className='w-full space-y-6 py-4'>
+    <div className="w-full space-y-6 py-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Account Settings</h1>
         <Button
@@ -200,10 +203,9 @@ export function AccountSection() {
               <Input
                 value={settings.user?.token || ""}
                 onChange={(e) => {
-                  setLocalSettings((prev) => ({
-                    ...prev,
-                    user: { ...prev.user, token: e.target.value },
-                  }));
+                  updateSettings({
+                    user: { token: e.target.value },
+                  });
                 }}
                 placeholder="Enter your API key"
                 className="font-mono text-sm bg-secondary/30"
@@ -225,7 +227,7 @@ export function AccountSection() {
 
           <div className="grid gap-4">
             <div className="space-y-6">
-            <h4 className="text-lg font-medium">Active plan</h4>
+              <h4 className="text-lg font-medium">Active plan</h4>
 
               <div className="flex flex-col gap-4">
                 {plans.map((plan) => (
@@ -265,7 +267,7 @@ export function AccountSection() {
             </p>
           </div>
           <Badge
-          variant={"secondary"}
+            variant={"secondary"}
             className="uppercase text-[10px] font-medium"
           >
             COMING SOON
