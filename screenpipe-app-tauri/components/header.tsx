@@ -22,6 +22,7 @@ import {
   Book,
   User,
   Fingerprint,
+  Settings2,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Calendar } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-user";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -123,7 +125,6 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
 
-
   return (
     <div>
       {isLoading ? (
@@ -162,16 +163,23 @@ export default function Header() {
                 <DropdownMenuLabel>account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    className="cursor-pointer p-0"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowSettings(true);
-                    }}
-                  >
-                    <Settings />
-                  </DropdownMenuItem>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <DropdownMenuItem
+                        onSelect={(e) => e.preventDefault()}
+                        className="cursor-pointer  p-1.5"
+                      >
+                        <Settings2 className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                      </DropdownMenuItem>
+                    </DialogTrigger>
+                    <DialogContent
+                      className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0 [&>button]:hidden"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Settings />
+                    </DialogContent>
+                  </Dialog>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>

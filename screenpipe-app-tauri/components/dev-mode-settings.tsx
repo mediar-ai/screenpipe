@@ -114,12 +114,10 @@ const getDebuggingCommands = (os: string | null, dataDir: string) => {
 };
 
 export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
-  const { settings, updateSettings, localSettings, setLocalSettings } =
-    useSettings();
+  const { settings, updateSettings } = useSettings();
   const handleDevModeToggle = async (checked: boolean) => {
     try {
       await updateSettings({ devMode: checked });
-      setLocalSettings((prev) => ({ ...prev, devMode: checked }));
     } catch (error) {
       console.error("failed to update dev mode:", error);
       toast({
@@ -207,12 +205,12 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
                     <Label htmlFor="dev-mode">enable dev mode</Label>
                     <Switch
                       id="dev-mode"
-                      checked={localSettings.devMode}
+                      checked={settings.devMode}
                       onCheckedChange={handleDevModeToggle}
                     />
                   </div>
                   <div className="absolute top-2 right-2">
-                    <CliCommandDialog localSettings={localSettings} />
+                    <CliCommandDialog localSettings={settings} />
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
