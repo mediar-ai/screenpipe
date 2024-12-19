@@ -1,138 +1,142 @@
-use image::DynamicImage;
-use log::error;
-use std::ffi::CStr;
-use std::os::raw::{c_char, c_uchar};
-
-use std::ops::Drop;
-
-struct OcrResultGuard(*mut c_char);
-
-impl Drop for OcrResultGuard {
-    fn drop(&mut self) {
-        unsafe {
-            if !self.0.is_null() {
-                free_string(self.0);
-            }
-        }
-    }
-}
-
 #[cfg(target_os = "macos")]
-#[link(name = "screenpipe")]
-extern "C" {
-    fn perform_ocr(
-        image_data: *const c_uchar,
-        length: usize,
-        width: i32,
-        height: i32,
-        languages: *const *const c_char,
-        languages_count: i32,
-    ) -> *mut c_char;
-    fn free_string(ptr: *mut c_char);
+use cidre::{
+    cv::{PixelBuf, PixelFormat},
+    ns,
+    vn::{self, ImageRequestHandler, RecognizeTextRequest},
+};
+use image::DynamicImage;
+use image::GenericImageView;
+use log::error;
+use serde::{Deserialize, Serialize};
+use std::{ffi::c_void, ptr::null_mut};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct OcrResultBBox {
+    x: f64,
+    y: f64,
+    height: f64,
+    width: f64,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+struct OcrTextElement {
+    bounding_box: Vec<OcrResultBBox>,
+    confidence: f32,
+    text: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct OcrResult {
+    ocr_result: String,
+    text_elements: Vec<OcrTextElement>,
+    overall_confidence: f32,
+}
+
+#[no_mangle]
+#[cfg(target_os = "macos")]
+extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_void) {
+    // Implement your release logic here
+}
+
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
-    languages: Vec<screenpipe_core::Language>,
-) -> String {
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    let raw_data = rgba.as_raw();
+    languages: &ns::ArrayMut<ns::String>,
+) -> (String, String, Option<f64>) {
+    let (width, height) = image.dimensions();
+    let rgb = image.grayscale().to_luma8();
+    let raw_data = rgb.as_raw();
+    // let pixels = image.pixels();
 
-    let languages = get_apple_languages(languages);
+    let mut overall_confidence = 0.0;
+    let default_ocr_result = (
+        String::from(""),
+        String::from("[]"),
+        Some(overall_confidence),
+    );
 
-    let c_languages: Vec<*const c_char> = languages
-        .iter()
-        .map(|s| s.as_ptr() as *const c_char)
-        .collect();
+    let width = usize::try_from(width).unwrap();
+    let height = usize::try_from(height).unwrap();
 
-    unsafe {
-        let result_ptr = perform_ocr(
-            raw_data.as_ptr(),
-            raw_data.len(),
-            width as i32,
-            height as i32,
-            c_languages.as_ptr(),
-            c_languages.len() as i32,
-        );
-        let _guard = OcrResultGuard(result_ptr);
-        let result = CStr::from_ptr(result_ptr).to_string_lossy().into_owned();
-        result
+    let mut pixel_buf_out = None;
+
+    let pixel_buf = unsafe {
+        PixelBuf::create_with_bytes_in(
+            width,
+            height,
+            PixelFormat::ONE_COMPONENT_8,
+            raw_data.as_ptr() as *mut c_void,
+            width,
+            release_callback,
+            null_mut(),
+            None,
+            &mut pixel_buf_out,
+            None,
+        )
+        .to_result_unchecked(pixel_buf_out)
     }
-}
+    .unwrap();
 
-#[cfg(target_os = "macos")]
-pub fn parse_apple_ocr_result(json_result: &str) -> (String, String, Option<f64>) {
-    let parsed_result: serde_json::Value = serde_json::from_str(json_result).unwrap_or_else(|e| {
-        error!("Failed to parse JSON output: {}", e);
-        serde_json::json!({
-            "ocrResult": "",
-            "textElements": [],
-            "overallConfidence": 0.0
-        })
-    });
+    let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
+    let mut request = RecognizeTextRequest::new();
+    // Recognize all languages
+    request.set_recognition_langs(&languages);
+    request.set_uses_lang_correction(false);
+    let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
+    let result = handler.perform(&requests);
 
-    let text = parsed_result["ocrResult"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
-    let text_elements = parsed_result["textElements"]
-        .as_array()
-        .unwrap_or(&vec![])
-        .clone();
-    let overall_confidence = parsed_result["overallConfidence"].as_f64();
-
-    let json_output: Vec<serde_json::Value> = text_elements
-        .iter()
-        .map(|element| {
-            serde_json::json!({
-                "level": "0",
-                "page_num": "0",
-                "block_num": "0",
-                "par_num": "0",
-                "line_num": "0",
-                "word_num": "0",
-                "left": element["boundingBox"]["x"].as_f64().unwrap_or(0.0).to_string(),
-                "top": element["boundingBox"]["y"].as_f64().unwrap_or(0.0).to_string(),
-                "width": element["boundingBox"]["width"].as_f64().unwrap_or(0.0).to_string(),
-                "height": element["boundingBox"]["height"].as_f64().unwrap_or(0.0).to_string(),
-                "conf": element["confidence"].as_f64().unwrap_or(0.0).to_string(),
-                "text": element["text"].as_str().unwrap_or("").to_string()
-            })
-        })
-        .collect();
-
-    let json_output_string = serde_json::to_string(&json_output).unwrap_or_else(|e| {
-        error!("Failed to serialize JSON output: {}", e);
-        "[]".to_string()
-    });
-
-    (text, json_output_string, overall_confidence)
-}
-
-#[cfg(target_os = "macos")]
-fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
-    use screenpipe_core::Language;
-
-    let mut langs: Vec<String> = Vec::new();
-    for lang in languages {
-        let lang_str = match lang {
-            Language::English => "en-US",
-            Language::Spanish => "es-ES",
-            Language::French => "fr-FR",
-            Language::German => "de-DE",
-            Language::Italian => "it-IT",
-            Language::Portuguese => "pt-BR",
-            Language::Russian => "ru-RU",
-            Language::Chinese => "zh-Hans",
-            Language::Korean => "ko-KR",
-            Language::Japanese => "ja-JP",
-            Language::Ukrainian => "uk-UA",
-            Language::Thai => "th-TH",
-            Language::Arabic => "ar-SA",
-            _ => continue,
-        };
-        langs.push(lang_str.to_string());
+    if result.is_err() {
+        drop(pixel_buf);
+        return default_ocr_result;
     }
-    langs
+
+    if let Some(results) = request.results() {
+        if !results.is_empty() {
+            let mut ocr_results_vec: Vec<serde_json::Value> = Vec::new();
+            let mut ocr_text: String = String::new();
+            results.iter().for_each(|result| {
+                let observation_result = result.top_candidates(1).get(0).unwrap();
+                let text = observation_result.string();
+                let confidence = observation_result.confidence() as f64;
+                let bbox = observation_result
+                    .bounding_box_for_range(ns::Range::new(0, text.len()))
+                    .unwrap()
+                    .bounding_box();
+                let x = bbox.origin.x;
+                let y = bbox.origin.y;
+                let height = bbox.size.height;
+                let width = bbox.size.width;
+
+                ocr_results_vec.push(serde_json::json!({
+                    "level": "0",
+                    "page_num": "0",
+                    "block_num": "0",
+                    "par_num": "0",
+                    "line_num": "0",
+                    "word_num": "0",
+                    "left": x.to_string(),
+                    "top": y.to_string(),
+                    "width": width.to_string(),
+                    "height": height.to_string(),
+                    "conf": confidence.to_string(),
+                    "text": text.to_string(),
+                }));
+
+                overall_confidence += confidence;
+                ocr_text.push_str(text.to_string().as_str());
+            });
+
+            let json_output_string = serde_json::to_string(&ocr_results_vec).unwrap_or_else(|e| {
+                error!("Failed to serialize JSON output: {}", e);
+                "[]".to_string()
+            });
+
+            drop(pixel_buf);
+
+            return (ocr_text, json_output_string, Some(overall_confidence));
+        }
+    }
+
+    drop(pixel_buf);
+    return default_ocr_result;
 }
