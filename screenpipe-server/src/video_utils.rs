@@ -71,8 +71,18 @@ pub struct MergeVideosResponse {
     video_path: String,
 }
 
-pub async fn validate_video(file_path: &str) -> Result<()> {
-    // command: ffmpeg -v error -i <file> -f null -
+#[derive(Deserialize)]
+pub struct ValidateMediaParams {
+   pub file_path: String,
+}
+
+pub async fn validate_media(file_path: &str) -> Result<()> {
+    use tokio::fs::try_exists;
+
+    if !try_exists(file_path).await? {
+        return Err(anyhow::anyhow!("media file does not exist: {}", file_path));
+    }
+
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
     let status = Command::new(ffmpeg_path)
         .args(&[
@@ -90,7 +100,7 @@ pub async fn validate_video(file_path: &str) -> Result<()> {
     if status.status.success() {
         Ok(())
     } else {
-        Err(anyhow::anyhow!("invalid video file: {}", file_path))
+        Err(anyhow::anyhow!("invalid media file: {}", file_path))
     }
 }
 
@@ -113,7 +123,7 @@ pub async fn merge_videos(
     let mut file = tokio::fs::File::create(&temp_file).await?;
     for video_path in &request.video_paths {
         // video validation before writing in txt
-        if let Err(e) = validate_video(video_path).await{
+        if let Err(e) = validate_media(video_path).await{
             error!("invalid file in merging, skipping: {:?}", e);
             continue;
         }
