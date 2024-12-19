@@ -118,9 +118,14 @@ export function RecordingSettings() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Modify setLocalSettings to track changes
-  const handleSettingsChange = (newSettings: Partial<Settings>) => {
+  const handleSettingsChange = (
+    newSettings: Partial<Settings>,
+    restart: boolean = true
+  ) => {
     updateSettings(newSettings);
-    setHasUnsavedChanges(true);
+    if (restart) {
+      setHasUnsavedChanges(true);
+    }
   };
 
   // Show toast when settings change
@@ -215,10 +220,13 @@ export function RecordingSettings() {
             .map((device) => device.name);
         }
 
-        updateSettings({
-          monitorIds: updatedMonitorIds,
-          audioDevices: updatedAudioDevices,
-        });
+        handleSettingsChange(
+          {
+            monitorIds: updatedMonitorIds,
+            audioDevices: updatedAudioDevices,
+          },
+          false
+        );
       } catch (error) {
         console.error("Failed to load devices:", error);
       }
@@ -289,7 +297,7 @@ export function RecordingSettings() {
         .map((w) => w.toLowerCase())
         .includes(lowerCaseValue)
     ) {
-      updateSettings({
+      handleSettingsChange({
         ignoredWindows: [...settings.ignoredWindows, value],
         includedWindows: settings.includedWindows.filter(
           (w) => w.toLowerCase() !== lowerCaseValue
@@ -299,7 +307,7 @@ export function RecordingSettings() {
   };
 
   const handleRemoveIgnoredWindow = (value: string) => {
-    updateSettings({
+    handleSettingsChange({
       ignoredWindows: settings.ignoredWindows.filter((w) => w !== value),
     });
   };
@@ -312,7 +320,7 @@ export function RecordingSettings() {
         .map((w) => w.toLowerCase())
         .includes(lowerCaseValue)
     ) {
-      updateSettings({
+      handleSettingsChange({
         includedWindows: [...settings.includedWindows, value],
         ignoredWindows: settings.ignoredWindows.filter(
           (w) => w.toLowerCase() !== lowerCaseValue
@@ -322,7 +330,7 @@ export function RecordingSettings() {
   };
 
   const handleRemoveIncludedWindow = (value: string) => {
-    updateSettings({
+    handleSettingsChange({
       includedWindows: settings.includedWindows.filter((w) => w !== value),
     });
   };
@@ -334,16 +342,16 @@ export function RecordingSettings() {
     }
 
     if (value === "screenpipe-cloud") {
-      updateSettings({
+      handleSettingsChange({
         audioTranscriptionEngine: value,
       });
     } else {
-      updateSettings({ audioTranscriptionEngine: value });
+      handleSettingsChange({ audioTranscriptionEngine: value });
     }
   };
 
   const handleOcrModelChange = (value: string) => {
-    updateSettings({ ocrEngine: value });
+    handleSettingsChange({ ocrEngine: value });
   };
 
   const handleMonitorChange = (currentValue: string) => {
@@ -351,7 +359,7 @@ export function RecordingSettings() {
       ? settings.monitorIds.filter((id) => id !== currentValue)
       : [...settings.monitorIds, currentValue];
 
-    updateSettings({ monitorIds: updatedMonitors });
+    handleSettingsChange({ monitorIds: updatedMonitors });
   };
 
   const handleLanguageChange = (currentValue: Language) => {
@@ -359,7 +367,7 @@ export function RecordingSettings() {
       ? settings.languages.filter((id) => id !== currentValue)
       : [...settings.languages, currentValue];
 
-    updateSettings({ languages: updatedLanguages });
+    handleSettingsChange({ languages: updatedLanguages });
   };
 
   const handleAudioDeviceChange = (currentValue: string) => {
@@ -367,19 +375,19 @@ export function RecordingSettings() {
       ? settings.audioDevices.filter((device) => device !== currentValue)
       : [...settings.audioDevices, currentValue];
 
-    updateSettings({ audioDevices: updatedDevices });
+    handleSettingsChange({ audioDevices: updatedDevices });
   };
 
   const handlePiiRemovalChange = (checked: boolean) => {
-    updateSettings({ usePiiRemoval: checked });
+    handleSettingsChange({ usePiiRemoval: checked });
   };
 
   const handleDisableAudioChange = (checked: boolean) => {
-    updateSettings({ disableAudio: checked });
+    handleSettingsChange({ disableAudio: checked });
   };
 
   const handleFpsChange = (value: number[]) => {
-    updateSettings({ fps: value[0] });
+    handleSettingsChange({ fps: value[0] });
   };
 
   const handleVadSensitivityChange = (value: number[]) => {
@@ -388,7 +396,7 @@ export function RecordingSettings() {
       1: "medium",
       0: "low",
     };
-    updateSettings({
+    handleSettingsChange({
       vadSensitivity: sensitivityMap[value[0]],
     });
   };
@@ -403,7 +411,7 @@ export function RecordingSettings() {
   };
 
   const handleAudioChunkDurationChange = (value: number[]) => {
-    updateSettings({ audioChunkDuration: value[0] });
+    handleSettingsChange({ audioChunkDuration: value[0] });
   };
 
   const renderOcrEngineOptions = () => {
@@ -425,11 +433,11 @@ export function RecordingSettings() {
 
   const handleAnalyticsToggle = (checked: boolean) => {
     const newValue = checked;
-    updateSettings({ analyticsEnabled: newValue });
+    handleSettingsChange({ analyticsEnabled: newValue });
   };
 
   const handleChineseMirrorToggle = async (checked: boolean) => {
-    updateSettings({ useChineseMirror: checked });
+    handleSettingsChange({ useChineseMirror: checked });
     if (checked) {
       // Trigger setup when the toggle is turned on
       await runSetup();
@@ -463,7 +471,7 @@ export function RecordingSettings() {
         // TODO: check permission of selected dir for server to write into
 
         if (selected) {
-          updateSettings({ dataDir: selected });
+          handleSettingsChange({ dataDir: selected });
         } else {
           console.log("canceled");
         }
@@ -483,7 +491,7 @@ export function RecordingSettings() {
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const newValue = e.target.value;
-    updateSettings({ dataDir: newValue });
+    handleSettingsChange({ dataDir: newValue });
   };
 
   const handleDataDirInputBlur = () => {
@@ -515,7 +523,7 @@ export function RecordingSettings() {
       duration: 3000,
     });
 
-    updateSettings({ dataDir: settings.dataDir });
+    handleSettingsChange({ dataDir: settings.dataDir });
   };
 
   const runSetup = async () => {
@@ -567,14 +575,14 @@ export function RecordingSettings() {
         variant: "destructive",
       });
       // Revert the toggle if setup fails
-      updateSettings({ useChineseMirror: false });
+      handleSettingsChange({ useChineseMirror: false });
     } finally {
       setIsSetupRunning(false);
     }
   };
 
   const handleFrameCacheToggle = (checked: boolean) => {
-    updateSettings({
+    handleSettingsChange({
       enableFrameCache: checked,
     });
   };
@@ -606,7 +614,7 @@ export function RecordingSettings() {
       }
 
       // Just update the local setting - the update button will handle the restart
-      updateSettings({ enableUiMonitoring: checked });
+      handleSettingsChange({ enableUiMonitoring: checked });
     } catch (error) {
       console.error("failed to toggle ui monitoring:", error);
       toast({
@@ -962,7 +970,6 @@ export function RecordingSettings() {
                       handleSettingsChange({
                         deepgramApiKey: newValue,
                       });
-                      updateSettings({ deepgramApiKey: newValue });
                     }}
                     className="pr-10 w-full"
                     placeholder="Enter your Deepgram API key"
