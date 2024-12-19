@@ -26,9 +26,6 @@ text_json/
 
 src-tauri/deno-*
 
-# Unignore
-!screenpipe-vision/lib/libscreenpipe*.dylib
-
 # Tauri signing key
 tauri_key_louis.key
 pnpm-lock.yaml

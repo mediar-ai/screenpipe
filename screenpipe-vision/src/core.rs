@@ -1,6 +1,4 @@
 #[cfg(target_os = "macos")]
-use crate::apple::parse_apple_ocr_result;
-#[cfg(target_os = "macos")]
 use crate::apple::perform_ocr_apple;
 use crate::capture_screenshot_by_window::CapturedWindow;
 use crate::capture_screenshot_by_window::WindowFilters;
@@ -11,6 +9,8 @@ use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
+#[cfg(target_os = "macos")]
+use cidre::ns;
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
+    sync::OnceLock,
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
@@ -29,6 +30,9 @@ use xcap_macos::Monitor;
 
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
+
+#[cfg(target_os = "macos")]
+static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 
 pub struct CaptureResult {
     pub image: DynamicImage,
@@ -205,6 +209,17 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
+    #[cfg(target_os = "macos")]
+    let languages_slice = {
+        use ns;
+        let apple_languages = get_apple_languages(languages.clone());
+        let mut slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
+        apple_languages.iter().for_each(|language| {
+            slice.push(&ns::String::with_str(language.as_str()));
+        });
+        slice
+    };
+
     for captured_window in window_images {
         let (window_text, window_json_output, confidence) = match ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
@@ -218,10 +233,7 @@ pub async fn process_ocr_task(
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => parse_apple_ocr_result(&perform_ocr_apple(
-                &captured_window.image,
-                languages.clone(),
-            )),
+            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages_slice),
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -296,4 +308,29 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
 
     Ok(())
 }
- 
+
+#[cfg(target_os = "macos")]
+fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
+    let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert(Language::English, "en-US");
+        m.insert(Language::Spanish, "es-ES");
+        m.insert(Language::French, "fr-FR");
+        m.insert(Language::German, "de-DE");
+        m.insert(Language::Italian, "it-IT");
+        m.insert(Language::Portuguese, "pt-BR");
+        m.insert(Language::Russian, "ru-RU");
+        m.insert(Language::Chinese, "zh-Hans");
+        m.insert(Language::Korean, "ko-KR");
+        m.insert(Language::Japanese, "ja-JP");
+        m.insert(Language::Ukrainian, "uk-UA");
+        m.insert(Language::Thai, "th-TH");
+        m.insert(Language::Arabic, "ar-SA");
+        m
+    });
+
+    languages
+        .iter()
+        .filter_map(|lang| map.get(lang).map(|&s| s.to_string()))
+        .collect()
+}

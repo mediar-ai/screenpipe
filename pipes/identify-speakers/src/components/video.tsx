@@ -33,47 +33,50 @@ export const VideoComponent = memo(function VideoComponent({
     </p>
   );
 
-  const getMimeType = (path: string): string => {
-    const ext = path.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "mp4":
-        return "video/mp4";
-      case "webm":
-        return "video/webm";
-      case "ogg":
-        return "video/ogg";
-      case "mp3":
-        return "audio/mpeg";
-      case "wav":
-        return "audio/wav";
-      default:
-        return isAudio ? "audio/mpeg" : "video/mp4";
+  const validateMedia = async(path: string): Promise<string> => {
+    try {
+      const response = await fetch(`http://localhost:3030/experimental/validate/media?file_path=${encodeURIComponent(path)}`);
+      const result = await response.json();
+      return result.status;
+    } catch (error) {
+      console.error("Failed to validate media:", error);
+      return "Failed to validate media";
     }
   };
 
   useEffect(() => {
     async function loadMedia() {
       try {
-        console.log("Loading media:", filePath);
         const sanitizedPath = sanitizeFilePath(filePath);
         console.log("Sanitized path:", sanitizedPath);
+
         if (!sanitizedPath) {
           throw new Error("Invalid file path");
         }
 
-        setIsAudio(
-          sanitizedPath.toLowerCase().includes("input") ||
-            sanitizedPath.toLowerCase().includes("output")
-        );
+        const validationStatus = await validateMedia(sanitizedPath);
+        console.log("Media file:", validationStatus)
 
-        const { data, mimeType } = await getMediaFile(sanitizedPath);
-        const binaryData = atob(data);
-        const bytes = new Uint8Array(binaryData.length);
-        for (let i = 0; i < binaryData.length; i++) {
-          bytes[i] = binaryData.charCodeAt(i);
+        if (validationStatus === "valid media file") {
+          setIsAudio(
+            sanitizedPath.toLowerCase().includes("input") ||
+            sanitizedPath.toLowerCase().includes("output")
+          );
+          const { data, mimeType } = await getMediaFile(sanitizedPath);
+          const binaryData = atob(data);
+          const bytes = new Uint8Array(binaryData.length);
+          for (let i = 0; i < binaryData.length; i++) {
+            bytes[i] = binaryData.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: mimeType });
+          setMediaSrc(URL.createObjectURL(blob));
+        } else if (validationStatus.startsWith("media file does not exist")) {
+            throw new Error(`${isAudio ? "audio" : "video" } file not exists, it might get deleted`);
+        } else if (validationStatus.startsWith("invalid media file")) {
+            throw new Error(`the ${isAudio ? "audio" : "video" } file is not written completely`);
+        } else { 
+            throw new Error("unknown media validation status"); 
         }
-        const blob = new Blob([bytes], { type: mimeType });
-        setMediaSrc(URL.createObjectURL(blob));
       } catch (error) {
         console.error("Failed to load media:", error);
         setError(
