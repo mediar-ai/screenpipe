@@ -9,6 +9,7 @@ use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
+#[cfg(target_os = "macos")]
 use cidre::ns;
 use image::DynamicImage;
 use log::{debug, error};
@@ -19,6 +20,7 @@ use std::sync::Arc;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
+    sync::OnceLock,
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
@@ -28,6 +30,9 @@ use xcap_macos::Monitor;
 
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
+
+#[cfg(target_os = "macos")]
+static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 
 pub struct CaptureResult {
     pub image: DynamicImage,
@@ -205,12 +210,15 @@ pub async fn process_ocr_task(
     let mut window_count = 0;
 
     #[cfg(target_os = "macos")]
-    use ns;
-    let apple_languages = get_apple_languages(languages.clone());
-    let mut languages_slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
-    apple_languages.iter().for_each(|language| {
-        languages_slice.push(&ns::String::with_str(language.as_str()));
-    });
+    let languages_slice = {
+        use ns;
+        let apple_languages = get_apple_languages(languages.clone());
+        let mut slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
+        apple_languages.iter().for_each(|language| {
+            slice.push(&ns::String::with_str(language.as_str()));
+        });
+        slice
+    };
 
     for captured_window in window_images {
         let (window_text, window_json_output, confidence) = match ocr_engine {
@@ -303,27 +311,26 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
-    use screenpipe_core::Language;
+    let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert(Language::English, "en-US");
+        m.insert(Language::Spanish, "es-ES");
+        m.insert(Language::French, "fr-FR");
+        m.insert(Language::German, "de-DE");
+        m.insert(Language::Italian, "it-IT");
+        m.insert(Language::Portuguese, "pt-BR");
+        m.insert(Language::Russian, "ru-RU");
+        m.insert(Language::Chinese, "zh-Hans");
+        m.insert(Language::Korean, "ko-KR");
+        m.insert(Language::Japanese, "ja-JP");
+        m.insert(Language::Ukrainian, "uk-UA");
+        m.insert(Language::Thai, "th-TH");
+        m.insert(Language::Arabic, "ar-SA");
+        m
+    });
 
-    let mut langs: Vec<String> = Vec::new();
-    for lang in languages {
-        let lang_str = match lang {
-            Language::English => "en-US",
-            Language::Spanish => "es-ES",
-            Language::French => "fr-FR",
-            Language::German => "de-DE",
-            Language::Italian => "it-IT",
-            Language::Portuguese => "pt-BR",
-            Language::Russian => "ru-RU",
-            Language::Chinese => "zh-Hans",
-            Language::Korean => "ko-KR",
-            Language::Japanese => "ja-JP",
-            Language::Ukrainian => "uk-UA",
-            Language::Thai => "th-TH",
-            Language::Arabic => "ar-SA",
-            _ => continue,
-        };
-        langs.push(lang_str.to_string());
-    }
-    langs
+    languages
+        .iter()
+        .filter_map(|lang| map.get(lang).map(|&s| s.to_string()))
+        .collect()
 }
