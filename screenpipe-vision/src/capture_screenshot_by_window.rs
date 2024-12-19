@@ -49,6 +49,7 @@ static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
         "loginwindow",
         "WindowManager",
         "Contexts",
+        "Screenshot",
     ])
 });
 

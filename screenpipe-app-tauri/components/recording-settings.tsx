@@ -1395,8 +1395,6 @@ export function RecordingSettings({
                         we do not collect any screen data, microphone, query
                         data.
                         <br />
-                        do not collect any screen data, microphone, query data.
-                        <br />
                         read more on our data privacy policy at
                         <br />
                         <a

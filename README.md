@@ -77,7 +77,7 @@
 
 # how it works?
 
-- we record everything 24/7
+- we record everything 24/7, 100% locally
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 

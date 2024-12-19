@@ -17,7 +17,13 @@ use crate::{
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
-    video_utils::{merge_videos, MergeVideosRequest, MergeVideosResponse},
+    video_utils::{
+        merge_videos,
+        validate_media,
+        MergeVideosRequest,
+        MergeVideosResponse,
+        ValidateMediaParams
+    },
     DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
@@ -910,6 +916,22 @@ async fn merge_frames_handler(
     }
 }
 
+async fn validate_media_handler(
+    State(_state): State<Arc<AppState>>,
+    Query(params): Query<ValidateMediaParams>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+
+    match validate_media(&params.file_path).await {
+        Ok(_) => Ok(Json(json!({"status": "valid media file"}))),
+        Err(e) => {
+            Err((
+                StatusCode::EXPECTATION_FAILED,
+                Json(json!({"status": e.to_string()})),
+            ))
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct RawSqlQuery {
     query: String,
@@ -1589,6 +1611,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/merge", post(merge_speakers_handler))
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
+        .route("/experimental/validate/media", get(validate_media_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
