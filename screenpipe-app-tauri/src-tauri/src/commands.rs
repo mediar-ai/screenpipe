@@ -293,15 +293,24 @@ pub async fn open_pipe_window(
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app_handle,
         &title,
         tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap()),
     )
     .title(title)
     .inner_size(800.0, 600.0)
+    .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .build()
     .map_err(|e| e.to_string())?;
+
+    // Force focus and show
+    let _ = window.set_focus();
+    let _ = window.show();
+
+    #[cfg(target_os = "macos")]
+    let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
     Ok(())
 }
