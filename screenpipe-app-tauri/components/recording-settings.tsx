@@ -67,6 +67,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -98,6 +99,9 @@ export function RecordingSettings() {
   > | null>(null);
   const [windowsForIgnore, setWindowsForIgnore] = useState("");
   const [windowsForInclude, setWindowsForInclude] = useState("");
+
+  const { items: windowItems, isLoading: isWindowItemsLoading } =
+    useSqlAutocomplete("window");
 
   const [availableMonitors, setAvailableMonitors] = useState<MonitorDevice[]>(
     []
@@ -625,38 +629,60 @@ export function RecordingSettings() {
     }
   };
   const handleIgnoredWindowsChange = (values: string[]) => {
-    const newValue = values.find(
-      (value) => !settings.ignoredWindows.includes(value)
-    );
+    // Convert all values to lowercase for comparison
+    const lowerCaseValues = values.map(v => v.toLowerCase());
+    const currentLowerCase = settings.ignoredWindows.map(v => v.toLowerCase());
 
-    if (newValue) {
-      handleAddIgnoredWindow(newValue);
-    } else {
-      // Find the removed value
-      const removedValue = settings.ignoredWindows.find(
-        (value) => !values.includes(value)
-      );
-      if (removedValue) {
-        handleRemoveIgnoredWindow(removedValue);
-      }
+    // Find added values (in values but not in current)
+    const addedValues = values.filter(v => !currentLowerCase.includes(v.toLowerCase()));
+    // Find removed values (in current but not in values)
+    const removedValues = settings.ignoredWindows.filter(v => !lowerCaseValues.includes(v.toLowerCase()));
+
+    if (addedValues.length > 0) {
+      // Handle adding new value
+      const newValue = addedValues[0];
+      handleSettingsChange({
+        ignoredWindows: [...settings.ignoredWindows, newValue],
+        // Remove from included windows if present
+        includedWindows: settings.includedWindows.filter(
+          w => w.toLowerCase() !== newValue.toLowerCase()
+        ),
+      });
+    } else if (removedValues.length > 0) {
+      // Handle removing value
+      const removedValue = removedValues[0];
+      handleSettingsChange({
+        ignoredWindows: settings.ignoredWindows.filter(w => w !== removedValue),
+      });
     }
   };
 
   const handleIncludedWindowsChange = (values: string[]) => {
-    const newValue = values.find(
-      (value) => !settings.includedWindows.includes(value)
-    );
+    // Convert all values to lowercase for comparison
+    const lowerCaseValues = values.map(v => v.toLowerCase());
+    const currentLowerCase = settings.includedWindows.map(v => v.toLowerCase());
 
-    if (newValue) {
-      handleAddIncludedWindow(newValue);
-    } else {
-      // Find the removed value
-      const removedValue = settings.includedWindows.find(
-        (value) => !values.includes(value)
-      );
-      if (removedValue) {
-        handleRemoveIncludedWindow(removedValue);
-      }
+    // Find added values (in values but not in current)
+    const addedValues = values.filter(v => !currentLowerCase.includes(v.toLowerCase()));
+    // Find removed values (in current but not in values)
+    const removedValues = settings.includedWindows.filter(v => !lowerCaseValues.includes(v.toLowerCase()));
+
+    if (addedValues.length > 0) {
+      // Handle adding new value
+      const newValue = addedValues[0];
+      handleSettingsChange({
+        includedWindows: [...settings.includedWindows, newValue],
+        // Remove from ignored windows if present
+        ignoredWindows: settings.ignoredWindows.filter(
+          w => w.toLowerCase() !== newValue.toLowerCase()
+        ),
+      });
+    } else if (removedValues.length > 0) {
+      // Handle removing value
+      const removedValue = removedValues[0];
+      handleSettingsChange({
+        includedWindows: settings.includedWindows.filter(w => w !== removedValue),
+      });
     }
   };
 
@@ -831,13 +857,13 @@ export function RecordingSettings() {
                 </TooltipProvider>
               </Label>
               <MultiSelect
-                options={settings.ignoredWindows.map((window) => ({
-                  value: window,
-                  label: window,
+                options={windowItems.map((item) => ({
+                  value: item.name,
+                  label: item.name,
                   icon: AppWindowMac,
                 }))}
-                onValueChange={handleIgnoredWindowsChange}
                 defaultValue={settings.ignoredWindows}
+                onValueChange={handleIgnoredWindowsChange}
                 placeholder="add windows to ignore"
                 variant="default"
                 animation={2}
@@ -870,13 +896,13 @@ export function RecordingSettings() {
                 </TooltipProvider>
               </Label>
               <MultiSelect
-                options={settings.includedWindows.map((window) => ({
-                  value: window,
-                  label: window,
+                options={windowItems.map((item) => ({
+                  value: item.name,
+                  label: item.name,
                   icon: AppWindowMac,
                 }))}
-                onValueChange={handleIncludedWindowsChange}
                 defaultValue={settings.includedWindows}
+                onValueChange={handleIncludedWindowsChange}
                 placeholder="add window to include"
                 variant="default"
                 animation={2}
