@@ -28,7 +28,6 @@ anyhow = "1.0.86"
 log = { workspace = true }
 
 image-compare = "0.4.1"
-strsim = "0.10.0"
 clap = { version = "4.0", features = ["derive"] }
 # tokio = { version = "1", features = ["full"] }
 
@@ -50,7 +49,6 @@ criterion = { workspace = true }
 assert_cmd = "2.0.14"
 predicates = "3.1.0"
 assert_fs = "1.1.1"
-strsim = "0.10.0"
 memory-stats = "1.2.0"
 
 # websocket example
@@ -58,9 +56,6 @@ futures-util = "0.3"
 tokio-tungstenite = "0.20"
 serde = "1.0.200"
 base64 = "0.22.1"
-
-[build-dependencies]
-cc = "1.0"
 
 [package.metadata.osx]
 framework = ["Vision", "AppKit"]
@@ -97,4 +92,3 @@ xcap-macos = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"
 xcap = "0.0.14"
-

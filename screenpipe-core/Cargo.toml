@@ -31,13 +31,10 @@ tokio = { workspace = true }
 # Security
 regex = { version = "1.10.6", features = ["std"], optional = true }
 lazy_static = { version = "1.4.0", optional = true }
-tempfile = "3.3.0"
 url = "2.4.0"
 
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
-dirs = "5.0.0"
 clap = { version = "4.5.20", features = ["derive"] }
 
 # random
