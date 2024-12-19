@@ -38,7 +38,7 @@ export const VideoComponent = memo(function VideoComponent({
     const ext = path.split(".").pop()?.toLowerCase();
     switch (ext) {
       case "mp4":
-        return "video/mp4";
+        return "video/mp4m";
       case "webm":
         return "video/webm";
       case "ogg":
@@ -48,7 +48,7 @@ export const VideoComponent = memo(function VideoComponent({
       case "wav":
         return "audio/wav";
       default:
-        return isAudio ? "audio/mpeg" : "video/mp4";
+        return isAudio ? "audio/mpeg" : "video/mp4m";
     }
   };
 
@@ -120,7 +120,9 @@ export const VideoComponent = memo(function VideoComponent({
         </div>
       ) : (
         <video controls className="w-full rounded-md">
-          <source src={mediaSrc} type="video/mp4" />
+          <source src={mediaSrc} type='video/mp4; codecs="hvc1"' />
+          <source src={mediaSrc} type='video/mp4; codecs="hvec"' />
+          <source src={mediaSrc} type='video/mp4' />
           Your browser does not support the video tag.
         </video>
       )}
