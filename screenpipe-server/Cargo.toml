@@ -66,7 +66,6 @@ tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 
 # Log
 log = { workspace = true }
-env_logger = "0.10"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
@@ -76,7 +75,7 @@ clap = { version = "4.3", features = ["derive", "env"] }
 # Memory watchdog
 sysinfo = "0.29.0"
 
-# Color 
+# Color
 colored = "2.0"
 
 # Plugins
@@ -86,7 +85,7 @@ futures = "0.3.17"
 # Directory management
 dirs = "5.0"
 
-# Client http 
+# Client http
 reqwest = { workspace = true }
 
 # Concurrency
@@ -126,6 +125,7 @@ zerocopy = { version = "0.7.32" }
 port_check = "0.2.1"
 
 [dev-dependencies]
+env_logger = "0.10"
 tempfile = "3.3.0"
 
 # Benches
