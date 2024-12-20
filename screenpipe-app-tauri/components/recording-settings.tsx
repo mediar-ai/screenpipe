@@ -1225,7 +1225,7 @@ export function RecordingSettings() {
               htmlFor="audioChunkDuration"
               className="flex items-center space-x-2"
             >
-              <span>Audio chunk duration (seconds)</span>
+              <span>audio chunk duration (seconds)</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>

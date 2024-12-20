@@ -57,7 +57,7 @@ export async function analyzeChunk(
     model,
     messages: [
       {
-        role: "system",
+        role: "user" as const,
         content:
           "summarize this chunk of activity in 2-3 sentences, focus on key events and patterns",
       },
@@ -134,7 +134,7 @@ export const AGENTS: Agent[] = [
         openai,
         [
           {
-            role: "system",
+            role: "user",
             content: `create a hierarchical summary with these sections:
                 ### overview
                 (one paragraph summary of entire time range, focusing on answering the user's question)
@@ -181,7 +181,7 @@ export const AGENTS: Agent[] = [
         openai,
         [
           {
-            role: "system",
+            role: "user",
             content:
               "analyze all context including apps, windows, text & audio. provide insights about user activity patterns",
           },
@@ -212,7 +212,7 @@ export const AGENTS: Agent[] = [
         openai,
         [
           {
-            role: "system",
+            role: "user",
             content:
               "analyze app and window usage patterns, focus on work habits and application transitions",
           },
@@ -242,7 +242,7 @@ export const AGENTS: Agent[] = [
         openai,
         [
           {
-            role: "system",
+            role: "user",
             content:
               "analyze OCR text content, identify key topics and information being viewed",
           },
@@ -270,7 +270,7 @@ export const AGENTS: Agent[] = [
         openai,
         [
           {
-            role: "system",
+            role: "user",
             content:
               "analyze audio transcriptions, identify key conversations and spoken content",
           },

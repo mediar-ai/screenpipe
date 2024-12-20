@@ -636,7 +636,7 @@ export function SearchChat() {
 
       const messages = [
         {
-          role: "system" as const,
+          role: "user" as const, // claude does not support system messages?
           content: `You are a helpful assistant specialized as a "${
             selectedAgent.name
           }". ${selectedAgent.systemPrompt}

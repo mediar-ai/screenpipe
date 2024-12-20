@@ -104,6 +104,23 @@ function IconOpenAI({ className, ...props }: React.ComponentProps<"svg">) {
   );
 }
 
+function IconClaude({ className, ...props }: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      fill="currentColor" 
+      viewBox="0 0 24 24"
+      role="img"
+      xmlns="http://www.w3.org/2000/svg"
+      className={cn("size-4", className)}
+      {...props}
+    >
+      <title>Claude icon</title>
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function IconVercel({ className, ...props }: React.ComponentProps<"svg">) {
   return (
     <svg
@@ -590,4 +607,5 @@ export {
   IconChevronUpDown,
   IconLlama,
   IconCode,
+  IconClaude,
 };

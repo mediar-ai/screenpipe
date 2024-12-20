@@ -219,37 +219,21 @@ const getStore = async () => {
 const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     const tauriStore = await getStore();
-    const allKeys = await tauriStore.keys();
-    const values: Record<string, any> = {};
-
-    for (const k of allKeys) {
-      values[k] = await tauriStore.get(k);
-    }
-
-    return { settings: unflattenObject(values) };
+    const settings = await tauriStore.get<Settings>("root");
+    return settings || createDefaultSettingsObject();
   },
   setItem: async (_key: string, value: any) => {
     const tauriStore = await getStore();
-
-    const flattenedValue = flattenObject(value.settings);
-
-    // Delete all existing keys first
-    const existingKeys = await tauriStore.keys();
-    for (const key of existingKeys) {
-      await tauriStore.delete(key);
-    }
-
-    // Set new flattened values
-    for (const [key, val] of Object.entries(flattenedValue)) {
+    const settings = value.settings;
+    for (const [key, val] of Object.entries(settings)) {
       await tauriStore.set(key, val);
     }
-
     await tauriStore.save();
   },
   removeItem: async (_key: string) => {
     const tauriStore = await getStore();
-    const keys = await tauriStore.keys();
-    for (const key of keys) {
+    const settings = createDefaultSettingsObject();
+    for (const key of Object.keys(settings)) {
       await tauriStore.delete(key);
     }
     await tauriStore.save();
