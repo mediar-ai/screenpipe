@@ -23,6 +23,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    core::ShutdownSignal,
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -31,7 +32,7 @@ use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
-use tokio::{runtime::Runtime, signal, sync::broadcast};
+use tokio::{signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -403,22 +404,15 @@ async fn main() -> anyhow::Result<()> {
     let ocr_engine_clone = cli.ocr_engine.clone();
     let vad_engine = cli.vad_engine.clone();
     let vad_engine_clone = vad_engine.clone();
+    let vad_engine_clone_2 = vad_engine.clone();
     let vad_sensitivity_clone = cli.vad_sensitivity.clone();
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    let audio_runtime = Runtime::new().unwrap();
-    let vision_runtime = Runtime::new().unwrap();
-
-    let audio_handle = audio_runtime.handle().clone();
-    let vision_handle = vision_runtime.handle().clone();
-
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
-    let vision_control_clone = Arc::clone(&vision_control);
-    let shutdown_tx_clone = shutdown_tx.clone();
     let monitor_ids_clone = monitor_ids.clone();
-    let ignored_windows_clone = cli.ignored_windows.clone();
-    let included_windows_clone = cli.included_windows.clone();
+    let ignored_windows = cli.ignored_windows.clone();
+    let included_windows = cli.included_windows.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -429,54 +423,43 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
 
-    let handle = {
-        let runtime = &tokio::runtime::Handle::current();
-        runtime.spawn(async move {
-            loop {
-                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
-                let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let recording_future = start_continuous_recording(
-                    db_clone.clone(),
-                    output_path_clone.clone(),
-                    fps,
-                    audio_chunk_duration, // use the new setting
-                    Duration::from_secs(cli.video_chunk_duration),
-                    vision_control_clone.clone(),
-                    audio_devices_control.clone(),
-                    cli.disable_audio,
-                    Arc::new(cli.audio_transcription_engine.clone().into()),
-                    Arc::new(cli.ocr_engine.clone().into()),
-                    monitor_ids_clone.clone(),
-                    cli.use_pii_removal,
-                    cli.disable_vision,
-                    vad_engine_clone,
-                    &vision_handle,
-                    &audio_handle,
-                    &cli.ignored_windows,
-                    &cli.included_windows,
-                    cli.deepgram_api_key.clone(),
-                    cli.vad_sensitivity.clone(),
-                    languages.clone(),
-                    cli.capture_unfocused_windows,
-                );
+    let shutdown = ShutdownSignal::new();
+    let shutdown_for_ctrlc = shutdown.clone();
+    let shutdown_for_autodestruct = shutdown.clone();
 
-                let result = tokio::select! {
-                    result = recording_future => result,
-                    _ = shutdown_rx.recv() => {
-                        info!("received shutdown signal for recording");
-                        break;
-                    }
-                };
+    // Use in continuous recording
+    let recording_future = start_continuous_recording(
+        db_clone,
+        output_path_clone,
+        fps,
+        audio_chunk_duration,
+        Duration::from_secs(cli.video_chunk_duration),
+        audio_devices_control.clone(),
+        cli.disable_audio,
+        Arc::new(cli.audio_transcription_engine.clone().into()),
+        Arc::new(cli.ocr_engine.clone().into()),
+        monitor_ids_clone.clone(),
+        cli.use_pii_removal,
+        cli.disable_vision,
+        vad_engine_clone_2,
+        &ignored_windows,
+        &included_windows,
+        cli.deepgram_api_key.clone(),
+        cli.vad_sensitivity.clone(),
+        languages.clone(),
+        cli.capture_unfocused_windows,
+        shutdown_for_autodestruct.clone(),
+        #[cfg(feature = "keyboard")]
+        cli.enable_keyboard,
+    );
 
-                if let Err(e) = result {
-                    error!("continuous recording error: {:?}", e);
-                }
-            }
-
-            drop(vision_runtime);
-            drop(audio_runtime);
-        })
-    };
+    // Single Ctrl+C handler
+    tokio::spawn(async move {
+        if let Ok(()) = signal::ctrl_c().await {
+            info!("received ctrl+c, initiating shutdown");
+            shutdown_for_ctrlc.signal();
+        }
+    });
 
     let local_data_dir_clone_2 = local_data_dir_clone.clone();
     #[cfg(feature = "llm")]
@@ -567,11 +550,11 @@ async fn main() -> anyhow::Result<()> {
     println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
     println!(
         "│ ignored windows     │ {:<34} │",
-        format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)
+        format_cell(&format!("{:?}", &ignored_windows), VALUE_WIDTH)
     );
     println!(
         "│ included windows    │ {:<34} │",
-        format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
+        format_cell(&format!("{:?}", &included_windows), VALUE_WIDTH)
     );
     println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
     println!("│ frame cache         │ {:<34} │", cli.enable_frame_cache);
@@ -647,7 +630,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Audio devices section
-    println!("├─────────────────────┼────────────────────────────────────┤");
+    println!("├─────────────────────┼──────────────────────────────���─────┤");
     println!("│ audio devices       │                                    │");
 
     if cli.disable_audio {
@@ -762,47 +745,16 @@ async fn main() -> anyhow::Result<()> {
     let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
-    // Add auto-destruct watcher
+    // Auto-destruct watcher (if enabled)
     if let Some(pid) = cli.auto_destruct_pid {
         info!("watching pid {} for auto-destruction", pid);
-        let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
-            // sleep for 5 seconds
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("watched pid {} has stopped, initiating shutdown", pid);
-                let _ = shutdown_tx_clone.send(());
+                shutdown_for_autodestruct.signal();
             }
         });
-    }
-
-    let ctrl_c_future = signal::ctrl_c();
-    pin_mut!(ctrl_c_future);
-
-    // only in beta and on macos
-    #[cfg(feature = "beta")]
-    {
-        if cli.enable_beta && cfg!(target_os = "macos") {
-            use screenpipe_actions::run;
-
-            info!("beta feature enabled, starting screenpipe actions");
-
-            let shutdown_tx_clone = shutdown_tx.clone();
-            tokio::spawn(async move {
-                let mut shutdown_rx = shutdown_tx_clone.subscribe();
-
-                tokio::select! {
-                    result = run() => {
-                        if let Err(e) = result {
-                            error!("Error running screenpipe actions: {}", e);
-                        }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("Received shutdown signal, stopping screenpipe actions");
-                    }
-                }
-            });
-        }
     }
 
     // Start the UI monitoring task
@@ -833,17 +785,14 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    // Main select loop
     tokio::select! {
-        _ = handle => info!("recording completed"),
-        result = &mut server_future => {
+        _ = recording_future => info!("recording completed"),
+        result = server_future => {
             match result {
                 Ok(_) => info!("server stopped normally"),
                 Err(e) => error!("server stopped with error: {:?}", e),
             }
-        }
-        _ = ctrl_c_future => {
-            info!("received ctrl+c, initiating shutdown");
-            let _ = shutdown_tx.send(());
         }
     }
 
@@ -1161,7 +1110,7 @@ fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
     }
 
     // Construct the new PATH string
-    let new_path_env = format!("{};{}", current_path, new_path.display());
+    let new_path_env = format!("\";{}\"", new_path.display());
 
     // Execute the 'setx' command to persist the PATH
     let output = std::process::Command::new("setx")

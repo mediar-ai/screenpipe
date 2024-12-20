@@ -239,6 +239,11 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
+    /// Enable keyboard capture
+    #[cfg(feature = "keyboard")]
+    #[arg(long, default_value_t = false)]
+    pub enable_keyboard: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
