@@ -33,7 +33,7 @@ tauri-plugin-process = "=2.0.0"
 tauri-plugin-autostart = "=2.0.0"
 tauri-plugin-deep-link = "=2.2.0"
 tauri-plugin-shell = "=2.0.0"
-tauri-plugin-store = "=2.0.0"
+tauri-plugin-store = "=2.2.0"
 
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"

@@ -12,29 +12,85 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge"; // Add this import
-import { cn } from "@/lib/utils"; // Add this import
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
-import { HelpCircle, RefreshCw, Coins, UserCog } from "lucide-react";
+import {
+  HelpCircle,
+  RefreshCw,
+  Coins,
+  UserCog,
+  ExternalLinkIcon,
+} from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { Card } from "../ui/card";
+
+function PlanCard({
+  title,
+  price,
+  features,
+  isActive,
+  isSelected,
+  onSelect,
+}: {
+  title: string;
+  price: string;
+  features: string[];
+  isActive?: boolean;
+  isSelected?: boolean;
+  onSelect?: () => void;
+}) {
+  return (
+    <Card
+      className={cn(
+        "rounded-xl border px-6 py-4 flex items-start gap-6 cursor-pointer transition-all",
+        isActive
+          ? "border-gray-500/50 bg-gray-500/5"
+          : "border-border/50 bg-secondary/5",
+        isSelected && !isActive && "border-primary ring-1 ring-primary",
+        !isActive && "hover:border-primary/50"
+      )}
+      onClick={onSelect}
+    >
+      <div className="space-y-2 min-w-[200px]">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-medium opacity-80">{title}</h3>
+        </div>
+        <p className="text-lg">{price}</p>
+      </div>
+
+      <ul className="flex-grow space-y-2">
+        {features.map((feature, i) => (
+          <li
+            key={i}
+            className="flex items-center text-sm text-muted-foreground"
+          >
+            <span className="mr-2">•</span>
+            {feature}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
 
 export function AccountSection() {
   const { user, loadUser } = useUser();
-  const { localSettings, setLocalSettings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
   const handleRefreshCredits = async () => {
-    if (!localSettings.user?.token) return;
+    if (!settings.user?.token) return;
 
     setIsRefreshing(true);
     try {
-      await loadUser(localSettings.user.token);
+      await loadUser(settings.user.token);
       toast({
         title: "credits refreshed",
         description: "your credit balance has been updated",
@@ -50,39 +106,91 @@ export function AccountSection() {
     }
   };
 
+  const clientRefId = `${user?.id}&customer_email=${encodeURIComponent(
+    user?.email ?? ""
+  )}`;
+
+  const plans = [
+    {
+      title: "Monthly",
+      price: "$20/mo",
+      features: [
+        "15 credits/mo",
+        "Unlimited ScreenPipe cloud",
+        "Priority support",
+      ],
+      url: `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${clientRefId}`,
+    },
+    {
+      title: "One-time",
+      price: "$50",
+      features: ["50 credits", "Bever expires", "Basic OCR & STT"],
+      url: `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${clientRefId}`,
+    },
+    {
+      title: "Enterprise",
+      price: "Book a call",
+      features: [
+        "Custom credits allocation",
+        "Dedicated support",
+        "Custom features",
+      ],
+      url: "https://cal.com/louis030195/screenpipe-for-businesses",
+    },
+  ];
+
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle>account</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => invoke("open_auth_window")}
-          >
-            <UserCog className="w-4 h-4 mr-2" />
-            manage account
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+    <div className="w-full space-y-6 py-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Account Settings</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => invoke("open_auth_window")}
+          className="hover:bg-secondary/80"
+        >
+          Manage Account <ExternalLinkIcon className="w-4 h-4 ml-2" />
+        </Button>
+      </div>
+
+      <div className="space-y-8">
         <div className="space-y-6">
-          {/* API Key Section */}
-          <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Coins className="w-4 h-4 text-muted-foreground" />
+              <h4 className="text-sm font-medium">Credits & Usage</h4>
+              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
+                {user?.credits?.amount || 0} available
+              </Badge>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleRefreshCredits}
+              disabled={isRefreshing}
+              className="h-8 w-8"
+            >
+              <RefreshCw
+                className={cn("w-4 h-4", { "animate-spin": isRefreshing })}
+              />
+            </Button>
+          </div>
+
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Label htmlFor="key" className="text-sm font-medium">
-                api key
+              <Label className="text-sm font-medium text-muted-foreground">
+                ScreenPipe API Key
               </Label>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-4 w-4 cursor-help text-muted-foreground" />
+                    <HelpCircle className="h-3.5 w-3.5 cursor-help text-muted-foreground/50" />
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[300px]">
-                    <p>
-                      your key syncs credits and settings across devices. find
-                      it in your dashboard.{" "}
-                      <span className="text-destructive font-semibold">
+                  <TooltipContent side="right" className="max-w-[280px]">
+                    <p className="text-xs leading-relaxed">
+                      Your key syncs credits and settings across devices. you
+                      can find it in your dashboard.{" "}
+                      <span className="text-destructive font-medium">
                         keep it private.
                       </span>
                     </p>
@@ -90,186 +198,128 @@ export function AccountSection() {
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex gap-2">
               <Input
-                id="key"
-                value={localSettings.user?.token || ""}
+                value={settings.user?.token || ""}
                 onChange={(e) => {
-                  setLocalSettings((prev) => ({
-                    ...prev,
-                    user: { ...prev.user, token: e.target.value },
-                  }));
-                }}
-                placeholder="enter your api key"
-                className="font-mono text-sm"
-                autoCorrect="off"
-                autoCapitalize="off"
-                autoComplete="off"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  loadUser(localSettings.user?.token || "");
-                  toast({
-                    title: "key updated",
-                    description: "your key has been updated",
+                  updateSettings({
+                    user: { token: e.target.value },
                   });
                 }}
-              >
-                verify
-              </Button>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Credits Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-medium">credits & billing</h4>
-                <Badge variant="outline" className="text-[10px] px-1.5">
-                  {user?.credits?.amount || 0} remaining
-                </Badge>
-              </div>
+                placeholder="Enter your API key"
+                className="font-mono text-sm bg-secondary/30"
+              />
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefreshCredits}
-                disabled={isRefreshing}
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  loadUser(settings.user?.token || "");
+                  toast({ title: "key updated" });
+                }}
               >
-                <RefreshCw
-                  className={cn("w-4 h-4", { "animate-spin": isRefreshing })}
-                />
+                Verify
               </Button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3">
-              <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-                <div className="flex flex-col space-y-1.5 p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="px-1.5 text-xs">
-                        monthly
-                      </Badge>
-                      <span className="text-sm font-mono">
-                        15 credits/m, unlimited screenpipe cloud, priority
-                        support
-                      </span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(
-                          `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(
-                            user?.email ?? ""
-                          )}`
-                        )
-                      }
-                    >
-                      $30/mo
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-                <div className="flex flex-col space-y-1.5 p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="px-1.5 text-xs">
-                        one-time
-                      </Badge>
-                      <span className="text-sm font-mono">50 credits</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(
-                          `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(
-                            user?.email ?? ""
-                          )}`
-                        )
-                      }
-                    >
-                      $50
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border  ">
-                <div className="flex flex-col space-y-1.5 p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="px-1.5 text-xs">
-                        enterprise
-                      </Badge>
-                      <span className="text-sm font-mono">custom</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(
-                          "https://cal.com/louis030195/screenpipe-for-businesses"
-                        )
-                      }
-                    >
-                      book a call
-                    </Button>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
           <Separator className="my-6" />
 
-          {/* Developer Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h4 className="text-sm font-medium">developer</h4>
-                <Badge variant="outline" className="text-[10px] px-1.5">
-                  beta
-                </Badge>
+          <div className="grid gap-4">
+            <div className="space-y-6">
+              <h4 className="text-lg font-medium">Active plan</h4>
+
+              <div className="flex flex-col gap-4">
+                {plans.map((plan) => (
+                  <PlanCard
+                    key={plan.title}
+                    title={plan.title}
+                    price={plan.price}
+                    features={plan.features}
+                    isSelected={selectedPlan === plan.title}
+                    onSelect={() => setSelectedPlan(plan.title)}
+                  />
+                ))}
+              </div>
+
+              {selectedPlan && (
+                <Button
+                  className="w-full text-white"
+                  onClick={() => {
+                    const plan = plans.find((p) => p.title === selectedPlan);
+                    if (plan) openUrl(plan.url);
+                  }}
+                >
+                  Checkout
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <Separator className="my-6" />
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
+            <h4 className="text-lg font-medium">Developer Tools</h4>
+            <p className="text-sm text-muted-foreground">
+              Build and sell custom pipes
+            </p>
+          </div>
+          <Badge
+            variant={"secondary"}
+            className="uppercase text-[10px] font-medium"
+          >
+            COMING SOON
+          </Badge>
+        </div>
+
+        <div className="space-y-6">
+          <div className="flex flex-col space-y-6">
+            <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
+                    <img
+                      className="rounded-md"
+                      src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
+                      alt=""
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">Stripe Connect</div>
+                    <p className="text-xs text-muted-foreground">
+                      Set up payments to receive earnings from your pipes
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    openUrl(
+                      "https://connect.stripe.com/oauth/authorize?client_id=YOUR_CLIENT_ID"
+                    )
+                  }
+                  className="h-9"
+                  disabled
+                >
+                  Connect
+                </Button>
               </div>
             </div>
 
-            <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="flex-1">
-                  <h5 className="text-sm font-medium mb-1">stripe connect</h5>
-                  <p className="text-sm text-muted-foreground">
-                    sell your pipes on the marketplace
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled
-                  className="shrink-0"
-                >
-                  <div className="flex items-center gap-2">
-                    connect
-                    <Badge variant="outline" className="uppercase text-[10px]">
-                      soon
-                    </Badge>
-                  </div>
-                </Button>
-              </div>
-
-              <div className="text-xs text-muted-foreground font-mono bg-muted/60 rounded p-2">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Publish your pipe with CLI
+              </Label>
+              <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
                 $ screenpipe publish my-awesome-pipe
               </div>
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -1,10 +1,18 @@
-import { useState, useEffect } from "react";
-import { createStore, Store } from "@tauri-apps/plugin-store";
-import { localDataDir, join, homeDir } from "@tauri-apps/api/path";
+import { homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
-import posthog from "posthog-js";
 import { Language } from "@/lib/language";
+import {
+  createStore as createStoreEasyPeasy,
+  action,
+  Action,
+  persist,
+  createTypedHooks,
+  PersistStorage,
+} from "easy-peasy";
+import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
+import { localDataDir } from "@tauri-apps/api/path";
+import { flattenObject, unflattenObject } from "../utils";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -159,93 +167,124 @@ const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
   linux: ["Info center", "Discover", "Parted"],
 };
 
-let store: Awaited<ReturnType<typeof createStore>> | null = null;
+// Model definition
+export interface StoreModel {
+  settings: Settings;
+  setSettings: Action<StoreModel, Partial<Settings>>;
+  resetSettings: Action<StoreModel>;
+  resetSetting: Action<StoreModel, keyof Settings>;
+}
+
+function createDefaultSettingsObject(): Settings {
+  let defaultSettings = { ...DEFAULT_SETTINGS };
+  const currentPlatform = platform();
+
+  const ocrModel =
+    currentPlatform === "macos"
+      ? "apple-native"
+      : currentPlatform === "windows"
+      ? "windows-native"
+      : "tesseract";
+
+  defaultSettings.ocrEngine = ocrModel;
+  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
+  defaultSettings.platform = currentPlatform;
+
+  defaultSettings.ignoredWindows = [
+    ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
+    ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
+  ];
+
+  return defaultSettings;
+}
+
+// Create a singleton store instance
+let storePromise: Promise<LazyStore> | null = null;
+
+const getStore = async () => {
+  if (!storePromise) {
+    storePromise = (async () => {
+      const dir = await localDataDir();
+      return new TauriStore(`${dir}/screenpipe/store.bin`);
+    })();
+  }
+  return storePromise;
+};
+
+const tauriStorage: PersistStorage = {
+  getItem: async (_key: string) => {
+    const tauriStore = await getStore();
+    const allKeys = await tauriStore.keys();
+    const values: Record<string, any> = {};
+
+    for (const k of allKeys) {
+      values[k] = await tauriStore.get(k);
+    }
+
+    return { settings: unflattenObject(values) };
+  },
+  setItem: async (_key: string, value: any) => {
+    const tauriStore = await getStore();
+
+    const flattenedValue = flattenObject(value.settings);
+
+    // Delete all existing keys first
+    const existingKeys = await tauriStore.keys();
+    for (const key of existingKeys) {
+      await tauriStore.delete(key);
+    }
+
+    // Set new flattened values
+    for (const [key, val] of Object.entries(flattenedValue)) {
+      await tauriStore.set(key, val);
+    }
+
+    await tauriStore.save();
+  },
+  removeItem: async (_key: string) => {
+    const tauriStore = await getStore();
+    const keys = await tauriStore.keys();
+    for (const key of keys) {
+      await tauriStore.delete(key);
+    }
+    await tauriStore.save();
+  },
+};
+
+export const store = createStoreEasyPeasy<StoreModel>(
+  persist(
+    {
+      settings: createDefaultSettingsObject(),
+      setSettings: action((state, payload) => {
+        state.settings = {
+          ...state.settings,
+          ...payload,
+        };
+      }),
+      resetSettings: action((state) => {
+        state.settings = createDefaultSettingsObject();
+      }),
+      resetSetting: action((state, key) => {
+        const defaultValue = createDefaultSettingsObject()[key];
+        (state.settings as any)[key] = defaultValue;
+      }),
+    },
+    {
+      storage: tauriStorage,
+      mergeStrategy: "mergeDeep",
+    }
+  )
+);
+
+const typedHooks = createTypedHooks<StoreModel>();
+const useStoreActions = typedHooks.useStoreActions;
+const useStoreState = typedHooks.useStoreState;
 
 export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [localSettings, setLocalSettings] = useState<Settings>(settings);
-
-  useEffect(() => {
-    posthog.identify(settings.userId);
-  }, [settings.userId]);
-
-  useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
-
-  const resetSetting = async (key: keyof Settings) => {
-    if (!store) {
-      await initStore();
-    }
-
-    const defaultSettings = createDefaultSettingsObject(platform());
-
-    try {
-      const updatedSettings = { ...settings, [key]: defaultSettings[key] };
-      setSettings(updatedSettings);
-      await store!.set(key, defaultSettings[key]);
-      // No need to call save() as we're using autoSave: true
-    } catch (error) {
-      console.error(`failed to reset setting ${key}:`, error);
-      // revert local state if store update fails
-      setSettings(settings);
-    }
-  };
-
-  const resetSettings = async () => {
-    const userSettings = createDefaultSettingsObject(platform());
-
-    updateSettings(userSettings);
-  };
-
-  const loadSettings = async () => {
-    if (!store) {
-      await initStore();
-    }
-
-    try {
-      const currentPlatform = platform();
-      const userSettings = await createUserSettings(store!, currentPlatform);
-
-      setSettings({ ...userSettings, isLoading: false });
-    } catch (error) {
-      console.error("failed to load settings:", error);
-      setSettings((prevSettings) => ({ ...prevSettings, isLoading: false }));
-    }
-  };
-
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const updateSettings = async (newSettings: Partial<Settings>) => {
-    if (!store) {
-      await initStore();
-    }
-
-    try {
-      // Create complete updated settings object
-      const updatedSettings = { ...settings, ...newSettings };
-
-      // Save each setting individually to the store
-      for (const [key, value] of Object.entries(updatedSettings)) {
-        await store!.set(key, value);
-      }
-
-      // Update local state
-      setLocalSettings(updatedSettings);
-      setSettings(updatedSettings);
-
-      // Force save to disk
-      await store!.save();
-
-      console.log("settings saved successfully:", updatedSettings);
-    } catch (error) {
-      console.error("failed to update settings:", error);
-      setSettings(settings);
-      throw error;
-    }
-  };
+  const settings = useStoreState((state) => state.settings);
+  const setSettings = useStoreActions((actions) => actions.setSettings);
+  const resetSettings = useStoreActions((actions) => actions.resetSettings);
+  const resetSetting = useStoreActions((actions) => actions.resetSetting);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
@@ -264,56 +303,9 @@ export function useSettings() {
 
   return {
     settings,
-    updateSettings,
+    updateSettings: setSettings,
+    resetSettings,
     resetSetting,
     getDataDir,
-    resetSettings,
-    localSettings,
-    setLocalSettings,
   };
-}
-
-async function initStore() {
-  const dataDir = await localDataDir();
-  const storePath = await join(dataDir, "screenpipe", "store.bin");
-  store = await createStore(storePath);
-}
-
-function createDefaultSettingsObject(currentPlatform: string) {
-  let defaultSettings = DEFAULT_SETTINGS;
-
-  const ocrModel =
-    currentPlatform === "macos"
-      ? "apple-native"
-      : currentPlatform === "windows"
-      ? "windows-native"
-      : "tesseract";
-
-  defaultSettings.ocrEngine = ocrModel;
-  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
-
-  defaultSettings.ignoredWindows = [
-    ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
-    ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
-  ];
-
-  return defaultSettings;
-}
-
-async function createUserSettings(
-  store: Store,
-  currentPlatform: string
-): Promise<Settings> {
-  let defaultSettingsObject = createDefaultSettingsObject(currentPlatform);
-  let userSettingsObject: Record<string, any> = {};
-
-  for (const key of Object.keys(defaultSettingsObject)) {
-    const storedValue = await store.get(key);
-    userSettingsObject[key] =
-      storedValue === null || storedValue === undefined
-        ? defaultSettingsObject[key as keyof Settings]
-        : storedValue;
-  }
-
-  return userSettingsObject as Settings;
 }
