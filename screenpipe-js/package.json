@@ -39,6 +39,7 @@
         "tsup": "^8.0.0"
     },
     "dependencies": {
+        "@scarf/scarf": "^1.4.0",
         "@types/express": "^5.0.0",
         "@types/node-cron": "^3.0.11",
         "express": "^4.21.1",
