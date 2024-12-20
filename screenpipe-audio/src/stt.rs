@@ -304,7 +304,7 @@ pub async fn prepare_segments(
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    let audio_data = normalize_v2(&audio_data);
+    let audio_data = normalize_v2(audio_data);
 
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();
@@ -411,7 +411,7 @@ pub async fn stt(
         process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
-    Ok(transcription?)
+    transcription
 }
 
 pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
