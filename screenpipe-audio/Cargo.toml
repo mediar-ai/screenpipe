@@ -69,13 +69,19 @@ crossbeam = { workspace = true }
 # Directories
 dirs = "5.0.1"
 
+deep_filter = { git = "https://github.com/EzraEllette/DeepFilterNet.git", features = [
+  "transforms",
+  "tract",
+] }
 lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 regex = "1.11.0"
 ndarray = "0.16"
+tract-core = { version = "^0.21.4" }
 ort = "=2.0.0-rc.6"
-knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
+knf-rs = { git = "https://github.com/Neptune650/knf-rs.git", branch = "main" }
 ort-sys = "=2.0.0-rc.8"
+parking_lot = { version = "0.12.3", features = ["send_guard"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.6", features = [

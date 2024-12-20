@@ -1,11 +1,15 @@
 use crate::audio_processing::audio_to_mono;
+use crate::audio_processing::NoiseFilter;
+use crate::audio_processing::NoiseReductionModel;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
+use parking_lot::Mutex as ParkingMutex;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -432,95 +436,147 @@ impl AudioStream {
         let is_disconnected_clone = is_disconnected.clone();
         let stream_control_tx_clone = stream_control_tx.clone();
         let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
-            let device = device_clone;
-            let device_name = device.to_string();
-            let config = config_clone;
-            let error_callback = move |err: StreamError| {
-                if err
-                    .to_string()
-                    .contains("The requested device is no longer available")
-                {
-                    warn!(
-                        "audio device {} disconnected. stopping recording.",
-                        device_name
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async move {
+                    let device = device_clone;
+                    let device_name = device.to_string();
+                    let config = config_clone;
+                    // let model_path = NoiseFilter::get_or_download_model(NoiseReductionModel::V3LL)
+                    //     .await
+                    //     .unwrap();
+
+                    let model_path = PathBuf::from(
+                        // TODO: add model path
+                        "<MODEL_PATH>",
                     );
-                    stream_control_tx_clone
-                        .send(StreamControl::Stop(oneshot::channel().0))
-                        .unwrap();
+                    let noise_filter = Arc::new(ParkingMutex::new(
+                        NoiseFilter::new(model_path, config.sample_rate().0)
+                            .await
+                            .unwrap(),
+                    ));
 
-                    is_disconnected_clone.store(true, Ordering::Relaxed);
-                } else {
-                    error!("an error occurred on the audio stream: {}", err);
-                    if err.to_string().contains("device is no longer valid") {
-                        warn!("audio device disconnected. stopping recording.");
-                        if let Some(arc) = is_running_weak_2.upgrade() {
-                            arc.store(false, Ordering::Relaxed);
+                    let error_callback = move |err: StreamError| {
+                        if err
+                            .to_string()
+                            .contains("The requested device is no longer available")
+                        {
+                            warn!(
+                                "audio device {} disconnected. stopping recording.",
+                                device_name
+                            );
+                            stream_control_tx_clone
+                                .send(StreamControl::Stop(oneshot::channel().0))
+                                .unwrap();
+
+                            is_disconnected_clone.store(true, Ordering::Relaxed);
+                        } else {
+                            error!("an error occurred on the audio stream: {}", err);
+                            if err.to_string().contains("device is no longer valid") {
+                                warn!("audio device disconnected. stopping recording.");
+                                if let Some(arc) = is_running_weak_2.upgrade() {
+                                    arc.store(false, Ordering::Relaxed);
+                                }
+                            }
                         }
+                    };
+
+                    let stream =
+                        match config.sample_format() {
+                            cpal::SampleFormat::F32 => cpal_audio_device
+                                .build_input_stream(
+                                    &config.into(),
+                                    move |data: &[f32], _: &_| {
+                                        let mono = match noise_filter
+                                            .lock()
+                                            .process(&audio_to_mono(data, channels))
+                                        {
+                                            Ok(mono) => mono,
+                                            Err(e) => {
+                                                error!("error processing noise filter: {}", e);
+                                                return;
+                                            }
+                                        };
+                                        let _ = tx.send(mono);
+                                    },
+                                    error_callback,
+                                    None,
+                                )
+                                .expect("Failed to build input stream"),
+                            cpal::SampleFormat::I16 => cpal_audio_device
+                                .build_input_stream(
+                                    &config.into(),
+                                    move |data: &[i16], _: &_| {
+                                        let mono = match noise_filter.lock().process(
+                                            &audio_to_mono(bytemuck::cast_slice(data), channels),
+                                        ) {
+                                            Ok(mono) => mono,
+                                            Err(e) => {
+                                                error!("error processing noise filter: {}", e);
+                                                return;
+                                            }
+                                        };
+                                        let _ = tx.send(mono);
+                                    },
+                                    error_callback,
+                                    None,
+                                )
+                                .expect("Failed to build input stream"),
+                            cpal::SampleFormat::I32 => cpal_audio_device
+                                .build_input_stream(
+                                    &config.into(),
+                                    move |data: &[i32], _: &_| {
+                                        let mono = match noise_filter.lock().process(
+                                            &audio_to_mono(bytemuck::cast_slice(data), channels),
+                                        ) {
+                                            Ok(mono) => mono,
+                                            Err(e) => {
+                                                error!("error processing noise filter: {}", e);
+                                                return;
+                                            }
+                                        };
+                                        let _ = tx.send(mono);
+                                    },
+                                    error_callback,
+                                    None,
+                                )
+                                .expect("Failed to build input stream"),
+                            cpal::SampleFormat::I8 => cpal_audio_device
+                                .build_input_stream(
+                                    &config.into(),
+                                    move |data: &[i8], _: &_| {
+                                        let mono = match noise_filter.lock().process(
+                                            &audio_to_mono(bytemuck::cast_slice(data), channels),
+                                        ) {
+                                            Ok(mono) => mono,
+                                            Err(e) => {
+                                                error!("error processing noise filter: {}", e);
+                                                return;
+                                            }
+                                        };
+                                        let _ = tx.send(mono);
+                                    },
+                                    error_callback,
+                                    None,
+                                )
+                                .expect("Failed to build input stream"),
+                            _ => {
+                                error!("unsupported sample format: {}", config.sample_format());
+                                return;
+                            }
+                        };
+
+                    if let Err(e) = stream.play() {
+                        error!("failed to play stream for {}: {}", device.to_string(), e);
                     }
-                }
-            };
 
-            let stream = match config.sample_format() {
-                cpal::SampleFormat::F32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[f32], _: &_| {
-                            let mono = audio_to_mono(data, channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I16 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i16], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i32], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I8 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i8], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                _ => {
-                    error!("unsupported sample format: {}", config.sample_format());
-                    return;
-                }
-            };
-
-            if let Err(e) = stream.play() {
-                error!("failed to play stream for {}: {}", device.to_string(), e);
-            }
-
-            if let Ok(StreamControl::Stop(response)) = stream_control_rx.recv() {
-                info!("stopped recording audio stream");
-                stream.pause().ok();
-                drop(stream);
-                response.send(()).ok();
-            }
+                    if let Ok(StreamControl::Stop(response)) = stream_control_rx.recv() {
+                        info!("stopped recording audio stream");
+                        stream.pause().ok();
+                        drop(stream);
+                        response.send(()).ok();
+                    }
+                })
         }))));
 
         Ok(AudioStream {
