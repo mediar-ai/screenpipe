@@ -114,8 +114,16 @@ jobs:
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: [self-hosted, Windows, X64] # Windows x86_64
+          - platform: "self-hosted" # Windows x86_64
             args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
+            pre-build-args: "" # --openblas
+            tauri-args: "--target x86_64-pc-windows-msvc"
+          - platform: "Windows" # Windows x86_64
+            args: "--target x86_64-pc-windows-msvc --features mkl"
+            pre-build-args: "" # --openblas
+            tauri-args: "--target x86_64-pc-windows-msvc"
+          - platform: "X64" # X64 architecture
+            args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: "" # --openblas
             tauri-args: "--target x86_64-pc-windows-msvc"
 
@@ -151,6 +159,20 @@ jobs:
         shell: bash
         run: |
           sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
+
+      - name: Install NSIS
+        if: matrix.platform == 'self-hosted' && matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          $nsisUrl = "https://nsis.sourceforge.io/mediawiki/images/9/96/NSIS-3.08-setup.exe"
+          $installerPath = "$env:TEMP\nsis-installer.exe"
+          Invoke-WebRequest -Uri $nsisUrl -OutFile $installerPath
+          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
+          Remove-Item $installerPath -Force
+            # Add NSIS to PATH
+          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            # Verify NSIS installation
+          & "C:\Program Files (x86)\NSIS\makensis.exe" -VERSION
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -525,7 +547,20 @@ jobs:
           $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
           $content = $content -replace '^version = ".*"', ('version = "' + '${{ github.event.inputs.version }}' + '"')
           $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
-
+    
+      - name: Install NSIS
+        if: matrix.platform == 'self-hosted' && matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          $nsisUrl = "https://nsis.sourceforge.io/mediawiki/images/9/96/NSIS-3.08-setup.exe"
+          $installerPath = "$env:TEMP\nsis-installer.exe"
+          Invoke-WebRequest -Uri $nsisUrl -OutFile $installerPath
+          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
+          Remove-Item $installerPath -Force
+            # Add NSIS to PATH
+          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            # Verify NSIS installation
+          & "C:\Program Files (x86)\NSIS\makensis.exe" -VERSION
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
