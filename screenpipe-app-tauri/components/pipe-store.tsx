@@ -1044,14 +1044,30 @@ const PipeStore: React.FC = () => {
 
   const handlePipePurchase = async (pipe: Pipe, requiredCredits: number) => {
     try {
-      // Start a Supabase transaction using RPC
       const { data, error } = await supabase.rpc("purchase_pipe", {
         v_user_id: user?.id,
         p_pipe_id: pipe.id,
         p_credits_spent: requiredCredits,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("purchase error:", error);
+        toast({
+          title: "purchase failed",
+          description: error.message,
+          variant: "destructive", 
+        });
+        return false;
+      }
+
+      if (!data) {
+        toast({
+          title: "purchase failed",
+          description: "unknown error occurred",
+          variant: "destructive",
+        });
+        return false;
+      }
 
       // Update local user credits state
       if (user?.credits) {
@@ -1064,10 +1080,11 @@ const PipeStore: React.FC = () => {
       });
 
       return true;
+
     } catch (error) {
       console.error("purchase failed:", error);
       toast({
-        title: "purchase failed",
+        title: "purchase failed", 
         description: "please try again or contact support",
         variant: "destructive",
       });

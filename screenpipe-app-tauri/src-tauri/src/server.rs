@@ -194,7 +194,7 @@ async fn handle_auth(
         .join("screenpipe")
         .join("store.bin");
     info!("store path: {:?}", path);
-    let store = StoreBuilder::new(&state.app_handle, path).build();
+    let store = StoreBuilder::new(&state.app_handle, path).build().unwrap();
 
     if payload.token.is_some() {
         let auth_data = AuthData {
