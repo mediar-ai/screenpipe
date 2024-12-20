@@ -7,11 +7,8 @@ from mcp.server.models import InitializationOptions
 import mcp.types as types
 import mcp.server.stdio
 
-import logging
 import json
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
 
 # Enable nested event loops (needed for some environments)
 nest_asyncio.apply()
@@ -38,9 +35,9 @@ async def handle_list_tools() -> list[types.Tool]:
                     },
                     "content_type": {
                         "type": "string",
-                        "enum": ["ocr", "audio"],
+                        "enum": ["all","ocr", "audio","ui"],
                         "description": "Type of content to search",
-                        "default": "ocr"
+                        "default": "all"
                     },
                     "limit": {
                         "type": "integer",
@@ -108,10 +105,7 @@ async def handle_call_tool(
                 response.raise_for_status()
                 try:
                     data = json.loads(response.text)
-                    logging.debug(f"Response Data: {data}")
                 except json.JSONDecodeError as json_error:
-                    logging.error(f"JSON decoding failed: {json_error}")
-                    logging.error(f"Raw Response Content: {response.text}")
                     return [types.TextContent(
                         type="text",
                         text=f"failed to parse JSON response: {json_error}"
@@ -130,21 +124,17 @@ async def handle_call_tool(
             if not results:
                 return [types.TextContent(
                     type="text", 
-                    text="no results found by vivek"
+                    text="no results found"
                 )]
 
             # Format each result based on content type
             formatted_results = []
             for result in results:
                 if "content" not in result:
-                    logging.debug("Continew")
                     continue
                 
                 content = result["content"]
-                logging.debug(f"Content : {content}")
-
                 if result.get("type") == "OCR":
-                    logging.debug(f"OCR Content: {content}")
                     text = (
                         f"OCR Text: {content.get('text', 'N/A')}\n"
                         f"App: {content.get('app_name', 'N/A')}\n"
@@ -159,14 +149,14 @@ async def handle_call_tool(
                         f"Time: {content.get('timestamp', 'N/A')}\n"
                         "---\n"
                     )
-                # elif result.get("type") == "UI":
-                #     text = (
-                #         f"UI Text: {content.get('text', 'N/A')}\n"
-                #         f"App: {content.get('app_name', 'N/A')}\n"
-                #         f"Window: {content.get('window_name', 'N/A')}\n"
-                #         f"Time: {content.get('timestamp', 'N/A')}\n"
-                #         "---\n"
-                #     )
+                elif result.get("type") == "UI":
+                    text = (
+                        f"UI Text: {content.get('text', 'N/A')}\n"
+                        f"App: {content.get('app_name', 'N/A')}\n"
+                        f"Window: {content.get('window_name', 'N/A')}\n"
+                        f"Time: {content.get('timestamp', 'N/A')}\n"
+                        "---\n"
+                    )
                 else:
                     continue
                 
