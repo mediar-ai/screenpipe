@@ -9,6 +9,7 @@ import { Loader2, Send, Square, X, GripHorizontal } from "lucide-react";
 import { StreamTimeSeriesResponse } from "@/app/page";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Agent } from "./agents";
+import { Settings } from "@screenpipe/js";
 
 interface AIPanelProps {
   position: { x: number; y: number };
@@ -16,7 +17,7 @@ interface AIPanelProps {
   onClose: () => void;
   frames: StreamTimeSeriesResponse[];
   agents: Agent[];
-  settings: { openaiApiKey: string; aiUrl: string; aiModel: string };
+  settings: Settings;
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }
