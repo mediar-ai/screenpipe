@@ -165,37 +165,28 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
     }
 }
 
+#[cfg(target_os = "macos")]
 pub fn check_accessibility_permission() -> OSPermissionStatus {
-    #[cfg(target_os = "macos")]
-    {
-        if unsafe { AXIsProcessTrusted() } {
-            OSPermissionStatus::Granted
-        } else {
-            OSPermissionStatus::Denied
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        // For non-macOS platforms, assume permission is granted
-        OSPermissionStatus::NotNeeded
+    if unsafe { AXIsProcessTrusted() } {
+        OSPermissionStatus::Granted
+    } else {
+        OSPermissionStatus::Denied
     }
 }
 
+#[cfg(target_os = "macos")]
 pub fn request_accessibility_permission() {
-    #[cfg(target_os = "macos")]
-    {
-        use core_foundation::base::TCFType;
-        use core_foundation::dictionary::CFDictionary; // Import CFDictionaryRef
-        use core_foundation::string::CFString;
+    use core_foundation::base::TCFType;
+    use core_foundation::dictionary::CFDictionary;
+    use core_foundation::string::CFString;
 
-        let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
-        let prompt_value = core_foundation::boolean::CFBoolean::true_value();
+    let prompt_key = CFString::new("AXTrustedCheckOptionPrompt");
+    let prompt_value = core_foundation::boolean::CFBoolean::true_value();
 
-        let options =
-            CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt_value.as_CFType())]);
+    let options =
+        CFDictionary::from_CFType_pairs(&[(prompt_key.as_CFType(), prompt_value.as_CFType())]);
 
-        unsafe {
-            AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
-        }
+    unsafe {
+        AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
     }
 }
