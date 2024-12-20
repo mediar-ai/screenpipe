@@ -55,17 +55,11 @@ try {
     Write-Host "checking git installation..."
     if (!(Get-Command git -ErrorAction SilentlyContinue)) {
         Write-Host "installing git..."
-        $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe"
-        $gitInstaller = "$env:TEMP\GitInstaller.exe"
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
         
-        Write-Host "downloading git installer..."
-        Invoke-WebRequest -Uri $gitUrl -OutFile $gitInstaller
-        
-        Write-Host "running git installer..."
-        Start-Process -FilePath $gitInstaller -Args "/VERYSILENT /NORESTART" -Wait
-        
-        # Cleanup
-        Remove-Item $gitInstaller -Force
+        $gitInstallScript = "https://raw.githubusercontent.com/saltstack/salt-ci-images/refs/heads/main/os-images/AWS/windows/scripts/Install-Git.ps1"
+        Write-Host "downloading and running git installer..."
+        Invoke-Expression (New-Object Net.WebClient).DownloadString($gitInstallScript)
         
         # Refresh PATH
         $env:Path = [Environment]::GetEnvironmentVariable("Path", "User")
