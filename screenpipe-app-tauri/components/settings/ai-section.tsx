@@ -293,7 +293,7 @@ const AISection = () => {
           "llama3.1:405B",
         ];
       case "screenpipe-cloud":
-        return ["gpt-4o", "gpt-4o-mini"];
+        return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1", "claude-3-5-sonnet-latest"];
       case "openai":
         return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
       default:
