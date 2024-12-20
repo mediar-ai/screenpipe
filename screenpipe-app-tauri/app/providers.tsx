@@ -7,6 +7,8 @@ import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
+import { store } from "@/lib/hooks/use-settings";
+import { StoreProvider } from "easy-peasy";
 
 export const Providers = forwardRef<HTMLDivElement, { children: React.ReactNode }>(
   ({ children }, ref) => {
@@ -23,14 +25,15 @@ export const Providers = forwardRef<HTMLDivElement, { children: React.ReactNode 
       }
     }, []);
 
-    return (
+  return (
+    <StoreProvider store={store}>
       <OnboardingProvider>
         <ChangelogDialogProvider>
           <PostHogProvider client={posthog}>{children}</PostHogProvider>
         </ChangelogDialogProvider>
       </OnboardingProvider>
-    );
-  }
-);
+    </StoreProvider>
+  );
+});
 
 Providers.displayName = "Providers";

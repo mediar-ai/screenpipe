@@ -4,6 +4,7 @@ import path from "path";
 import os from "os";
 import type { Settings, PipeConfig, ParsedConfig, InboxMessage } from "./types";
 import { AddressInfo, createServer } from "net";
+import type { BrowserPipe } from "./browser";
 
 // Environment detection
 const isNode =
@@ -154,6 +155,31 @@ class SettingsManager {
   async resetKey<K extends keyof Settings>(key: K): Promise<void> {
     if (!this.initialized) await this.init();
     this.settings[key] = DEFAULT_SETTINGS[key];
+    await this.save();
+  }
+
+  async getCustomSetting(namespace: string, key: string): Promise<any> {
+    if (!this.initialized) await this.init();
+    return this.settings.customSettings?.[namespace]?.[key];
+  }
+
+  async setCustomSetting(namespace: string, key: string, value: any): Promise<void> {
+    if (!this.initialized) await this.init();
+    this.settings.customSettings = this.settings.customSettings || {};
+    this.settings.customSettings[namespace] = this.settings.customSettings[namespace] || {};
+    this.settings.customSettings[namespace][key] = value;
+    await this.save();
+  }
+
+  async getNamespaceSettings(namespace: string): Promise<Record<string, any> | undefined> {
+    if (!this.initialized) await this.init();
+    return this.settings.customSettings?.[namespace];
+  }
+
+  async updateNamespaceSettings(namespace: string, settings: Record<string, any>): Promise<void> {
+    if (!this.initialized) await this.init();
+    this.settings.customSettings = this.settings.customSettings || {};
+    this.settings.customSettings[namespace] = settings;
     await this.save();
   }
 }
@@ -324,7 +350,14 @@ async function getAvailablePort(): Promise<number> {
 export * from "./browser";
 
 // Node-specific pipe implementation
-export const pipe = {
+interface NodePipe extends BrowserPipe {
+  settings: SettingsManager;
+  scheduler: Scheduler;
+  inbox: InboxManager;
+  loadPipeConfig(): Promise<PipeConfig>;
+}
+
+export const pipe: NodePipe = {
   ...require("./browser").pipe,
   settings: new SettingsManager(),
   scheduler: new Scheduler(),

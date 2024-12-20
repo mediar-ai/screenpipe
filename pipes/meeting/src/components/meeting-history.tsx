@@ -257,7 +257,7 @@ export default function MeetingHistory({
 
       const messages = [
         {
-          role: "system" as const,
+          role: "user" as const, // claude does not support system messages?
           content: `you are a helpful assistant that summarizes meetings. `,
         },
         {

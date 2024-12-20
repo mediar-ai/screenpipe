@@ -89,7 +89,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     let store = StoreBuilder::new(app, path).build();
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store
+    let data_dir = store?
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
@@ -347,7 +347,9 @@ async fn main() {
             }
 
             // Store setup and analytics initialization
-            let store = StoreBuilder::new(app.handle(), path.clone()).build();
+            let store = StoreBuilder::new(app.handle(), path.clone())
+                .build()
+                .unwrap();
 
             if store.keys().len() == 0 {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
