@@ -51,6 +51,28 @@ try {
     Write-Host "installing bun..."
     powershell -c "irm bun.sh/install.ps1|iex"
 
+    # Install Git if not present
+    Write-Host "checking git installation..."
+    if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Host "installing git..."
+        $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.43.0.windows.1/Git-2.43.0-64-bit.exe"
+        $gitInstaller = "$env:TEMP\GitInstaller.exe"
+        
+        Write-Host "downloading git installer..."
+        Invoke-WebRequest -Uri $gitUrl -OutFile $gitInstaller
+        
+        Write-Host "running git installer..."
+        Start-Process -FilePath $gitInstaller -Args "/VERYSILENT /NORESTART" -Wait
+        
+        # Cleanup
+        Remove-Item $gitInstaller -Force
+        
+        # Refresh PATH
+        $env:Path = [Environment]::GetEnvironmentVariable("Path", "User")
+    } else {
+        Write-Host "git is already installed"
+    }
+
     Write-Host @"
 
 ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗

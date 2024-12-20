@@ -67,43 +67,51 @@ cd "$TMP_DIR" || exit 1
 
 # Check dependencies on Linux
 if [ "$os" = "unknown-linux-gnu" ]; then
-    # Check for required libraries
-    NEED_ALSA=0
-    NEED_FFMPEG=0
+    # Check for required libraries and commands
+    declare -A PACKAGES
 
+    # Check ALSA
     if ! ldconfig -p | grep -q "libasound.so.2" >/dev/null 2>&1; then
-        NEED_ALSA=1
+        PACKAGES["apt"]="libasound2-dev"
+        PACKAGES["dnf"]="alsa-lib"
+        PACKAGES["pacman"]="alsa-lib" 
+        PACKAGES["zypper"]="alsa-lib"
     fi
+    
+    # Check FFmpeg
     if ! command -v ffmpeg >/dev/null 2>&1; then
-        NEED_FFMPEG=1
+        PACKAGES["apt"]="${PACKAGES["apt"]} ffmpeg"
+        PACKAGES["dnf"]="${PACKAGES["dnf"]} ffmpeg"
+        PACKAGES["pacman"]="${PACKAGES["pacman"]} ffmpeg"
+        PACKAGES["zypper"]="${PACKAGES["zypper"]} ffmpeg"
     fi
 
-    # Install missing dependencies based on package manager
-    if [ $NEED_ALSA -eq 1 ] || [ $NEED_FFMPEG -eq 1 ]; then
+    # Check Git
+    if ! command -v git >/dev/null 2>&1; then
+        PACKAGES["apt"]="${PACKAGES["apt"]} git"
+        PACKAGES["dnf"]="${PACKAGES["dnf"]} git"
+        PACKAGES["pacman"]="${PACKAGES["pacman"]} git"
+        PACKAGES["zypper"]="${PACKAGES["zypper"]} git"
+    fi
+
+    # Install missing packages based on package manager
+    if [ -n "${PACKAGES["apt"]}" ] || [ -n "${PACKAGES["dnf"]}" ] || [ -n "${PACKAGES["pacman"]}" ] || [ -n "${PACKAGES["zypper"]}" ]; then
         if command -v apt-get >/dev/null 2>&1; then
             # Ubuntu/Debian
-            PKGS=""
-            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS libasound2-dev" && echo "installing libasound2-dev..."
-            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
-            sudo apt-get install -qq -y $PKGS >/dev/null 2>&1
+            echo "installing packages: ${PACKAGES["apt"]}..."
+            sudo apt-get install -qq -y ${PACKAGES["apt"]} >/dev/null 2>&1
         elif command -v dnf >/dev/null 2>&1; then
             # Fedora/RHEL
-            PKGS=""
-            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
-            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
-            sudo dnf install -q -y $PKGS >/dev/null 2>&1
+            echo "installing packages: ${PACKAGES["dnf"]}..."
+            sudo dnf install -q -y ${PACKAGES["dnf"]} >/dev/null 2>&1
         elif command -v pacman >/dev/null 2>&1; then
             # Arch Linux
-            PKGS=""
-            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
-            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
-            sudo pacman -S --noconfirm --quiet $PKGS >/dev/null 2>&1
+            echo "installing packages: ${PACKAGES["pacman"]}..."
+            sudo pacman -S --noconfirm --quiet ${PACKAGES["pacman"]} >/dev/null 2>&1
         elif command -v zypper >/dev/null 2>&1; then
             # OpenSUSE
-            PKGS=""
-            [ $NEED_ALSA -eq 1 ] && PKGS="$PKGS alsa-lib" && echo "installing alsa-lib..."
-            [ $NEED_FFMPEG -eq 1 ] && PKGS="$PKGS ffmpeg" && echo "installing ffmpeg..."
-            sudo zypper --quiet --non-interactive install $PKGS >/dev/null 2>&1
+            echo "installing packages: ${PACKAGES["zypper"]}..."
+            sudo zypper --quiet --non-interactive install ${PACKAGES["zypper"]} >/dev/null 2>&1
         fi
     fi
 fi
