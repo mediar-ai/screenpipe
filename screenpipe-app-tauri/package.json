@@ -58,7 +58,7 @@
     "ansi-to-html": "^0.7.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cmdk": "1.0.0",
+    "cmdk": "0.2.1",
     "date-fns": "^3.6.0",
     "easy-peasy": "^6.0.5",
     "framer-motion": "^11.5.4",

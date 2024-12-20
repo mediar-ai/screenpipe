@@ -440,7 +440,7 @@ const AISection = () => {
                   />
                   <CommandList>
                     <CommandEmpty>
-                      press enter to use "{settings.aiModel}"
+                      press enter to use &quot;{settings.aiModel}&quot;
                     </CommandEmpty>
                     <CommandGroup heading="Suggestions">
                       {getModelSuggestions(settings.aiProviderType)?.map(

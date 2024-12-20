@@ -630,13 +630,19 @@ export function RecordingSettings() {
   };
   const handleIgnoredWindowsChange = (values: string[]) => {
     // Convert all values to lowercase for comparison
-    const lowerCaseValues = values.map(v => v.toLowerCase());
-    const currentLowerCase = settings.ignoredWindows.map(v => v.toLowerCase());
+    const lowerCaseValues = values.map((v) => v.toLowerCase());
+    const currentLowerCase = settings.ignoredWindows.map((v) =>
+      v.toLowerCase()
+    );
 
     // Find added values (in values but not in current)
-    const addedValues = values.filter(v => !currentLowerCase.includes(v.toLowerCase()));
+    const addedValues = values.filter(
+      (v) => !currentLowerCase.includes(v.toLowerCase())
+    );
     // Find removed values (in current but not in values)
-    const removedValues = settings.ignoredWindows.filter(v => !lowerCaseValues.includes(v.toLowerCase()));
+    const removedValues = settings.ignoredWindows.filter(
+      (v) => !lowerCaseValues.includes(v.toLowerCase())
+    );
 
     if (addedValues.length > 0) {
       // Handle adding new value
@@ -645,27 +651,35 @@ export function RecordingSettings() {
         ignoredWindows: [...settings.ignoredWindows, newValue],
         // Remove from included windows if present
         includedWindows: settings.includedWindows.filter(
-          w => w.toLowerCase() !== newValue.toLowerCase()
+          (w) => w.toLowerCase() !== newValue.toLowerCase()
         ),
       });
     } else if (removedValues.length > 0) {
       // Handle removing value
       const removedValue = removedValues[0];
       handleSettingsChange({
-        ignoredWindows: settings.ignoredWindows.filter(w => w !== removedValue),
+        ignoredWindows: settings.ignoredWindows.filter(
+          (w) => w !== removedValue
+        ),
       });
     }
   };
 
   const handleIncludedWindowsChange = (values: string[]) => {
     // Convert all values to lowercase for comparison
-    const lowerCaseValues = values.map(v => v.toLowerCase());
-    const currentLowerCase = settings.includedWindows.map(v => v.toLowerCase());
+    const lowerCaseValues = values.map((v) => v.toLowerCase());
+    const currentLowerCase = settings.includedWindows.map((v) =>
+      v.toLowerCase()
+    );
 
     // Find added values (in values but not in current)
-    const addedValues = values.filter(v => !currentLowerCase.includes(v.toLowerCase()));
+    const addedValues = values.filter(
+      (v) => !currentLowerCase.includes(v.toLowerCase())
+    );
     // Find removed values (in current but not in values)
-    const removedValues = settings.includedWindows.filter(v => !lowerCaseValues.includes(v.toLowerCase()));
+    const removedValues = settings.includedWindows.filter(
+      (v) => !lowerCaseValues.includes(v.toLowerCase())
+    );
 
     if (addedValues.length > 0) {
       // Handle adding new value
@@ -674,14 +688,16 @@ export function RecordingSettings() {
         includedWindows: [...settings.includedWindows, newValue],
         // Remove from ignored windows if present
         ignoredWindows: settings.ignoredWindows.filter(
-          w => w.toLowerCase() !== newValue.toLowerCase()
+          (w) => w.toLowerCase() !== newValue.toLowerCase()
         ),
       });
     } else if (removedValues.length > 0) {
       // Handle removing value
       const removedValue = removedValues[0];
       handleSettingsChange({
-        includedWindows: settings.includedWindows.filter(w => w !== removedValue),
+        includedWindows: settings.includedWindows.filter(
+          (w) => w !== removedValue
+        ),
       });
     }
   };

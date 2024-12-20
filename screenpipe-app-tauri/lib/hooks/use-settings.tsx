@@ -177,7 +177,12 @@ export interface StoreModel {
 
 function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
-  const currentPlatform = platform();
+  let currentPlatform = "unknown";
+  try {
+    currentPlatform = platform() || "unknown";
+  } catch (e) {
+    console.warn("platform detection failed, defaulting to unknown");
+  }
 
   const ocrModel =
     currentPlatform === "macos"
