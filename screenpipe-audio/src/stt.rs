@@ -304,34 +304,23 @@ pub async fn prepare_segments(
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    let audio_data = normalize_v2(&audio_data);
+    let audio_data = normalize_v2(audio_data);
 
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();
 
-    let mut noise = 0.;
-    let mut audio_frames = Vec::new();
+    let mut audio_frames: Vec<f32> = Vec::new();
     let mut total_frames = 0;
     let mut speech_frame_count = 0;
 
     for chunk in audio_data.chunks(frame_size) {
         total_frames += 1;
 
-        let mut new_chunk = chunk.to_vec();
         let status = vad_engine.lock().await.audio_type(chunk);
-        match status {
-            Ok(VadStatus::Speech) => {
-                if let Ok(processed_audio) = spectral_subtraction(chunk, noise) {
-                    new_chunk = processed_audio;
-                    speech_frame_count += 1;
-                }
-            }
-            Ok(VadStatus::Unknown) => {
-                noise = average_noise_spectrum(chunk);
-            }
-            _ => {}
+        if let Ok(VadStatus::Speech) = status {
+            audio_frames.extend(chunk);
+            speech_frame_count += 1;
         }
-        audio_frames.extend(new_chunk);
     }
 
     let speech_ratio = speech_frame_count as f32 / total_frames as f32;
@@ -484,7 +473,6 @@ impl TranscriptionResult {
     }
 }
 
-use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
 use std::sync::atomic::{AtomicBool, Ordering};
 use vad_rs::VadStatus;
 
@@ -563,6 +551,8 @@ pub async fn create_whisper_channel(
                             } else {
                                 audio.data.as_ref().to_vec()
                             };
+
+                            // TODO -- remove noise from audio
 
                             audio.data = Arc::new(audio_data.clone());
                             audio.sample_rate = m::SAMPLE_RATE as u32;
