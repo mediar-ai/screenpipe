@@ -112,28 +112,29 @@ export function AccountSection() {
 
   const plans = [
     {
-      title: "Monthly",
+      title: "monthly",
       price: "$20/mo",
       features: [
         "15 credits/mo",
-        "Unlimited ScreenPipe cloud",
-        "Priority support",
+        "unlimited screenpipe cloud",
+        "priority support",
       ],
       url: `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${clientRefId}`,
     },
     {
-      title: "One-time",
+      title: "one-time",
       price: "$50",
-      features: ["50 credits", "Bever expires", "Basic OCR & STT"],
+      features: ["50 credits", "never expires", "priority support"],
       url: `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${clientRefId}`,
     },
     {
-      title: "Enterprise",
-      price: "Book a call",
+      title: "enterprise",
+      price: "book a call",
       features: [
-        "Custom credits allocation",
-        "Dedicated support",
-        "Custom features",
+        "enterprise process intelligence & process mining",
+        "dedicated support",
+        "consulting",
+        "custom features",
       ],
       url: "https://cal.com/louis030195/screenpipe-for-businesses",
     },
@@ -142,14 +143,14 @@ export function AccountSection() {
   return (
     <div className="w-full space-y-6 py-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Account Settings</h1>
+        <h1 className="text-2xl font-bold">account settings</h1>
         <Button
           variant="outline"
           size="sm"
           onClick={() => invoke("open_auth_window")}
           className="hover:bg-secondary/80"
         >
-          Manage Account <ExternalLinkIcon className="w-4 h-4 ml-2" />
+          manage account <ExternalLinkIcon className="w-4 h-4 ml-2" />
         </Button>
       </div>
 
@@ -158,7 +159,7 @@ export function AccountSection() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Coins className="w-4 h-4 text-muted-foreground" />
-              <h4 className="text-sm font-medium">Credits & Usage</h4>
+              <h4 className="text-sm font-medium">credits & usage</h4>
               <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
                 {user?.credits?.amount || 0} available
               </Badge>
@@ -179,7 +180,7 @@ export function AccountSection() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Label className="text-sm font-medium text-muted-foreground">
-                ScreenPipe API Key
+                screenpipe api key
               </Label>
               <TooltipProvider>
                 <Tooltip>
@@ -188,7 +189,7 @@ export function AccountSection() {
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[280px]">
                     <p className="text-xs leading-relaxed">
-                      Your key syncs credits and settings across devices. you
+                      your key syncs credits and settings across devices. you
                       can find it in your dashboard.{" "}
                       <span className="text-destructive font-medium">
                         keep it private.
@@ -207,7 +208,7 @@ export function AccountSection() {
                     user: { token: e.target.value },
                   });
                 }}
-                placeholder="Enter your API key"
+                placeholder="enter your api key"
                 className="font-mono text-sm bg-secondary/30"
               />
               <Button
@@ -218,7 +219,7 @@ export function AccountSection() {
                   toast({ title: "key updated" });
                 }}
               >
-                Verify
+                verify
               </Button>
             </div>
           </div>
@@ -227,7 +228,7 @@ export function AccountSection() {
 
           <div className="grid gap-4">
             <div className="space-y-6">
-              <h4 className="text-lg font-medium">Active plan</h4>
+              <h4 className="text-lg font-medium">active plan</h4>
 
               <div className="flex flex-col gap-4">
                 {plans.map((plan) => (
@@ -261,9 +262,9 @@ export function AccountSection() {
 
         <div className="flex items-center justify-between">
           <div className="space-y-1.5">
-            <h4 className="text-lg font-medium">Developer Tools</h4>
+            <h4 className="text-lg font-medium">developer tools</h4>
             <p className="text-sm text-muted-foreground">
-              Build and sell custom pipes
+              build and sell custom pipes
             </p>
           </div>
           <Badge
@@ -287,9 +288,9 @@ export function AccountSection() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">Stripe Connect</div>
+                    <div className="text-sm font-medium">stripe connect</div>
                     <p className="text-xs text-muted-foreground">
-                      Set up payments to receive earnings from your pipes
+                      set up payments to receive earnings from your pipes
                     </p>
                   </div>
                 </div>
@@ -304,14 +305,14 @@ export function AccountSection() {
                   className="h-9"
                   disabled
                 >
-                  Connect
+                  connect
                 </Button>
               </div>
             </div>
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">
-                Publish your pipe with CLI
+                publish your pipe with cli
               </Label>
               <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
                 $ screenpipe publish my-awesome-pipe

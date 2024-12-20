@@ -2,8 +2,21 @@
 
 import React, { useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Settings2, Brain, Video, Keyboard, User, ArrowLeft } from "lucide-react";
-import { Dialog, DialogContent, DialogTrigger } from "./ui/dialog";
+import {
+  Settings2,
+  Brain,
+  Video,
+  Keyboard,
+  User,
+  ArrowLeft,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
 import { cn } from "@/lib/utils";
 import { RecordingSettings } from "./recording-settings";
 import { AccountSection } from "./settings/account-section";
@@ -13,7 +26,8 @@ import AISection from "./settings/ai-section";
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings() {
-  const [activeSection, setActiveSection] = useState<SettingsSection>("account");
+  const [activeSection, setActiveSection] =
+    useState<SettingsSection>("account");
 
   const renderSection = () => {
     switch (activeSection) {
@@ -29,60 +43,59 @@ export function Settings() {
   };
 
   return (
-        <div className="flex h-full">
-          {/* Sidebar */}
-          <div className="w-64 border-r bg-[#f3f3f3]">
-            <div className="flex items-center gap-4 ml-6 mt-4">
-              <h1 className="text-2xl font-bold">Settings</h1>
-            </div>
-            <div className="flex flex-col space-y-1 p-4">
-              {[
-                {
-                  id: "account",
-                  label: "Account",
-                  icon: <User className="h-4 w-4" />,
-                },
-                {
-                  id: "ai",
-                  label: "AI Settings",
-                  icon: <Brain className="h-4 w-4" />,
-                },
-                {
-                  id: "recording",
-                  label: "Recording",
-                  icon: <Video className="h-4 w-4" />,
-                },
-                {
-                  id: "shortcuts",
-                  label: "Shortcuts",
-                  icon: <Keyboard className="h-4 w-4" />,
-                },
-              ].map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() =>
-                      setActiveSection(section.id as SettingsSection)
-                    }
-                    className={cn(
-                      "flex items-center space-x-2 px-4 py-1.5 rounded-lg transition-colors",
-                      activeSection === section.id
-                        ? "bg-black/90 text-white"
-                        : "hover:bg-black/10"
-                    )}
-                  >
-                    {section.icon}
-                    <span>{section.label}</span>
-                  </button>
-              ))}
-            </div>
-          </div>
+    <div className="flex h-full">
+      {/* Sidebar */}
+      <div className="w-64 border-r bg-[#f3f3f3]">
+        <DialogHeader className="flex items-center gap-4 ml-6 mt-4">
+          <DialogTitle className="text-2xl font-bold">settings</DialogTitle>
+        </DialogHeader>
 
-          {/* Content - Updated styles */}
-          <div className="flex-1 flex flex-col h-full max-h-[80vh]">
-            <div className="flex-1 overflow-y-auto px-4">
-              <div className="max-h-full">{renderSection()}</div>
-            </div>
-          </div>
+        <div className="flex flex-col space-y-1 p-4">
+          {[
+            {
+              id: "account",
+              label: "account",
+              icon: <User className="h-4 w-4" />,
+            },
+            {
+              id: "ai",
+              label: "ai settings",
+              icon: <Brain className="h-4 w-4" />,
+            },
+            {
+              id: "recording",
+              label: "recording",
+              icon: <Video className="h-4 w-4" />,
+            },
+            {
+              id: "shortcuts",
+              label: "shortcuts",
+              icon: <Keyboard className="h-4 w-4" />,
+            },
+          ].map((section) => (
+            <button
+              key={section.id}
+              onClick={() => setActiveSection(section.id as SettingsSection)}
+              className={cn(
+                "flex items-center space-x-2 px-4 py-1.5 rounded-lg transition-colors",
+                activeSection === section.id
+                  ? "bg-black/90 text-white"
+                  : "hover:bg-black/10"
+              )}
+            >
+              {section.icon}
+              <span>{section.label}</span>
+            </button>
+          ))}
         </div>
+      </div>
+
+      {/* Content - Updated styles */}
+      <div className="flex-1 flex flex-col h-full max-h-[80vh]">
+        <div className="flex-1 overflow-y-auto px-4">
+          <div className="max-h-full">{renderSection()}</div>
+        </div>
+      </div>
+    </div>
   );
 }

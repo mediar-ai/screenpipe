@@ -131,12 +131,12 @@ const ShortcutSection = () => {
 
   return (
     <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold">Shortcuts</h1>
+      <h1 className="text-2xl font-bold">shortcuts</h1>
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h4 className="font-medium">Toggle Screenpipe Overlay</h4>
+          <h4 className="font-medium">toggle screenpipe overlay</h4>
           <p className="text-sm text-muted-foreground">
-            Global shortcut to show/hide the main interface
+            global shortcut to show/hide the main interface
           </p>
         </div>
         <div className="flex items-center gap-4">

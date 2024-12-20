@@ -304,16 +304,16 @@ const AISection = () => {
 
   return (
     <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold">AI Settings</h1>
+      <h1 className="text-2xl font-bold">ai settings</h1>
       <div className="w-full">
         <Label htmlFor="aiUrl" className="min-w-[80px]">
-          AI Provider
+          ai provider
         </Label>
         <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
           <AIProviderCard
             type="screenpipe-cloud"
-            title="Screenpipe Cloud"
-            description="Fastest with built-in context awareness and streaming support"
+            title="screenpipe cloud"
+            description="use openai or anthropic models without worrying about api keys or usage"
             imageSrc="/images/screenpipe.png"
             selected={settings.aiProviderType === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
@@ -322,8 +322,8 @@ const AISection = () => {
 
           <AIProviderCard
             type="openai"
-            title="OpenAI"
-            description="Use your own OpenAI API key for GPT-4 and other models"
+            title="openai"
+            description="use your own openai api key for gpt-4 and other models"
             imageSrc="/images/openai.png"
             selected={settings.aiProviderType === "openai"}
             onClick={() => handleAiProviderChange("openai")}
@@ -331,8 +331,8 @@ const AISection = () => {
 
           <AIProviderCard
             type="native-ollama"
-            title="Ollama"
-            description="Run AI models locally using your existing ollama installation"
+            title="ollama"
+            description="run ai models locally using your existing ollama installation"
             imageSrc="/images/ollama.png"
             selected={settings.aiProviderType === "native-ollama"}
             onClick={() => handleAiProviderChange("native-ollama")}
@@ -340,8 +340,8 @@ const AISection = () => {
 
           <AIProviderCard
             type="custom"
-            title="Custom"
-            description="Connect to your own AI provider or self-hosted models"
+            title="custom"
+            description="connect to your own ai provider or self-hosted models"
             imageSrc="/images/custom.png"
             selected={settings.aiProviderType === "custom"}
             onClick={() => handleAiProviderChange("custom")}
@@ -362,7 +362,7 @@ const AISection = () => {
       {settings.aiProviderType === "custom" && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4">
-            <Label htmlFor="customAiUrl">Custom URL</Label>
+            <Label htmlFor="customAiUrl">custom url</Label>
             <Input
               id="customAiUrl"
               value={settings.aiUrl}
@@ -416,7 +416,7 @@ const AISection = () => {
       {settings.aiProviderType !== "embedded" && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4 w-full">
-            <Label htmlFor="aiModel">AI model</Label>
+            <Label htmlFor="aiModel">ai model</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -430,9 +430,18 @@ const AISection = () => {
               </PopoverTrigger>
               <PopoverContent className="w-full p-0">
                 <Command>
-                  <CommandInput placeholder="select model" />
+                  <CommandInput 
+                    placeholder="select or type model name"
+                    onValueChange={(value) => {
+                      if (value) {
+                        updateSettings({ aiModel: value });
+                      }
+                    }}
+                  />
                   <CommandList>
-                    <CommandEmpty>No results found.</CommandEmpty>
+                    <CommandEmpty>
+                      press enter to use "{settings.aiModel}"
+                    </CommandEmpty>
                     <CommandGroup heading="Suggestions">
                       {getModelSuggestions(settings.aiProviderType)?.map(
                         (model) => (
@@ -458,7 +467,7 @@ const AISection = () => {
 
       <div className="w-full">
         <div className="flex flex-col gap-4 mb-4 w-full">
-          <Label htmlFor="customPrompt">Prompt</Label>
+          <Label htmlFor="customPrompt">prompt</Label>
           <div className="flex-grow relative">
             <Textarea
               id="customPrompt"
@@ -484,7 +493,7 @@ const AISection = () => {
       <div className="w-full">
         <div className="flex flex-col gap-4 mb-4 w-full">
           <Label htmlFor="aiMaxContextChars" className="flex items-center">
-            Max Context{" "}
+            max context{" "}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -507,7 +516,7 @@ const AISection = () => {
             <Slider
               id="aiMaxContextChars"
               min={1000}
-              max={128000}
+              max={512000}
               step={1000}
               value={[settings.aiMaxContextChars]}
               onValueChange={handleMaxContextCharsChange}
@@ -523,9 +532,9 @@ const AISection = () => {
       <div className="flex items-center gap-4 mb-4 w-full">
         <div className="flex items-center justify-between w-full">
           <div className="space-y-1">
-            <h4 className="font-medium">Embedded AI</h4>
+            <h4 className="font-medium">embedded ai</h4>
             <p className="text-sm text-muted-foreground">
-              Enable this to use local ai features in screenpipe.
+              enable this to use local ai features in screenpipe.
             </p>
           </div>
           <div className="flex items-center gap-2">

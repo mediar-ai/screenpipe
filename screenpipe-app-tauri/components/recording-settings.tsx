@@ -688,13 +688,13 @@ export function RecordingSettings() {
 
   return (
     <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold mb-4">Recording</h1>
+      <h1 className="text-2xl font-bold mb-4">recording</h1>
       {settings.devMode || (!isUpdating && isDisabled) ? (
         <Alert>
           <Terminal className="h-4 w-4" />
-          <AlertTitle>Heads up!</AlertTitle>
+          <AlertTitle>heads up!</AlertTitle>
           <AlertDescription>
-            Make sure to turn off dev mode and start screenpipe recorder first
+            make sure to turn off dev mode and start screenpipe recorder first
             (go to status)
           </AlertDescription>
         </Alert>
@@ -706,12 +706,12 @@ export function RecordingSettings() {
           isDisabled && "opacity-50 pointer-events-none cursor-not-allowed"
         )}
       >
-        <h4 className="text-lg font-semibold my-4">Video</h4>
+        <h4 className="text-lg font-semibold my-4">video</h4>
         <div className="flex flex-col space-y-6">
           <div className="flex flex-col space-y-2">
             <Label htmlFor="monitorIds" className="flex items-center space-x-2">
               <Monitor className="h-4 w-4" />
-              <span>Monitors</span>
+              <span>monitors</span>
             </Label>
             <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
               <PopoverTrigger asChild>
@@ -778,7 +778,7 @@ export function RecordingSettings() {
           <div className="flex flex-col space-y-2">
             <Label htmlFor="ocrModel" className="flex items-center space-x-2">
               <Eye className="h-4 w-4" />
-              <span>OCR Model</span>
+              <span>ocr model</span>
             </Label>
             <Select
               onValueChange={handleOcrModelChange}
@@ -797,7 +797,7 @@ export function RecordingSettings() {
           </div>
           <div className="flex flex-col space-y-2">
             <Label htmlFor="fps" className="flex items-center space-x-2">
-              <span>Frames per second (FPS)</span>
+              <span>frames per second (fps)</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -836,7 +836,7 @@ export function RecordingSettings() {
                 htmlFor="ignoredWindows"
                 className="flex items-center space-x-2"
               >
-                <span>Ignored Windows</span>
+                <span>ignored windows</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -875,7 +875,7 @@ export function RecordingSettings() {
                 htmlFor="includedWindows"
                 className="flex items-center space-x-2"
               >
-                <span>Included Windows</span>
+                <span>included windows</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
@@ -914,14 +914,14 @@ export function RecordingSettings() {
         </div>
         <Separator className="my-6" />
 
-        <h4 className="text-lg font-semibold my-4">Audio</h4>
+        <h4 className="text-lg font-semibold my-4">audio</h4>
 
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h4 className="font-medium">Disable Audio Recording</h4>
+              <h4 className="font-medium">disable audio recording</h4>
               <p className="text-sm text-muted-foreground">
-                Useful if you don&apos;t need audio or if you have memory/CPU
+                useful if you don&apos;t need audio or if you have memory/cpu
                 issues
               </p>
             </div>
@@ -938,7 +938,7 @@ export function RecordingSettings() {
               className="flex items-center"
             >
               <Mic className="h-4 w-4" />
-              <span>Audio transcription model</span>
+              <span>audio transcription model</span>
             </Label>
             <Select
               onValueChange={handleAudioTranscriptionModelChange}
@@ -984,7 +984,7 @@ export function RecordingSettings() {
                   className="flex items-center space-x-2"
                 >
                   <Key className="h-4 w-4" />
-                  API key
+                  api key
                 </Label>
                 <div className="flex-grow relative">
                   <Input
@@ -1019,7 +1019,7 @@ export function RecordingSettings() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground text-left mt-1">
-                Don&apos;t have an api key? get one from{" "}
+                don&apos;t have an api key? get one from{" "}
                 <a
                   href="https://console.deepgram.com/"
                   target="_blank"
@@ -1163,7 +1163,7 @@ export function RecordingSettings() {
               htmlFor="vadSensitivity"
               className="flex items-center space-x-2"
             >
-              <span>Voice Activity Detection sensitivity</span>
+              <span>voice activity detection sensitivity</span>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger>
@@ -1249,18 +1249,18 @@ export function RecordingSettings() {
 
         <Separator className="my-6" />
 
-        <h4 className="text-lg font-semibold my-4">Misc</h4>
+        <h4 className="text-lg font-semibold my-4">misc</h4>
 
         <div className="space-y-8 py-4">
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <h4 className="font-medium">
-                  Remove Personal Information (PII)
+                  remove personal information (pii)
                 </h4>
                 <p className="text-sm text-muted-foreground">
-                  Removes sensitive data like credit cards, emails, and phone
-                  numbers from OCR text
+                  removes sensitive data like credit cards, emails, and phone
+                  numbers from ocr text
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1275,9 +1275,9 @@ export function RecordingSettings() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <h4 className="font-medium">Enable Telemetry</h4>
+                <h4 className="font-medium">enable telemetry</h4>
                 <p className="text-sm text-muted-foreground">
-                  Help improve Screenpipe with anonymous usage data
+                  help improve screenpipe with anonymous usage data
                 </p>
               </div>
               <Switch
@@ -1289,10 +1289,10 @@ export function RecordingSettings() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <h4 className="font-medium">Use Chinese Mirror</h4>
+                <h4 className="font-medium">use chinese mirror</h4>
                 <p className="text-sm text-muted-foreground">
-                  Alternative download source for Hugging Face models in
-                  mainland China
+                  alternative download source for hugging face models in
+                  mainland china
                 </p>
               </div>
               <Switch
@@ -1304,10 +1304,10 @@ export function RecordingSettings() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <h4 className="font-medium">Enable Timeline UI</h4>
+                <h4 className="font-medium">enable timeline ui</h4>
                 <p className="text-sm text-muted-foreground">
-                  Experimental feature that provides a timeline interface like
-                  Rewind.ai
+                  experimental feature that provides a timeline interface like
+                  rewind.ai
                 </p>
               </div>
               <Switch
@@ -1320,9 +1320,9 @@ export function RecordingSettings() {
             {isMacOS && (
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h4 className="font-medium">Enable UI Monitoring</h4>
+                  <h4 className="font-medium">enable ui monitoring</h4>
                   <p className="text-sm text-muted-foreground">
-                    Monitor UI elements for better search context (requires
+                    monitor ui elements for better search context (requires
                     accessibility permission)
                   </p>
                 </div>
@@ -1339,7 +1339,7 @@ export function RecordingSettings() {
             <div className="space-y-2">
               <div className="flex items-center gap-2 mb-2">
                 <Folder className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Data Directory</h3>
+                <h3 className="text-lg font-semibold">data directory</h3>
               </div>
 
               {!dataDirInputVisible ? (
@@ -1351,15 +1351,15 @@ export function RecordingSettings() {
                 >
                   <div className="flex gap-4">
                     {!!settings.dataDir
-                      ? "Change Directory"
-                      : "Select Directory"}
+                      ? "change directory"
+                      : "select directory"}
                     <span className="text-muted-foreground">
                       {settings.dataDir === settings.dataDir
-                        ? `Current at: ${
-                            settings.dataDir || "Default Directory"
+                        ? `current at: ${
+                            settings.dataDir || "default directory"
                           }`
-                        : `Change to: ${
-                            settings.dataDir || "Default Directory"
+                        : `change to: ${
+                            settings.dataDir || "default directory"
                           }`}
                     </span>
                   </div>
