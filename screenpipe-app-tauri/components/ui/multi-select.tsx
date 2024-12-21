@@ -162,26 +162,27 @@ export const MultiSelect = React.forwardRef<
       }>
     >([]);
 
-    const handleInputKeyDown = (
-      event: React.KeyboardEvent<HTMLInputElement>
-    ) => {
+    // Combine regular and custom options for rendering
+    const allOptions = [...options, ...customOptions];
+
+    const addCustomValue = (value: string) => {
+      if (
+        value && 
+        validateCustomValue(value) && 
+        !selectedValues.includes(value) && 
+        !allOptions.some(opt => opt.value === value)
+      ) {
+        const newSelectedValues = [...selectedValues, value];
+        setSelectedValues(newSelectedValues);
+        onValueChange(newSelectedValues);
+        setInputValue("");
+      }
+    };
+
+    const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
-        if (
-          allowCustomValues &&
-          inputValue &&
-          !selectedValues.includes(inputValue)
-        ) {
-          if (validateCustomValue(inputValue)) {
-            const newSelectedValues = [...selectedValues, inputValue];
-            setSelectedValues(newSelectedValues);
-            onValueChange(newSelectedValues);
-            // Add to custom options
-            setCustomOptions([
-              ...customOptions,
-              { label: inputValue, value: inputValue, icon: undefined },
-            ]);
-            setInputValue(""); // Clear input after adding
-          }
+        if (allowCustomValues) {
+          addCustomValue(inputValue);
         }
         setIsPopoverOpen(true);
       } else if (event.key === "Backspace" && !event.currentTarget.value) {
@@ -229,9 +230,6 @@ export const MultiSelect = React.forwardRef<
     const handleInputChange = (value: string) => {
       setInputValue(value);
     };
-
-    // Combine regular and custom options for rendering
-    const allOptions = [...options, ...customOptions];
 
     return (
       <Popover
@@ -339,25 +337,7 @@ export const MultiSelect = React.forwardRef<
               <CommandEmpty>
                 {allowCustomValues ? (
                   <CommandItem
-                    onSelect={() => {
-                      if (inputValue && validateCustomValue(inputValue)) {
-                        const newSelectedValues = [
-                          ...selectedValues,
-                          inputValue,
-                        ];
-                        setSelectedValues(newSelectedValues);
-                        onValueChange(newSelectedValues);
-                        setCustomOptions([
-                          ...customOptions,
-                          {
-                            label: inputValue,
-                            value: inputValue,
-                            icon: undefined,
-                          },
-                        ]);
-                        setInputValue("");
-                      }
-                    }}
+                    onSelect={() => addCustomValue(inputValue)}
                   >
                     Add &quot;{inputValue}&quot;
                   </CommandItem>
