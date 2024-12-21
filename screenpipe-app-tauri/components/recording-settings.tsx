@@ -24,6 +24,7 @@ import {
   EyeOff,
   Key,
   Terminal,
+  Asterisk,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -68,7 +69,7 @@ import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { relaunch } from '@tauri-apps/plugin-process';
+import { relaunch } from "@tauri-apps/plugin-process";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -88,6 +89,30 @@ interface MonitorDevice {
   width: number;
   height: number;
 }
+
+const createWindowOptions = (
+  windowItems: { name: string }[],
+  existingPatterns: string[]
+) => {
+  const windowOptions = windowItems
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => ({
+      value: item.name,
+      label: item.name,
+      icon: AppWindowMac,
+    }));
+
+  // Only add custom patterns that aren't already in windowItems
+  const customOptions = existingPatterns
+    .filter((pattern) => !windowItems.some((item) => item.name === pattern))
+    .map((pattern) => ({
+      value: pattern,
+      label: pattern,
+      icon: Asterisk,
+    }));
+
+  return [...windowOptions, ...customOptions];
+};
 
 export function RecordingSettings() {
   const { settings, updateSettings, getDataDir } = useSettings();
@@ -277,7 +302,7 @@ export function RecordingSettings() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // Start a new instance with updated settings
       await invoke("spawn_screenpipe");
-      
+
       await new Promise((resolve) => setTimeout(resolve, 2000));
       await relaunch();
 
@@ -879,16 +904,18 @@ export function RecordingSettings() {
                 </TooltipProvider>
               </Label>
               <MultiSelect
-                options={windowItems.map((item) => ({
-                  value: item.name,
-                  label: item.name,
-                  icon: AppWindowMac,
-                }))}
+                options={createWindowOptions(
+                  windowItems,
+                  settings.ignoredWindows
+                )}
                 defaultValue={settings.ignoredWindows}
                 onValueChange={handleIgnoredWindowsChange}
                 placeholder="add windows to ignore"
                 variant="default"
+                modalPopover={true}
                 animation={2}
+                allowCustomValues={true}
+                validateCustomValue={(value) => value.length >= 2}
               />
             </div>
 
@@ -918,16 +945,18 @@ export function RecordingSettings() {
                 </TooltipProvider>
               </Label>
               <MultiSelect
-                options={windowItems.map((item) => ({
-                  value: item.name,
-                  label: item.name,
-                  icon: AppWindowMac,
-                }))}
+                options={createWindowOptions(
+                  windowItems,
+                  settings.includedWindows
+                )}
                 defaultValue={settings.includedWindows}
                 onValueChange={handleIncludedWindowsChange}
                 placeholder="add window to include"
                 variant="default"
+                modalPopover={true}
                 animation={2}
+                allowCustomValues={true}
+                validateCustomValue={(value) => value.length >= 2}
               />
             </div>
           </div>
