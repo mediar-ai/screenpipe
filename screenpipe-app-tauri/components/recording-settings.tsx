@@ -273,6 +273,8 @@ export function RecordingSettings() {
       }
 
       await invoke("kill_all_sreenpipes");
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       // Start a new instance with updated settings
       await invoke("spawn_screenpipe");
       
