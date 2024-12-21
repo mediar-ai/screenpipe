@@ -1005,7 +1005,7 @@ export function RecordingSettings() {
                   htmlFor="deepgramApiKey"
                   className="flex items-center space-x-2"
                 >
-                  <Key className="pl-2 h-4 w-4" />
+                  <Key className="h-4 w-4" />
                   api key
                 </Label>
                 <div className="flex-grow relative">

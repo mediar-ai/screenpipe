@@ -2,9 +2,58 @@
 import { pipe } from "@screenpipe/js/node";
 import { NextResponse } from "next/server";
 import type { Settings } from "@screenpipe/js";
+import { promises as fs } from "fs";
+import path from "path";
 // Force Node.js runtime
 export const runtime = "nodejs"; // Add this line
 export const dynamic = "force-dynamic";
+
+async function updateCronSchedule(intervalMinutes: number) {
+  try {
+    // Get the .screenpipe base directory from the environment or use a default
+    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const pipeConfigPath = path.join(
+      screenpipeDir,
+      "pipes",
+      "obsidian",
+      "pipe.json"
+    );
+
+    console.log(`updating cron schedule at: ${pipeConfigPath}`);
+
+    let config: any = {};
+
+    try {
+      const content = await fs.readFile(pipeConfigPath, "utf8");
+      config = JSON.parse(content);
+    } catch (err) {
+      console.log(
+        `no existing config found, creating new one at ${pipeConfigPath}`
+      );
+      config = { crons: [] };
+    }
+
+    // Update or add the cron schedule
+    config.crons = [
+      {
+        path: "/api/log",
+        schedule: `0 */${intervalMinutes} * * * *`,
+      },
+    ];
+
+    // Preserve other existing properties
+    config.enabled = config.enabled ?? true;
+    config.is_nextjs = config.is_nextjs ?? true;
+
+    await fs.writeFile(pipeConfigPath, JSON.stringify(config, null, 2));
+    console.log(
+      `updated cron schedule to run every ${intervalMinutes} minutes`
+    );
+  } catch (err) {
+    console.error("failed to update cron schedule:", err);
+    throw err;
+  }
+}
 
 export async function GET() {
   const defaultSettings: Settings = {
@@ -54,6 +103,14 @@ export async function PUT(request: Request) {
 
     const body = await request.json();
     const { key, value, isPartialUpdate, reset, namespace } = body;
+
+    // Handle obsidian namespace updates
+    if (namespace === "obsidian" && isPartialUpdate && value.interval) {
+      // Convert interval from milliseconds to minutes, ensure it's at least 1
+      const intervalMinutes = Math.max(1, Math.floor(value.interval / 60000));
+      await updateCronSchedule(intervalMinutes);
+      console.log(`setting interval to ${intervalMinutes} minutes`);
+    }
 
     if (reset) {
       if (namespace) {
