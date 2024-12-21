@@ -59,9 +59,19 @@ export function ObsidianSettings() {
 
   const openPath = async () => {
     try {
+      // Check if File System Access API is supported
+      if (!("showDirectoryPicker" in window)) {
+        toast({
+          variant: "destructive",
+          title: "error",
+          description:
+            "your browser doesn't support directory selection. please enter the path manually.",
+        });
+        return;
+      }
+
       // Open directory picker dialog
-      // @ts-ignore
-      const dirHandle = await window.showDirectoryPicker();
+      const dirHandle = await (window as any).showDirectoryPicker();
       const path = dirHandle.name;
 
       // Update the input value and settings
@@ -77,8 +87,18 @@ export function ObsidianSettings() {
         },
         "obsidian"
       );
+
+      toast({
+        title: "path updated",
+        description: "obsidian vault path has been set",
+      });
     } catch (err) {
       console.error("failed to open directory picker:", err);
+      toast({
+        variant: "destructive",
+        title: "error",
+        description: "failed to select directory",
+      });
     }
   };
 
@@ -117,8 +137,8 @@ export function ObsidianSettings() {
             step="1"
             max="60"
             defaultValue={
-              settings.customSettings?.obsidian?.interval 
-                ? settings.customSettings?.obsidian?.interval / 60000 
+              settings.customSettings?.obsidian?.interval
+                ? settings.customSettings?.obsidian?.interval / 60000
                 : 5
             }
           />

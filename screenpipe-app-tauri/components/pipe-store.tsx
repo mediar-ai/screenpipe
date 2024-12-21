@@ -62,6 +62,15 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "obsidian",
+    name: "obsidian v2",
+    description:
+      "write logs of your day in obsidian with local AI features, customization, and user friendly UI",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian",
+    credits: 10,
+    paid: true,
+  },
+  {
     id: "data-table",
     name: "data table",
     description:
@@ -949,14 +958,15 @@ const PipeStore: React.FC = () => {
                 </div>
               </div>
 
-              {selectedPipe.enabled && (
-                <div className="space-y-3 pt-4 border-t">
-                  <PipeConfigForm
-                    pipe={selectedPipe}
-                    onConfigSave={handleConfigSave}
-                  />
-                </div>
-              )}
+              {selectedPipe.enabled &&
+                selectedPipe.config?.fields?.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <PipeConfigForm
+                      pipe={selectedPipe}
+                      onConfigSave={handleConfigSave}
+                    />
+                  </div>
+                )}
             </div>
           </div>
 
