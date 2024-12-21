@@ -31,7 +31,6 @@ tauri-plugin-dialog = "=2.0.0"
 tauri-plugin-os = "=2.0.0"
 tauri-plugin-process = "=2.0.0"
 tauri-plugin-autostart = "=2.0.0"
-tauri-plugin-deep-link = "=2.2.0"
 tauri-plugin-shell = "=2.0.0"
 tauri-plugin-store = "=2.2.0"
 
@@ -67,8 +66,7 @@ anyhow = "1.0.71"
 # System information
 sysinfo = "=0.29.0"
 
-# hakc 
-thiserror = "1.0.63"
+# hakc
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
@@ -122,3 +120,8 @@ custom-protocol = ["tauri/custom-protocol"]
 [package.metadata.cargo-machete]
 ignored = ["tauri-utils"]
 
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
