@@ -23,7 +23,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { LogFileButton } from "../log-file-button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -59,6 +59,13 @@ interface AIProviderCardProps {
   disabled?: boolean;
   warningText?: string;
   imageClassName?: string;
+}
+
+interface OllamaModel {
+  name: string;
+  size: number;
+  digest: string;
+  modified_at: string;
 }
 
 const AIProviderCard = ({
@@ -284,16 +291,14 @@ const AISection = () => {
 
   const getModelSuggestions = (provider: AIProviderType) => {
     switch (provider) {
-      case "native-ollama":
-        return [
-          "llama3.2:1B",
-          "llama3.2:3B",
-          "llama3.1:8B",
-          "llama3.3:70B",
-          "llama3.1:405B",
-        ];
       case "screenpipe-cloud":
-        return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1", "claude-3-5-sonnet-latest"];
+        return [
+          "gpt-4o",
+          "gpt-4o-mini",
+          "o1-mini",
+          "o1",
+          "claude-3-5-sonnet-latest",
+        ];
       case "openai":
         return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
       default:
@@ -301,6 +306,26 @@ const AISection = () => {
     }
   };
   console.log(getModelSuggestions(settings.aiProviderType));
+
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+
+  useEffect(() => {
+    const fetchOllamaModels = async () => {
+      if (settings.aiProviderType !== "native-ollama") return;
+
+      try {
+        const response = await fetch("http://localhost:11434/api/tags");
+        if (!response.ok) throw new Error("Failed to fetch Ollama models");
+        const data = (await response.json()) as { models: OllamaModel[] };
+        setOllamaModels(data.models || []);
+      } catch (error) {
+        console.error("Failed to fetch Ollama models:", error);
+        setOllamaModels([]);
+      }
+    };
+
+    fetchOllamaModels();
+  }, [settings.aiProviderType]);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -430,7 +455,7 @@ const AISection = () => {
               </PopoverTrigger>
               <PopoverContent className="w-full p-0">
                 <Command>
-                  <CommandInput 
+                  <CommandInput
                     placeholder="select or type model name"
                     onValueChange={(value) => {
                       if (value) {
@@ -443,19 +468,31 @@ const AISection = () => {
                       press enter to use &quot;{settings.aiModel}&quot;
                     </CommandEmpty>
                     <CommandGroup heading="Suggestions">
-                      {getModelSuggestions(settings.aiProviderType)?.map(
-                        (model) => (
-                          <CommandItem
-                            key={model}
-                            value={model}
-                            onSelect={() => {
-                              updateSettings({ aiModel: model });
-                            }}
-                          >
-                            {model}
-                          </CommandItem>
-                        )
-                      )}
+                      {settings.aiProviderType === "native-ollama"
+                        ? ollamaModels?.map((model) => (
+                            <CommandItem
+                              key={model.name}
+                              value={model.name}
+                              onSelect={() => {
+                                updateSettings({ aiModel: model.name });
+                              }}
+                            >
+                              {model.name}
+                            </CommandItem>
+                          ))
+                        : getModelSuggestions(settings.aiProviderType)?.map(
+                            (model) => (
+                              <CommandItem
+                                key={model}
+                                value={model}
+                                onSelect={() => {
+                                  updateSettings({ aiModel: model });
+                                }}
+                              >
+                                {model}
+                              </CommandItem>
+                            )
+                          )}
                     </CommandGroup>
                   </CommandList>
                 </Command>
