@@ -273,6 +273,8 @@ export function RecordingSettings() {
 
       await invoke("kill_all_sreenpipes");
 
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       // Start a new instance with updated settings
       await invoke("spawn_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -281,6 +283,8 @@ export function RecordingSettings() {
         title: "settings updated successfully",
         description: "screenpipe has been restarted with new settings.",
       });
+
+      window.location.reload();
     } catch (error) {
       console.error("failed to update settings:", error);
       toast({
@@ -951,9 +955,9 @@ export function RecordingSettings() {
           <div className="flex flex-col space-y-2">
             <Label
               htmlFor="audioTranscriptionModel"
-              className="flex items-center"
+              className="flex items-center space-x-2"
             >
-              <Mic className="pl-2 h-4 w-4" />
+              <Mic className="h-4 w-4" />
               <span>audio transcription model</span>
             </Label>
             <Select
@@ -1081,7 +1085,7 @@ export function RecordingSettings() {
                         <CommandItem
                           key={device.name}
                           value={device.name}
-                          onSelect={handleAudioDeviceChange}
+                          onSelect={() => handleAudioDeviceChange(device.name)}
                         >
                           <div className="flex items-center">
                             <Check

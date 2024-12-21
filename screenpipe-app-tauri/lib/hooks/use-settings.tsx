@@ -301,7 +301,14 @@ export function useSettings() {
     )
       return settings.dataDir;
 
-    return platform() === "macos" || platform() === "linux"
+    let p = "macos";
+    try {
+      p = platform();
+    } catch (e) {
+      console.error("failed to get platform", e);
+    }
+
+    return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
   };
