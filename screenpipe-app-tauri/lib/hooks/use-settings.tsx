@@ -177,30 +177,30 @@ export interface StoreModel {
 
 function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
-  let currentPlatform = "unknown";
   try {
-    currentPlatform = platform() || "unknown";
+    const currentPlatform = platform();
+
+    const ocrModel =
+      currentPlatform === "macos"
+        ? "apple-native"
+        : currentPlatform === "windows"
+        ? "windows-native"
+        : "tesseract";
+
+    defaultSettings.ocrEngine = ocrModel;
+    defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
+    defaultSettings.platform = currentPlatform;
+
+    defaultSettings.ignoredWindows = [
+      ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
+      ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
+    ];
+
+    return defaultSettings;
   } catch (e) {
-    console.warn("platform detection failed, defaulting to unknown");
+    console.error("failed to get platform", e);
+    return DEFAULT_SETTINGS;
   }
-
-  const ocrModel =
-    currentPlatform === "macos"
-      ? "apple-native"
-      : currentPlatform === "windows"
-      ? "windows-native"
-      : "tesseract";
-
-  defaultSettings.ocrEngine = ocrModel;
-  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
-  defaultSettings.platform = currentPlatform;
-
-  defaultSettings.ignoredWindows = [
-    ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
-    ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
-  ];
-
-  return defaultSettings;
 }
 
 // Create a singleton store instance
@@ -301,7 +301,14 @@ export function useSettings() {
     )
       return settings.dataDir;
 
-    return platform() === "macos" || platform() === "linux"
+    let p = "macos";
+    try {
+      p = platform();
+    } catch (e) {
+      console.error("failed to get platform", e);
+    }
+
+    return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
   };

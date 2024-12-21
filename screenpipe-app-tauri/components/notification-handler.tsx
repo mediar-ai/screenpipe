@@ -17,7 +17,6 @@ const NotificationHandler: React.FC = () => {
   useEffect(() => {
     const checkAndRequestPermission = async () => {
       let permission = await isPermissionGranted();
-      console.log("ission", permission);
 
       if (!permission) {
         const result = await requestPermission();

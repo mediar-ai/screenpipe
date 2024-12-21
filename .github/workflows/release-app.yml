@@ -144,9 +144,9 @@ jobs:
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         run: |
-          $nsisUrl = "https://nsis.sourceforge.io/mediawiki/images/9/96/NSIS-3.08-setup.exe"
+          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.10/nsis-3.10-setup.exe/download"
           $installerPath = "$env:TEMP\nsis-installer.exe"
-          Invoke-WebRequest -Uri $nsisUrl -OutFile $installerPath
+          Invoke-Expression "curl.exe -L -o `"$installerPath`" `"$nsisUrl`""
           Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
           Remove-Item $installerPath -Force
             # Add NSIS to PATH

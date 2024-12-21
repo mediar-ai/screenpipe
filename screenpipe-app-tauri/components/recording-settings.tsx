@@ -273,6 +273,7 @@ export function RecordingSettings() {
       }
 
       await invoke("kill_all_sreenpipes");
+      // Start a new instance with updated settings
       await invoke("spawn_screenpipe");
       
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -282,6 +283,8 @@ export function RecordingSettings() {
         title: "settings updated successfully",
         description: "screenpipe has been restarted with new settings.",
       });
+
+      window.location.reload();
     } catch (error) {
       console.error("failed to update settings:", error);
       toast({
@@ -952,7 +955,7 @@ export function RecordingSettings() {
           <div className="flex flex-col space-y-2">
             <Label
               htmlFor="audioTranscriptionModel"
-              className="flex items-center"
+              className="flex items-center space-x-2"
             >
               <Mic className="h-4 w-4" />
               <span>audio transcription model</span>
@@ -1000,7 +1003,7 @@ export function RecordingSettings() {
                   htmlFor="deepgramApiKey"
                   className="flex items-center space-x-2"
                 >
-                  <Key className="h-4 w-4" />
+                  <Key className="pl-2 h-4 w-4" />
                   api key
                 </Label>
                 <div className="flex-grow relative">
@@ -1015,7 +1018,7 @@ export function RecordingSettings() {
                       });
                     }}
                     className="pr-10 w-full"
-                    placeholder="Enter your Deepgram API key"
+                    placeholder="enter your Deepgram API key"
                     autoCorrect="off"
                     autoCapitalize="off"
                     autoComplete="off"
@@ -1082,7 +1085,7 @@ export function RecordingSettings() {
                         <CommandItem
                           key={device.name}
                           value={device.name}
-                          onSelect={handleAudioDeviceChange}
+                          onSelect={() => handleAudioDeviceChange(device.name)}
                         >
                           <div className="flex items-center">
                             <Check
