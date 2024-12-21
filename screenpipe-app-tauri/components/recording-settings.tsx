@@ -68,6 +68,7 @@ import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
+import { relaunch } from '@tauri-apps/plugin-process';
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -272,12 +273,11 @@ export function RecordingSettings() {
       }
 
       await invoke("kill_all_sreenpipes");
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
       // Start a new instance with updated settings
       await invoke("spawn_screenpipe");
+      
       await new Promise((resolve) => setTimeout(resolve, 2000));
+      await relaunch();
 
       toast({
         title: "settings updated successfully",
