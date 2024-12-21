@@ -41,7 +41,8 @@ const config = {
 			'libavfilter-dev',
 			'libavdevice-dev', // FFMPEG
 			'libasound2-dev', // cpal
-			'libxdo-dev'
+			'libxdo-dev',
+			'git'
 		],
 	},
 	macos: {
@@ -185,6 +186,53 @@ async function copyFile(src, dest) {
 	await fs.chmod(dest, 0o755); // ensure the binary is executable
 }
 
+// Add this function near the top of the file
+async function ensureGitInstalled() {
+	if (platform === 'windows') {
+		try {
+			await $`git --version`.quiet();
+			console.log('git is already installed');
+		} catch {
+			console.log('installing git...');
+			try {
+				const gitUrl = 'https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/Git-2.44.0-64-bit.exe';
+				const gitInstaller = 'git-installer.exe';
+				
+				// Download Git installer
+				await $`${wgetPath} --no-config ${gitUrl} -O ${gitInstaller}`;
+				
+				// Install Git silently
+				await $`${gitInstaller} /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"`;
+				
+				// Clean up installer
+				await fs.unlink(gitInstaller);
+				
+				console.log('git installed successfully');
+			} catch (error) {
+				console.error('failed to install git:', error);
+				throw error;
+			}
+		}
+	} else if (platform === 'macos') {
+		try {
+			await $`git --version`.quiet();
+			console.log('git is already installed');
+		} catch {
+			console.log('git not found, ensuring xcode command line tools are installed...');
+			try {
+				await $`xcode-select -p`.quiet();
+				console.log('xcode command line tools already installed');
+			} catch {
+				console.log('installing xcode command line tools...');
+				await $`touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress`;
+				const prod = await $`softwareupdate -l | grep "\\*.*Command Line" | tail -n 1 | sed 's/^[^C]* //'`.text();
+				await $`softwareupdate -i "${prod.trim()}" --verbose`;
+				console.log('xcode command line tools (including git) installed successfully');
+			}
+		}
+	}
+}
+
 /* ########## Linux ########## */
 if (platform == 'linux') {
 	// Install APT packages
@@ -237,6 +285,7 @@ if (platform == 'linux') {
 /* ########## Windows ########## */
 if (platform == 'windows') {
 	const wgetPath = await findWget();
+	await ensureGitInstalled();
 
 	console.log('Copying screenpipe binary...');
 
@@ -310,6 +359,7 @@ async function getMostRecentBinaryPath(targetArch, paths) {
 }
 /* ########## macOS ########## */
 if (platform == 'macos') {
+	await ensureGitInstalled();
 	const architectures = ['arm64', 'x86_64'];
 	for (const arch of architectures) {
 		if (process.env['SKIP_SCREENPIPE_SETUP']) {
