@@ -113,7 +113,7 @@ const DEFAULT_SETTINGS: Settings = {
   includedWindows: [],
   aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 100000,
+  aiMaxContextChars: 30000,
   fps: 0.5,
   vadSensitivity: "high",
   analyticsEnabled: true,
@@ -177,30 +177,30 @@ export interface StoreModel {
 
 function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
-  let currentPlatform = "unknown";
   try {
-    currentPlatform = platform() || "unknown";
+    const currentPlatform = platform();
+
+    const ocrModel =
+      currentPlatform === "macos"
+        ? "apple-native"
+        : currentPlatform === "windows"
+        ? "windows-native"
+        : "tesseract";
+
+    defaultSettings.ocrEngine = ocrModel;
+    defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
+    defaultSettings.platform = currentPlatform;
+
+    defaultSettings.ignoredWindows = [
+      ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
+      ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
+    ];
+
+    return defaultSettings;
   } catch (e) {
-    console.warn("platform detection failed, defaulting to unknown");
+    console.error("failed to get platform", e);
+    return DEFAULT_SETTINGS;
   }
-
-  const ocrModel =
-    currentPlatform === "macos"
-      ? "apple-native"
-      : currentPlatform === "windows"
-      ? "windows-native"
-      : "tesseract";
-
-  defaultSettings.ocrEngine = ocrModel;
-  defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
-  defaultSettings.platform = currentPlatform;
-
-  defaultSettings.ignoredWindows = [
-    ...DEFAULT_IGNORED_WINDOWS_IN_ALL_OS,
-    ...(DEFAULT_IGNORED_WINDOWS_PER_OS[currentPlatform] ?? []),
-  ];
-
-  return defaultSettings;
 }
 
 // Create a singleton store instance
@@ -219,21 +219,37 @@ const getStore = async () => {
 const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     const tauriStore = await getStore();
-    const settings = await tauriStore.get<Settings>("root");
-    return settings || createDefaultSettingsObject();
+    const allKeys = await tauriStore.keys();
+    const values: Record<string, any> = {};
+
+    for (const k of allKeys) {
+      values[k] = await tauriStore.get(k);
+    }
+
+    return { settings: unflattenObject(values) };
   },
   setItem: async (_key: string, value: any) => {
     const tauriStore = await getStore();
-    const settings = value.settings;
-    for (const [key, val] of Object.entries(settings)) {
+
+    const flattenedValue = flattenObject(value.settings);
+
+    // Delete all existing keys first
+    const existingKeys = await tauriStore.keys();
+    for (const key of existingKeys) {
+      await tauriStore.delete(key);
+    }
+
+    // Set new flattened values
+    for (const [key, val] of Object.entries(flattenedValue)) {
       await tauriStore.set(key, val);
     }
+
     await tauriStore.save();
   },
   removeItem: async (_key: string) => {
     const tauriStore = await getStore();
-    const settings = createDefaultSettingsObject();
-    for (const key of Object.keys(settings)) {
+    const keys = await tauriStore.keys();
+    for (const key of keys) {
       await tauriStore.delete(key);
     }
     await tauriStore.save();

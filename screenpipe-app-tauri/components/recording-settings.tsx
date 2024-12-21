@@ -953,7 +953,7 @@ export function RecordingSettings() {
               htmlFor="audioTranscriptionModel"
               className="flex items-center"
             >
-              <Mic className="h-4 w-4" />
+              <Mic className="pl-2 h-4 w-4" />
               <span>audio transcription model</span>
             </Label>
             <Select
@@ -999,7 +999,7 @@ export function RecordingSettings() {
                   htmlFor="deepgramApiKey"
                   className="flex items-center space-x-2"
                 >
-                  <Key className="h-4 w-4" />
+                  <Key className="pl-2 h-4 w-4" />
                   api key
                 </Label>
                 <div className="flex-grow relative">
@@ -1014,7 +1014,7 @@ export function RecordingSettings() {
                       });
                     }}
                     className="pr-10 w-full"
-                    placeholder="Enter your Deepgram API key"
+                    placeholder="enter your Deepgram API key"
                     autoCorrect="off"
                     autoCapitalize="off"
                     autoComplete="off"

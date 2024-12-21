@@ -133,14 +133,6 @@ const corePipes: CorePipe[] = [
     paid: false,
   },
   {
-    id: "pipe-simple-nextjs",
-    name: "keyword analytics",
-    description: "show most used keywords",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
-    credits: 0,
-    paid: false,
-  },
-  {
     id: "meeting",
     name: "meeting assistant",
     description:
@@ -157,6 +149,14 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
     credits: 10,
     paid: true,
+  },
+  {
+    id: "pipe-simple-nextjs",
+    name: "keyword analytics",
+    description: "show most used keywords",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
+    credits: 0,
+    paid: false,
   },
 ];
 
