@@ -39,6 +39,7 @@ export function useSettings() {
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
+        console.log("data", data);
         setSettings({ ...defaultSettings, ...data });
       } catch (err) {
         setError(err as Error);

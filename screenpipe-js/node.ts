@@ -18,6 +18,41 @@ function assertNode(functionName: string) {
   }
 }
 
+// Helper functions to flatten/unflatten objects
+const flattenObject = (obj: any, prefix = ""): Record<string, any> => {
+  return Object.keys(obj).reduce((acc: Record<string, any>, k: string) => {
+    const pre = prefix.length ? prefix + "." : "";
+    if (
+      typeof obj[k] === "object" &&
+      obj[k] !== null &&
+      !Array.isArray(obj[k])
+    ) {
+      Object.assign(acc, flattenObject(obj[k], pre + k));
+    } else {
+      acc[pre + k] = obj[k];
+    }
+    return acc;
+  }, {});
+};
+
+const unflattenObject = (obj: Record<string, any>): any => {
+  const result: any = {};
+  for (const key in obj) {
+    const keys = key.split(".");
+    let current = result;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (i === keys.length - 1) {
+        current[k] = obj[key];
+      } else {
+        current[k] = current[k] || {};
+        current = current[k];
+      }
+    }
+  }
+  return result;
+};
+
 // Helper for dynamic imports
 async function requireNodeModule(moduleName: string) {
   if (!isNode) return null;
@@ -105,7 +140,8 @@ class SettingsManager {
     try {
       await fs.mkdir(path.dirname(this.storePath), { recursive: true });
       const data = await fs.readFile(this.storePath);
-      this.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(data.toString()) };
+      const rawSettings = JSON.parse(data.toString());
+      this.settings = { ...DEFAULT_SETTINGS, ...unflattenObject(rawSettings) };
       this.initialized = true;
     } catch (error) {
       if ((error as { code?: string }).code === "ENOENT") {
@@ -119,7 +155,11 @@ class SettingsManager {
 
   async save(): Promise<void> {
     await fs.mkdir(path.dirname(this.storePath), { recursive: true });
-    await fs.writeFile(this.storePath, JSON.stringify(this.settings, null, 2));
+    const flattenedSettings = flattenObject(this.settings);
+    await fs.writeFile(
+      this.storePath,
+      JSON.stringify(flattenedSettings, null, 2)
+    );
   }
 
   async get<K extends keyof Settings>(key: K): Promise<Settings[K]> {
@@ -163,20 +203,30 @@ class SettingsManager {
     return this.settings.customSettings?.[namespace]?.[key];
   }
 
-  async setCustomSetting(namespace: string, key: string, value: any): Promise<void> {
+  async setCustomSetting(
+    namespace: string,
+    key: string,
+    value: any
+  ): Promise<void> {
     if (!this.initialized) await this.init();
     this.settings.customSettings = this.settings.customSettings || {};
-    this.settings.customSettings[namespace] = this.settings.customSettings[namespace] || {};
+    this.settings.customSettings[namespace] =
+      this.settings.customSettings[namespace] || {};
     this.settings.customSettings[namespace][key] = value;
     await this.save();
   }
 
-  async getNamespaceSettings(namespace: string): Promise<Record<string, any> | undefined> {
+  async getNamespaceSettings(
+    namespace: string
+  ): Promise<Record<string, any> | undefined> {
     if (!this.initialized) await this.init();
     return this.settings.customSettings?.[namespace];
   }
 
-  async updateNamespaceSettings(namespace: string, settings: Record<string, any>): Promise<void> {
+  async updateNamespaceSettings(
+    namespace: string,
+    settings: Record<string, any>
+  ): Promise<void> {
     if (!this.initialized) await this.init();
     this.settings.customSettings = this.settings.customSettings || {};
     this.settings.customSettings[namespace] = settings;
