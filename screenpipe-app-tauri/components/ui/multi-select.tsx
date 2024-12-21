@@ -167,10 +167,10 @@ export const MultiSelect = React.forwardRef<
 
     const addCustomValue = (value: string) => {
       if (
-        value && 
-        validateCustomValue(value) && 
-        !selectedValues.includes(value) && 
-        !allOptions.some(opt => opt.value === value)
+        value &&
+        validateCustomValue(value) &&
+        !selectedValues.includes(value) &&
+        !allOptions.some((opt) => opt.value === value)
       ) {
         const newSelectedValues = [...selectedValues, value];
         setSelectedValues(newSelectedValues);
@@ -179,7 +179,9 @@ export const MultiSelect = React.forwardRef<
       }
     };
 
-    const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleInputKeyDown = (
+      event: React.KeyboardEvent<HTMLInputElement>
+    ) => {
       if (event.key === "Enter") {
         if (allowCustomValues) {
           addCustomValue(inputValue);
@@ -229,6 +231,18 @@ export const MultiSelect = React.forwardRef<
     // Add handler for input changes
     const handleInputChange = (value: string) => {
       setInputValue(value);
+    };
+
+    // Add custom filtering logic
+    const filterOptions = (value: string) => {
+      return allOptions.filter((option) => {
+        const searchTerm = value.toLowerCase().trim();
+        const label = option.label.toLowerCase();
+        const optionValue = option.value.toLowerCase();
+
+        // Only return exact matches or substrings
+        return label.includes(searchTerm) || optionValue.includes(searchTerm);
+      });
     };
 
     return (
@@ -326,9 +340,17 @@ export const MultiSelect = React.forwardRef<
           align="start"
           onEscapeKeyDown={() => setIsPopoverOpen(false)}
         >
-          <Command className="w-full">
+          <Command
+            className="w-full"
+            filter={(value, search) => {
+              if (!search) return 1;
+              return filterOptions(search).some((opt) => opt.value === value)
+                ? 1
+                : 0;
+            }}
+          >
             <CommandInput
-              placeholder="Search or type custom value..."
+              placeholder="Search..."
               onKeyDown={handleInputKeyDown}
               value={inputValue}
               onValueChange={handleInputChange}
@@ -336,9 +358,7 @@ export const MultiSelect = React.forwardRef<
             <CommandList>
               <CommandEmpty>
                 {allowCustomValues ? (
-                  <CommandItem
-                    onSelect={() => addCustomValue(inputValue)}
-                  >
+                  <CommandItem onSelect={() => addCustomValue(inputValue)}>
                     Add &quot;{inputValue}&quot;
                   </CommandItem>
                 ) : (
@@ -387,7 +407,7 @@ export const MultiSelect = React.forwardRef<
                         <option.icon className="mr-2 h-4 w-4 text-muted-foreground" />
                       )}
                       <span>{option.label}</span>
-                      {!options.find(o => o.value === option.value) && (
+                      {!options.find((o) => o.value === option.value) && (
                         <Badge variant="outline" className="ml-2">
                           custom
                         </Badge>
@@ -417,7 +437,7 @@ export const MultiSelect = React.forwardRef<
                         <option.icon className="mr-2 h-4 w-4 text-muted-foreground" />
                       )}
                       <span>{option.label}</span>
-                      {!options.find(o => o.value === option.value) && (
+                      {!options.find((o) => o.value === option.value) && (
                         <Badge variant="outline" className="ml-2">
                           custom
                         </Badge>
