@@ -117,6 +117,12 @@ interface MultiSelectProps
    * Optional, can be used to add custom styles.
    */
   className?: string;
+
+  /** Allow users to enter custom values not in the options list */
+  allowCustomValues?: boolean;
+
+  /** Optional validation function for custom values */
+  validateCustomValue?: (value: string) => boolean;
 }
 
 export const MultiSelect = React.forwardRef<
@@ -135,6 +141,8 @@ export const MultiSelect = React.forwardRef<
       modalPopover = false,
       asChild = false,
       className,
+      allowCustomValues = false,
+      validateCustomValue = () => true,
       ...props
     },
     ref
@@ -143,11 +151,41 @@ export const MultiSelect = React.forwardRef<
       React.useState<string[]>(defaultValue);
     const [isPopoverOpen, setIsPopoverOpen] = React.useState(false);
     const [isAnimating, setIsAnimating] = React.useState(false);
+    const [inputValue, setInputValue] = React.useState("");
+
+    // Add state to track custom values
+    const [customOptions, setCustomOptions] = React.useState<
+      Array<{
+        label: string;
+        value: string;
+        icon?: React.ComponentType<{ className?: string }>;
+      }>
+    >([]);
+
+    // Combine regular and custom options for rendering
+    const allOptions = [...options, ...customOptions];
+
+    const addCustomValue = (value: string) => {
+      if (
+        value &&
+        validateCustomValue(value) &&
+        !selectedValues.includes(value) &&
+        !allOptions.some((opt) => opt.value === value)
+      ) {
+        const newSelectedValues = [...selectedValues, value];
+        setSelectedValues(newSelectedValues);
+        onValueChange(newSelectedValues);
+        setInputValue("");
+      }
+    };
 
     const handleInputKeyDown = (
       event: React.KeyboardEvent<HTMLInputElement>
     ) => {
       if (event.key === "Enter") {
+        if (allowCustomValues) {
+          addCustomValue(inputValue);
+        }
         setIsPopoverOpen(true);
       } else if (event.key === "Backspace" && !event.currentTarget.value) {
         const newSelectedValues = [...selectedValues];
@@ -188,6 +226,23 @@ export const MultiSelect = React.forwardRef<
         setSelectedValues(allValues);
         onValueChange(allValues);
       }
+    };
+
+    // Add handler for input changes
+    const handleInputChange = (value: string) => {
+      setInputValue(value);
+    };
+
+    // Add custom filtering logic
+    const filterOptions = (value: string) => {
+      return allOptions.filter((option) => {
+        const searchTerm = value.toLowerCase().trim();
+        const label = option.label.toLowerCase();
+        const optionValue = option.value.toLowerCase();
+
+        // Only return exact matches or substrings
+        return label.includes(searchTerm) || optionValue.includes(searchTerm);
+      });
     };
 
     return (
@@ -285,13 +340,31 @@ export const MultiSelect = React.forwardRef<
           align="start"
           onEscapeKeyDown={() => setIsPopoverOpen(false)}
         >
-          <Command className="w-full">
+          <Command
+            className="w-full"
+            filter={(value, search) => {
+              if (!search) return 1;
+              return filterOptions(search).some((opt) => opt.value === value)
+                ? 1
+                : 0;
+            }}
+          >
             <CommandInput
               placeholder="Search..."
               onKeyDown={handleInputKeyDown}
+              value={inputValue}
+              onValueChange={handleInputChange}
             />
             <CommandList>
-              <CommandEmpty>No results found.</CommandEmpty>
+              <CommandEmpty>
+                {allowCustomValues ? (
+                  <CommandItem onSelect={() => addCustomValue(inputValue)}>
+                    Add &quot;{inputValue}&quot;
+                  </CommandItem>
+                ) : (
+                  "No results found."
+                )}
+              </CommandEmpty>
               <CommandGroup>
                 <CommandItem
                   key="all"
@@ -301,7 +374,7 @@ export const MultiSelect = React.forwardRef<
                   <div
                     className={cn(
                       "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                      selectedValues.length === options.length
+                      selectedValues.length === allOptions.length
                         ? "bg-primary text-primary-foreground"
                         : "opacity-50 [&_svg]:invisible"
                     )}
@@ -310,9 +383,11 @@ export const MultiSelect = React.forwardRef<
                   </div>
                   <span>(Select All)</span>
                 </CommandItem>
-                {options.map((option) => {
-                  const isSelected = selectedValues.includes(option.value);
-                  return (
+
+                {/* Show selected items first */}
+                {allOptions
+                  .filter((option) => selectedValues.includes(option.value))
+                  .map((option) => (
                     <CommandItem
                       key={option.value}
                       onSelect={() => toggleOption(option.value)}
@@ -321,7 +396,7 @@ export const MultiSelect = React.forwardRef<
                       <div
                         className={cn(
                           "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                          isSelected
+                          selectedValues.includes(option.value)
                             ? "bg-primary text-primary-foreground"
                             : "opacity-50 [&_svg]:invisible"
                         )}
@@ -332,9 +407,43 @@ export const MultiSelect = React.forwardRef<
                         <option.icon className="mr-2 h-4 w-4 text-muted-foreground" />
                       )}
                       <span>{option.label}</span>
+                      {!options.find((o) => o.value === option.value) && (
+                        <Badge variant="outline" className="ml-2">
+                          custom
+                        </Badge>
+                      )}
                     </CommandItem>
-                  );
-                })}
+                  ))}
+
+                {allOptions
+                  .filter((option) => !selectedValues.includes(option.value))
+                  .map((option) => (
+                    <CommandItem
+                      key={option.value}
+                      onSelect={() => toggleOption(option.value)}
+                      className="cursor-pointer w-full"
+                    >
+                      <div
+                        className={cn(
+                          "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                          selectedValues.includes(option.value)
+                            ? "bg-primary text-primary-foreground"
+                            : "opacity-50 [&_svg]:invisible"
+                        )}
+                      >
+                        <CheckIcon className="h-4 w-4" />
+                      </div>
+                      {option.icon && (
+                        <option.icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span>{option.label}</span>
+                      {!options.find((o) => o.value === option.value) && (
+                        <Badge variant="outline" className="ml-2">
+                          custom
+                        </Badge>
+                      )}
+                    </CommandItem>
+                  ))}
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup>
