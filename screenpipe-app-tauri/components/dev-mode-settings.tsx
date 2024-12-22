@@ -1,20 +1,13 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import React, { useState } from "react";
+
 import { CodeBlock } from "@/components/ui/codeblock";
 import { platform } from "@tauri-apps/plugin-os";
-import { MarkdownWithExternalLinks } from "./markdown-with-external-links";
-import { Badge } from "./ui/badge";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { invoke } from "@tauri-apps/api/core";
-import { toast, useToast } from "./ui/use-toast";
+import { useToast } from "./ui/use-toast";
 import {
   Tooltip,
   TooltipContent,
@@ -24,19 +17,8 @@ import {
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, FileText, Activity, Wrench } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
-import { homeDir } from "@tauri-apps/api/path";
-import LogViewer from "./log-viewer-v2";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Command } from "@tauri-apps/plugin-shell";
+
 import { CliCommandDialog } from "./cli-command-dialog";
-import { LogFileButton } from "./log-file-button";
 
 const getDebuggingCommands = (os: string | null, dataDir: string) => {
   let cliInstructions = "";
@@ -117,7 +99,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
   const { settings, updateSettings } = useSettings();
   const handleDevModeToggle = async (checked: boolean) => {
     try {
-      await updateSettings({ devMode: checked });
+      updateSettings({ devMode: checked });
     } catch (error) {
       console.error("failed to update dev mode:", error);
       toast({
@@ -210,7 +192,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
                     />
                   </div>
                   <div className="absolute top-2 right-2">
-                    <CliCommandDialog localSettings={settings} />
+                    <CliCommandDialog settings={settings} />
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">

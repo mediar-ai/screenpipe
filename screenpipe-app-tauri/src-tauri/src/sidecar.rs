@@ -13,40 +13,52 @@ use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
+use tauri_plugin_store::Store;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
+    #[serde(rename = "user.credits.amount")]
     pub amount: i64,
+    #[serde(rename = "user.credits.created_at", default)]
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
-    #[serde(default)]
+    #[serde(rename = "user.id", default)]
     pub id: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "user.email", default)]
     pub email: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "user.name", default)]
     pub name: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "user.image", default)]
     pub image: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "user.token", default)]
     pub token: Option<String>,
-    #[serde(default)]
+    #[serde(rename = "user.clerk_id", default)]
     pub clerk_id: Option<String>,
     #[serde(default)]
     pub credits: Option<UserCredits>,
 }
 
-impl Default for User {
-    fn default() -> Self {
+impl User {
+    pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
         Self {
-            id: None,
-            email: None,
-            name: None,
-            image: None,
-            token: None,
-            clerk_id: None,
-            credits: None,
+            id: store.get("user.id").and_then(|v| v.as_str().map(String::from)),
+            email: store.get("user.email").and_then(|v| v.as_str().map(String::from)),
+            name: store.get("user.name").and_then(|v| v.as_str().map(String::from)),
+            image: store.get("user.image").and_then(|v| v.as_str().map(String::from)),
+            token: store.get("user.token").and_then(|v| v.as_str().map(String::from)),
+            clerk_id: store.get("user.clerk_id").and_then(|v| v.as_str().map(String::from)),
+            credits: Some(UserCredits {
+                amount: store
+                    .get("user.credits.amount")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0),
+                created_at: store
+                    .get("user.credits.created_at")
+                    .and_then(|v| v.as_str().map(String::from)),
+            }),
         }
     }
 }
@@ -224,11 +236,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    let user: User = store
-        .get("user")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
+    let user = User::from_store(&store);
 
+    println!("user: {:?}", user);
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -342,6 +352,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
+
+    args.push("--debug");
 
     // Add exe directory path before the Windows-specific block
     let exe_dir = env::current_exe()

@@ -304,7 +304,7 @@ export function RecordingSettings() {
       await invoke("spawn_screenpipe");
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      await relaunch();
+      // await relaunch();
 
       toast({
         title: "settings updated successfully",
@@ -1032,10 +1032,10 @@ export function RecordingSettings() {
               <div className="flex flex-col space-y-2">
                 <Label
                   htmlFor="deepgramApiKey"
-                  className="flex items-center space-x-2"
+                  className="flex items-center gap-2"
                 >
                   <Key className="h-4 w-4" />
-                  api key
+                  <span>api key</span>
                 </Label>
                 <div className="flex-grow relative">
                   <Input
