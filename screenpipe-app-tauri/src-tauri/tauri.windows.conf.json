@@ -5,6 +5,9 @@
             "bun",
             "ollama"
         ],
+        "targets": [
+            "nsis"
+        ],
         "resources": {
             "ffmpeg\\bin\\ffmpeg.exe": "./",
             "ffmpeg\\bin\\ffprobe.exe": "./",

@@ -140,20 +140,6 @@ jobs:
             throw "Failed to enable git long paths"
           }
 
-      - name: Install NSIS
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: powershell
-        run: |
-          $nsisUrl = "https://sourceforge.net/projects/nsis/files/NSIS%203/3.10/nsis-3.10-setup.exe/download"
-          $installerPath = "$env:TEMP\nsis-installer.exe"
-          Invoke-Expression "curl.exe -L -o `"$installerPath`" `"$nsisUrl`""
-          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-          Remove-Item $installerPath -Force
-            # Add NSIS to PATH
-          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            # Verify NSIS installation
-          & "C:\Program Files (x86)\NSIS\makensis.exe" -VERSION
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
