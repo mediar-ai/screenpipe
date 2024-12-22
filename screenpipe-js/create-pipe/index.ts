@@ -150,7 +150,7 @@ async function main() {
         "mediar-ai",
         "screenpipe",
         "main",
-        "pipes/pipe-simple-nextjs",
+        "pipes/obsidian",
         directory
       );
 
