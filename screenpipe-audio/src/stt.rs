@@ -1,6 +1,6 @@
 use crate::{
     audio_processing::normalize_v2,
-    encode_single_audio, multilingual,
+    encode_single_audio, initialize_whisper_model, multilingual,
     pyannote::{
         embedding::EmbeddingExtractor,
         identify::EmbeddingManager,

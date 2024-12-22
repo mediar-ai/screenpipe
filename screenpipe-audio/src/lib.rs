@@ -22,6 +22,7 @@ pub use vad_engine::VadEngineEnum;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use whisper::WhisperModel;
 
 lazy_static! {
     pub static ref GLOBAL_WHISPER_MODEL: Arc<Mutex<Option<WhisperModel>>> =
@@ -30,7 +31,7 @@ lazy_static! {
 
 pub async fn initialize_whisper_model(
     audio_transcription_engine: &AudioTranscriptionEngine,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let model = WhisperModel::new(audio_transcription_engine)?;
     let mut global_model = GLOBAL_WHISPER_MODEL.lock().await;
     *global_model = Some(model);

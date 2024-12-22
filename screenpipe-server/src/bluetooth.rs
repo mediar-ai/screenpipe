@@ -1,14 +1,33 @@
-use anyhow::Result;
-use btleplug::api::{Central, Manager as _, Peripheral as _, ScanFilter};
-use btleplug::platform::{Adapter, Manager, Peripheral};
+use anyhow::{anyhow, Result};
+use btleplug::api::{Central, CentralEvent, Manager as _, Peripheral as _, ScanFilter};
+use btleplug::platform::{Adapter, Manager, PeripheralId};
+use chrono::{DateTime, Utc};
 use futures::stream::StreamExt;
-use screenpipe_audio::GLOBAL_WHISPER_MODEL;
-use tokio::sync::mpsc;
+use screenpipe_audio::pcm_decode::pcm_decode_bytes;
+use screenpipe_audio::{
+    stt, AudioDevice, AudioTranscriptionEngine, DeviceType, GLOBAL_WHISPER_MODEL,
+};
+use screenpipe_core::Language;
+use screenpipe_vision::core::OcrTaskData;
+use screenpipe_vision::{process_ocr_task, OcrEngine};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
+use tokio::sync::mpsc::channel;
+use tracing::info;
+use uuid::Uuid;
+
+use crate::DatabaseManager;
+
+const SCREENPIPE_SERVICE_UUID: &str = "00000000-0000-1000-8000-00805F9B34FB"; // Replace with your actual UUID
+const HDMI_STREAM_CHARACTERISTIC_UUID: &str = "00000001-0000-1000-8000-00805F9B34FB"; // Replace with your actual UUID
 
 pub struct BluetoothManager {
     adapter: Adapter,
     db: Arc<DatabaseManager>,
     known_devices: HashMap<String, DeviceConfig>,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,7 +39,10 @@ struct DeviceConfig {
 }
 
 impl BluetoothManager {
-    pub async fn new(db: Arc<DatabaseManager>) -> Result<Self> {
+    pub async fn new(
+        db: Arc<DatabaseManager>,
+        audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    ) -> Result<Self> {
         let manager = Manager::new().await?;
         let adapter = manager
             .adapters()
@@ -33,6 +55,7 @@ impl BluetoothManager {
             adapter,
             db,
             known_devices: HashMap::new(),
+            audio_transcription_engine,
         })
     }
 
@@ -44,7 +67,7 @@ impl BluetoothManager {
 
         while let Some(event) = events.next().await {
             match event {
-                btleplug::api::Event::DeviceDiscovered(id) => {
+                CentralEvent::DeviceDiscovered(id) => {
                     if let Some(device) = self.known_devices.get(&id.to_string()) {
                         self.handle_known_device(&id).await?;
                     }
@@ -56,33 +79,41 @@ impl BluetoothManager {
         Ok(())
     }
 
-    async fn handle_known_device(&self, device_id: &str) -> Result<()> {
+    async fn handle_known_device(&self, device_id: &PeripheralId) -> Result<()> {
         let peripheral = self.adapter.peripheral(device_id).await?;
 
         // Connect and authenticate
         peripheral.connect().await?;
 
-        // Set up characteristic for receiving data
-        let chars = peripheral.characteristics();
-        let data_char = chars
+        // Find our custom service
+        peripheral.discover_services().await?;
+        let screenpipe_service = peripheral
+            .services()
             .iter()
-            .find(|c| c.uuid == UUID::from_str("YOUR-UUID-HERE").unwrap())
-            .ok_or_else(|| anyhow!("data characteristic not found"))?;
+            .find(|s| s.uuid == Uuid::parse_str(SCREENPIPE_SERVICE_UUID).unwrap())
+            .ok_or_else(|| anyhow!("screenpipe service not found"))?;
+
+        // Get the HDMI stream characteristic
+        let chars = peripheral.characteristics();
+        let hdmi_char = chars
+            .iter()
+            .find(|c| c.uuid == Uuid::parse_str(HDMI_STREAM_CHARACTERISTIC_UUID).unwrap())
+            .ok_or_else(|| anyhow!("hdmi characteristic not found"))?;
 
         // Subscribe to notifications
-        peripheral.subscribe(data_char).await?;
+        peripheral.subscribe(hdmi_char).await?;
 
         let mut notifications = peripheral.notifications().await?;
 
         while let Some(data) = notifications.next().await {
             match data.value[0] {
                 0x01 => {
-                    self.handle_image_data(&data.value[1..], &self.known_devices[&device_id].name)
-                        .await?
-                }
-                0x02 => {
-                    self.handle_audio_data(&data.value[1..], &self.known_devices[&device_id].name)
-                        .await?
+                    // HDMI frame data
+                    self.handle_image_data(
+                        &data.value[1..],
+                        &self.known_devices[&device_id.to_string()].name,
+                    )
+                    .await?;
                 }
                 _ => println!("unknown data type received"),
             }
@@ -97,12 +128,26 @@ impl BluetoothManager {
 
         // Run OCR
         let ocr_engine = OcrEngine::default();
-        let (text, text_json, confidence) = ocr_engine
-            .process_image(&img, vec![Language::English])
-            .await?;
+        let (result_tx, mut result_rx) = channel(512);
+        process_ocr_task(
+            OcrTaskData {
+                image: img,
+                window_images: vec![],
+                frame_number: 0,
+                timestamp: Instant::now(),
+                result_tx,
+            },
+            &ocr_engine,
+            vec![Language::English],
+        )
+        .await?;
+
+        let result = result_rx.recv().await.unwrap();
+        let text = result.window_ocr_results[0].text.clone();
+        let text_json = result.window_ocr_results[0].text_json.clone();
 
         // First insert video chunk to get an ID
-        let video_chunk_id = self
+        let _ = self
             .db
             .insert_video_chunk("bluetooth-capture.mp4", device_name)
             .await?;
@@ -115,11 +160,11 @@ impl BluetoothManager {
             .insert_ocr_text(
                 frame_id,
                 &text,
-                &text_json,
+                &serde_json::to_string(&text_json)?,
                 "bluetooth-device",
                 device_name,
                 Arc::new(ocr_engine),
-                true, // focused since it's the only window
+                true,
             )
             .await?;
 
@@ -127,13 +172,13 @@ impl BluetoothManager {
     }
 
     async fn handle_audio_data(&self, data: &[u8], device_name: &str) -> Result<()> {
-        // Convert audio data
-        let audio = rodio::Decoder::new(std::io::Cursor::new(data))?;
+        // First decode the PCM data using symphonia
+        let (pcm_data, sample_rate) = pcm_decode_bytes(data)?;
 
         // Get global model
-        let model = GLOBAL_WHISPER_MODEL.lock().await;
+        let mut model = GLOBAL_WHISPER_MODEL.lock().await;
         let model = model
-            .as_ref()
+            .as_mut()
             .ok_or_else(|| anyhow!("whisper model not initialized"))?;
 
         // First insert audio chunk
@@ -141,11 +186,11 @@ impl BluetoothManager {
 
         // Use model for transcription
         let transcription = stt(
-            &audio_data,
+            &pcm_data,
             sample_rate,
             device_name,
             model,
-            audio_transcription_engine.clone(),
+            self.audio_transcription_engine.clone(),
             None,   // deepgram key
             vec![], // languages
         )
@@ -155,16 +200,16 @@ impl BluetoothManager {
         self.db
             .insert_audio_transcription(
                 audio_chunk_id,
-                &transcription.text,
+                &transcription,
                 0, // offset_index
                 "whisper",
                 &AudioDevice {
                     name: device_name.to_string(),
                     device_type: DeviceType::Input,
                 },
-                transcription.speaker_id,
-                transcription.start_time,
-                transcription.end_time,
+                None, // speaker_id
+                None, // start_time
+                None, // end_time
             )
             .await?;
 
@@ -173,14 +218,14 @@ impl BluetoothManager {
 
     pub async fn register_iphone(&mut self, mac_address: String, name: String) -> Result<()> {
         let device_config = DeviceConfig {
-            name,
-            mac_address,
+            name: name.clone(),
+            mac_address: mac_address.clone(),
             auto_sync: true,
             last_sync: None,
         };
 
         self.known_devices.insert(mac_address, device_config);
-        println!("registered new iphone device: {}", name);
+        info!("registered new iphone device: {}", name);
         Ok(())
     }
 }

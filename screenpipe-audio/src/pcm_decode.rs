@@ -76,3 +76,66 @@ pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32
     }
     Ok((pcm_data, sample_rate))
 }
+
+pub fn pcm_decode_bytes(data: &[u8]) -> anyhow::Result<(Vec<f32>, u32)> {
+    debug!("Starting PCM decoding from bytes");
+
+    // Convert data to owned Vec to satisfy 'static requirement
+    let data = data.to_vec();
+    let cursor = std::io::Cursor::new(data);
+    let mss = symphonia::core::io::MediaSourceStream::new(Box::new(cursor), Default::default());
+
+    // Create a probe hint
+    let hint = symphonia::core::probe::Hint::new();
+
+    // Use the default options for metadata and format readers
+    let meta_opts: symphonia::core::meta::MetadataOptions = Default::default();
+    let fmt_opts: symphonia::core::formats::FormatOptions = Default::default();
+
+    // Probe the media source
+    let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
+    let mut format = probed.format;
+
+    // Find the first audio track with a known codec
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .ok_or_else(|| anyhow::anyhow!("no supported audio tracks"))?;
+
+    // Use the default options for the decoder
+    let dec_opts: DecoderOptions = Default::default();
+
+    // Create a decoder for the track
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &dec_opts)
+        .expect("unsupported codec");
+
+    let track_id = track.id;
+    let sample_rate = track.codec_params.sample_rate.unwrap_or(0);
+    let mut pcm_data = Vec::new();
+
+    debug!("Starting decode loop");
+    // The decode loop
+    while let Ok(packet) = format.next_packet() {
+        // Skip packets from other tracks
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        match decoder.decode(&packet)? {
+            AudioBufferRef::F32(buf) => pcm_data.extend(buf.chan(0)),
+            AudioBufferRef::U8(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::U16(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::U24(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::U32(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::S8(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::S16(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::S24(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::S32(data) => conv(&mut pcm_data, data),
+            AudioBufferRef::F64(data) => conv(&mut pcm_data, data),
+        }
+    }
+
+    Ok((pcm_data, sample_rate))
+}

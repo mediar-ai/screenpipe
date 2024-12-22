@@ -124,6 +124,8 @@ libsqlite3-sys = { version = "0.26", features = ["bundled"] }
 zerocopy = { version = "0.7.32" }
 port_check = "0.2.1"
 
+btleplug = { version = "0.11", optional = true }
+
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
@@ -151,6 +153,7 @@ pipes = ["screenpipe-core/pipes", "url"]
 llm = ["screenpipe-core/llm"]
 beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
 experimental = ["enigo"]
+bluetooth = ["btleplug"]
 
 [[bin]]
 name = "screenpipe"

@@ -26,7 +26,6 @@ use screenpipe_server::{
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
-    bluetooth::BluetoothManager,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -392,6 +391,8 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
+    #[cfg(feature = "bluetooth")]
+    let bt_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
         all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
     } else {
@@ -835,28 +836,37 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Initialize Bluetooth manager
-    let bluetooth_manager = BluetoothManager::new(Arc::clone(&db)).await?;
-    
-    // Start Bluetooth scanning in a separate task
-    let bluetooth_shutdown_tx = shutdown_tx.clone();
-    tokio::spawn(async move {
-        let mut shutdown_rx = bluetooth_shutdown_tx.subscribe();
-        
-        loop {
-            tokio::select! {
-                result = bluetooth_manager.start_scanning() => {
-                    if let Err(e) = result {
-                        println!("bluetooth scanning error: {}, retrying in 5s...", e);
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+    #[cfg(feature = "bluetooth")]
+    if cli.use_bluetooth {
+        use screenpipe_server::bluetooth::BluetoothManager;
+        info!("initializing bluetooth manager");
+        let bluetooth_manager = BluetoothManager::new(
+            Arc::clone(&db),
+            Arc::new(bt_transcription_engine_clone.into()),
+        )
+        .await?;
+
+        // Start Bluetooth scanning in a separate task
+        let bluetooth_shutdown_tx = shutdown_tx.clone();
+        tokio::spawn(async move {
+            let mut shutdown_rx = bluetooth_shutdown_tx.subscribe();
+
+            loop {
+                tokio::select! {
+                    result = bluetooth_manager.start_scanning() => {
+                        if let Err(e) = result {
+                            error!("bluetooth scanning error: {}, retrying in 5s...", e);
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                        }
+                    }
+                    _ = shutdown_rx.recv() => {
+                        info!("shutting down bluetooth manager");
+                        break;
                     }
                 }
-                _ = shutdown_rx.recv() => {
-                    println!("shutting down bluetooth manager");
-                    break;
-                }
             }
-        }
-    });
+        });
+    }
 
     tokio::select! {
         _ = handle => info!("recording completed"),

@@ -1,5 +1,6 @@
 mod auto_destruct;
-mod bluetooth;
+#[cfg(feature = "bluetooth")]
+pub mod bluetooth;
 pub mod chunking;
 pub mod cli;
 pub mod core;
@@ -17,7 +18,6 @@ mod video_db;
 mod video_utils;
 
 pub use auto_destruct::watch_pid;
-pub use bluetooth::Bluetooth;
 pub use cli::Cli;
 pub use core::start_continuous_recording;
 pub use db::DatabaseManager;

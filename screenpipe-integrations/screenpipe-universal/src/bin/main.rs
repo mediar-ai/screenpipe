@@ -70,21 +70,13 @@ impl CaptureManager {
         let buffer_dir = PathBuf::from(BUFFER_DIR);
         tokio::fs::create_dir_all(&buffer_dir).await?;
 
-        // Test HDMI capture device
+        // Find video device
         let hdmi_device = find_hdmi_device().await?;
-        println!("found hdmi capture device: {}", hdmi_device);
+        println!("found video capture device: {}", hdmi_device);
 
-        // Test capture capabilities
-        let output = Command::new("ffmpeg")
-            .args(["-f", "v4l2", "-list_formats", "all", "-i", &hdmi_device])
-            .output()
-            .await?;
-
-        if !output.status.success() {
-            return Err(anyhow::anyhow!(
-                "hdmi device test failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            ));
+        // Test device exists but don't fail on format list
+        if !tokio::fs::metadata(&hdmi_device).await.is_ok() {
+            return Err(anyhow::anyhow!("video device not found: {}", hdmi_device));
         }
 
         Ok(Self {
@@ -141,16 +133,17 @@ impl CaptureManager {
     }
 
     async fn start_video_capture(&self, output_path: &PathBuf) -> Result<tokio::process::Child> {
+        let video_device = find_working_video_device().await?;
+        
+        // Let ffmpeg auto-detect resolution instead of forcing 1920x1080
         Command::new("ffmpeg")
             .args([
                 "-f",
                 "v4l2",
                 "-framerate",
                 &FPS.to_string(),
-                "-video_size",
-                "1920x1080",
                 "-i",
-                "/dev/video1",
+                &video_device,
                 "-c:v",
                 "libx264",
                 "-preset",
@@ -160,24 +153,58 @@ impl CaptureManager {
                 output_path.to_str().unwrap(),
             ])
             .spawn()
-            .context("failed to start hdmi capture")
+            .context("failed to start video capture")
     }
 
     async fn start_audio_capture(&self, output_path: &PathBuf) -> Result<tokio::process::Child> {
-        Command::new("ffmpeg")
-            .args([
-                "-f",
-                "alsa",
-                "-i",
-                "hw:0",
-                "-acodec",
-                "pcm_s16le",
-                "-ar",
-                "44100",
-                output_path.to_str().unwrap(),
+        // Try different audio capture methods in sequence
+        let capture_configs = [
+            // Try ALSA first in headless environment
+            (vec![
+                "-f", "alsa",
+                "-i", "default",
+                "-acodec", "pcm_s16le",
+                "-ar", "44100",
+            ]),
+            // Fallback to specific ALSA device
+            (vec![
+                "-f", "alsa",
+                "-i", "plughw:CARD=Device,DEV=0",
+                "-acodec", "pcm_s16le",
+                "-ar", "44100",
+            ]),
+            // Last resort: try OSS
+            (vec![
+                "-f", "oss",
+                "-i", "/dev/dsp",
+                "-acodec", "pcm_s16le",
+                "-ar", "44100",
             ])
-            .spawn()
-            .context("failed to start audio capture")
+        ];
+
+        let mut last_error = None;
+
+        for config in capture_configs.iter() {
+            let mut args = config.clone();
+            args.push(output_path.to_str().unwrap());
+
+            match Command::new("ffmpeg")
+                .args(&args)
+                .spawn()
+            {
+                Ok(child) => {
+                    println!("audio capture started with config: {:?}", args);
+                    return Ok(child);
+                }
+                Err(e) => {
+                    println!("failed to start audio with config {:?}: {}", args, e);
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        // If we get here, none of the configs worked
+        Err(anyhow::anyhow!("failed to start audio capture: {:?}", last_error))
     }
 
     async fn cleanup_old_files(&self) -> Result<()> {
@@ -239,13 +266,13 @@ async fn sync_chunk(chunk: &CaptureChunk) -> Result<()> {
     while retry_count < MAX_RETRIES {
         match attempt_sync(chunk).await {
             Ok(_) => {
-                println!("successfully synced chunk: {}", chunk.id);
+                info!("successfully synced chunk: {}", chunk.id);
                 return Ok(());
             }
             Err(e) => {
                 retry_count += 1;
                 if retry_count < MAX_RETRIES {
-                    println!(
+                    info!(
                         "sync attempt {} failed: {}, retrying in {} seconds...",
                         retry_count,
                         e,
@@ -271,7 +298,7 @@ async fn attempt_sync(chunk: &CaptureChunk) -> Result<()> {
         .next()
         .ok_or_else(|| anyhow::anyhow!("no bluetooth adapter found"))?;
 
-    println!("scanning for mac devices...");
+    info!("scanning for mac devices...");
     adapter.start_scan(ScanFilter::default()).await?;
 
     let mut events = adapter.events().await?;
@@ -285,11 +312,11 @@ async fn attempt_sync(chunk: &CaptureChunk) -> Result<()> {
                 if let Some(name) = properties.local_name {
                     if name.contains("MacBook") {
                         found_mac = true;
-                        println!("found mac device: {}", name);
+                        info!("found mac device: {}", name);
                         match transfer_chunk(&peripheral, chunk).await {
                             Ok(_) => return Ok(()),
                             Err(e) => {
-                                println!("transfer failed: {}", e);
+                                error!("transfer failed: {}", e);
                                 // Let the retry mechanism handle it
                                 return Err(e);
                             }
@@ -308,7 +335,7 @@ async fn attempt_sync(chunk: &CaptureChunk) -> Result<()> {
 }
 
 async fn transfer_chunk(peripheral: &platform::Peripheral, chunk: &CaptureChunk) -> Result<()> {
-    println!("connecting to mac...");
+    info!("connecting to mac...");
     peripheral.connect().await?;
 
     // Find our custom service/characteristic
@@ -319,7 +346,7 @@ async fn transfer_chunk(peripheral: &platform::Peripheral, chunk: &CaptureChunk)
         .ok_or_else(|| anyhow::anyhow!("transfer characteristic not found"))?;
 
     // Transfer video file
-    println!("transferring video file...");
+    info!("transferring video file...");
     transfer_file(
         peripheral,
         transfer_char,
@@ -330,7 +357,7 @@ async fn transfer_chunk(peripheral: &platform::Peripheral, chunk: &CaptureChunk)
     .await?;
 
     // Transfer audio file
-    println!("transferring audio file...");
+    info!("transferring audio file...");
     transfer_file(
         peripheral,
         transfer_char,
@@ -340,7 +367,7 @@ async fn transfer_chunk(peripheral: &platform::Peripheral, chunk: &CaptureChunk)
     )
     .await?;
 
-    println!("transfer completed for chunk: {}", chunk.id);
+    info!("transfer completed for chunk: {}", chunk.id);
     Ok(())
 }
 
@@ -408,7 +435,7 @@ async fn transfer_file(
                             e
                         ));
                     }
-                    println!("retry {} for sequence {}", retry_count, sequence_number);
+                    info!("retry {} for sequence {}", retry_count, sequence_number);
                     sleep(RETRY_DELAY).await;
                 }
             }
@@ -416,7 +443,7 @@ async fn transfer_file(
 
         // Print progress
         let progress = (bytes_transferred as f64 / file_size as f64 * 100.0) as u32;
-        println!(
+        info!(
             "transfer progress: {}% ({}/{} bytes)",
             progress, bytes_transferred, file_size
         );
@@ -432,18 +459,80 @@ async fn find_hdmi_device() -> Result<String> {
         .await?;
 
     let devices = String::from_utf8_lossy(&output.stdout);
+    println!("available video devices:\n{}", devices);
 
-    // Look for HDMI capture device
-    for line in devices.lines() {
-        if line.to_lowercase().contains("hdmi") || line.to_lowercase().contains("capture") {
-            // Usually the device path is on the next line
-            if let Some(device_path) = line.lines().next() {
-                if device_path.starts_with("/dev/video") {
-                    return Ok(device_path.to_string());
-                }
+    // Try to find Cam Link 4K first
+    for (i, line) in devices.lines().enumerate() {
+        if line.contains("Cam Link 4K") {
+            if let Some(next_line) = devices.lines().nth(i + 1) {
+                return Ok(next_line.trim().to_string());
             }
         }
     }
 
-    Err(anyhow::anyhow!("no hdmi capture device found"))
+    // Fallback: return first video device if no Cam Link found
+    for line in devices.lines() {
+        if line.trim().starts_with("/dev/video") {
+            return Ok(line.trim().to_string());
+        }
+    }
+
+    Err(anyhow::anyhow!("no video capture device found"))
+}
+
+async fn find_working_video_device() -> Result<String> {
+    // Try different video devices
+    for device in &["/dev/video0", "/dev/video1", "/dev/video2"] {
+        let output = Command::new("ffmpeg")
+            .args([
+                "-f",
+                "v4l2",
+                "-list_formats",
+                "all",
+                "-i",
+                device,
+            ])
+            .output()
+            .await?;
+
+        if output.status.success() || output.stderr.len() > 0 {
+            // If we get format info, device likely works
+            println!("found working video device: {}", device);
+            return Ok(device.to_string());
+        }
+    }
+
+    Err(anyhow::anyhow!("no working video device found"))
+}
+
+async fn find_working_audio_device() -> Result<String> {
+    // Try to detect available audio devices
+    let devices = [
+        "default",
+        "plughw:CARD=Device,DEV=0",
+        "hw:0",
+        "hw:1",
+        "plughw:0,0",
+    ];
+
+    for device in &devices {
+        let output = Command::new("arecord")
+            .args([
+                "-D",
+                device,
+                "--duration=1",
+                "/dev/null"
+            ])
+            .output()
+            .await?;
+
+        if output.status.success() {
+            println!("found working audio device: {}", device);
+            return Ok(device.to_string());
+        }
+    }
+
+    // If no device works, return default and let ffmpeg handle it
+    println!("no working audio device found, falling back to default");
+    Ok("default".to_string())
 }
