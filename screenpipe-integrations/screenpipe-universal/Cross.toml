@@ -1,0 +1,28 @@
+[build.env]
+passthrough = [
+    "RUST_LOG",
+    "PKG_CONFIG_ALLOW_CROSS",
+    "PKG_CONFIG_PATH",
+    "PKG_CONFIG_SYSROOT_DIR",
+]
+
+[target.aarch64-unknown-linux-gnu]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:latest"
+pre-build = [
+    "apt-get update",
+    "dpkg --add-architecture arm64",
+    "sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list",
+    "echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main restricted universe multiverse' >> /etc/apt/sources.list",
+    "echo 'deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main restricted universe multiverse' >> /etc/apt/sources.list",
+    "apt-get update",
+    "apt-get install -y libdbus-1-dev:arm64 pkg-config"
+]
+
+[build.env.PKG_CONFIG_PATH]
+value = "/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
+
+[build.env.PKG_CONFIG_ALLOW_CROSS]
+value = "1"
+
+[build.env.PKG_CONFIG_SYSROOT_DIR]
+value = "/"

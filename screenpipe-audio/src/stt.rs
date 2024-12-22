@@ -45,6 +45,8 @@ lazy_static! {
         .unwrap_or_else(|_| "https://api.deepgram.com/v1/listen".to_string());
     static ref CUSTOM_DEEPGRAM_API_TOKEN: String =
         env::var("CUSTOM_DEEPGRAM_API_TOKEN").unwrap_or_else(|_| String::new());
+    pub static ref GLOBAL_WHISPER_MODEL: Arc<Mutex<Option<WhisperModel>>> =
+        Arc::new(Mutex::new(None));
 }
 
 async fn transcribe_with_deepgram(
@@ -500,7 +502,12 @@ pub async fn create_whisper_channel(
     crossbeam::channel::Receiver<TranscriptionResult>,
     Arc<AtomicBool>, // Shutdown flag
 )> {
-    let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
+    // Initialize if not already done
+    if GLOBAL_WHISPER_MODEL.lock().await.is_none() {
+        initialize_whisper_model(&audio_transcription_engine).await?;
+    }
+
+    let mut whisper_model = GLOBAL_WHISPER_MODEL.lock().await.as_ref().unwrap().clone();
     let (input_sender, input_receiver): (
         crossbeam::channel::Sender<AudioInput>,
         crossbeam::channel::Receiver<AudioInput>,

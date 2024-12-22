@@ -273,8 +273,12 @@ pub enum Command {
     },
     /// Run database migrations
     Migrate,
+    /// Bluetooth commands
+    Bluetooth {
+        #[clap(subcommand)]
+        subcommand: BluetoothCommand,
+    },
 }
-
 
 #[derive(Subcommand)]
 pub enum PipeCommand {
@@ -361,4 +365,27 @@ pub enum PipeCommand {
 pub enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Debug, Parser)]
+pub enum BluetoothCommand {
+    /// Register a new iPhone device for syncing
+    Register {
+        /// Device name (e.g. "iPhone 13")
+        name: String,
+        /// MAC address (e.g. "XX:XX:XX:XX:XX:XX")
+        mac: String,
+    },
+    /// List registered devices
+    List,
+    /// Remove a registered device
+    Remove {
+        /// MAC address of device to remove
+        mac: String,
+    },
+    /// Force sync with a device
+    Sync {
+        /// MAC address of device to sync
+        mac: String,
+    },
 }

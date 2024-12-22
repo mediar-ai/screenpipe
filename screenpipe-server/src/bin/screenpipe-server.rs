@@ -26,6 +26,7 @@ use screenpipe_server::{
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
+    bluetooth::BluetoothManager,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -832,6 +833,30 @@ async fn main() -> anyhow::Result<()> {
             }
         });
     }
+
+    // Initialize Bluetooth manager
+    let bluetooth_manager = BluetoothManager::new(Arc::clone(&db)).await?;
+    
+    // Start Bluetooth scanning in a separate task
+    let bluetooth_shutdown_tx = shutdown_tx.clone();
+    tokio::spawn(async move {
+        let mut shutdown_rx = bluetooth_shutdown_tx.subscribe();
+        
+        loop {
+            tokio::select! {
+                result = bluetooth_manager.start_scanning() => {
+                    if let Err(e) = result {
+                        println!("bluetooth scanning error: {}, retrying in 5s...", e);
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                }
+                _ = shutdown_rx.recv() => {
+                    println!("shutting down bluetooth manager");
+                    break;
+                }
+            }
+        }
+    });
 
     tokio::select! {
         _ = handle => info!("recording completed"),
