@@ -188,7 +188,7 @@ function createDefaultSettingsObject(): Settings {
         : "tesseract";
 
     defaultSettings.ocrEngine = ocrModel;
-    defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
+    defaultSettings.fps = currentPlatform === "macos" ? 0.5 : 1;
     defaultSettings.platform = currentPlatform;
 
     defaultSettings.ignoredWindows = [
