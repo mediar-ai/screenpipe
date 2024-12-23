@@ -2,11 +2,13 @@
 #[cfg(feature = "pipes")]
 mod pipes {
     use regex::Regex;
+    use std::collections::HashMap;
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
+    use tokio::sync::watch;
 
     use reqwest::Client;
     use serde_json::Value;
@@ -33,6 +35,19 @@ mod pipes {
     use rand::{thread_rng, Rng};
     use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use std::str::FromStr;
+
+    pub struct CronHandle {
+        shutdown: watch::Sender<bool>,
+    }
+
+    impl CronHandle {
+        pub fn stop(&self) {
+            let _ = self.shutdown.send(true);
+        }
+    }
+
+    static CRON_HANDLES: Lazy<tokio::sync::Mutex<HashMap<String, Vec<CronHandle>>>> =
+        Lazy::new(|| tokio::sync::Mutex::new(HashMap::new()));
 
     // Add this function to generate a secure cron secret
     fn generate_cron_secret() -> String {
@@ -138,16 +153,11 @@ mod pipes {
                     let base_url = format!("http://localhost:{}", port);
                     debug!("using base url: {} for cron jobs", base_url);
 
-                    // Generate a CRON_SECRET if not exists
                     let cron_secret = generate_cron_secret();
                     debug!("generated cron secret for pipe: {}", pipe);
-
-                    // Add CRON_SECRET to environment variables
                     env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
 
-                    // Clone the crons array and screenpipe_dir before the loop
-                    let crons = crons.to_vec();
-                    let screenpipe_dir = screenpipe_dir.clone();
+                    let mut handles = Vec::new();
 
                     for cron in crons {
                         let path = cron["path"]
@@ -159,35 +169,31 @@ mod pipes {
                             .ok_or_else(|| anyhow::anyhow!("missing schedule"))?
                             .to_string();
 
-                        debug!("setting up cron job: {} with schedule: {}", path, schedule);
+                        let (tx, rx) = watch::channel(false);
+                        let handle = CronHandle { shutdown: tx };
+                        handles.push(handle);
 
-                        // Validate cron expression
-                        match cron::Schedule::from_str(&schedule) {
-                            Ok(_) => {
-                                let base_url = base_url.clone();
-                                let pipe_clone = pipe.to_string();
-                                let secret_clone = cron_secret.clone();
-                                let screenpipe_dir = screenpipe_dir.clone();
+                        let base_url = base_url.clone();
+                        let pipe_clone = pipe.to_string();
+                        let secret_clone = cron_secret.clone();
+                        let screenpipe_dir = screenpipe_dir.clone();
 
-                                debug!("spawning cron task for path: {}", path);
-                                tokio::spawn(async move {
-                                    run_cron_schedule(
-                                        &pipe_clone,
-                                        &base_url,
-                                        &path,
-                                        &secret_clone,
-                                        &schedule,
-                                        &screenpipe_dir,
-                                    )
-                                    .await;
-                                });
-                            }
-                            Err(e) => {
-                                error!("invalid cron expression '{}': {}", schedule, e);
-                                anyhow::bail!("invalid cron expression '{}': {}", schedule, e);
-                            }
-                        }
+                        tokio::spawn(async move {
+                            run_cron_schedule(
+                                &pipe_clone,
+                                &base_url,
+                                &path,
+                                &secret_clone,
+                                &schedule,
+                                &screenpipe_dir,
+                                rx,
+                            )
+                            .await;
+                        });
                     }
+
+                    // Store handles for later cleanup
+                    CRON_HANDLES.lock().await.insert(pipe.to_string(), handles);
                 }
 
                 // Install dependencies using bun
@@ -798,6 +804,7 @@ mod pipes {
         secret: &str,
         schedule: &str,
         screenpipe_dir: &Path,
+        mut shutdown: watch::Receiver<bool>,
     ) {
         let schedule = match cron::Schedule::from_str(schedule) {
             Ok(s) => s,
@@ -869,7 +876,25 @@ mod pipes {
                 }
                 Err(e) => error!("failed to execute cron job: {}", e),
             }
+
+            if let Ok(()) = shutdown.changed().await {
+                if *shutdown.borrow() {
+                    info!("cron job shutdown for pipe at path: {}", path);
+                    break;
+                }
+            }
         }
+    }
+
+    pub async fn cleanup_pipe_crons(pipe: &str) -> Result<()> {
+        if let Some(handles) = CRON_HANDLES.lock().await.remove(pipe) {
+            info!("cleaning up {} cron jobs for pipe {}", handles.len(), pipe);
+            for handle in handles {
+                handle.stop();
+            }
+            info!("stopped all cron jobs for pipe: {}", pipe);
+        }
+        Ok(())
     }
 }
 

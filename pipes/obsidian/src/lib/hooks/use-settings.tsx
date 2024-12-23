@@ -29,18 +29,20 @@ export function useSettings() {
     },
   };
 
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
-      setLoading(true);
+      if (!loading) setLoading(true);
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
         setSettings({ ...defaultSettings, ...data });
       } catch (err) {
+        console.error("failed to load settings:", err);
+        setSettings(defaultSettings);
         setError(err as Error);
       } finally {
         setLoading(false);
@@ -68,95 +70,122 @@ export function useSettings() {
     value: Settings[T],
     namespace?: string
   ) => {
+    if (!settings) return;
     try {
       await fetch("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ key, value, namespace }),
       });
-      
-      if (namespace) {
-        // Update namespace settings in state
-        setSettings((prev) => ({
-          ...prev,
-          customSettings: {
-            ...prev.customSettings,
-            [namespace]: {
-              ...(prev.customSettings?.[namespace] || {}),
-              [key]: value,
-            },
-          },
-        }));
-      } else {
-        // Update regular settings
-        setSettings((prev) => ({ ...prev, [key]: value }));
-      }
-    } catch (err) {
-      setError(err as Error);
-    }
-  };
 
-  const updateSettings = async (newSettings: Partial<Settings>, namespace?: string) => {
-    try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({ value: newSettings, isPartialUpdate: true, namespace }),
-      });
-      
       if (namespace) {
-        setSettings((prev) => ({
-          ...prev,
-          customSettings: {
-            ...prev.customSettings,
-            [namespace]: {
-              ...(prev.customSettings?.[namespace] || {}),
-              ...newSettings,
-            },
-          },
-        }));
-      } else {
-        setSettings((prev) => ({ ...prev, ...newSettings }));
-      }
-    } catch (err) {
-      setError(err as Error);
-    }
-  };
-
-  const resetSettings = async (settingKey?: keyof Settings, namespace?: string) => {
-    try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({ reset: true, key: settingKey, namespace }),
-      });
-      
-      if (namespace) {
-        if (settingKey) {
-          // Reset single key in namespace
-          setSettings((prev) => ({
+        setSettings((prev) => {
+          if (!prev) return defaultSettings;
+          return {
             ...prev,
             customSettings: {
               ...prev.customSettings,
               [namespace]: {
                 ...(prev.customSettings?.[namespace] || {}),
-                [settingKey]: undefined,
+                [key]: value,
               },
             },
-          }));
-        } else {
-          // Reset entire namespace
-          setSettings((prev) => ({
+          };
+        });
+      } else {
+        setSettings((prev) => {
+          if (!prev) return defaultSettings;
+          return { ...prev, [key]: value };
+        });
+      }
+    } catch (err) {
+      setError(err as Error);
+    }
+  };
+
+  const updateSettings = async (
+    newSettings: Partial<Settings>,
+    namespace?: string
+  ) => {
+    if (!settings) return;
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          value: newSettings,
+          isPartialUpdate: true,
+          namespace,
+        }),
+      });
+
+      if (namespace) {
+        setSettings((prev) => {
+          if (!prev) return defaultSettings;
+          return {
             ...prev,
             customSettings: {
               ...prev.customSettings,
-              [namespace]: {},
+              [namespace]: {
+                ...(prev.customSettings?.[namespace] || {}),
+                ...newSettings,
+              },
             },
-          }));
-        }
+          };
+        });
+      } else {
+        setSettings((prev) => {
+          if (!prev) return defaultSettings;
+          return { ...prev, ...newSettings };
+        });
+      }
+    } catch (err) {
+      setError(err as Error);
+    }
+  };
+
+  const resetSettings = async (
+    settingKey?: keyof Settings,
+    namespace?: string
+  ) => {
+    if (!settings) return;
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({ reset: true, key: settingKey, namespace }),
+      });
+
+      if (namespace) {
+        setSettings((prev) => {
+          if (!prev) return defaultSettings;
+          if (settingKey) {
+            return {
+              ...prev,
+              customSettings: {
+                ...prev.customSettings,
+                [namespace]: {
+                  ...(prev.customSettings?.[namespace] || {}),
+                  [settingKey]: undefined,
+                },
+              },
+            };
+          } else {
+            return {
+              ...prev,
+              customSettings: {
+                ...prev.customSettings,
+                [namespace]: {},
+              },
+            };
+          }
+        });
       } else {
         if (settingKey) {
-          setSettings((prev) => ({
-            ...prev,
-            [settingKey]: defaultSettings[settingKey],
-          }));
+          setSettings((prev) => {
+            if (!prev) return defaultSettings;
+            return {
+              ...prev,
+              [settingKey]: defaultSettings[settingKey],
+            };
+          });
         } else {
           setSettings(defaultSettings);
         }
@@ -167,7 +196,7 @@ export function useSettings() {
   };
 
   return {
-    settings,
+    settings: settings || defaultSettings,
     loading,
     error,
     updateSetting,
