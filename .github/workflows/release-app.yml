@@ -468,7 +468,7 @@ jobs:
 
       - name: Download and Run CLI Manually (Windows)
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-        shell: pwsh
+        shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
         run: |
