@@ -7,6 +7,10 @@ use commands::show_main_window;
 use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
+use tauri::AppHandle;
+use tauri::WebviewWindow;
+use tauri::WebviewWindowBuilder;
+use tauri::Window;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -20,6 +24,8 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_deep_link::DeepLinkExt;
+use tauri::Emitter;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
@@ -100,6 +106,52 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
+pub fn recreate_window(app_handle: AppHandle, window_name: Window, focus: bool) -> tauri::Result<WebviewWindow> {
+    let label = window_name.label();
+    if let Some(window) = app_handle.get_webview_window(label) {
+        if focus {
+            if window.is_minimized().unwrap_or_default() {
+                let _ = window.unminimize();
+            }
+            window.show().unwrap();
+            // window.center().unwrap();
+            let _ = window.set_focus();
+        }
+        return Ok(window);
+    } else {
+        log::info!("window {} not found, recreating...", label);
+        let window_config = app_handle
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|w| w.label == label)
+            .unwrap()
+            .clone();
+        match WebviewWindowBuilder::from_config(&app_handle, &window_config) {
+            Ok(builder) => match builder.build() {
+                Ok(window) => {
+                    log::info!("window {} created", label);
+                    return Ok(window)
+                }
+                Err(e) => {
+                    log::error!("failed to recreate window: {}", e);
+                    Err(e)
+                },
+            },
+            Err(e) => {
+                log::error!("failed to recreate window from config: {}", e);
+                Err(e)
+            }
+        }
+    }
+}
+
+#[derive(Debug, serde::Serialize, Clone)]
+struct OuthDeepLinkPayload {
+    api_key: String,
+}
+
 #[tokio::main]
 async fn main() {
     let _ = fix_path_env::fix();
@@ -127,6 +179,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -438,29 +491,19 @@ async fn main() {
             let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
-            let app_handle = app.handle().clone();
+            let sidecar_app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut manager = sidecar_manager_clone.lock().await;
+                if let Err(e) = manager.spawn(&sidecar_app_handle).await {
+                    error!("Failed to spawn initial sidecar: {}", e);
+                }
 
-            info!(
-                "will start sidecar: {}",
-                !use_dev_mode && !is_first_time_user
-            );
-
-            if !use_dev_mode && !is_first_time_user {
-                tauri::async_runtime::spawn(async move {
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.spawn(&app_handle).await {
-                        error!("Failed to spawn initial sidecar: {}", e);
-                    }
-
-                    // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.check_and_restart(&app_handle).await {
-                        error!("Failed to restart sidecar: {}", e);
-                    }
-                });
-            } else {
-                debug!("Dev mode enabled, skipping sidecar spawn and restart");
-            }
+                // Spawn a background task to check and restart periodically
+                let mut manager = sidecar_manager_clone.lock().await;
+                if let Err(e) = manager.check_and_restart(&sidecar_app_handle).await {
+                    error!("Failed to restart sidecar: {}", e);
+                }
+            });
 
             // Inside the main function, after the `app.manage(port);` line, add:
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
@@ -491,6 +534,51 @@ async fn main() {
                         }
                     }
                 });
+            }
+
+            // Clone a new app_handle for the deep link handler
+            let deep_link_app_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<_> = event.urls().into_iter().collect();
+                log::debug!("deep link URLs: {:?}", urls);
+                for url in urls {
+                    log::debug!("handling deep link: {:?}", url);
+                    if let Some(host) = url.host() {
+                        if host.to_string() == "oauth" {
+                            log::debug!("oauth deep link: {:?}", url);
+                            let query_pairs = url.query_pairs().collect::<Vec<_>>();
+                            let api_key = query_pairs
+                                .iter()
+                                .find(|(key, _)| key == "api_key")
+                                .map(|(_, value)| value.to_string())
+                                .unwrap_or_default();
+                            
+                            let payload = OuthDeepLinkPayload { api_key };
+                            
+                            // First get or create the window
+                            if let Some(window) = deep_link_app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            } else {
+                                show_main_window(&deep_link_app_handle, true);
+                            }
+                            
+                            // Then emit the event
+                            let _ = deep_link_app_handle.emit_to(
+                                "main",
+                                "auth-deep-link",
+                                payload,
+                            );
+                        }
+                    }
+                }
+            });
+            // Register URL scheme on Windows/Linux
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                if let Err(err) = app.handle().deep_link().register() {
+                    error!("Failed to register deep link protocol: {}", err);
+                }
             }
 
             Ok(())

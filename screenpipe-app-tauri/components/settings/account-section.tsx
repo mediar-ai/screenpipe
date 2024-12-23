@@ -147,7 +147,7 @@ export function AccountSection() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => invoke("open_auth_window")}
+          onClick={() => openUrl("https://screenpi.pe/login")}
           className="hover:bg-secondary/80"
         >
           manage account <ExternalLinkIcon className="w-4 h-4 ml-2" />
