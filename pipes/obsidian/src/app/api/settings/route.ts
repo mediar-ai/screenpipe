@@ -8,9 +8,10 @@ import path from "path";
 export const runtime = "nodejs"; // Add this line
 export const dynamic = "force-dynamic";
 
+const DEFAULT_INTERVAL_MINUTES = 5;
+
 async function updateCronSchedule(intervalMinutes: number) {
   try {
-    // Get the .screenpipe base directory from the environment or use a default
     const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
     const pipeConfigPath = path.join(
       screenpipeDir,
@@ -18,10 +19,18 @@ async function updateCronSchedule(intervalMinutes: number) {
       "obsidian",
       "pipe.json"
     );
+    const settingsPath = path.join(
+      screenpipeDir,
+      "pipes",
+      "obsidian",
+      "settings.json"
+    );
 
     console.log(`updating cron schedule at: ${pipeConfigPath}`);
 
+    // Load or initialize both configs
     let config: any = {};
+    let settings: any = {};
 
     try {
       const content = await fs.readFile(pipeConfigPath, "utf8");
@@ -33,15 +42,27 @@ async function updateCronSchedule(intervalMinutes: number) {
       config = { crons: [] };
     }
 
-    // Update or add the cron schedule
+    try {
+      const settingsContent = await fs.readFile(settingsPath, "utf8");
+      settings = JSON.parse(settingsContent);
+    } catch (err) {
+      console.log(
+        `no existing settings found, creating new one at ${settingsPath}`
+      );
+      settings = { interval: intervalMinutes * 60000 };
+    }
+
+    // Update settings
+    settings.interval = intervalMinutes * 60000;
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+
+    // Update cron config
     config.crons = [
       {
         path: "/api/log",
         schedule: `0 */${intervalMinutes} * * * *`,
       },
     ];
-
-    // Preserve other existing properties
     config.enabled = config.enabled ?? true;
     config.is_nextjs = config.is_nextjs ?? true;
 
@@ -56,41 +77,48 @@ async function updateCronSchedule(intervalMinutes: number) {
 }
 
 export async function GET() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-  };
-
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
       throw new Error("settingsManager not found");
     }
-    const rawSettings = await settingsManager.getAll();
-    return NextResponse.json(rawSettings);
+
+    // Load persisted settings if they exist
+    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const settingsPath = path.join(
+      screenpipeDir,
+      "pipes",
+      "obsidian",
+      "settings.json"
+    );
+
+    try {
+      const settingsContent = await fs.readFile(settingsPath, "utf8");
+      const persistedSettings = JSON.parse(settingsContent);
+
+      // Merge with current settings
+      const rawSettings = await settingsManager.getAll();
+      return NextResponse.json({
+        ...rawSettings,
+        customSettings: {
+          ...rawSettings.customSettings,
+          obsidian: {
+            ...(rawSettings.customSettings?.obsidian || {}),
+            ...persistedSettings,
+          },
+        },
+      });
+    } catch (err) {
+      // If no persisted settings, return normal settings
+      const rawSettings = await settingsManager.getAll();
+      return NextResponse.json(rawSettings);
+    }
   } catch (error) {
     console.error("failed to get settings:", error);
-    return NextResponse.json(defaultSettings);
+    return NextResponse.json(
+      { error: "failed to get settings" },
+      { status: 500 }
+    );
   }
 }
 
@@ -105,9 +133,10 @@ export async function PUT(request: Request) {
     const { key, value, isPartialUpdate, reset, namespace } = body;
 
     // Handle obsidian namespace updates
-    if (namespace === "obsidian" && isPartialUpdate && value.interval) {
-      // Convert interval from milliseconds to minutes, ensure it's at least 1
-      const intervalMinutes = Math.max(1, Math.floor(value.interval / 60000));
+    if (namespace === "obsidian" && isPartialUpdate) {
+      // Use provided interval or default
+      const intervalMs = value.interval || DEFAULT_INTERVAL_MINUTES * 60000;
+      const intervalMinutes = Math.max(1, Math.floor(intervalMs / 60000));
       await updateCronSchedule(intervalMinutes);
       console.log(`setting interval to ${intervalMinutes} minutes`);
     }

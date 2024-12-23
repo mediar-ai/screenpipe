@@ -134,13 +134,6 @@ async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
-    if !is_local_ipv4_port_free(cli.port) {
-        error!(
-            "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
-        );
-        return Err(anyhow::anyhow!("port already in use"));
-    }
-
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -285,6 +278,13 @@ async fn main() -> anyhow::Result<()> {
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
+    }
+
+    if !is_local_ipv4_port_free(cli.port) {
+        error!(
+            "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
+        );
+        return Err(anyhow::anyhow!("port already in use"));
     }
 
     let all_audio_devices = list_audio_devices().await?;

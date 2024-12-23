@@ -125,7 +125,7 @@ export function AccountSection() {
   const plans = [
     {
       title: "monthly",
-      price: "$20/mo",
+      price: "$30/mo",
       features: [
         "15 credits/mo",
         "unlimited screenpipe cloud",

@@ -62,15 +62,6 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
-    id: "obsidian",
-    name: "obsidian v2",
-    description:
-      "write logs of your day in obsidian with local AI features, customization, and user friendly UI",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian",
-    credits: 10,
-    paid: true,
-  },
-  {
     id: "data-table",
     name: "data table",
     description:
@@ -96,6 +87,33 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
     credits: 0,
     paid: false,
+  },
+  {
+    id: "identify-speakers",
+    name: "speaker identification",
+    description:
+      "automatically identify and label different speakers in your recordings using AI voice recognition",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
+    credits: 0,
+    paid: false,
+  },
+  {
+    id: "obsidian",
+    name: "obsidian v2",
+    description:
+      "write logs of your day in obsidian with local AI features, customization, and user friendly UI",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian",
+    credits: 10,
+    paid: true,
+  },
+  {
+    id: "meeting",
+    name: "meeting assistant",
+    description:
+      "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
+    credits: 15,
+    paid: true,
   },
   {
     id: "pipe-linkedin-ai-assistant",
@@ -140,24 +158,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
     credits: 0,
     paid: false,
-  },
-  {
-    id: "meeting",
-    name: "meeting assistant",
-    description:
-      "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
-    credits: 15,
-    paid: true,
-  },
-  {
-    id: "identify-speakers",
-    name: "speaker identification",
-    description:
-      "automatically identify and label different speakers in your recordings using AI voice recognition",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
-    credits: 10,
-    paid: true,
   },
   {
     id: "pipe-simple-nextjs",
