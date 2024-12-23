@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -29,6 +29,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
+import { emit, listen } from '@tauri-apps/api/event'
 
 function PlanCard({
   title,
@@ -84,6 +85,17 @@ export function AccountSection() {
   const { settings, updateSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  
+
+  useEffect(() => {
+    const unsubscribe = listen('auth-deep-link', (event) => {
+      console.log('Received auth deep link:', event.payload);
+    });
+
+    return () => {
+      unsubscribe.then(fn => fn());
+    };
+  }, []);
 
   const handleRefreshCredits = async () => {
     if (!settings.user?.token) return;
