@@ -29,7 +29,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
-import { emit, listen } from '@tauri-apps/api/event'
+import {
+  onOpenUrl,
+  getCurrent as getCurrentDeepLinkUrls,
+} from "@tauri-apps/plugin-deep-link";
 
 function PlanCard({
   title,
@@ -85,15 +88,35 @@ export function AccountSection() {
   const { settings, updateSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  
 
   useEffect(() => {
-    const unsubscribe = listen('auth-deep-link', (event) => {
-      console.log('Received auth deep link:', event.payload);
+    // Listen for deep link URL opens
+    const setupDeepLink = async () => {
+      const unsubscribeDeepLink = await onOpenUrl((urls) => {
+        console.log("received deep link urls:", urls);
+        for (const url of urls) {
+          if (url.includes("api_key=")) {
+            const apiKey = new URL(url).searchParams.get("api_key");
+            if (apiKey) {
+              updateSettings({ user: { token: apiKey } });
+              toast({
+                title: "logged in!",
+                description: "your api key has been set",
+              });
+            }
+          }
+        }
+      });
+      return unsubscribeDeepLink;
+    };
+
+    let deepLinkUnsubscribe: (() => void) | undefined;
+    setupDeepLink().then((unsubscribe) => {
+      deepLinkUnsubscribe = unsubscribe;
     });
 
     return () => {
-      unsubscribe.then(fn => fn());
+      if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, []);
 
@@ -293,6 +316,7 @@ export function AccountSection() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       className="rounded-md"
                       src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
