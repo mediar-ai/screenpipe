@@ -121,7 +121,9 @@ async def handle_call_tool(
                     continue
                 
                 content = result["content"]
-                if content.get("type") == "OCR":
+                content_type = result.get("type", "Unknown")
+                
+                if content_type == "OCR":
                     text = (
                         f"OCR Text: {content.get('text', 'N/A')}\n"
                         f"App: {content.get('app_name', 'N/A')}\n"
@@ -129,14 +131,14 @@ async def handle_call_tool(
                         f"Time: {content.get('timestamp', 'N/A')}\n"
                         "---\n"
                     )
-                elif content.get("type") == "Audio":
+                elif content_type == "Audio":
                     text = (
                         f"Audio Transcription: {content.get('transcription', 'N/A')}\n"
                         f"Device: {content.get('device_name', 'N/A')}\n"
                         f"Time: {content.get('timestamp', 'N/A')}\n"
                         "---\n"
                     )
-                elif content.get("type") == "UI":
+                elif content_type == "UI":
                     text = (
                         f"UI Text: {content.get('text', 'N/A')}\n"
                         f"App: {content.get('app_name', 'N/A')}\n"
@@ -145,9 +147,15 @@ async def handle_call_tool(
                         "---\n"
                     )
                 else:
-                    continue
+                    text = str(content)
                 
                 formatted_results.append(text)
+
+            if not formatted_results:
+                return [types.TextContent(
+                    type="text", 
+                    text=f"No {arguments.get('content_type', 'content')} found in your screen recordings."
+                )]
 
             return [types.TextContent(
                 type="text",
