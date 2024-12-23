@@ -471,25 +471,22 @@ jobs:
         shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         run: |
           # Create temp directory for CLI
           $cliDir = "cn-cli-temp"
           New-Item -ItemType Directory -Force -Path $cliDir
           
-          # Download CLI from GitHub
-          $cliUrl = "https://github.com/crabnebula-dev/cloud-releases/releases/latest/download/cloud-cli-x86_64-pc-windows-msvc.zip"
-          $cliZip = "$cliDir\cli.zip"
+          # Download CLI with correct URL
+          $cliUrl = "https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/windows-binary-x86_64"
           
           Write-Host "Downloading CrabNebula CLI..."
-          Invoke-WebRequest -Uri $cliUrl -OutFile $cliZip
-          
-          # Extract CLI
-          Expand-Archive -Path $cliZip -DestinationPath $cliDir -Force
+          Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile "$cliDir\cn.exe"
           
           # Run upload command
           Write-Host "Uploading assets..."
           $env:PATH = "$PWD\$cliDir;$env:PATH"
-          ./cn-cli release upload ${{ secrets.CN_APP_SLUG }} --framework tauri --path ./screenpipe-app-tauri/src-tauri --api-key ${{ secrets.CN_API_KEY }}
+          ./cn-cli-temp/cn.exe release upload ${{ secrets.CN_APP_SLUG }} --framework tauri --path ./screenpipe-app-tauri/src-tauri --api-key ${{ secrets.CN_API_KEY }}
 
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'

@@ -16,17 +16,6 @@ const PIPE_ADDITIONS = {
   },
 };
 
-const PIPE_TYPE_OPTIONS = [
-  {
-    name: "ui - create a pipe with a user interface",
-    value: "ui",
-  },
-  {
-    name: "headless - create a pipe without ui",
-    value: "headless",
-  },
-];
-
 async function downloadAndExtractRepo(
   owner: string,
   repo: string,
@@ -129,90 +118,40 @@ async function main() {
     default: pipeName,
   });
 
-  // get pipe type
-  const pipeType = await select({
-    message: "would you like to add a user interface to your pipe?",
-    choices: PIPE_TYPE_OPTIONS,
-  });
-
-  // ai customization confirmation
-  // const useAI = await confirm({
-  //   message: "would you like to use ai to customize your pipe? (experimental)",
-  //   default: false,
-  // });
-
   const spinner = ora("creating your pipe...").start();
 
   try {
     // Download and extract the appropriate template
-    if (pipeType === "ui") {
-      await downloadAndExtractRepo(
-        "mediar-ai",
-        "screenpipe",
-        "main",
-        "pipes/obsidian",
-        directory
-      );
+    await downloadAndExtractRepo(
+      "mediar-ai",
+      "screenpipe",
+      "main",
+      "pipes/obsidian",
+      directory
+    );
 
-      // Update package.json with the pipe name
-      const pkgPath = path.join(process.cwd(), directory, "package.json");
-      const pkg = await fs.readJson(pkgPath);
+    // Update package.json with the pipe name
+    const pkgPath = path.join(process.cwd(), directory, "package.json");
+    const pkg = await fs.readJson(pkgPath);
 
-      pkg.name = pipeName;
-      pkg.dependencies = {
-        ...pkg.dependencies,
-        ...PIPE_ADDITIONS.dependencies,
-      };
-      pkg.devDependencies = {
-        ...pkg.devDependencies,
-        ...PIPE_ADDITIONS.devDependencies,
-      };
+    pkg.name = pipeName;
+    pkg.dependencies = {
+      ...pkg.dependencies,
+      ...PIPE_ADDITIONS.dependencies,
+    };
+    pkg.devDependencies = {
+      ...pkg.devDependencies,
+      ...PIPE_ADDITIONS.devDependencies,
+    };
 
-      await fs.writeJson(pkgPath, pkg, { spaces: 2 });
-    } else {
-      await downloadAndExtractRepo(
-        "mediar-ai",
-        "screenpipe",
-        "main",
-        "pipes/pipe-obsidian-time-logs",
-        directory
-      );
-
-      // Update pipe.ts only for headless pipes
-      const pipePath = path.join(process.cwd(), directory, "pipe.ts");
-      let pipeContent = await fs.readFile(pipePath, "utf8");
-      pipeContent = pipeContent.replace(
-        /name: ["'].*["']/,
-        `name: "${pipeName}"`
-      );
-      await fs.writeFile(pipePath, pipeContent);
-    }
-
-    // if (useAI) {
-    //   spinner.text = "customizing with ai...";
-    //   // TODO: implement AI customization
-    //   await new Promise((resolve) => setTimeout(resolve, 1000)); // placeholder
-    // }
+    await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 
     spinner.succeed(chalk.green("pipe created successfully! 🎉"));
 
     console.log("\nto get started:");
     console.log(chalk.cyan(`cd ${directory}`));
     console.log(chalk.cyan("bun install    # or use: npm install, pnpm install, yarn"));
-
-    if (pipeType === "ui") {
-      console.log(chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev"));
-    } else {
-      console.log(
-        chalk.cyan(`export SCREENPIPE_DIR="$HOME/.screenpipe"
-export PIPE_ID="${pipeName}"
-export PIPE_FILE="pipe.ts"
-export PIPE_DIR="$SCREENPIPE_DIR/pipes/${pipeName}"
-
-bun run pipe.ts    # or use: npm run pipe.ts, pnpm pipe.ts, yarn pipe.ts
-        `)
-      );
-    }
+    console.log(chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev"));
 
     console.log(
       "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
