@@ -270,7 +270,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
             thru CLI 👇
           </p>
           <CodeBlock
-            language="bash"
+            language={platform() === "windows" ? "powershell" : "bash"}
             value={getDebuggingCommands(platform(), localDataDir)}
           />
 

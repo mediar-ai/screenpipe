@@ -125,7 +125,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
                   </p>
                   <CodeBlock
                     className="rounded-md mt-2"
-                    language="bash"
+                    language={platform() === "windows" ? "powershell" : "bash"}
                     value={instructions.command}
                   />
                 </li>
