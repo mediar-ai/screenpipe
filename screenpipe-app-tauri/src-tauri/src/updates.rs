@@ -2,6 +2,7 @@ use crate::kill_all_sreenpipes;
 use crate::SidecarState;
 use anyhow::Error;
 use log::{error, info};
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
@@ -38,6 +39,12 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        if let Ok(val) = std::env::var("TAURI_ENV_DEBUG") {
+            if val == "true" {
+                info!("dev mode is enabled, skipping update check");
+                return Result::Ok(false);
+            }
+        }
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 
