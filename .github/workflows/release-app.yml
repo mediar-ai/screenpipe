@@ -483,10 +483,11 @@ jobs:
           Write-Host "Downloading CrabNebula CLI..."
           Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile "$cliDir\cn.exe"
           
-          # Run upload command
+          # Run upload command - Fixed syntax
           Write-Host "Uploading assets..."
           $env:PATH = "$PWD\$cliDir;$env:PATH"
-          ./cn-cli-temp/cn.exe release upload ${{ secrets.CN_APP_SLUG }} --framework tauri --path ./screenpipe-app-tauri/src-tauri --api-key ${{ secrets.CN_API_KEY }}
+          cd screenpipe-app-tauri/src-tauri
+          ../../../cn-cli-temp/cn.exe release upload ${{ secrets.CN_APP_SLUG }} --framework tauri --api-key ${{ secrets.CN_API_KEY }}
 
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
