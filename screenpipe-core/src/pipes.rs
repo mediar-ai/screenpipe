@@ -824,16 +824,16 @@ mod pipes {
         // Get pipe directory for state persistence
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
 
-        // Get last execution time
-        let last_run = match get_last_cron_execution(&pipe_dir, path).await {
-            Ok(time) => time,
-            Err(e) => {
-                error!("failed to get last cron execution: {}", e);
-                None
-            }
-        };
-
         loop {
+            // Get last execution time at the start of each loop
+            let last_run = match get_last_cron_execution(&pipe_dir, path).await {
+                Ok(time) => time,
+                Err(e) => {
+                    error!("failed to get last cron execution: {}", e);
+                    None
+                }
+            };
+
             let now = chrono::Utc::now();
             let next = if let Some(last) = last_run {
                 // Get next occurrence after the last execution
@@ -845,42 +845,59 @@ mod pipes {
 
             let next = match next {
                 Some(next) => next,
-                None => continue,
+                None => {
+                    error!("no next execution time found for cron schedule");
+                    break;
+                }
             };
 
-            let duration = (next - now)
-                .to_std()
-                .unwrap_or(tokio::time::Duration::from_secs(1));
-            tokio::time::sleep(duration).await;
+            let duration = match (next - now).to_std() {
+                Ok(duration) => duration,
+                Err(e) => {
+                    error!("invalid duration: {}", e);
+                    tokio::time::Duration::from_secs(60) // fallback to 1 minute
+                }
+            };
 
-            debug!("executing cron job for pipe {} at path {}", pipe, path);
+            debug!(
+                "next cron execution for pipe {} at path {} in {} seconds",
+                pipe,
+                path,
+                duration.as_secs()
+            );
 
-            match client
-                .get(&format!("{}{}", base_url, path))
-                .headers(headers.clone())
-                .send()
-                .await
-            {
-                Ok(res) => {
-                    if res.status().is_success() {
-                        // Save successful execution time
-                        if let Err(e) = save_cron_execution(&pipe_dir, path).await {
-                            error!("failed to save cron execution time: {}", e);
+            // Wait for either the next execution time or shutdown signal
+            tokio::select! {
+                _ = tokio::time::sleep(duration) => {
+                    debug!("executing cron job for pipe {} at path {}", pipe, path);
+                    match client
+                        .get(&format!("{}{}", base_url, path))
+                        .headers(headers.clone())
+                        .send()
+                        .await
+                    {
+                        Ok(res) => {
+                            if res.status().is_success() {
+                                // Save successful execution time
+                                if let Err(e) = save_cron_execution(&pipe_dir, path).await {
+                                    error!("failed to save cron execution time: {}", e);
+                                }
+                                debug!("cron job executed successfully");
+                            } else {
+                                error!("cron job failed with status: {}", res.status());
+                                if let Ok(text) = res.text().await {
+                                    error!("error response: {}", text);
+                                }
+                            }
                         }
-                    } else {
-                        error!("cron job failed with status: {}", res.status());
-                        if let Ok(text) = res.text().await {
-                            error!("error response: {}", text);
-                        }
+                        Err(e) => error!("failed to execute cron job: {}", e),
                     }
                 }
-                Err(e) => error!("failed to execute cron job: {}", e),
-            }
-
-            if let Ok(()) = shutdown.changed().await {
-                if *shutdown.borrow() {
-                    info!("cron job shutdown for pipe at path: {}", path);
-                    break;
+                Ok(()) = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        info!("shutting down cron job for pipe at path: {}", path);
+                        break;
+                    }
                 }
             }
         }
