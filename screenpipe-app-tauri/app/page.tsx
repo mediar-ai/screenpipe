@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -33,12 +35,33 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
-    registerShortcuts({
-      showScreenpipeShortcut: settings.showScreenpipeShortcut,
-      disabledShortcuts: settings.disabledShortcuts,
-    });
-  }, [settings.showScreenpipeShortcut, settings.disabledShortcuts]);
+    const unlisten = Promise.all([
+      listen('shortcut-start-recording', async () => {
+        await invoke("spawn_screenpipe");
 
+        toast({
+          title: 'recording started',
+          description: 'screen recording has been initiated'
+        });
+      }),
+      
+      listen('shortcut-stop-recording', async () => {
+        await invoke("kill_all_sreenpipes");
+  
+        toast({
+          title: 'recording stopped',
+          description: 'screen recording has been stopped'
+        });
+      })
+    ]);
+
+    return () => {
+      unlisten.then(listeners => {
+        listeners.forEach(unlistenFn => unlistenFn());
+      });
+    };
+  }, []);
+  
   useEffect(() => {
     if (settings.userId) {
       posthog?.identify(settings.userId, {

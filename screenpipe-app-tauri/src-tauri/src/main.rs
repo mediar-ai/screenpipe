@@ -13,6 +13,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::Config;
+use tauri::Emitter;
 use tauri::Manager;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
@@ -20,6 +21,8 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
@@ -51,11 +54,156 @@ pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 
+use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 
+use tauri::AppHandle;
+use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
+
+// New struct to hold shortcut configuration
+#[derive(Debug, Default)]
+struct ShortcutConfig {
+    show: String,
+    start: String,
+    stop: String,
+    disabled: Vec<String>,
+}
+
+impl ShortcutConfig {
+    async fn from_store(app: &AppHandle) -> Result<Self, String> {
+        let base_dir = get_base_dir(app, None).map_err(|e| e.to_string())?;
+        let path = base_dir.join("store.bin");
+        let store = StoreBuilder::new(app, path)
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        Ok(Self {
+            show: store
+                .get("showScreenpipeShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_else(|| "Alt+Space".to_string()),
+            start: store
+                .get("startRecordingShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_else(|| "Alt+Shift+R".to_string()),
+            stop: store
+                .get("stopRecordingShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            disabled: store
+                .get("disabledShortcuts")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default(),
+        })
+    }
+
+    fn is_disabled(&self, shortcut_type: &str) -> bool {
+        self.disabled.contains(&shortcut_type.to_string())
+    }
+}
+
+// Helper to register a single shortcut
+async fn register_shortcut(
+    app: &AppHandle,
+    shortcut_str: &str,
+    is_disabled: bool,
+    handler: impl Fn(&AppHandle) + Send + Sync + 'static,
+) -> Result<(), String> {
+    if shortcut_str.is_empty() || is_disabled {
+        return Ok(());
+    }
+
+    let shortcut = parse_shortcut(shortcut_str)?;
+
+    let global_shortcut = app.global_shortcut();
+
+    global_shortcut
+        .on_shortcut(shortcut, move |app, _shortcut, event| {
+            // Only trigger on key press, not release
+            if matches!(event.state, ShortcutState::Pressed) {
+                handler(&app);
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_global_shortcuts(
+    app: AppHandle,
+    show_shortcut: String,
+    start_shortcut: String,
+    stop_shortcut: String,
+) -> Result<(), String> {
+    let config = ShortcutConfig {
+        show: show_shortcut,
+        start: start_shortcut,
+        stop: stop_shortcut,
+        disabled: ShortcutConfig::from_store(&app).await?.disabled,
+    };
+    apply_shortcuts(&app, &config).await
+}
+
+async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
+    let config = ShortcutConfig::from_store(app).await?;
+    apply_shortcuts(app, &config).await
+}
+
+async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
+    let global_shortcut = app.global_shortcut();
+    // Unregister all existing shortcuts first
+    global_shortcut.unregister_all().unwrap();
+
+    // Register show shortcut
+    register_shortcut(app, &config.show, config.is_disabled("show"), |app| {
+        info!("show shortcut triggered");
+        if let Some(window) = app.get_webview_window("main") {
+            match window.is_visible() {
+                Ok(true) => {
+                    info!("window is visible, hiding main window");
+                    hide_main_window(app)
+                }
+                Ok(false) | Err(_) => {
+                    info!(
+                        "window is not visible or error checking visibility, showing main window"
+                    );
+                    show_main_window(app, false)
+                }
+            }
+        } else {
+            debug!("main window not found");
+        }
+    })
+    .await?;
+
+    // Register start shortcut
+    register_shortcut(
+        app,
+        &config.start,
+        config.is_disabled("start_recording"),
+        |app| {
+            let _ = app.emit("shortcut-start-recording", ());
+        },
+    )
+    .await?;
+
+    // Register stop shortcut
+    register_shortcut(
+        app,
+        &config.stop,
+        config.is_disabled("stop_recording"),
+        |app| {
+            let _ = app.emit("shortcut-stop-recording", ());
+        },
+    )
+    .await?;
+
+    Ok(())
+}
 
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
     // Fetch pipe config from API
@@ -83,6 +231,39 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+fn send_recording_notification(
+    app_handle: &tauri::AppHandle,
+    success: bool,
+    action: &str,
+    error_msg: Option<&str>,
+) {
+    let (title, body, event) = if success {
+        (
+            "Screenpipe",
+            format!("Recording {}", action),
+            format!("recording_{}", action),
+        )
+    } else {
+        (
+            "Screenpipe",
+            format!("Failed to {} recording", action),
+            "recording_failed".to_string(),
+        )
+    };
+
+    if let Some(err) = error_msg {
+        error!("Recording operation failed: {}", err);
+    }
+
+    let _ = app_handle
+        .notification()
+        .builder()
+        .title(title)
+        .body(&body)
+        .show();
+    let _ = app_handle.emit(&event, body);
+}
+
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     let base_dir = get_base_dir(app, None)?;
     let path = base_dir.join("store.bin");
@@ -98,6 +279,94 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     } else {
         get_base_dir(app, Some(data_dir))
     }
+}
+
+// Helper function to parse shortcut string
+fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = shortcut_str.split('+').collect();
+    let key = parts.last().ok_or("Invalid shortcut format")?;
+
+    let mut modifiers = Modifiers::empty();
+    for modifier in &parts[..parts.len() - 1] {
+        match modifier.to_uppercase().as_str() {
+            "SUPER" | "CMD" | "COMMAND" => modifiers |= Modifiers::META,
+            "CTRL" | "CONTROL" => modifiers |= Modifiers::CONTROL,
+            "ALT" | "OPTION" => modifiers |= Modifiers::ALT,
+            "SHIFT" => modifiers |= Modifiers::SHIFT,
+            _ => return Err(format!("Unknown modifier: {}", modifier)),
+        }
+    }
+
+    // Parse the key code - make case insensitive
+    let code = match key.to_uppercase().as_str() {
+        // Letters
+        "A" => Code::KeyA,
+        "B" => Code::KeyB,
+        "C" => Code::KeyC,
+        "D" => Code::KeyD,
+        "E" => Code::KeyE,
+        "F" => Code::KeyF,
+        "G" => Code::KeyG,
+        "H" => Code::KeyH,
+        "I" => Code::KeyI,
+        "J" => Code::KeyJ,
+        "K" => Code::KeyK,
+        "L" => Code::KeyL,
+        "M" => Code::KeyM,
+        "N" => Code::KeyN,
+        "O" => Code::KeyO,
+        "P" => Code::KeyP,
+        "Q" => Code::KeyQ,
+        "R" => Code::KeyR,
+        "S" => Code::KeyS,
+        "T" => Code::KeyT,
+        "U" => Code::KeyU,
+        "V" => Code::KeyV,
+        "W" => Code::KeyW,
+        "X" => Code::KeyX,
+        "Y" => Code::KeyY,
+        "Z" => Code::KeyZ,
+
+        // Numbers
+        "0" => Code::Digit0,
+        "1" => Code::Digit1,
+        "2" => Code::Digit2,
+        "3" => Code::Digit3,
+        "4" => Code::Digit4,
+        "5" => Code::Digit5,
+        "6" => Code::Digit6,
+        "7" => Code::Digit7,
+        "8" => Code::Digit8,
+        "9" => Code::Digit9,
+
+        // Function keys
+        "F1" => Code::F1,
+        "F2" => Code::F2,
+        "F3" => Code::F3,
+        "F4" => Code::F4,
+        "F5" => Code::F5,
+        "F6" => Code::F6,
+        "F7" => Code::F7,
+        "F8" => Code::F8,
+        "F9" => Code::F9,
+        "F10" => Code::F10,
+        "F11" => Code::F11,
+        "F12" => Code::F12,
+
+        // Special keys
+        "SPACE" => Code::Space,
+        "TAB" => Code::Tab,
+        "ENTER" => Code::Enter,
+        "ESCAPE" | "ESC" => Code::Escape,
+        "UP" => Code::ArrowUp,
+        "DOWN" => Code::ArrowDown,
+        "LEFT" => Code::ArrowLeft,
+        "RIGHT" => Code::ArrowRight,
+
+        _ => return Err(format!("Unsupported key: {}", key)),
+    };
+
+    Ok(Shortcut::new(Some(modifiers), code))
 }
 
 #[tokio::main]
@@ -184,6 +453,7 @@ async fn main() {
             commands::show_meetings,
             commands::show_identify_speakers,
             commands::open_pipe_window,
+            update_global_shortcuts,
         ])
         .setup(|app| {
             // Logging setup
@@ -255,18 +525,27 @@ async fn main() {
             // Tray setup
             if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
+
+                let start_recording =
+                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                let stop_recording =
+                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+
                 let version = MenuItemBuilder::with_id(
                     "version",
                     format!("version {}", app.package_info().version),
                 )
                 .enabled(false)
                 .build(app)?;
+
                 let menu_divider = PredefinedMenuItem::separator(app)?;
                 let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
                 let menu = MenuBuilder::new(app)
                     .items(&[
                         &version,
                         &show,
+                        &start_recording,
+                        &stop_recording,
                         update_manager.update_now_menu_item_ref(),
                         &menu_divider,
                         &quit,
@@ -274,16 +553,62 @@ async fn main() {
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
 
-                let update_item = update_manager.update_now_menu_item_ref().clone();
-                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
-
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(app_handle, false);
                     }
                     "quit" => {
-                        println!("quit clicked");
+                        debug!("Quit requested");
+                        // First try to stop any running recordings
+                        let state = app_handle.state::<SidecarState>();
+                        tauri::async_runtime::block_on(async {
+                            if let Err(e) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                error!("Error stopping recordings during quit: {}", e);
+                            }
+                        });
+                        // Then exit
                         app_handle.exit(0);
+                    }
+                    "start_recording" => {
+                        let app_handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = app_handle.state::<SidecarState>();
+                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
+                                send_recording_notification(
+                                    &app_handle,
+                                    false,
+                                    "start",
+                                    Some(&err.to_string()),
+                                );
+                            } else {
+                                send_recording_notification(&app_handle, true, "started", None);
+                            }
+                        });
+                    }
+                    "stop_recording" => {
+                        let app_handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state = app_handle.state::<SidecarState>();
+                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                                error!("Failed to stop recording: {}", err);
+                                let _ = app_handle
+                                    .notification()
+                                    .builder()
+                                    .title("Screenpipe")
+                                    .body("Failed to stop recording")
+                                    .show();
+                                let _ =
+                                    app_handle.emit("recording_failed", "Failed to stop recording");
+                            } else {
+                                let _ = app_handle
+                                    .notification()
+                                    .builder()
+                                    .title("Screenpipe")
+                                    .body("Recording stopped")
+                                    .show();
+                                let _ = app_handle.emit("recording_stopped", "Recording stopped");
+                            }
+                        });
                     }
                     "update_now" => {
                         use tauri_plugin_notification::NotificationExt;
@@ -494,6 +819,32 @@ async fn main() {
                 });
             }
 
+<<<<<<< HEAD
+=======
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all()?;
+
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<_> = event.urls().into_iter().collect();
+                info!("deep link URLs: {:?}", urls);
+            });
+            // Register URL scheme on Windows/Linux
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                if let Err(err) = app.handle().deep_link().register("screenpipe") {
+                    error!("Failed to register deep link protocol: {}", err);
+                }
+            }
+
+            // Initialize global shortcuts
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = initialize_global_shortcuts(&app_handle).await {
+                    error!("Failed to initialize global shortcuts: {}", e);
+                }
+            });
+
+>>>>>>> 7da94cbf3cd799baef60e49976f63cf5a5a91b47
             Ok(())
         })
         .build(tauri::generate_context!())

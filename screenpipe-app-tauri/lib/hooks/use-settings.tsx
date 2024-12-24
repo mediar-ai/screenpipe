@@ -13,6 +13,7 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { invoke } from "@tauri-apps/api/core";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -31,6 +32,8 @@ export type EmbeddedLLMConfig = {
 
 export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
+  START_RECORDING = "start_recording",
+  STOP_RECORDING = "stop_recording",
 }
 
 export interface User {
@@ -76,13 +79,15 @@ export type Settings = {
   embeddedLLM: EmbeddedLLMConfig;
   languages: Language[];
   enableBeta: boolean;
-  showScreenpipeShortcut: string;
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
   disabledShortcuts: Shortcut[];
   user: User;
+  showScreenpipeShortcut: string;
+  startRecordingShortcut: string;
+  stopRecordingShortcut: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -126,13 +131,15 @@ const DEFAULT_SETTINGS: Settings = {
     port: 11438,
   },
   enableBeta: false,
-  showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
   disabledShortcuts: [],
   user: {},
+  showScreenpipeShortcut: "Super+Alt+S",
+  startRecordingShortcut: "Super+Alt+R",
+  stopRecordingShortcut: "Super+Alt+X",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -312,6 +319,7 @@ export function useSettings() {
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
   };
+
 
   return {
     settings,

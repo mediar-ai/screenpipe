@@ -375,12 +375,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .to_path_buf();
 
     if cfg!(windows) {
-        let tessdata_path = exe_dir.join("tessdata");
-        let mut c = app
-            .shell()
-            .sidecar("screenpipe")
-            .unwrap()
-            .env("TESSDATA_PREFIX", tessdata_path);
 
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
