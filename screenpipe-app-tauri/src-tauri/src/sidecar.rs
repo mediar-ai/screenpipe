@@ -9,11 +9,11 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::Store;
 use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tauri_plugin_store::Store;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -44,12 +44,24 @@ pub struct User {
 impl User {
     pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
         Self {
-            id: store.get("user.id").and_then(|v| v.as_str().map(String::from)),
-            email: store.get("user.email").and_then(|v| v.as_str().map(String::from)),
-            name: store.get("user.name").and_then(|v| v.as_str().map(String::from)),
-            image: store.get("user.image").and_then(|v| v.as_str().map(String::from)),
-            token: store.get("user.token").and_then(|v| v.as_str().map(String::from)),
-            clerk_id: store.get("user.clerk_id").and_then(|v| v.as_str().map(String::from)),
+            id: store
+                .get("user.id")
+                .and_then(|v| v.as_str().map(String::from)),
+            email: store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from)),
+            name: store
+                .get("user.name")
+                .and_then(|v| v.as_str().map(String::from)),
+            image: store
+                .get("user.image")
+                .and_then(|v| v.as_str().map(String::from)),
+            token: store
+                .get("user.token")
+                .and_then(|v| v.as_str().map(String::from)),
+            clerk_id: store
+                .get("user.clerk_id")
+                .and_then(|v| v.as_str().map(String::from)),
             credits: Some(UserCredits {
                 amount: store
                     .get("user.credits.amount")
