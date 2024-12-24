@@ -13,6 +13,45 @@ interface DailyLog {
   timestamp: string;
 }
 
+interface TwitterThread {
+  mainTweet: string;
+  threadTweets: string[];
+  hashtags: string[];
+}
+
+async function generateTwitterContent(
+  screenData: ContentItem[],
+  customPrompt: string,
+  gptModel: string,
+  gptApiUrl: string,
+  openaiApiKey: string
+): Promise<TwitterThread> {
+  const prompt = `${customPrompt}\n\nScreen activity:\n${screenData.map(item => item.text).join('\n')}`;
+  
+  const response = await fetch(gptApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${openaiApiKey}`
+    },
+    body: JSON.stringify({
+      model: gptModel,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }]
+    })
+  });
+
+  const data = await response.json();
+  return JSON.parse(data.choices[0].message.content);
+}
+
+function generateTwitterLinks(content: TwitterThread): string {
+  const baseUrl = 'https://twitter.com/intent/tweet?text=';
+  return encodeURIComponent(content.mainTweet);
+}
+
 async function generateDailyLog(
   screenData: ContentItem[],
   dailylogPrompt: string,
