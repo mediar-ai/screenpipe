@@ -42,9 +42,8 @@ get_os_arch() {
 
 echo "fetching latest version from github..."
 LATEST_RELEASE=$(curl -s https://api.github.com/repos/mediar-ai/screenpipe/releases/latest)
-# Extract version using multiple steps to ensure proper parsing
-VERSION=$(echo "$LATEST_RELEASE" | tr -d '\n' | grep -o '"tag_name":"v[^"]*"' | cut -d':' -f2 | tr -d '"' | sed 's/^v//')
-
+# Extract version using grep and sed for cross-platform compatibility
+VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": *"v[^"]*"' | sed 's/.*"v\([^"]*\)".*/\1/')
 if [ -z "$VERSION" ]; then
     echo "failed to fetch latest version"
     exit 1
