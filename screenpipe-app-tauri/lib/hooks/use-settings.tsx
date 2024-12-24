@@ -253,8 +253,8 @@ const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     // Get active profile from profiles store
     const profilesStore = await getProfilesStore();
-    const activeProfile = await profilesStore.get("activeProfile") || "default";
-    const availableProfiles = await profilesStore.get("profiles") || ["default"];
+    const activeProfile = (await profilesStore.get("activeProfile")) as string || "default";
+    const availableProfiles = (await profilesStore.get("profiles")) as string[] || ["default"];
 
     // Get settings from active profile's store
     const tauriStore = await getStore(activeProfile);
