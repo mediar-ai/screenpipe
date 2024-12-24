@@ -502,9 +502,9 @@ async fn main() {
                 info!("deep link URLs: {:?}", urls);
             });
             // Register URL scheme on Windows/Linux
-            #[cfg(any(target_os = "linux"))]
+            #[cfg(any(windows, target_os = "linux"))]
             {
-                if let Err(err) = app.handle().deep_link().register() {
+                if let Err(err) = app.handle().deep_link().register("screenpipe") {
                     error!("Failed to register deep link protocol: {}", err);
                 }
             }
