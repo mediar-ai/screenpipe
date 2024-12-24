@@ -75,6 +75,8 @@ axum = "0.6.0"    # or your current version
 
 dirs = "5.0.1"
 tauri-plugin-http = "2"
+tauri-plugin-deep-link = "2"
+url = "2.4.0"
 
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]

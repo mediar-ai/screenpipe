@@ -164,6 +164,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -491,6 +492,21 @@ async fn main() {
                         }
                     }
                 });
+            }
+
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all()?;
+
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<_> = event.urls().into_iter().collect();
+                info!("deep link URLs: {:?}", urls);
+            });
+            // Register URL scheme on Windows/Linux
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                if let Err(err) = app.handle().deep_link().register() {
+                    error!("Failed to register deep link protocol: {}", err);
+                }
             }
 
             Ok(())
