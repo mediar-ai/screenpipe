@@ -4,7 +4,7 @@ use tauri::{
     menu::{IsMenuItem, MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     AppHandle, Wry,
 };
-use tracing::info;
+use tracing::{info, debug};
 
 pub async fn update_tray_menu(
     app: &AppHandle,
@@ -63,7 +63,7 @@ pub async fn update_tray_menu(
     // Update tray
     if let Some(tray) = app.tray_by_id("screenpipe_main") {
         tray.set_menu(Some(menu))?;
-        info!(
+        debug!(
             "updated tray menu with {} enabled pipes",
             response["data"]
                 .as_array()
