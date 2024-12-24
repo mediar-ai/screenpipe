@@ -472,6 +472,8 @@ jobs:
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
           USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          MAX_RETRIES: 3
+          RETRY_DELAY: 10
         run: |
           # create temp directory for cli
           $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
@@ -486,10 +488,37 @@ jobs:
           # move to the directory we want to upload from
           cd screenpipe-app-tauri/src-tauri
           
-          # upload assets
+          # upload assets with retry logic
           $cliFullPath = Join-Path $cliDir "cn.exe"
           Write-Host "uploading assets from $(pwd) using $cliFullPath..."
-          & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          
+          $attempt = 1
+          $success = $false
+          
+          while (-not $success -and $attempt -le $env:MAX_RETRIES) {
+            Write-Host "Attempt $attempt of $env:MAX_RETRIES"
+            try {
+              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+              if ($LASTEXITCODE -eq 0) {
+                $success = $true
+                Write-Host "Upload successful!"
+              } else {
+                throw "CLI returned exit code $LASTEXITCODE"
+              }
+            } catch {
+              Write-Host "Error during attempt $attempt`: $_"
+              if ($attempt -lt $env:MAX_RETRIES) {
+                Write-Host "Waiting $env:RETRY_DELAY seconds before retry..."
+                Start-Sleep -Seconds $env:RETRY_DELAY
+              }
+            }
+            $attempt++
+          }
+          
+          if (-not $success) {
+            Write-Host "Failed to upload after $env:MAX_RETRIES attempts"
+            exit 1
+          }
 
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
