@@ -108,6 +108,12 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
     }
 }
 
+#[tauri::command]
+pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.close();
+    }
+}
 
 #[tauri::command]
 pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {

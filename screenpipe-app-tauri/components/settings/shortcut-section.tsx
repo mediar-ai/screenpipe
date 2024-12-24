@@ -1,210 +1,259 @@
 import React, { useEffect, useState } from "react";
 import { Shortcut, useSettings } from "@/lib/hooks/use-settings";
 import { parseKeyboardShortcut } from "@/lib/utils";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { registerShortcuts } from "@/lib/shortcuts";
 import { toast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import hotkeys from "hotkeys-js";
+
+interface ShortcutState {
+  isRecording: boolean;
+  pressedKeys: string[];
+}
 
 const ShortcutSection = () => {
   const { settings, updateSettings } = useSettings();
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
-  const [nonModifierKey, setNonModifierKey] = useState<string>("");
-  const [currentShortcut, setCurrentShortcut] = useState<string>(
-    settings.showScreenpipeShortcut
-  );
+  const [shortcutStates, setShortcutStates] = useState<
+    Record<Shortcut, ShortcutState>
+  >({
+    [Shortcut.SHOW_SCREENPIPE]: { isRecording: false, pressedKeys: [] },
+    [Shortcut.START_RECORDING]: { isRecording: false, pressedKeys: [] },
+    [Shortcut.STOP_RECORDING]: { isRecording: false, pressedKeys: [] },
+  });
 
-  const [disabledShortcuts, setDisabledShortcuts] = useState<Shortcut[]>(
-    settings.disabledShortcuts
-  );
+  const updateShortcut = async (shortcut: Shortcut, keys: string) => {
+    try {
+      // Update the appropriate flat key
+      const updates = {
+        [Shortcut.SHOW_SCREENPIPE]: { showScreenpipeShortcut: keys },
+        [Shortcut.START_RECORDING]: { startRecordingShortcut: keys },
+        [Shortcut.STOP_RECORDING]: { stopRecordingShortcut: keys },
+      }[shortcut];
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [pressedKeys, setPressedKeys] = useState<string[]>([]);
+      // Update settings first
+      updateSettings(updates);
 
-  useEffect(() => {
-    setCurrentShortcut(settings.showScreenpipeShortcut);
+      // Then update Rust backend
+      await invoke("update_global_shortcuts", {
+        showShortcut: settings.showScreenpipeShortcut,
+        startShortcut: settings.startRecordingShortcut,
+        stopShortcut: settings.stopRecordingShortcut,
+      });
 
-    const parts = settings.showScreenpipeShortcut.split("+");
-    const modifiers = parts.slice(0, -1);
-    const key = parts.slice(-1)[0];
-
-    setSelectedModifiers(modifiers);
-    setNonModifierKey(key);
-  }, [settings.showScreenpipeShortcut]);
-
-  useEffect(() => {
-    if (!isRecording) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      e.preventDefault();
-
-      // Get modifiers
-      const modifiers: string[] = [];
-      if (e.metaKey) modifiers.push("super");
-      if (e.ctrlKey) modifiers.push("ctrl");
-      if (e.altKey) modifiers.push("alt");
-      if (e.shiftKey) modifiers.push("shift");
-
-      // Get the main key
-      const key = e.key.toUpperCase();
-
-      // Update pressed keys in real-time
-      setPressedKeys([...new Set([...modifiers, key])]);
-
-      const isModifierKey = [
-        "CONTROL",
-        "ALT",
-        "SHIFT",
-        "META",
-        "COMMAND",
-      ].includes(key);
-
-      if (!isModifierKey) {
-        setSelectedModifiers(modifiers);
-        setNonModifierKey(key);
-
-        // Auto save after successful recording
-        const newShortcut = [...modifiers, key].join("+");
-        updateSettings({
-          showScreenpipeShortcut: newShortcut,
-        });
-        updateSettings({ showScreenpipeShortcut: newShortcut });
-        setCurrentShortcut(newShortcut);
-        setIsRecording(false);
-
-        registerShortcuts({
-          showScreenpipeShortcut: newShortcut,
-          disabledShortcuts,
-        });
-
-        toast({
-          title: "shortcut updated",
-          description: `new shortcut set to: ${parseKeyboardShortcut(
-            newShortcut
-          )}`,
-        });
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      e.preventDefault();
-      // Clear pressed keys when all keys are released
-      setPressedKeys([]);
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [
-    isRecording,
-    settings,
-    updateSettings,
-    disabledShortcuts,
-  ]);
-
-  const handleShortcutToggle = (checked: boolean) => {
-    console.log("handleShortcutToggle", checked);
-    let newDisabledShortcuts = [...settings.disabledShortcuts];
-    if (!checked) {
-      newDisabledShortcuts.push(Shortcut.SHOW_SCREENPIPE);
-    } else {
-      newDisabledShortcuts = newDisabledShortcuts.filter(
-        (shortcut) => shortcut !== Shortcut.SHOW_SCREENPIPE
-      );
+      return true;
+    } catch (error) {
+      console.error("failed to update shortcut:", error);
+      return false;
     }
+  };
+
+  const toggleShortcut = async (shortcut: Shortcut, enabled: boolean) => {
+    const newDisabled = enabled
+      ? settings.disabledShortcuts.filter((s) => s !== shortcut)
+      : [...settings.disabledShortcuts, shortcut];
 
     updateSettings({
-      disabledShortcuts: newDisabledShortcuts,
+      disabledShortcuts: newDisabled,
     });
 
-    registerShortcuts({
-      showScreenpipeShortcut: settings.showScreenpipeShortcut,
-      disabledShortcuts: newDisabledShortcuts,
+    // Update Rust backend with current shortcuts
+    await invoke("update_global_shortcuts", {
+      showShortcut: settings.showScreenpipeShortcut,
+      startShortcut: settings.startRecordingShortcut,
+      stopShortcut: settings.stopRecordingShortcut,
     });
   };
 
-  return (
-    <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold">shortcuts</h1>
+  const getShortcut = (shortcut: Shortcut): string => {
+    switch (shortcut) {
+      case Shortcut.SHOW_SCREENPIPE:
+        return settings.showScreenpipeShortcut;
+      case Shortcut.START_RECORDING:
+        return settings.startRecordingShortcut;
+      case Shortcut.STOP_RECORDING:
+        return settings.stopRecordingShortcut;
+    }
+  };
+
+  const isShortcutEnabled = (shortcut: Shortcut): boolean => {
+    return !settings.disabledShortcuts.includes(shortcut);
+  };
+
+  // Handle keyboard events for shortcut recording
+  useEffect(() => {
+    const activeShortcut = Object.entries(shortcutStates).find(
+      ([_, state]) => state.isRecording
+    );
+    if (!activeShortcut) return;
+
+    const [shortcutKey] = activeShortcut;
+
+    const handleKeyPress = (event: KeyboardEvent) => {
+      event.preventDefault();
+
+      // Get pressed keys in a consistent format
+      const keys = hotkeys
+        .getPressedKeyCodes()
+        .map((code) => {
+          // Map key codes to consistent names
+          switch (code) {
+            case 91:
+            case 93:
+              return "SUPER"; // Command/Windows key
+            case 16:
+              return "SHIFT";
+            case 17:
+              return "CTRL";
+            case 18:
+              return "ALT";
+            default:
+              return String.fromCharCode(code);
+          }
+        })
+        .filter((value, index, self) => self.indexOf(value) === index); // Remove duplicates
+
+      // Sort modifiers to ensure consistent order
+      const modifiers = keys.filter((k) =>
+        ["SUPER", "CTRL", "ALT", "SHIFT"].includes(k)
+      );
+      const normalKeys = keys.filter(
+        (k) => !["SUPER", "CTRL", "ALT", "SHIFT"].includes(k)
+      );
+
+      const finalKeys = [...modifiers, ...normalKeys];
+
+      // Update pressed keys display
+      setShortcutStates((prev) => ({
+        ...prev,
+        [shortcutKey]: {
+          ...prev[shortcutKey as Shortcut],
+          pressedKeys: finalKeys,
+        },
+      }));
+
+      // Only update if we have a non-modifier key
+      if (normalKeys.length > 0) {
+        handleShortcutUpdate(shortcutKey as Shortcut, finalKeys.join("+"));
+      }
+    };
+
+    // Enable all keys, including special ones
+    hotkeys.filter = () => true;
+    hotkeys("*", handleKeyPress);
+
+    return () => {
+      hotkeys.unbind("*");
+    };
+  }, [shortcutStates]);
+
+  const handleShortcutUpdate = async (shortcut: Shortcut, keys: string) => {
+    const success = await updateShortcut(shortcut, keys);
+
+    if (success) {
+      toast({
+        title: "shortcut updated",
+        description: `${shortcut} set to: ${parseKeyboardShortcut(keys)}`,
+      });
+    } else {
+      toast({
+        title: "error updating shortcut",
+        description:
+          "failed to register shortcut. please try a different combination.",
+        variant: "destructive",
+      });
+    }
+
+    // Reset recording state
+    setShortcutStates((prev) => ({
+      ...prev,
+      [shortcut]: { isRecording: false, pressedKeys: [] },
+    }));
+  };
+
+  const ShortcutRow = ({
+    shortcut,
+    title,
+    description,
+  }: {
+    shortcut: Shortcut;
+    title: string;
+    description: string;
+  }) => {
+    const state = shortcutStates[shortcut];
+    const currentKeys = state.isRecording
+      ? state.pressedKeys
+      : parseKeyboardShortcut(getShortcut(shortcut)).split("+");
+
+    return (
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h4 className="font-medium">toggle screenpipe overlay</h4>
-          <p className="text-sm text-muted-foreground">
-            global shortcut to show/hide the main interface
-          </p>
+          <h4 className="font-medium">{title}</h4>
+          <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setIsRecording(true)}
+            onClick={() =>
+              setShortcutStates((prev) => ({
+                ...prev,
+                [shortcut]: { ...prev[shortcut], isRecording: true },
+              }))
+            }
             className={cn(
               "relative min-w-[140px] rounded-md border px-3 py-2 text-sm",
               "bg-muted/50 hover:bg-muted/70 transition-colors",
               "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring",
-              isRecording && "border-primary"
+              state.isRecording && "border-primary"
             )}
           >
-            {isRecording ? (
+            {state.isRecording ? (
               <span className="animate-pulse">recording...</span>
             ) : (
               <span className="flex items-center justify-between gap-2">
-                {currentShortcut
-                  ? parseKeyboardShortcut(currentShortcut)
-                  : "click to record"}
+                {currentKeys.map((key, i) => (
+                  <kbd key={i} className="px-1 bg-background/50 rounded">
+                    {key}
+                  </kbd>
+                ))}
                 <Pencil className="h-3 w-3 opacity-50" />
               </span>
             )}
           </button>
 
           <Switch
-            id="shortcutEnabled"
-            checked={
-              !settings.disabledShortcuts.includes(Shortcut.SHOW_SCREENPIPE)
-            }
-            onCheckedChange={handleShortcutToggle}
+            checked={isShortcutEnabled(shortcut)}
+            onCheckedChange={(checked) => toggleShortcut(shortcut, checked)}
           />
         </div>
       </div>
+    );
+  };
 
-      {isRecording && (
-        <div className="rounded-lg border bg-muted/50 p-4">
-          <p className="text-xs text-center text-muted-foreground mb-3">
-            press your desired key combination
-          </p>
-          <div className="flex justify-center gap-1">
-            {pressedKeys.length > 0 ? (
-              pressedKeys.map((key) => (
-                <kbd
-                  key={key}
-                  className="px-2 py-1 text-xs rounded bg-background"
-                >
-                  {parseKeyboardShortcut(key)}
-                </kbd>
-              ))
-            ) : (
-              <span className="text-xs text-muted-foreground">
-                waiting for input...
-              </span>
-            )}
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              onClick={() => {
-                setIsRecording(false);
-                setPressedKeys([]);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              cancel
-            </button>
-          </div>
-        </div>
-      )}
+  return (
+    <div className="w-full space-y-6 py-4">
+      <h1 className="text-2xl font-bold">shortcuts</h1>
+
+      <div className="space-y-6">
+        <ShortcutRow
+          shortcut={Shortcut.SHOW_SCREENPIPE}
+          title="toggle screenpipe overlay"
+          description="global shortcut to show/hide the main interface"
+        />
+
+        <ShortcutRow
+          shortcut={Shortcut.START_RECORDING}
+          title="start recording"
+          description="global shortcut to start screen recording"
+        />
+
+        <ShortcutRow
+          shortcut={Shortcut.STOP_RECORDING}
+          title="stop recording"
+          description="global shortcut to stop screen recording"
+        />
+      </div>
     </div>
   );
 };
