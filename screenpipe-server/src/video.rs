@@ -167,12 +167,16 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
-    // TODO: issue on macos https://github.com/mediar-ai/screenpipe/pull/580
-    #[cfg(target_os = "macos")]
-    args.extend_from_slice(&["-vcodec", "libx264", "-preset", "ultrafast", "-crf", "23"]);
-
-    #[cfg(not(target_os = "macos"))]
-    args.extend_from_slice(&["-vcodec", "libx265", "-preset", "ultrafast", "-crf", "23"]);
+    args.extend_from_slice(&[
+        "-vcodec",
+        "libx265",
+        "-tag:v",
+        "hvc1",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "23",
+    ]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 

@@ -59,9 +59,6 @@ async fn transcribe_with_deepgram(
 
     // Use token from env var
     let custom_api_key = CUSTOM_DEEPGRAM_API_TOKEN.as_str();
-    if custom_api_key.is_empty() {
-        return Err(anyhow!("CUSTOM_DEEPGRAM_API_TOKEN not set"));
-    }
 
     // Create a WAV file in memory
     let mut cursor = Cursor::new(Vec::new());
@@ -100,16 +97,29 @@ async fn transcribe_with_deepgram(
         .concat();
     }
 
+    // rationale: custom api key = custom AI proxy to use deepgram
+    // no custom api key = use deepgram api key for real deepgram endpoint
     let api_key_to_use = if custom_api_key.is_empty() {
         api_key
     } else {
         custom_api_key
     };
+    let is_custom_endpoint = !custom_api_key.is_empty();
+
+    debug!("deepgram api key: {}", api_key_to_use);
 
     let response = client
         .post(format!("{}?{}", *DEEPGRAM_API_URL, query_params))
         .header("Content-Type", "audio/wav")
-        .header("Authorization", format!("Token {}", api_key_to_use))
+        // Use Bearer format when using custom endpoint/proxy
+        .header(
+            "Authorization",
+            if is_custom_endpoint {
+                format!("Bearer {}", api_key_to_use)
+            } else {
+                format!("Token {}", api_key_to_use)
+            },
+        )
         .body(wav_data)
         .send();
 
@@ -304,7 +314,7 @@ pub async fn prepare_segments(
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    let audio_data = normalize_v2(&audio_data);
+    let audio_data = normalize_v2(audio_data);
 
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();
@@ -411,7 +421,7 @@ pub async fn stt(
         process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
     };
 
-    Ok(transcription?)
+    transcription
 }
 
 pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {

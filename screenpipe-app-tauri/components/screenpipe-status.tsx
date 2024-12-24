@@ -5,54 +5,29 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { CodeBlock } from "@/components/ui/codeblock";
 import { platform } from "@tauri-apps/plugin-os";
-import { MarkdownWithExternalLinks } from "./markdown-with-external-links";
 import { Badge } from "./ui/badge";
-import { Label } from "./ui/label";
-import { Switch } from "./ui/switch";
-import { useSettings } from "@/lib/hooks/use-settings";
 import { invoke } from "@tauri-apps/api/core";
 import { toast, useToast } from "./ui/use-toast";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
+
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
-import { Card, CardContent, CardFooter } from "./ui/card";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import {
-  Lock,
-  Folder,
-  FileText,
-  Activity,
-  Wrench,
-  RefreshCw,
-  HardDrive,
-  HelpCircle,
-} from "lucide-react";
+import { Lock, Folder, Activity } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
-import { homeDir } from "@tauri-apps/api/path";
 import LogViewer from "./log-viewer-v2";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Command } from "@tauri-apps/plugin-shell";
-import { CliCommandDialog } from "./cli-command-dialog";
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -172,18 +147,16 @@ const HealthStatus = ({ className }: { className?: string }) => {
   );
 
   const handleOpenStatusDialog = async () => {
-    if (isDialogLoading) return; // Prevent multiple clicks while loading
-
     try {
       setIsDialogLoading(true);
       const dir = await getDataDir();
       setLocalDataDir(dir);
       setIsDialogOpen(true);
     } catch (error) {
-      console.error("Failed to open status dialog:", error);
+      console.error("failed to open status dialog:", error);
       toast({
-        title: "Error",
-        description: "Failed to open status dialog. Please try again.",
+        title: "error",
+        description: "failed to open status dialog. please try again.",
         variant: "destructive",
         duration: 3000,
       });
@@ -253,19 +226,13 @@ const HealthStatus = ({ className }: { className?: string }) => {
   return (
     <>
       <Badge
-        variant="outline"
+        variant="default"
         className={cn(
-          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
-          isDialogLoading && "opacity-50 pointer-events-none"
+          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
         )}
         onClick={handleOpenStatusDialog}
       >
-        {isDialogLoading ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <Activity className="mr-2 h-4 w-4" />
-        )}
-        status{" "}
+        <Activity className="mr-2 h-4 w-4" />
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
             statusColor === "bg-red-500" ? "animate-pulse" : ""
@@ -307,7 +274,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   />
                   <span className="text-sm">screen recording</span>
                   <span className="text-sm text-muted-foreground">
-                    status: {health ? health.frame_status : "error"}, last update:{" "}
+                    status: {health ? health.frame_status : "error"}, last
+                    update:{" "}
                     {formatTimestamp(health?.last_frame_timestamp ?? null)}
                   </span>
                 </div>
@@ -347,7 +315,11 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <span className="text-sm">audio recording</span>
                   <span className="text-sm text-muted-foreground">
                     status:{" "}
-                    {settings.disableAudio ? "turned off" : health ? health.audio_status : "error"}
+                    {settings.disableAudio
+                      ? "turned off"
+                      : health
+                      ? health.audio_status
+                      : "error"}
                     , last update:{" "}
                     {settings.disableAudio
                       ? "n/a"
@@ -390,7 +362,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     <span className="text-sm">ui monitoring</span>
                     <span className="text-sm text-muted-foreground">
                       status: {health?.ui_status}, last update:{" "}
-                      {formatTimestamp(health ? health.last_ui_timestamp : "error" )}
+                      {formatTimestamp(
+                        health ? health.last_ui_timestamp : "error"
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

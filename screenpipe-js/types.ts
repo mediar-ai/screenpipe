@@ -207,6 +207,7 @@ export interface Settings {
   enableUiMonitoring: boolean;
   aiMaxContextChars: number;
   user: User;
+  customSettings?: Record<string, any>;
 }
 
 /**

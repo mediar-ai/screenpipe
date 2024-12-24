@@ -622,7 +622,10 @@ export function SearchChat() {
 
     try {
       const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
+        apiKey:
+          settings.aiProviderType === "screenpipe-cloud"
+            ? settings.user.token
+            : settings.openaiApiKey,
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
@@ -633,7 +636,7 @@ export function SearchChat() {
 
       const messages = [
         {
-          role: "system" as const,
+          role: "user" as const, // claude does not support system messages?
           content: `You are a helpful assistant specialized as a "${
             selectedAgent.name
           }". ${selectedAgent.systemPrompt}

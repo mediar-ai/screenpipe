@@ -240,7 +240,10 @@ export default function MeetingHistory({
 
     try {
       const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
+        apiKey:
+          settings.aiProviderType === "screenpipe-cloud"
+            ? settings.user.token
+            : settings.openaiApiKey,
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
@@ -254,7 +257,7 @@ export default function MeetingHistory({
 
       const messages = [
         {
-          role: "system" as const,
+          role: "user" as const, // claude does not support system messages?
           content: `you are a helpful assistant that summarizes meetings. `,
         },
         {

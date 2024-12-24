@@ -14,7 +14,7 @@ resolver = "2"
 
 
 [workspace.package]
-version = "0.2.18"
+version = "0.2.22"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -52,3 +52,9 @@ hf-hub = { git = "https://github.com/neo773/hf-hub", features = ["native-tls"] }
 git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
