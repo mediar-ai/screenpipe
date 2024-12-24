@@ -3,6 +3,8 @@
 ### 1. Configure Claude Desktop
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+- Windows: `notepad $env:AppData\Claude\claude_desktop_config.json`
+- Mac: `code ~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -19,6 +21,8 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
     }
 }
 ```
+Note: Restart Claude Desktop after making changes.
+
 
 ### 2. Test the Server
 
