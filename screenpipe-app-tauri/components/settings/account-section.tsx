@@ -179,14 +179,26 @@ export function AccountSection() {
     <div className="w-full space-y-6 py-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">account settings</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => openUrl("https://screenpi.pe/login")}
-          className="hover:bg-secondary/80"
-        >
-          manage account <ExternalLinkIcon className="w-4 h-4 ml-2" />
-        </Button>
+        <div className="flex gap-2">
+          {settings.user?.token && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openUrl("https://accounts.screenpi.pe/user")}
+              className="hover:bg-secondary/80"
+            >
+              manage account <UserCog className="w-4 h-4 ml-2" />
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openUrl("https://screenpi.pe/login")}
+            className="hover:bg-secondary/80"
+          >
+            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-8">

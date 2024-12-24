@@ -54,7 +54,7 @@ pub use sidecar::spawn_screenpipe;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
+use tauri_plugin_deep_link::DeepLinkExt;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
