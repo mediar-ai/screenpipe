@@ -1,7 +1,6 @@
 use crate::{get_base_dir, SidecarState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -367,15 +366,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     args.push("--debug");
 
-    // Add exe directory path before the Windows-specific block
-    let exe_dir = env::current_exe()
-        .expect("Failed to get current executable path")
-        .parent()
-        .expect("Failed to get parent directory of executable")
-        .to_path_buf();
+
 
     if cfg!(windows) {
-
+        let mut c = app
+            .shell()
+            .sidecar("screenpipe")
+            .unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }

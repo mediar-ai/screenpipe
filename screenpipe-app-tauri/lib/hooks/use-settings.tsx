@@ -205,7 +205,6 @@ function createDefaultSettingsObject(): Settings {
 
     return defaultSettings;
   } catch (e) {
-    console.error("failed to get platform", e);
     return DEFAULT_SETTINGS;
   }
 }
@@ -311,15 +310,12 @@ export function useSettings() {
     let p = "macos";
     try {
       p = platform();
-    } catch (e) {
-      console.error("failed to get platform", e);
-    }
+    } catch (e) {}
 
     return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
   };
-
 
   return {
     settings,

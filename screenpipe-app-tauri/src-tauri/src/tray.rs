@@ -4,7 +4,7 @@ use tauri::{
     menu::{IsMenuItem, MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     AppHandle, Wry,
 };
-use tracing::{info, debug};
+use tracing::debug;
 
 pub async fn update_tray_menu(
     app: &AppHandle,

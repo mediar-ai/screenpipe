@@ -60,7 +60,6 @@ pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 
 use tauri::AppHandle;
-use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -553,6 +552,9 @@ async fn main() {
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
 
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(app_handle, false);
@@ -818,24 +820,6 @@ async fn main() {
                     }
                 });
             }
-
-<<<<<<< HEAD
-=======
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            app.deep_link().register_all()?;
-
-            app.deep_link().on_open_url(move |event| {
-                let urls: Vec<_> = event.urls().into_iter().collect();
-                info!("deep link URLs: {:?}", urls);
-            });
-            // Register URL scheme on Windows/Linux
-            #[cfg(any(windows, target_os = "linux"))]
-            {
-                if let Err(err) = app.handle().deep_link().register("screenpipe") {
-                    error!("Failed to register deep link protocol: {}", err);
-                }
-            }
-
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -843,8 +827,6 @@ async fn main() {
                     error!("Failed to initialize global shortcuts: {}", e);
                 }
             });
-
->>>>>>> 7da94cbf3cd799baef60e49976f63cf5a5a91b47
             Ok(())
         })
         .build(tauri::generate_context!())
