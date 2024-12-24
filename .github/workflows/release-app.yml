@@ -144,6 +144,11 @@ jobs:
         with:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
+      - name: skip self hosted
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        run: 
+          exit 1
+
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
         shell: pwsh
