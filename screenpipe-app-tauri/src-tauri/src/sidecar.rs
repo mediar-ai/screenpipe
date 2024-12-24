@@ -363,12 +363,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .to_path_buf();
 
     if cfg!(windows) {
+        let mut c = app.shell().sidecar("screenpipe").unwrap();
 
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-        // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
+        // if a user with credits is provided, add the AI proxy env var api url for deepgram
         if user.credits.is_some() {
             c = c.env(
                 "DEEPGRAM_API_URL",
@@ -380,7 +381,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             }
         }
 
-        let c = c.args(&args);
+        c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
             error!("Failed to spawn sidecar: {}", e);
