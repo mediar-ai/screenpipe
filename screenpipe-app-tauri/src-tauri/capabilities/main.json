@@ -3,11 +3,7 @@
   "description": "permissions that were migrated from v1",
   "local": true,
   "windows": [
-    "main",
-    "timeline",
-    "search",
-    "meetings",
-    "identify-speakers"
+    "*"
   ],
   "permissions": [
     "core:event:allow-listen",
@@ -21,11 +17,6 @@
     "core:tray:default",
     "shell:default",
     "store:default",
-    "store:allow-create-store",
-    "store:allow-get",
-    "store:allow-set",
-    "store:allow-save",
-    "store:allow-load",
     "shell:allow-open",
     "fs:allow-watch",
     "fs:allow-open",
@@ -212,7 +203,7 @@
     "os:allow-os-type",
     "core:path:default",
     "process:default",
-    "store:default",
+    "core:webview:allow-internal-toggle-devtools",
     {
       "identifier": "shell:allow-execute",
       "allow": [
@@ -338,6 +329,36 @@
           "sidecar": true
         }
       ]
-    }
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "http://**/*",
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        {
+          "url": "https://**/*",
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
+        }
+      ]
+    },
+    "deep-link:default"
   ]
 }

@@ -77,7 +77,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
           model: aiModel,
           messages: [
             {
-              role: "system",
+              role: "user",
               content: "You are a helpful assistant that tells short jokes.",
             },
             {

@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
+      should_publish: ${{ steps.check.outputs.should_publish }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,6 +32,11 @@ jobs:
             echo "should_release=true" >> $GITHUB_OUTPUT
           else
             echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$COMMIT_MSG" | grep -q "release-app-publish"; then
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_publish=false" >> $GITHUB_OUTPUT
           fi
 
   generate_changelog:
@@ -121,6 +127,19 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
+      - name: Enable Git long paths on Windows
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          Write-Host "Enabling git core.longpaths..."
+          git config --system core.longpaths true
+          # Verify the setting
+          $longpaths = git config --system --get core.longpaths
+          Write-Host "core.longpaths is set to: $longpaths"
+          if ($longpaths -ne "true") {
+            throw "Failed to enable git long paths"
+          }
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
@@ -159,6 +178,14 @@ jobs:
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
+
+      - name: setup rust path
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+          echo "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          rustc --version # verify rust is available
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -279,24 +306,30 @@ jobs:
           # Create LLVM directory with proper permissions
           $llvmPath = "C:\Program Files\LLVM"
           if (!(Test-Path $llvmPath)) {
-            sudo mkdir -Force $llvmPath
-            sudo chmod 777 $llvmPath
+            New-Item -ItemType Directory -Force -Path $llvmPath | Out-Null
+            $acl = Get-Acl $llvmPath
+            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Users","FullControl","Allow")
+            $acl.SetAccessRule($rule)
+            Set-Acl $llvmPath $acl
           }
 
-          # Download LLVM installer
-          $installerPath = "$env:TEMP\LLVM-10.0.0-win64.exe"
-          Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe" -OutFile $installerPath
-
-          # Run installer silently
-          Start-Process -FilePath $installerPath -ArgumentList "/S /D=$llvmPath" -Wait
-
-          # Clean up
+          # Download and install LLVM
+          $installerUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe"
+          $installerPath = Join-Path $env:TEMP "LLVM-10.0.0-win64.exe"
+          
+          Write-Host "Downloading LLVM installer..."
+          Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+          
+          Write-Host "Installing LLVM..."
+          Start-Process -FilePath $installerPath -ArgumentList "/S","/D=$llvmPath" -Wait -NoNewWindow
+          
           Remove-Item $installerPath -Force
-
+          
           # Verify installation
           if (!(Test-Path "$llvmPath\bin\clang.exe")) {
-            throw "LLVM installation failed"
+            throw "LLVM installation failed - clang.exe not found"
           }
+          Write-Host "LLVM installation completed successfully"
 
       - name: Install wget on Windows
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
@@ -343,7 +376,6 @@ jobs:
           if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
           export PKG_CONFIG_PATH="/usr/local/opt/ffmpeg/lib/pkgconfig:$PKG_CONFIG_PATH"
           export PKG_CONFIG_ALLOW_CROSS=1
-          export RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path/../Frameworks -C link-arg=-Wl,-rpath,@loader_path/../Frameworks -C link-arg=-Wl,-install_name,@rpath/libscreenpipe.dylib"
           fi
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
@@ -362,18 +394,44 @@ jobs:
           bun ./scripts/pre_build.js ${{ matrix.pre-build-args }}
         working-directory: ./screenpipe-app-tauri
 
+      - uses: actions/setup-python@v5
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        with:
+          python-version: '3.13'
+
       - name: Copy library for MKL
         if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
         shell: powershell
         run: |
-          mkdir omp
-          python -m pip install intel-openmp --target omp
-          # Create mkl directory if it doesn't exist (ignore error if it does)
-          mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
-          ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
+          # Create target directory
+          $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+          New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
+          
+          # Install and copy Intel OpenMP
+          python -m pip install --upgrade pip
+          $temp_dir = "temp_omp"
+          New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
+          
+          Write-Host "Installing Intel OpenMP..."
+          python -m pip install intel-openmp --target $temp_dir
+          
+          Write-Host "Copying DLL files..."
+          Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+            Write-Host "Copying $_"
+            Copy-Item $_.FullName -Destination $mkl_dir -Force
+          }
+          
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
+          Write-Host "Found $dll_count DLLs in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
+          
+          Remove-Item -Path $temp_dir -Recurse -Force
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -405,37 +463,36 @@ jobs:
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
-          tauriScript: bunx tauri -v
+          tauriScript: bunx tauri -vvv
           retryAttempts: 3
 
-          # - name: Get version from Cargo.toml
-          #   shell: bash
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   run: |
-          #     VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          #     echo "VERSION=$VERSION" >> $GITHUB_ENV
+      - name: Download and Run CLI Manually (Windows)
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        env:
+          CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        run: |
+          # create temp directory for cli
+          $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
+          New-Item -ItemType Directory -Force -Path $cliDir
 
-          # - name: Upload screenpipe binary for signing
-          #   id: upload-unsigned-artifact
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   uses: actions/upload-artifact@v4
-          #   with:
-          #     name: unsigned-screenpipe
-          #     path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
+          # download cli
+          $cliUrl = "https://cdn.crabnebula.app/download/crabnebula/cn-cli/latest/platform/windows-binary-x86_64"
+          $cliExe = Join-Path $cliDir "cn.exe"
+          Write-Host "downloading crabnebula cli..."
+          Invoke-WebRequest -Uri $cliUrl -UserAgent $env:USER_AGENT -OutFile $cliExe
 
-          # - name: Sign artifact
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   uses: signpath/github-action-submit-signing-request@v1
-          #   with:
-          #     api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
-          #     organization-id: "9cd36272-53da-46a4-9d5c-a0870243ba97"
-          #     project-slug: "screenpipe"
-          #     signing-policy-slug: "test-signing"
-          #     github-artifact-id: "${{ steps.upload-unsigned-artifact.outputs.artifact-id }}"
-          #     wait-for-completion: true
-          #     output-artifact-directory: "./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe"
+          # move to the directory we want to upload from
+          cd screenpipe-app-tauri/src-tauri
+          
+          # upload assets
+          $cliFullPath = Join-Path $cliDir "cn.exe"
+          Write-Host "uploading assets from $(pwd) using $cliFullPath..."
+          & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
 
-      - name: Upload Assets to CrabNebula Cloud
+      - name: Upload Assets to CrabNebula Cloud (Non-Windows)
+        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         uses: crabnebula-dev/cloud-release@v0.2.6
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
@@ -602,7 +659,7 @@ jobs:
         run: |
           # Install pip first
           Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
-          C:\Users\screenpipe-windows\AppData\Local\Microsoft\WindowsApps\python.exe get-pip.py
+          python get-pip.py
           # Continue with existing steps
           mkdir omp
           pip install intel-openmp --target omp
@@ -611,7 +668,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Build
-        uses: tauri-apps/tauri-action@v0.5.16
+        uses: tauri-apps/tauri-action@v0.5.17
         env:
           # for updater
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -645,36 +702,28 @@ jobs:
           projectPath: "./screenpipe-app-tauri"
           tauriScript: bunx tauri -v
 
-          # - name: Get version from Cargo.toml
-          #   shell: bash
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   run: |
-          #     VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
-          #     echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-          # - name: Upload screenpipe binary for signing
-          #   id: upload-unsigned-artifact
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   uses: actions/upload-artifact@v4
-          #   with:
-          #     name: unsigned-screenpipe
-          #     path: ./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe
-
-          # - name: Sign artifact
-          #   if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
-          #   uses: signpath/github-action-submit-signing-request@v1
-          #   with:
-          #     api-token: "${{ secrets.SIGNPATH_API_TOKEN }}"
-          #     organization-id: "9cd36272-53da-46a4-9d5c-a0870243ba97"
-          #     project-slug: "screenpipe"
-          #     signing-policy-slug: "test-signing"
-          #     github-artifact-id: "${{ steps.upload-unsigned-artifact.outputs.artifact-id }}"
-          #     wait-for-completion: true
-          #     output-artifact-directory: "./screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/screenpipe_${{ env.VERSION }}_x64-setup.exe"
-
       - name: Upload Assets to CrabNebula Cloud
         uses: crabnebula-dev/cloud-release@v0.2.6
         with:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
+
+  publish-release:
+    needs: [check_commit, publish-tauri, retry-win]
+    if: needs.check_commit.outputs.should_publish == 'true' && (needs.publish-tauri.result == 'success' || needs.retry-win.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version = ' screenpipe-app-tauri/src-tauri/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Publish Release on CrabNebula Cloud
+        uses: crabnebula-dev/cloud-release@v0.2.6
+        with:
+          command: release publish ${{ secrets.CN_APP_SLUG }} ${{ env.VERSION }}
+          api-key: ${{ secrets.CN_API_KEY }}

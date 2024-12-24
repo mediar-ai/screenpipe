@@ -1,10 +1,12 @@
+use candle_transformers::models::metavoice::transformer;
+use candle_transformers::models::whisper;
 use futures::future::join_all;
 use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
 use screenpipe_audio::pyannote::identify::EmbeddingManager;
 use screenpipe_audio::stt::{prepare_segments, stt};
 use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
 use screenpipe_audio::whisper::WhisperModel;
-use screenpipe_audio::{AudioInput, AudioTranscriptionEngine};
+use screenpipe_audio::{resample, AudioInput, AudioTranscriptionEngine};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -74,7 +76,7 @@ async fn test_transcription_accuracy() {
     for (audio_file, expected_transcription) in test_cases {
         let whisper_model = Arc::clone(&whisper_model);
         let vad_engine = Arc::clone(&vad_engine);
-        let output_path = Arc::clone(&output_path);
+
         let embedding_extractor = Arc::clone(&embedding_extractor);
         let embedding_manager = EmbeddingManager::new(usize::MAX);
         let segmentation_model_path = segmentation_model_path.clone();
@@ -91,12 +93,28 @@ async fn test_transcription_accuracy() {
                 device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
             };
 
+            let audio_data = if audio_input.sample_rate != whisper::SAMPLE_RATE as u32 {
+                match resample(
+                    audio_input.data.as_ref(),
+                    audio_input.sample_rate,
+                    whisper::SAMPLE_RATE as u32,
+                ) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        panic!("Error resampling audio: {:?}", e);
+                    }
+                }
+            } else {
+                audio_input.data.as_ref().to_vec()
+            };
+
             let mut segments = prepare_segments(
-                &audio_input,
+                &audio_data,
                 vad_engine.clone(),
                 &segmentation_model_path,
                 embedding_manager,
                 embedding_extractor,
+                &audio_input.device.name,
             )
             .await
             .unwrap();
@@ -104,15 +122,13 @@ async fn test_transcription_accuracy() {
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
-                let (transcript, _) = stt(
+                let transcript = stt(
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
                     &mut whisper_model_guard,
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
-                    &output_path,
-                    true,
                     vec![Language::English],
                 )
                 .await

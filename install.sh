@@ -124,13 +124,44 @@ if [ "$(uname)" = "Darwin" ]; then
     # Check if ffmpeg is installed
     if ! command -v ffmpeg >/dev/null 2>&1; then
         echo "installing ffmpeg..."
-        FFMPEG_VERSION="7.1"
-        FFMPEG_URL="https://evermeet.cx/ffmpeg/ffmpeg-${FFMPEG_VERSION}.zip"
 
-        # Download and extract ffmpeg
-        curl -sL "$FFMPEG_URL" -o ffmpeg.zip
-        unzip -q ffmpeg.zip
+        if [ "$arch" = "aarch64" ]; then
+            FFMPEG_URL="https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
+        else
+            FFMPEG_URL="https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
+        fi
+
+        echo "downloading ffmpeg from: $FFMPEG_URL"
+        if ! curl -sL "$FFMPEG_URL" -o ffmpeg.zip; then
+            echo "failed to download ffmpeg"
+            exit 1
+        fi
+
+        if ! unzip -q ffmpeg.zip; then
+            echo "failed to extract ffmpeg"
+            exit 1
+        fi
         rm ffmpeg.zip
+
+        # Verify code signing on macOS
+        echo "verifying code signature..."
+        if ! codesign -v ./ffmpeg 2>/dev/null; then
+            echo "warning: binary is not signed or signature is invalid"
+            read -p "do you want to continue anyway? (y/N) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "installation aborted"
+                exit 1
+            fi
+        fi
+
+        # Verify the binary runs and check version
+        echo "verifying binary..."
+        if ! FFMPEG_VERSION=$(./ffmpeg -version | head -n1); then
+            echo "binary verification failed"
+            exit 1
+        fi
+        echo "detected version: $FFMPEG_VERSION"
 
         # Move to local bin
         mkdir -p "$HOME/.local/bin"
@@ -197,50 +228,11 @@ if ! mkdir -p "$INSTALL_DIR/screenpipe-vision/lib"; then
     exit 1
 fi
 
-# Download and install libraries for macOS
-if [ "$(uname)" = "Darwin" ]; then
-    echo "downloading required libraries..."
-    
-    if [ "$arch" = "aarch64" ]; then
-        LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
-        if ! curl -sL "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"; then
-            echo "Failed to download arm64 library"
-            exit 1
-        fi
-    elif [ "$arch" = "x86_64" ]; then
-        LIB_URL="https://raw.githubusercontent.com/mediar-ai/screenpipe/main/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"
-        if ! curl -sL "$LIB_URL" -o "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"; then
-            echo "Failed to download x86_64 library"
-            exit 1
-        fi
-    fi
-fi
 
 # Copy binary
 if ! cp bin/screenpipe "$INSTALL_DIR/"; then
     echo "Failed to copy binary"
     exit 1
-fi
-
-# Fix binary linking on macOS
-if [ "$(uname)" = "Darwin" ]; then
-    echo "fixing binary linking..."
-    cd "$INSTALL_DIR" || exit 1
-
-    # Remove any existing rpaths
-    install_name_tool -delete_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe" 2>/dev/null || true
-
-    # Add new rpath
-    install_name_tool -add_rpath "@executable_path/screenpipe-vision/lib" "./screenpipe"
-
-    # Change the library path in the binary
-    if [ "$arch" = "aarch64" ]; then
-        install_name_tool -change "screenpipe-vision/lib/libscreenpipe_arm64.dylib" "@rpath/libscreenpipe_arm64.dylib" "./screenpipe"
-        install_name_tool -id "@rpath/libscreenpipe_arm64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_arm64.dylib"
-    elif [ "$arch" = "x86_64" ]; then
-        install_name_tool -change "screenpipe-vision/lib/libscreenpipe_x86_64.dylib" "@rpath/libscreenpipe_x86_64.dylib" "./screenpipe"
-        install_name_tool -id "@rpath/libscreenpipe_x86_64.dylib" "$INSTALL_DIR/screenpipe-vision/lib/libscreenpipe_x86_64.dylib"
-    fi
 fi
 
 # Remove quarantine attributes on macOS
@@ -298,5 +290,10 @@ echo "1. restart your terminal or run: source $SHELL_CONFIG"
 echo "2. run: screenpipe"
 echo "3. allow permissions on macos (screen, mic) if needed"
 echo ""
-echo "join our discord: https://discord.gg/dU9EBuw7Uq"
-echo "check the docs: https://docs.screenpi.pe"
+echo "╭──────────────────────────────────────────╮"
+echo "│  join our discord:                       │"
+echo "│  --> https://discord.gg/dU9EBuw7Uq       │"
+echo "│                                          │"
+echo "│  check the docs:                         │"
+echo "│  --> https://docs.screenpi.pe            │"
+echo "╰──────────────────────────────────────────╯"

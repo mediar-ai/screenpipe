@@ -19,11 +19,17 @@ jobs:
       - name: Check for unused dependencies
         uses: bnjbvr/cargo-machete@main
 
+      - name: Install dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: .github/scripts/install_dependencies.sh
+
       - name: Install cargo-udeps
-        run: cargo install cargo-udeps --locked
+        run: |
+          rustup install nightly
+          cargo +nightly install cargo-udeps --locked
 
       - name: Run cargo-udeps
-        run: cargo udeps
+        run: cargo +nightly udeps
 
       - name: Install cargo-bloat
         run: cargo install cargo-bloat

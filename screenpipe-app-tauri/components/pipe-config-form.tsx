@@ -47,8 +47,6 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   onConfigSave,
 }) => {
   const [config, setConfig] = useState(pipe.config);
-  console.log("pipe", pipe);
-  console.log("config", config);
 
   useEffect(() => {
     setConfig(pipe.config);

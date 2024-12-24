@@ -42,6 +42,7 @@ mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod tray;
 mod updates;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
@@ -53,8 +54,25 @@ pub use sidecar::spawn_screenpipe;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
+use tauri_plugin_deep_link::DeepLinkExt;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
+
+async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
+    // Fetch pipe config from API
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("http://localhost:3030/pipes/info/{}", pipe_id))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+
+    // Extract port from response
+    response["data"]["config"]["port"]
+        .as_u64()
+        .map(|p| p as u16)
+        .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
+}
 
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
@@ -71,7 +89,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     let store = StoreBuilder::new(app, path).build();
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store
+    let data_dir = store?
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
@@ -109,6 +127,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 let _ = window.set_always_on_top(false);
@@ -147,6 +166,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -162,12 +182,10 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
-            commands::show_timeline,
-            icons::get_app_icon,
             commands::open_auth_window,
-            commands::show_search,
             commands::show_meetings,
             commands::show_identify_speakers,
+            commands::open_pipe_window,
         ])
         .setup(|app| {
             // Logging setup
@@ -258,6 +276,9 @@ async fn main() {
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
 
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
+
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
                         show_main_window(app_handle, false);
@@ -278,8 +299,6 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                // i think it shouldn't kill if we're in dev mode (on macos, windows need to kill)
-                                // bad UX: i use CLI and it kills my CLI because i updated app
                                 if let Err(err) = sidecar::kill_all_sreenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),
@@ -291,6 +310,22 @@ async fn main() {
                             });
                         });
                         update_manager.update_screenpipe();
+                    }
+                    id if id.starts_with("pipe_") => {
+                        let pipe_id = id.replace("pipe_", "");
+                        let app_handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            match get_pipe_port(&pipe_id).await {
+                                Ok(port) => {
+                                    if let Err(e) =
+                                        commands::open_pipe_window(app_handle, port, pipe_id).await
+                                    {
+                                        error!("Failed to open pipe window: {}", e);
+                                    }
+                                }
+                                Err(e) => error!("Failed to get pipe port: {}", e),
+                            }
+                        });
                     }
                     _ => (),
                 });
@@ -315,7 +350,9 @@ async fn main() {
             }
 
             // Store setup and analytics initialization
-            let store = StoreBuilder::new(app.handle(), path.clone()).build();
+            let store = StoreBuilder::new(app.handle(), path.clone())
+                .build()
+                .unwrap();
 
             if store.keys().len() == 0 {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
@@ -457,6 +494,21 @@ async fn main() {
                         }
                     }
                 });
+            }
+
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all()?;
+
+            app.deep_link().on_open_url(move |event| {
+                let urls: Vec<_> = event.urls().into_iter().collect();
+                info!("deep link URLs: {:?}", urls);
+            });
+            // Register URL scheme on Windows/Linux
+            #[cfg(any(target_os = "linux"))]
+            {
+                if let Err(err) = app.handle().deep_link().register() {
+                    error!("Failed to register deep link protocol: {}", err);
+                }
             }
 
             Ok(())

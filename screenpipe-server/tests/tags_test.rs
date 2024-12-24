@@ -392,6 +392,8 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "test_engine",
         &AudioDevice::new("test".to_string(), DeviceType::Output),
         None,
+        None,
+        None,
     )
     .await
     .unwrap();

@@ -1,17 +1,16 @@
 use clap::Parser;
 use screenpipe_core::Language;
-use screenpipe_vision::{continuous_capture, monitor::get_default_monitor, OcrEngine};
-use std::time::Duration;
+use screenpipe_vision::{
+    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::get_default_monitor,
+    OcrEngine,
+};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Save text files
-    #[arg(long, default_value_t = false)]
-    save_text_files: bool,
-
     /// FPS
     #[arg(long, default_value_t = 1.0)]
     fps: f32,
@@ -34,22 +33,21 @@ async fn main() {
 
     let (result_tx, mut result_rx) = channel(512);
 
-    let save_text_files = cli.save_text_files;
     let languages = cli.language;
 
     let monitor = get_default_monitor().await;
     let id = monitor.id();
+    let window_filters = WindowFilters::new(&[], &[]);
 
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
             Duration::from_secs_f32(1.0 / cli.fps),
-            save_text_files,
             OcrEngine::AppleNative,
             id,
-            &[],
-            &[],
+            Arc::new(window_filters),
             languages.clone(),
+            false,
         )
         .await
     });
