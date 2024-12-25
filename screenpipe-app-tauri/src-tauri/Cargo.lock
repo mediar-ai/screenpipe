@@ -6005,6 +6005,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tauri",
+ "tauri-plugin-deep-link",
  "thiserror 1.0.69",
  "windows-sys 0.59.0",
  "zbus",

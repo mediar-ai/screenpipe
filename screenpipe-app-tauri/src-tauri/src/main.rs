@@ -60,8 +60,8 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
+
 use tauri::AppHandle;
-use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -395,6 +395,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -432,7 +433,6 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -551,6 +551,9 @@ async fn main() {
                     ])
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
+
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
 
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
@@ -817,22 +820,6 @@ async fn main() {
                     }
                 });
             }
-
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            app.deep_link().register_all()?;
-
-            app.deep_link().on_open_url(move |event| {
-                let urls: Vec<_> = event.urls().into_iter().collect();
-                info!("deep link URLs: {:?}", urls);
-            });
-            // Register URL scheme on Windows/Linux
-            #[cfg(any(windows, target_os = "linux"))]
-            {
-                if let Err(err) = app.handle().deep_link().register("screenpipe") {
-                    error!("Failed to register deep link protocol: {}", err);
-                }
-            }
-
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -840,7 +827,6 @@ async fn main() {
                     error!("Failed to initialize global shortcuts: {}", e);
                 }
             });
-
             Ok(())
         })
         .build(tauri::generate_context!())

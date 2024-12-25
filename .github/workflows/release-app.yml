@@ -144,6 +144,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
+
       - name: Update version in Cargo.toml
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
         shell: pwsh

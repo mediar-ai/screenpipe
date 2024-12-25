@@ -2,7 +2,7 @@ use crate::get_data_dir;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
-use tracing::{info, error};
+use tracing::{error, info};
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -309,7 +309,8 @@ pub async fn open_pipe_window(
     .inner_size(1200.0, 850.0)
     .always_on_top(true)
     .visible_on_all_workspaces(true)
-    .build() {
+    .build()
+    {
         Ok(window) => window,
         Err(e) => {
             error!("failed to create window: {}", e);
