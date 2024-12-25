@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
-  Settings2,
   Brain,
   Video,
   Keyboard,
@@ -14,11 +13,8 @@ import {
   Check,
 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "./ui/dialog";
 import { cn } from "@/lib/utils";
 import { RecordingSettings } from "./recording-settings";
@@ -34,6 +30,8 @@ import {
 } from "./ui/dropdown-menu";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
 
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
@@ -43,11 +41,21 @@ export function Settings() {
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
 
-  const handleCreateProfile = () => {
+  const handleCreateProfile = async () => {
     if (newProfileName.trim()) {
       switchProfile(newProfileName.trim());
       setNewProfileName("");
       setIsCreatingProfile(false);
+
+      await invoke("kill_all_sreenpipes");
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      await invoke("spawn_screenpipe");
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      relaunch();
     }
   };
 
@@ -136,7 +144,10 @@ export function Settings() {
                 </div>
               ) : (
                 <DropdownMenuItem
-                  onSelect={() => setIsCreatingProfile(true)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setIsCreatingProfile(true);
+                  }}
                   className="gap-2"
                 >
                   <Plus className="h-4 w-4" />
