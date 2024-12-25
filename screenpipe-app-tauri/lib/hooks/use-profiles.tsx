@@ -14,6 +14,9 @@ export interface ProfilesModel {
 
 let profilesStorePromise: Promise<LazyStore> | null = null;
 
+/** 
+ * @warning Do not change autoSave to true, it causes race conditions
+ */
 const getProfilesStore = async () => {
   if (!profilesStorePromise) {
     profilesStorePromise = (async () => {
