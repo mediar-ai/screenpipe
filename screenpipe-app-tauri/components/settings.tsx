@@ -89,6 +89,10 @@ export function Settings() {
     }
   };
 
+  useEffect(() => {
+    console.log(profiles, "profiles");
+  }, [profiles]);
+
   return (
     <div className="flex h-full">
       {/* Sidebar */}
@@ -110,7 +114,7 @@ export function Settings() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
-            {profiles.length > 0 && profiles.map((profile) => (
+              {profiles?.map((profile) => (
                 <DropdownMenuItem
                   key={profile}
                   className="justify-between"

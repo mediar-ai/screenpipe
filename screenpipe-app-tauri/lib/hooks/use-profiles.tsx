@@ -19,7 +19,9 @@ const getProfilesStore = async () => {
     profilesStorePromise = (async () => {
       const dir = await localDataDir();
       console.log(dir, "dir");
-      return new LazyStore(`${dir}/screenpipe/profiles.bin`);
+      return new LazyStore(`${dir}/screenpipe/profiles.bin`, {
+        autoSave: false,
+      });
     })();
   }
   return profilesStorePromise;

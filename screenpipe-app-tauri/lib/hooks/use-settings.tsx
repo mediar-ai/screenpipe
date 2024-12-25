@@ -214,11 +214,15 @@ const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
-      const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`);
+      const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
+        autoSave: false,
+      });
       const activeProfile = await profilesStore.get("activeProfile") || "default";
       const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
       console.log("activeProfile", activeProfile, file);
-      return new TauriStore(`${dir}/screenpipe/${file}`);
+      return new TauriStore(`${dir}/screenpipe/${file}`, {
+        autoSave: false,
+      });
     })();
   }
   return storePromise;
