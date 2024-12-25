@@ -50,7 +50,7 @@ import {
 } from "@/components/ui/popover";
 
 interface AIProviderCardProps {
-  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
+  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded" | "gemini";
   title: string;
   description: string;
   imageSrc: string;
@@ -275,6 +275,9 @@ const AISection = () => {
       case "custom":
         newUrl = settings.aiUrl;
         break;
+      case "gemini":
+        newUrl = "https://generativelanguage.googleapis.com/v1beta/openai/";
+        break;
     }
 
     updateSettings({
@@ -302,6 +305,8 @@ const AISection = () => {
         ];
       case "openai":
         return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
+      case "gemini":
+        return ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"];
       default:
         return [];
     }
@@ -353,6 +358,16 @@ const AISection = () => {
             imageSrc="/images/openai.png"
             selected={settings.aiProviderType === "openai"}
             onClick={() => handleAiProviderChange("openai")}
+          />
+
+          <AIProviderCard
+            type="gemini"
+            title="gemini"
+            description="use your own gemini api key for using google's models"
+            imageSrc="/images/gemini.png"
+            selected={settings.aiProviderType === "gemini"}
+            onClick={() => handleAiProviderChange("gemini")}
+            
           />
 
           <AIProviderCard
