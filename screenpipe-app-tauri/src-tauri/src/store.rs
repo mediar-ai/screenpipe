@@ -40,6 +40,8 @@ pub fn get_store(
         "default".to_string()
     };
 
+    debug!("Using profile: {}", profile);
+
     // Determine store file path based on profile
     let store_path = if profile == "default" {
         base_dir.join("store.bin")

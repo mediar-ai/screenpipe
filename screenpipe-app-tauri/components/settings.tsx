@@ -12,10 +12,7 @@ import {
   Trash2,
   Check,
 } from "lucide-react";
-import {
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { DialogHeader, DialogTitle } from "./ui/dialog";
 import { cn } from "@/lib/utils";
 import { RecordingSettings } from "./recording-settings";
 import { AccountSection } from "./settings/account-section";
@@ -33,15 +30,38 @@ import { Button } from "./ui/button";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";
+import { toast } from "./ui/use-toast";
 
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings() {
   // const { settings, switchProfile, deleteProfile } = useSettings();
-  const { profiles, activeProfile, createProfile, deleteProfile, setActiveProfile } = useProfiles();
-  const [activeSection, setActiveSection] = useState<SettingsSection>("account");
+  const {
+    profiles,
+    activeProfile,
+    createProfile,
+    deleteProfile,
+    setActiveProfile,
+  } = useProfiles();
+  const [activeSection, setActiveSection] =
+    useState<SettingsSection>("account");
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
+
+  const handleProfileChange = async () => {
+    toast({
+      title: "Restarting Screenpipe",
+      description: "Please wait while we restart Screenpipe",
+    });
+    await invoke("kill_all_sreenpipes");
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    await invoke("spawn_screenpipe");
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    relaunch();
+  };
 
   const handleCreateProfile = async () => {
     if (newProfileName.trim()) {
@@ -50,30 +70,13 @@ export function Settings() {
       setActiveProfile(newProfileName.trim());
       setNewProfileName("");
       setIsCreatingProfile(false);
-
-      await invoke("kill_all_sreenpipes");
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      await invoke("spawn_screenpipe");
-
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      relaunch();
+      handleProfileChange();
     }
   };
 
   const handleSwitchProfile = async (profileName: string) => {
     setActiveProfile(profileName);
-    await invoke("kill_all_sreenpipes");
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    await invoke("spawn_screenpipe");
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    relaunch();
+    handleProfileChange();
   };
 
   const renderSection = () => {
@@ -121,9 +124,7 @@ export function Settings() {
                   onSelect={() => handleSwitchProfile(profile)}
                 >
                   <span className="font-mono">{profile}</span>
-                  {activeProfile === profile && (
-                    <Check className="h-4 w-4" />
-                  )}
+                  {activeProfile === profile && <Check className="h-4 w-4" />}
                   {profile !== "default" && (
                     <Trash2
                       className="h-4 w-4 opacity-50 hover:opacity-100"
