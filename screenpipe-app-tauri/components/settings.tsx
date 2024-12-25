@@ -38,7 +38,7 @@ type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings() {
   // const { settings, switchProfile, deleteProfile } = useSettings();
-  const { profiles, activeProfile, createProfile, deleteProfile } = useProfiles();
+  const { profiles, activeProfile, createProfile, deleteProfile, setActiveProfile } = useProfiles();
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
@@ -47,6 +47,7 @@ export function Settings() {
     if (newProfileName.trim()) {
       console.log("creating profile", newProfileName.trim());
       createProfile(newProfileName.trim());
+      setActiveProfile(newProfileName.trim());
       setNewProfileName("");
       setIsCreatingProfile(false);
 
@@ -63,6 +64,7 @@ export function Settings() {
   };
 
   const handleSwitchProfile = async (profileName: string) => {
+    setActiveProfile(profileName);
     await invoke("kill_all_sreenpipes");
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
