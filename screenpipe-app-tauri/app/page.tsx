@@ -35,10 +35,6 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
-    // @ts-ignore
-    const paths = window.__TAURI_ENV__;
-    console.log('paths:', paths);
-
     const unlisten = Promise.all([
       listen('shortcut-start-recording', async () => {
         await invoke("spawn_screenpipe");

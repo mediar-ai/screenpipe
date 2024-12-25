@@ -455,21 +455,6 @@ async fn main() {
             update_global_shortcuts,
         ])
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
-            // Expose system paths to window.__TAURI_ENV__
-            window.eval(&format!(
-                r#"
-                window.__TAURI_ENV__ = {{
-                    LOCAL_DATA: {:?},
-                    HOME: {:?},
-                    PLATFORM: {:?}
-                }};
-            "#,
-                app.path().local_data_dir().unwrap_or_default(),
-                app.path().home_dir().unwrap_or_default(),
-                std::env::consts::OS,
-            ))?;
-
             // Logging setup
             let app_handle = app.handle();
             let base_dir =

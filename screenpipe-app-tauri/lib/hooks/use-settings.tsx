@@ -15,16 +15,6 @@ import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
 import { invoke } from "@tauri-apps/api/core";
 
-declare global {
-  interface Window {
-    __TAURI_ENV__: {
-      LOCAL_DATA: string;
-      HOME: string;
-      PLATFORM: string;
-    };
-  }
-}
-
 export type VadSensitivity = "low" | "medium" | "high";
 
 export type AIProviderType =
@@ -232,25 +222,28 @@ function createDefaultSettingsObject(): Settings & {
   }
 }
 
-// Replace async stores with sync versions
+// Fix store type declarations
 let profilesStore: LazyStore | null = null;
 let stores: Record<string, LazyStore> = {};
 
-const getProfilesStore = () => {
+const getProfilesStore = async () => {
+  const localData = await localDataDir();
+  
   if (!profilesStore) {
-    profilesStore = new TauriStore(
-      `${window.__TAURI_ENV__.LOCAL_DATA}/screenpipe/profiles.bin`
+    profilesStore = await new TauriStore(
+      `${localData}/screenpipe/profiles.bin`
     );
   }
   return profilesStore;
 };
 
-const getStore = (profileName: string = "default") => {
+const getStore = async (profileName: string = "default") => {
   if (!stores[profileName]) {
     const fileName =
       profileName === "default" ? "store.bin" : `store-${profileName}.bin`;
-    stores[profileName] = new TauriStore(
-      `${window.__TAURI_ENV__.LOCAL_DATA}/screenpipe/${fileName}`
+    const localData = await localDataDir();
+    stores[profileName] = await new TauriStore(
+      `${localData}/screenpipe/${fileName}`
     );
   }
   return stores[profileName];
@@ -259,21 +252,19 @@ const getStore = (profileName: string = "default") => {
 const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     // Get active profile from profiles store
-    const profilesStore = getProfilesStore();
+    const profilesStore = await getProfilesStore();
+    if (!profilesStore) throw new Error("Failed to get profiles store");
 
-    const activeProfile =
-      (profilesStore.get("activeProfile") as unknown as string) || "default";
-    const availableProfiles = (profilesStore.get(
-      "profiles"
-    ) as unknown as string[]) || ["default"];
+    const activeProfile = ((await profilesStore.get("activeProfile")) as string) || "default";
+    const availableProfiles = ((await profilesStore.get("profiles")) as string[]) || ["default"];
 
     // Get settings from active profile's store
-    const tauriStore = getStore(activeProfile);
+    const tauriStore = await getStore(activeProfile);
     const values: Record<string, any> = {};
 
     const keys = await tauriStore.keys();
     for (const k of keys) {
-      values[k] = tauriStore.get(k);
+      values[k] = await tauriStore.get(k);
     }
 
     return {
@@ -289,13 +280,15 @@ const tauriStorage: PersistStorage = {
     const { settings } = value;
 
     // Update profiles metadata
-    const profilesStore = getProfilesStore();
-    profilesStore.set("activeProfile", settings.activeProfile);
-    profilesStore.set("profiles", Object.keys(settings.profiles || {}));
-    profilesStore.save();
+    const profilesStore = await getProfilesStore();
+    if (!profilesStore) throw new Error("Failed to get profiles store");
+
+    await profilesStore.set("activeProfile", settings.activeProfile);
+    await profilesStore.set("profiles", Object.keys(settings.profiles || {}));
+    await profilesStore.save();
 
     // Update active profile's settings
-    const tauriStore = getStore(settings.activeProfile);
+    const tauriStore = await getStore(settings.activeProfile);
     const flattenedValue = flattenObject({
       ...settings,
       profiles: undefined,
@@ -303,19 +296,19 @@ const tauriStorage: PersistStorage = {
     });
 
     for (const [key, val] of Object.entries(flattenedValue)) {
-      tauriStore.set(key, val);
+      await tauriStore.set(key, val);
     }
 
-    tauriStore.save();
+    await tauriStore.save();
   },
 
   removeItem: async (_key: string) => {
-    const tauriStore = getStore();
+    const tauriStore = await getStore();
     const keys = await tauriStore.keys();
     for (const key of keys) {
-      tauriStore.delete(key);
+      await tauriStore.delete(key);
     }
-    tauriStore.save();
+    await tauriStore.save();
   },
 };
 
@@ -388,7 +381,7 @@ export function useSettings() {
     stores = {};
 
     // Force reload of settings from the new store file
-    const newStore = getStore(profileName);
+    const newStore = await getStore(profileName);
     const allKeys = await newStore.keys();
     const values: Record<string, any> = {};
 
