@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import {
   Brain,
@@ -32,18 +32,21 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
+import { useProfiles } from "@/lib/hooks/use-profiles";
 
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
 export function Settings() {
-  const { settings, switchProfile, deleteProfile } = useSettings();
+  // const { settings, switchProfile, deleteProfile } = useSettings();
+  const { profiles, activeProfile, createProfile, deleteProfile } = useProfiles();
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
 
   const handleCreateProfile = async () => {
     if (newProfileName.trim()) {
-      switchProfile(newProfileName.trim());
+      console.log("creating profile", newProfileName.trim());
+      createProfile(newProfileName.trim());
       setNewProfileName("");
       setIsCreatingProfile(false);
 
@@ -59,7 +62,17 @@ export function Settings() {
     }
   };
 
-  const profiles = Object.keys(settings.profiles || { default: null });
+  const handleSwitchProfile = async (profileName: string) => {
+    await invoke("kill_all_sreenpipes");
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    await invoke("spawn_screenpipe");
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    relaunch();
+  };
 
   const renderSection = () => {
     switch (activeSection) {
@@ -90,19 +103,19 @@ export function Settings() {
                 variant="outline"
                 className="w-full justify-between font-mono text-sm"
               >
-                {settings.activeProfile}
+                {activeProfile}
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
-              {profiles.map((profile) => (
+            {profiles && profiles.map((profile) => (
                 <DropdownMenuItem
                   key={profile}
                   className="justify-between"
-                  onSelect={() => switchProfile(profile)}
+                  onSelect={() => handleSwitchProfile(profile)}
                 >
                   <span className="font-mono">{profile}</span>
-                  {settings.activeProfile === profile && (
+                  {activeProfile === profile && (
                     <Check className="h-4 w-4" />
                   )}
                   {profile !== "default" && (
