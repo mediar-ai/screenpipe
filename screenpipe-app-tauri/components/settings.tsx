@@ -110,7 +110,7 @@ export function Settings() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56">
-            {profiles && profiles.map((profile) => (
+            {profiles.length > 0 && profiles.map((profile) => (
                 <DropdownMenuItem
                   key={profile}
                   className="justify-between"

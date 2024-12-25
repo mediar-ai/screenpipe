@@ -29,7 +29,6 @@ const profilesStorage = {
   getItem: async (_key: string) => {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     const tauriStore = await getProfilesStore();
-    console.log(tauriStore, "tauriStore");
     const allKeys = await tauriStore.keys();
     const values: Record<string, any> = {};
 

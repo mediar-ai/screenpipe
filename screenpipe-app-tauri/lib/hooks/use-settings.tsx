@@ -216,8 +216,8 @@ const getStore = async () => {
       const dir = await localDataDir();
       const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`);
       const activeProfile = await profilesStore.get("activeProfile") || "default";
-      console.log("activeProfile", activeProfile);
-      const file = activeProfile ? `store.bin` : `store-${activeProfile}.bin`;
+      const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
+      console.log("activeProfile", activeProfile, file);
       return new TauriStore(`${dir}/screenpipe/${file}`);
     })();
   }
