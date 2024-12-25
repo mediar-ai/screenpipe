@@ -222,48 +222,48 @@ function createDefaultSettingsObject(): Settings & {
   }
 }
 
-// Fix store type declarations
-let profilesStore: LazyStore | null = null;
-let stores: Record<string, LazyStore> = {};
+// Create stores for profiles and settings
+let profilesStorePromise: Promise<LazyStore> | null = null;
+let storePromises: Record<string, Promise<LazyStore>> = {};
 
 const getProfilesStore = async () => {
-  const localData = await localDataDir();
-  
-  if (!profilesStore) {
-    profilesStore = await new TauriStore(
-      `${localData}/screenpipe/profiles.bin`
-    );
+  if (!profilesStorePromise) {
+    profilesStorePromise = (async () => {
+      const dir = await localDataDir();
+      return new TauriStore(`${dir}/screenpipe/profiles.bin`);
+    })();
   }
-  return profilesStore;
+  return profilesStorePromise;
 };
 
 const getStore = async (profileName: string = "default") => {
-  if (!stores[profileName]) {
-    const fileName =
-      profileName === "default" ? "store.bin" : `store-${profileName}.bin`;
-    const localData = await localDataDir();
-    stores[profileName] = await new TauriStore(
-      `${localData}/screenpipe/${fileName}`
-    );
+  if (!storePromises[profileName]) {
+    storePromises[profileName] = (async () => {
+      const dir = await localDataDir();
+      const fileName =
+        profileName === "default" ? "store.bin" : `store-${profileName}.bin`;
+      return new TauriStore(`${dir}/screenpipe/${fileName}`);
+    })();
   }
-  return stores[profileName];
+  return storePromises[profileName];
 };
 
 const tauriStorage: PersistStorage = {
   getItem: async (_key: string) => {
     // Get active profile from profiles store
     const profilesStore = await getProfilesStore();
-    if (!profilesStore) throw new Error("Failed to get profiles store");
-
-    const activeProfile = ((await profilesStore.get("activeProfile")) as string) || "default";
-    const availableProfiles = ((await profilesStore.get("profiles")) as string[]) || ["default"];
+    const activeProfile =
+      ((await profilesStore.get("activeProfile")) as string) || "default";
+    const availableProfiles = ((await profilesStore.get(
+      "profiles"
+    )) as string[]) || ["default"];
 
     // Get settings from active profile's store
     const tauriStore = await getStore(activeProfile);
+    const allKeys = await tauriStore.keys();
     const values: Record<string, any> = {};
 
-    const keys = await tauriStore.keys();
-    for (const k of keys) {
+    for (const k of allKeys) {
       values[k] = await tauriStore.get(k);
     }
 
@@ -281,8 +281,6 @@ const tauriStorage: PersistStorage = {
 
     // Update profiles metadata
     const profilesStore = await getProfilesStore();
-    if (!profilesStore) throw new Error("Failed to get profiles store");
-
     await profilesStore.set("activeProfile", settings.activeProfile);
     await profilesStore.set("profiles", Object.keys(settings.profiles || {}));
     await profilesStore.save();
@@ -301,7 +299,6 @@ const tauriStorage: PersistStorage = {
 
     await tauriStore.save();
   },
-
   removeItem: async (_key: string) => {
     const tauriStore = await getStore();
     const keys = await tauriStore.keys();
@@ -378,7 +375,7 @@ export function useSettings() {
     });
 
     // Clear store cache to force fresh read from new profile's file
-    stores = {};
+    storePromises = {};
 
     // Force reload of settings from the new store file
     const newStore = await getStore(profileName);
