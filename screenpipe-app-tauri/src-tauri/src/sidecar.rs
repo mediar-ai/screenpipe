@@ -1,4 +1,4 @@
-use crate::{get_base_dir, SidecarState};
+use crate::{get_store, SidecarState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
@@ -9,7 +9,6 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
@@ -133,9 +132,7 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+    let store = get_store(app, None).unwrap();
 
     let audio_transcription_engine = store
         .get("audioTranscriptionEngine")
@@ -509,9 +506,7 @@ impl SidecarManager {
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+        let store = get_store(&app.clone(), None).unwrap();
 
         let restart_interval = store
             .get("restartInterval")

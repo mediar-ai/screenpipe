@@ -47,12 +47,14 @@ mod server;
 mod sidecar;
 mod tray;
 mod updates;
+mod store;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use store::get_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
@@ -75,11 +77,7 @@ struct ShortcutConfig {
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let base_dir = get_base_dir(app, None).map_err(|e| e.to_string())?;
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(app, path)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
 
         Ok(Self {
             show: store
@@ -264,15 +262,17 @@ fn send_recording_notification(
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let base_dir = get_base_dir(app, None)?;
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(app, path).build();
+    // Create a new runtime for this synchronous function
+
+    let store = get_store(app, None)?;
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store?
+
+    let data_dir = store
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
+
     if data_dir == "default" {
         Ok(default_path)
     } else {
@@ -455,6 +455,21 @@ async fn main() {
             update_global_shortcuts,
         ])
         .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+            // Expose system paths to window.__TAURI_ENV__
+            window.eval(&format!(
+                r#"
+                window.__TAURI_ENV__ = {{
+                    LOCAL_DATA: {:?},
+                    HOME: {:?},
+                    PLATFORM: {:?}
+                }};
+            "#,
+                app.path().local_data_dir().unwrap_or_default(),
+                app.path().home_dir().unwrap_or_default(),
+                std::env::consts::OS,
+            ))?;
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
