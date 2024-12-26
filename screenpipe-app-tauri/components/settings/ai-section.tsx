@@ -299,6 +299,10 @@ const AISection = () => {
           "o1",
           "claude-3-5-sonnet-latest",
           "claude-3-5-haiku-latest",
+          "gemini-2.0-flash-exp",
+          "gemini-1.5-flash",
+          "gemini-1.5-flash-8b",
+          "gemini-1.5-pro",
         ];
       case "openai":
         return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
@@ -339,7 +343,7 @@ const AISection = () => {
           <AIProviderCard
             type="screenpipe-cloud"
             title="screenpipe cloud"
-            description="use openai or anthropic models without worrying about api keys or usage"
+            description="use openai, anthropic and google models without worrying about api keys or usage"
             imageSrc="/images/screenpipe.png"
             selected={settings.aiProviderType === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
@@ -443,7 +447,7 @@ const AISection = () => {
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4 w-full">
             <Label htmlFor="aiModel">ai model</Label>
-            <Popover>
+            <Popover modal={true}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"

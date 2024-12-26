@@ -13,7 +13,6 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
-import { invoke } from "@tauri-apps/api/core";
 
 export type VadSensitivity = "low" | "medium" | "high";
 

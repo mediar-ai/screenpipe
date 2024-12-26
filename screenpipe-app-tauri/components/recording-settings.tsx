@@ -1092,7 +1092,7 @@ export function RecordingSettings() {
               <Mic className="h-4 w-4" />
               <span>audio devices</span>
             </Label>
-            <Popover open={openAudioDevices} onOpenChange={setOpenAudioDevices}>
+            <Popover open={openAudioDevices} onOpenChange={setOpenAudioDevices} modal={true}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
