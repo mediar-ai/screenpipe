@@ -543,10 +543,10 @@ const AISection = () => {
                 </TooltipTrigger>
                 <TooltipContent side="left">
                   <p>
-                    maximum number of characters (think 3 characters per token)
+                    maximum number of characters (think 4 characters per token)
                     to send to the ai model. <br />
                     usually, openai models support up to 128k tokens, which is
-                    roughly 30k-40k characters. <br />
+                    roughly 512k characters. <br />
                     we&apos;ll use this for UI purposes to show you how much you
                     can send.
                   </p>

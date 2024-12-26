@@ -117,7 +117,7 @@ const DEFAULT_SETTINGS: Settings = {
   includedWindows: [],
   aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 30000,
+  aiMaxContextChars: 512000,
   fps: 0.5,
   vadSensitivity: "high",
   analyticsEnabled: true,
