@@ -99,3 +99,4 @@ export function Settings() {
     </div>
   );
 }
+// /api/settings

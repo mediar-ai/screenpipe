@@ -4,7 +4,7 @@ import Pipe from "@/components/pipe"
 
 export default function Home() {
   return (
-    <main className="flex flex-col justify-center items-center">
+    <main className="min-h-[1500px]">
       <Header />
       <Pipe />
     </main>

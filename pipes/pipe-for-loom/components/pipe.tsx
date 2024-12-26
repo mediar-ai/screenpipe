@@ -1,31 +1,27 @@
+import { Clock } from "lucide-react";
+import { useToast } from "@/lib/use-toast";
+import { Badge } from "@/components/ui/badge";
 import { Button } from '@/components/ui/button';
 import React, { useEffect, useState} from 'react';
 import { DateTimePicker } from './date-time-picker';
-import { useToast } from "@/lib/use-toast";
-import { Clock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { VideoComponent } from "@/components/video-comp";
+import VideoTimelineBlock from "@/components/video-timeline";
+import { LLMChat } from "@/components/llm-chat";
 
 const Pipe: React.FC = () => {
   const { toast } = useToast();
   const [startTime, setStartTime] = useState<Date>(new Date());
   const [endTime, setEndTime] = useState<Date>(new Date());
   const [mergedVideoPath, setMergedVideoPath] = useState<string>('');
-  const [mergedAudioPath, setMergedAudioPath] = useState<string>('');
   const [videoBlobUrl, setVideoBlobUrl] = useState<string>('');
   const [audioBlobUrl, setAudioBlobUrl] = useState<string>('');
-  const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
   const [isMerging, setIsMerging] = useState<boolean>(false);
-  const [activeContentType, setActiveContentType] = useState<'video' | 'audio' | null>(null);
 
   useEffect(() => {
-    const createBlobUrl = async (path: string, type: 'video' | 'audio') => {
+    const createBlobUrl = async (path: string) => {
       try {
-        console.log(`fetching blob url for path: ${path}`);
         const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
-        console.log(`res status: ${response.status}`);
         if (!response.ok) throw new Error(`failed to fetch: ${response.statusText}`);
-
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         if (type === 'video') {
@@ -39,30 +35,12 @@ const Pipe: React.FC = () => {
         console.error('error creating blob URL:', error);
       }
     };
-    
-    if (mergedVideoPath) {
-      createBlobUrl(mergedVideoPath, 'video');
-    }
-
-    if (mergedAudioPath) {
-      createBlobUrl(mergedAudioPath, 'audio');
-    }
-
     return () => {
       if (videoBlobUrl) {
         URL.revokeObjectURL(videoBlobUrl);
       }
-      if (audioBlobUrl) {
-        URL.revokeObjectURL(audioBlobUrl);
-      }
     };
-  }, [mergedVideoPath, mergedAudioPath]);
-
-  useEffect(() =>{
-    if (videoBlobUrl || audioBlobUrl) {
-      setIsDialogOpen(true);
-    }
-  }, [videoBlobUrl, audioBlobUrl])
+  }, [mergedVideoPath, audioBlobUrl, videoBlobUrl]);
 
   const handleQuickTimeFilter = (minutes: number) => {
     const now = new Date();
@@ -76,6 +54,7 @@ const Pipe: React.FC = () => {
       const startTimeStr = startTime.toISOString();
       const endTimeStr = endTime.toISOString();
       const response = await fetch(`http://localhost:3030/search?content_type=all&limit=30&offset=0&start_time=${startTimeStr}&end_time=${endTimeStr}&min_length=50&max_length=10000`)
+      console.log(`http://localhost:3030/search?content_type=all&limit=30&offset=0&start_time=${startTimeStr}&end_time=${endTimeStr}&min_length=50&max_length=10000`)
       if (!response.ok) {
         throw new Error(`http error! status: ${response.status}`);
       }
@@ -156,11 +135,8 @@ const Pipe: React.FC = () => {
       if (type === 'video') {
         setMergedVideoPath(data.video_path);
         console.log("merged video path", mergedVideoPath)
-      } else {
-        setMergedAudioPath(data.video_path);
-        console.log("merged audio path", mergedAudioPath)
-      }
-      console.log("data", data)
+      }       
+    console.log("data", data)
     } catch(error) {
       toast({
         title: "error",
@@ -174,7 +150,6 @@ const Pipe: React.FC = () => {
   const handleVideoMerging = async () => {
     try {
       setIsMerging(true);
-      setActiveContentType('video');
       toast({
         title: "merging",
         description: "video merging in process...",
@@ -208,42 +183,36 @@ const Pipe: React.FC = () => {
     }
   };
 
-  const handleAudioMerging = async () => {
-    try {
-      setIsMerging(true);
-      setActiveContentType('audio');
-      toast({
-        title: "merging",
-        description: "audio merging in process...",
-        duration: 3000,
-      });
-      const startTimeStr = startTime.toISOString();
-      const endTimeStr = endTime.toISOString();
-
-      const audioPaths = await fetchAudioContent(startTimeStr, endTimeStr) as string[];
-      console.log("audioPaths", audioPaths)
-      if (audioPaths.length < 2) {
-        toast({
-          title: "insufficient content",
-          variant: "destructive",
-          description: "insufficient audio contents, please try again later",
-          duration: 3000,
-        });
-        setIsMerging(false);
-        return;
+  const data =  [
+    {
+      "type": "OCR",
+      "content": {
+        "frame_id": 3292,
+        "text": "New Tab c mediar-ai/screenpipe 5] Q Search or enter address [bounty] allow user to O [bug] Connection lost.... O Mac mini - Education N luckasRanarison/tailwi... mistweaverco/kulala.n... nvim-lspconfig/doc/c... chatgpt Which Villain Has The ??? Phind I Ranked Oscar Nomin... Search or enter address AliExpress Sponsored @google github youtube The Indian Express Firefox web.whatsapp e,_ 3 S ??k??Iained console.algora Thought-provoking stories MIT Technology Review Fast Company",
+        "timestamp": "2024-12-25T07:08:27.626220100Z",
+        "file_path": "C:\\Users\\eirae\\.screenpipe\\data\\monitor_65537_2024-12-25_07-08-27.mp4",
+        "offset_index": 6,
+        "app_name": "Firefox",
+        "window_name": "Mozilla Firefox",
+        "tags": [],
+        "frame": null
       }
-      await mergeContent(audioPaths, 'audio');
-    } catch (error :any) {
-      console.error('error merging audios:', error);
-      toast({
-        title: "error",
-        variant: "destructive",
-        description: "error in audio merging, please try again!",
-        duration: 3000,
-      });
-      setIsMerging(false);
+    },
+    {
+      "type": "OCR",
+      "content": {
+        "frame_id": 3290,
+        "text": "x Restore pages Microsoft Edge closed while you had some pages open. Resto re",
+        "timestamp": "2024-12-25T07:08:27.603156600Z",
+        "file_path": "C:\\Users\\eirae\\.screenpipe\\data\\monitor_65537_2024-12-25_07-08-27.mp4",
+        "offset_index": 4,
+        "app_name": "Microsoft Edge",
+        "window_name": "Restore pages",
+        "tags": [],
+        "frame": null
+      }
     }
-  };
+  ]
 
   return (
     <div className="w-full mt-4 flex flex-col justify-center items-center">
@@ -296,54 +265,25 @@ const Pipe: React.FC = () => {
         </Badge>
       </div>
 
-      <div className="flex mt-12 flex-row min-w-[550px] justify-between items-center">
-        <Button 
-          className="!w-32 disabled:!cursor-not-allowed"
-          variant={"default"}
-          onClick={handleVideoMerging}
-          disabled={isMerging}
-        >
-          get video loom
-        </Button>
-        <Button 
-          className="!w-32 disabled:!cursor-not-allowed"
-          variant={"default"}
-          onClick={handleAudioMerging}
-          disabled={isMerging}
-        >
-          get audio loom
-        </Button>
-      </div>
+      <Button 
+        className="mt-10 disabled:!cursor-not-allowed"
+        variant={"default"}
+        onClick={handleVideoMerging}
+        disabled={isMerging}
+      >
+        generate loom video
+      </Button>
 
-      <Dialog open={isDialogOpen} onOpenChange={(open) => {
-        setIsDialogOpen(open);
-        if(!open){
-          setIsMerging(false);
-        }
-      }}>
-        <DialogContent className='flex flex-col justify-center items-center max-w-[80rem] h-[650px] '>
-          <DialogHeader className="flex flex-col justify-center items-center">
-            <DialogTitle className="text-center text-2xl">
-              loom for your spent time
-            </DialogTitle>
-          </DialogHeader>
-          {activeContentType === 'video' && videoBlobUrl && (
-            <video controls className="w-[70%] rounded-md">
-              <source src={videoBlobUrl} type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
-          )}
-          {activeContentType === 'audio' && audioBlobUrl && (
-            <div className="bg-gray-100 p-4 rounded-md">
-              <audio controls className="w-full">
-                <source src={audioBlobUrl} type="video/mp4" />
-                Your browser does not support the audio element.
-              </audio>
-            </div>
-          )}
-        </DialogContent>
-        <DialogFooter />
-      </Dialog>
+      <div className="border-2 mt-16 w-[1400px] rounded-lg flex-col flex items-center justify-center" >
+        <VideoComponent
+          filePath={"C:\\Users\\eirae\\.screenpipe\\data\\monitor_65537_2024-12-24_12-00-40.mp4"}
+          className="text-center m-8 "
+        />
+        <LLMChat data={data} />
+      </div>
+      {/* <VideoTimelineBlock  */}
+      {/*   timelineVideosPath={ */} {/*   } */}
+      {/* /> */}
     </div>
   );
 };
