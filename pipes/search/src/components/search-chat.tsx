@@ -621,6 +621,7 @@ export function SearchChat() {
     setIsAiLoading(true);
 
     try {
+      console.log("settings", settings);
       const openai = new OpenAI({
         apiKey:
           settings.aiProviderType === "screenpipe-cloud"
@@ -629,7 +630,6 @@ export function SearchChat() {
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
-      console.log("openai", settings.openaiApiKey, settings.aiUrl);
 
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
