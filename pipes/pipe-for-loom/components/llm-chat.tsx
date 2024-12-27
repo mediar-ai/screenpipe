@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Loader2, Send, Square } from "lucide-react";
 import { OpenAI } from "openai";
 import { useToast } from "@/lib/use-toast";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { generateId, Message } from "ai";
 import { ChatMessage } from "@/components/chat-message";
 import { spinner } from "@/components/spinner";
-import { Separator } from "@/components/ui/separator";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -37,6 +37,7 @@ interface LLMChatProps {
 }
 
 export function LLMChat({ data, className }: LLMChatProps) {
+
   const { toast } = useToast();
   const { health } = useHealthCheck();
   const [isLoading, setIsLoading] = useState(false);
@@ -54,16 +55,15 @@ export function LLMChat({ data, className }: LLMChatProps) {
 
   const MAX_CONTENT_LENGTH = settings.aiMaxContextChars;
 
-  const [selectedResults, setSelectedResults] = useState<Set<number>>(new Set());
   const [similarityThreshold, setSimilarityThreshold] = useState(1);
-  const [hoveredResult, setHoveredResult] = useState<number | null>(null);
 
-  const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const debouncedThreshold = useDebounce(similarityThreshold, 300);
+
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -117,6 +117,14 @@ export function LLMChat({ data, className }: LLMChatProps) {
   }, [isFloatingInputVisible]);
 
 
+  const removeDuplicateLines = (textContent: string[])  => {
+    const uniqueLines = Array.from(new Set(textContent));
+    if (uniqueLines.length > MAX_CONTENT_LENGTH) {
+      return uniqueLines.slice(0, MAX_CONTENT_LENGTH)
+    }
+    return uniqueLines;
+  };
+
   const handleStopStreaming = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -166,12 +174,11 @@ export function LLMChat({ data, className }: LLMChatProps) {
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
-      console.log("openai", settings.openaiApiKey, settings.aiUrl);
+      console.log("API settings", settings.openaiApiKey, settings.aiUrl);
 
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
-      const concatenatedText = data.map(item => item.content.text).join(" ");
-      console.log("concatenatedText:", concatenatedText);
+      const context = removeDuplicateLines(data.map(item => item.content.text))
       const messages = [
         {
           role: "user" as const,
@@ -180,6 +187,7 @@ export function LLMChat({ data, className }: LLMChatProps) {
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
             - User timezone offset: ${new Date().getTimezoneOffset()}
+            - a same lines can be repeat multiple time, you can ignore the duplicate lines
             - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
             `,
         },
@@ -189,11 +197,11 @@ export function LLMChat({ data, className }: LLMChatProps) {
         })),
         {
           role: "user" as const,
-          content: `Context data: ${concatenatedText}
+          content: `Context data: ${context}
           User query: ${floatingInput}`,
         },
       ];
-      console.log("messages", messages);
+      console.log("Messages:", messages);
 
       abortControllerRef.current = new AbortController();
       setIsStreaming(true);
@@ -310,8 +318,6 @@ export function LLMChat({ data, className }: LLMChatProps) {
           </form>
         </motion.div>
       </AnimatePresence>
-
-      <Separator className="my-8" />
 
       {(chatMessages.length > 0 || isAiLoading) && (
         <>

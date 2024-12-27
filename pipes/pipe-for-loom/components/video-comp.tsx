@@ -48,7 +48,6 @@ export const VideoComponent = memo(function VideoComponent({
     async function loadMedia() {
       try {
         const sanitizedPath = sanitizeFilePath(filePath);
-        console.log("Sanitized path:", sanitizedPath);
 
         if (!sanitizedPath) {
           throw new Error("Invalid file path");
@@ -129,7 +128,7 @@ export const VideoComponent = memo(function VideoComponent({
           >
         </video>
       </MediaThemeSutro>
-      {renderFileLink()}
+      {/* {renderFileLink()} */}
     </div>
   );
 });
