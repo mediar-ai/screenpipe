@@ -429,10 +429,9 @@ const PipeStore: React.FC = () => {
           console.log("user not authenticated, opening auth window");
           toast({
             title: "authentication required",
-            description: "please sign in to use paid pipes",
+            description: "please sign in in settings to use paid pipes",
             variant: "destructive",
           });
-          await invoke("open_auth_window");
           return;
         }
 

@@ -6,7 +6,7 @@ import { Anthropic } from '@anthropic-ai/sdk';
 async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
 	try {
 		const payload = await verifyToken(token, {
-				secretKey: env.CLERK_SECRET_KEY,
+			secretKey: env.CLERK_SECRET_KEY,
 		});
 		return !!payload.sub;
 	} catch (error) {
@@ -166,6 +166,7 @@ export default {
 				};
 				const isStreaming = body.stream === true;
 				const isAnthropicModel = body.model.toLowerCase().includes('claude');
+				const isGeminiModel = body.model.toLowerCase().includes('gemini');
 
 				const trace = langfuse.trace({
 					id: 'ai_call_' + Date.now(),
@@ -173,7 +174,7 @@ export default {
 					metadata: {
 						expectJson: body.response_format?.type === 'json_object',
 						streaming: isStreaming,
-						provider: isAnthropicModel ? 'anthropic' : 'openai',
+						provider: isAnthropicModel ? 'anthropic' : isGeminiModel ? 'gemini' : 'openai',
 					},
 				});
 
@@ -215,32 +216,59 @@ export default {
 
 									try {
 										const stream = await anthropic.messages.create({
-											messages: body.messages.map(msg => ({
-													role: msg.role === 'user' ? 'user' : 'assistant',
-													content: msg.content,
-												})),
-												model: body.model,
-												stream: true,
-												max_tokens: 4096,
-											})
+											messages: body.messages.map((msg) => ({
+												role: msg.role === 'user' ? 'user' : 'assistant',
+												content: msg.content,
+											})),
+											model: body.model,
+											stream: true,
+											max_tokens: 4096,
+										});
 
 										for await (const chunk of stream) {
 											if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
 												const openaiChunk = {
-													choices: [{
-														delta: {
-															content: chunk.delta.text
-														}
-													}]
+													choices: [
+														{
+															delta: {
+																content: chunk.delta.text,
+															},
+														},
+													],
 												};
 												await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
 											}
 										}
-										
+
 										await writer.write(new TextEncoder().encode('data: [DONE]\n\n'));
 									} catch (error) {
 										console.error('Error in Anthropic stream:', error);
 										throw error;
+									}
+								} else if (isGeminiModel) {
+									const apiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+										method: 'POST',
+										headers: {
+											Authorization: `Bearer ${env.GEMINI_API_KEY}`,
+											'Content-Type': 'application/json',
+										},
+										body: JSON.stringify(body),
+									});
+
+									if (!apiResponse.ok) {
+										const errorData = await apiResponse.json();
+										throw new Error(`API error: ${JSON.stringify(errorData)}`);
+									}
+
+									const reader = apiResponse.body?.getReader();
+									if (!reader) {
+										throw new Error('Failed to get reader from API response');
+									}
+
+									while (true) {
+										const { done, value } = await reader.read();
+										if (done) break;
+										await writer.write(value);
 									}
 								} else {
 									// Original OpenAI format - keep the fetch call only for OpenAI
@@ -299,7 +327,11 @@ export default {
 					// Non-streaming response
 					try {
 						const apiResponse = await fetch(
-							isAnthropicModel ? 'https://api.anthropic.com/v1/messages' : 'https://api.openai.com/v1/chat/completions',
+							isAnthropicModel
+								? 'https://api.anthropic.com/v1/messages'
+								: isGeminiModel
+								? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+								: 'https://api.openai.com/v1/chat/completions',
 							{
 								method: 'POST',
 								headers: {
@@ -307,6 +339,10 @@ export default {
 										? {
 												'x-api-key': env.ANTHROPIC_API_KEY,
 												'anthropic-version': '2023-06-01',
+										  }
+										: isGeminiModel
+										? {
+												Authorization: `Bearer ${env.GEMINI_API_KEY}`,
 										  }
 										: {
 												Authorization: `Bearer ${env.OPENAI_API_KEY}`,
@@ -439,6 +475,7 @@ interface Env {
 	DEEPGRAM_API_KEY: string;
 	RATE_LIMITER: DurableObjectNamespace;
 	CLERK_SECRET_KEY: string;
+	GEMINI_API_KEY: string;
 }
 
 /*
@@ -504,6 +541,25 @@ curl -X POST $HOST/v1/chat/completions \
 echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
 done | tr -d '\n'
 
+using gemini
+
+curl -X POST $HOST/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $TOKEN" \
+-d '{
+"model": "gemini-1.5-flash-latest",
+"stream": true,
+"messages": [
+    {
+        "role": "system",
+        "content": "You are a helpful assistant."
+    },
+    {
+        "role": "user",
+        "content": "Tell me a short joke."
+    }
+]
+}'
 
 deployment
 
