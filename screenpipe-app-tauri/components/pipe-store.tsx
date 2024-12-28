@@ -71,12 +71,48 @@ const corePipes: CorePipe[] = [
     paid: false,
   },
   {
+    id: "search",
+    name: "search",
+    description:
+      "search through your screen recordings and audio transcripts with AI",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+    credits: 0,
+    paid: false,
+  },
+  {
     id: "timeline",
     name: "timeline",
     description:
       "visualize your day with a beautiful AI-powered timeline of your activities, perfect for time tracking and productivity analysis",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
-    credits: 20,
+    credits: 0,
+    paid: false,
+  },
+  {
+    id: "identify-speakers",
+    name: "speaker identification",
+    description:
+      "automatically identify and label different speakers in your recordings using AI voice recognition",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
+    credits: 0,
+    paid: false,
+  },
+  {
+    id: "obsidian",
+    name: "obsidian v2",
+    description:
+      "write logs of your day in obsidian with local AI features, customization, and user friendly UI",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian",
+    credits: 10,
+    paid: true,
+  },
+  {
+    id: "meeting",
+    name: "meeting assistant",
+    description:
+      "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
+    credits: 15,
     paid: true,
   },
   {
@@ -130,33 +166,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-simple-nextjs",
     credits: 0,
     paid: false,
-  },
-  {
-    id: "search",
-    name: "search",
-    description:
-      "search through your screen recordings and audio transcripts with AI",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
-    credits: 0,
-    paid: false,
-  },
-  {
-    id: "meeting",
-    name: "meeting assistant",
-    description:
-      "organize and summarize your meetings with AI - get transcripts, action items, and key insights, 100% local or using cloud models",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
-    credits: 15,
-    paid: true,
-  },
-  {
-    id: "identify-speakers",
-    name: "speaker identification",
-    description:
-      "automatically identify and label different speakers in your recordings using AI voice recognition",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers",
-    credits: 10,
-    paid: true,
   },
 ];
 
@@ -420,10 +429,9 @@ const PipeStore: React.FC = () => {
           console.log("user not authenticated, opening auth window");
           toast({
             title: "authentication required",
-            description: "please sign in to use paid pipes",
+            description: "please sign in in settings to use paid pipes",
             variant: "destructive",
           });
-          await invoke("open_auth_window");
           return;
         }
 
@@ -727,6 +735,68 @@ const PipeStore: React.FC = () => {
     window.location.reload(); // dirty hack
   };
 
+  const handleUpdatePipe = async (pipe: Pipe) => {
+    try {
+      posthog.capture("update_pipe", {
+        pipe_id: pipe.id,
+      });
+
+      // Create initial toast with progress bar
+      const t = toast({
+        title: "updating pipe",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">deleting old version...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+
+      // First delete the pipe
+      await handleDeletePipe(pipe);
+
+      // Then download the new version
+      if (pipe.source) {
+        t.update({
+          id: t.id,
+          title: "updating pipe",
+          description: (
+            <div className="space-y-2">
+              <Progress value={50} className="h-1" />
+              <p className="text-xs">downloading new version...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+
+        await handleDownloadPipe(pipe.source);
+      }
+
+      t.update({
+        id: t.id,
+        title: "pipe updated",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
+      });
+
+      // Refresh the pipe list
+      await fetchInstalledPipes();
+    } catch (error) {
+      console.error("failed to update pipe:", error);
+      toast({
+        title: "error updating pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const renderPipeDetails = () => {
     if (!selectedPipe) return null;
 
@@ -798,6 +868,26 @@ const PipeStore: React.FC = () => {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
+                              onClick={() => handleUpdatePipe(selectedPipe)}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>update pipe</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+
+                    {selectedPipe.source?.startsWith("http") && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
                               onClick={() => openUrl(selectedPipe.source)}
                               variant="outline"
                               size="icon"
@@ -813,6 +903,27 @@ const PipeStore: React.FC = () => {
                       </TooltipProvider>
                     )}
 
+                    {!selectedPipe.source?.startsWith("https://") && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() =>
+                                handleRefreshFromDisk(selectedPipe)
+                              }
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>refresh the code from your local disk</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -830,30 +941,6 @@ const PipeStore: React.FC = () => {
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-
-                    <div className="space-y-2">
-                      {!selectedPipe.source?.startsWith("https://") && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                onClick={() =>
-                                  handleRefreshFromDisk(selectedPipe)
-                                }
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
-                                <RefreshCw className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>refresh the code from your local disk</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
                   </div>
 
                   {corePipes.find((cp) => cp.id === selectedPipe.id)?.paid && (
@@ -870,14 +957,15 @@ const PipeStore: React.FC = () => {
                 </div>
               </div>
 
-              {selectedPipe.enabled && (
-                <div className="space-y-3 pt-4 border-t">
-                  <PipeConfigForm
-                    pipe={selectedPipe}
-                    onConfigSave={handleConfigSave}
-                  />
-                </div>
-              )}
+              {selectedPipe.enabled &&
+                selectedPipe.config?.fields?.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t">
+                    <PipeConfigForm
+                      pipe={selectedPipe}
+                      onConfigSave={handleConfigSave}
+                    />
+                  </div>
+                )}
             </div>
           </div>
 
@@ -1044,14 +1132,30 @@ const PipeStore: React.FC = () => {
 
   const handlePipePurchase = async (pipe: Pipe, requiredCredits: number) => {
     try {
-      // Start a Supabase transaction using RPC
       const { data, error } = await supabase.rpc("purchase_pipe", {
         v_user_id: user?.id,
         p_pipe_id: pipe.id,
         p_credits_spent: requiredCredits,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("purchase error:", error);
+        toast({
+          title: "purchase failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (!data) {
+        toast({
+          title: "purchase failed",
+          description: "unknown error occurred",
+          variant: "destructive",
+        });
+        return false;
+      }
 
       // Update local user credits state
       if (user?.credits) {

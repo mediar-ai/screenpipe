@@ -621,19 +621,22 @@ export function SearchChat() {
     setIsAiLoading(true);
 
     try {
+      console.log("settings", settings);
       const openai = new OpenAI({
-        apiKey: settings.openaiApiKey,
+        apiKey:
+          settings.aiProviderType === "screenpipe-cloud"
+            ? settings.user.token
+            : settings.openaiApiKey,
         baseURL: settings.aiUrl,
         dangerouslyAllowBrowser: true,
       });
-      console.log("openai", settings.openaiApiKey, settings.aiUrl);
 
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
 
       const messages = [
         {
-          role: "system" as const,
+          role: "user" as const, // claude does not support system messages?
           content: `You are a helpful assistant specialized as a "${
             selectedAgent.name
           }". ${selectedAgent.systemPrompt}
@@ -655,7 +658,7 @@ export function SearchChat() {
               results.filter((_, index) => selectedResults.has(index))
             )
           )}
-          
+
           User query: ${floatingInput}`,
         },
       ];
@@ -1577,7 +1580,7 @@ export function SearchChat() {
                   <CommandList>
                     <CommandEmpty>no speakers found.</CommandEmpty>
                     <CommandGroup>
-                      {speakers.map((speaker: Speaker) => (
+                      {[...new Set(speakers)].map((speaker: Speaker) => (
                         <CommandItem
                           key={speaker.id}
                           value={speaker.name}

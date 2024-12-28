@@ -38,6 +38,12 @@ impl UpdatesManager {
         &self,
         show_dialog: bool,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        if let Ok(val) = std::env::var("TAURI_ENV_DEBUG") {
+            if val == "true" {
+                info!("dev mode is enabled, skipping update check");
+                return Result::Ok(false);
+            }
+        }
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 

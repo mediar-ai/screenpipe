@@ -32,7 +32,9 @@ export function CreditPurchaseDialog({
 
   const handlePurchase = async (url: string) => {
     setIsLoading(true);
-    await openUrl(url);
+    await openUrl(
+      `${url}?client_reference_id=${user?.id}&metadata[user_id]=${user?.id}`
+    );
     setTimeout(async () => {
       await refreshUser();
       onCreditsUpdated?.();

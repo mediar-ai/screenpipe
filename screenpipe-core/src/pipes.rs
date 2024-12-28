@@ -4,11 +4,13 @@
 mod pipes {
     use regex::Regex;
     use std::collections::HashMap;
+    use std::collections::HashMap;
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
+    use tokio::sync::watch;
     use tokio::sync::watch;
 
     use reqwest::Client;
@@ -97,9 +99,28 @@ mod pipes {
         } else {
             false
         };
+        let package_json_path = pipe_dir.join("package.json");
+
+        debug!(
+            "checking if pipe is a next.js project at: {:?}",
+            package_json_path
+        );
+
+        // First check if it's a Next.js project by looking at package.json
+        let is_nextjs = if package_json_path.exists() {
+            debug!("found package.json, checking for next.js dependency");
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            let has_next = package_data["dependencies"].get("next").is_some();
+            debug!("is next.js project: {}", has_next);
+            has_next
+        } else {
+            false
+        };
 
         // Check if pipe is still enabled
         if pipe_json_path.exists() {
+            debug!("checking if pipe is enabled from: {:?}", pipe_json_path);
             debug!("checking if pipe is enabled from: {:?}", pipe_json_path);
             let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
@@ -113,9 +134,11 @@ mod pipes {
                 anyhow::bail!("pipe is disabled");
             }
             debug!("pipe {} is enabled, continuing", pipe);
+            debug!("pipe {} is enabled, continuing", pipe);
         }
 
         // Prepare environment variables
+        debug!("preparing environment variables for pipe: {}", pipe);
         debug!("preparing environment variables for pipe: {}", pipe);
         let mut env_vars = std::env::vars().collect::<Vec<(String, String)>>();
         env_vars.push((
@@ -128,6 +151,16 @@ mod pipes {
             pipe_dir.to_str().unwrap().to_string(),
         ));
 
+        if is_nextjs {
+            debug!(
+                "setting up next.js specific configuration for pipe: {}",
+                pipe
+            );
+            // Handle Next.js specific setup including crons
+            if pipe_json_path.exists() {
+                debug!("reading pipe.json for next.js configuration");
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let pipe_config: Value = serde_json::from_str(&pipe_json)?;
         if is_nextjs {
             debug!(
                 "setting up next.js specific configuration for pipe: {}",
@@ -151,16 +184,32 @@ mod pipes {
 
                 env_vars.push(("PORT".to_string(), port.to_string()));
 
+                // Update pipe.json with the port
+                let port = pick_unused_port().expect("No ports free");
+                debug!("picked unused port {} for next.js pipe", port);
+                let mut updated_config = pipe_config.clone();
+                updated_config["port"] = json!(port);
+                let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
+                let mut file = File::create(&pipe_json_path).await?;
+                file.write_all(updated_pipe_json.as_bytes()).await?;
+                debug!("updated pipe.json with port configuration");
+
+                env_vars.push(("PORT".to_string(), port.to_string()));
+
                 // Handle cron jobs if they exist
                 if let Some(crons) = pipe_config.get("crons").and_then(Value::as_array) {
                     debug!("found {} cron jobs in configuration", crons.len());
+                    debug!("found {} cron jobs in configuration", crons.len());
                     let base_url = format!("http://localhost:{}", port);
+                    debug!("using base url: {} for cron jobs", base_url);
                     debug!("using base url: {} for cron jobs", base_url);
 
                     let cron_secret = generate_cron_secret();
                     debug!("generated cron secret for pipe: {}", pipe);
+                    debug!("generated cron secret for pipe: {}", pipe);
                     env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
 
+                    let mut handles = Vec::new();
                     let mut handles = Vec::new();
 
                     for cron in crons {
@@ -176,10 +225,14 @@ mod pipes {
                         let (tx, rx) = watch::channel(false);
                         let handle = CronHandle { shutdown: tx };
                         handles.push(handle);
+                        let (tx, rx) = watch::channel(false);
+                        let handle = CronHandle { shutdown: tx };
+                        handles.push(handle);
 
                         let base_url = base_url.clone();
                         let pipe_clone = pipe.to_string();
                         let secret_clone = cron_secret.clone();
+                        let screenpipe_dir = screenpipe_dir.clone();
                         let screenpipe_dir = screenpipe_dir.clone();
 
                         tokio::spawn(async move {
@@ -191,6 +244,8 @@ mod pipes {
                                 &schedule,
                                 &screenpipe_dir,
                                 rx,
+                                &screenpipe_dir,
+                                rx,
                             )
                             .await;
                         });
@@ -198,9 +253,13 @@ mod pipes {
 
                     // Store handles for later cleanup
                     CRON_HANDLES.lock().await.insert(pipe.to_string(), handles);
+
+                    // Store handles for later cleanup
+                    CRON_HANDLES.lock().await.insert(pipe.to_string(), handles);
                 }
 
                 // Install dependencies using bun
+                info!("installing dependencies for next.js pipe [{}]", pipe);
                 info!("installing dependencies for next.js pipe [{}]", pipe);
                 let install_output = Command::new(&bun_path)
                     .arg("install")
@@ -217,11 +276,34 @@ mod pipes {
                 }
                 debug!("successfully installed dependencies for next.js pipe");
             } else {
+                debug!("successfully installed dependencies for next.js pipe");
+            } else {
                 let port = pick_unused_port().expect("No ports free");
+                debug!("no pipe.json found, using port {} for next.js pipe", port);
                 debug!("no pipe.json found, using port {} for next.js pipe", port);
                 env_vars.push(("PORT".to_string(), port.to_string()));
             }
+            }
 
+            // Run the Next.js project with bun
+            debug!("starting next.js project with bun dev command");
+            let mut child = Command::new(&bun_path)
+                .arg("run")
+                .arg("dev")
+                .arg("--port")
+                .arg(
+                    env_vars
+                        .iter()
+                        .find(|(k, _)| k == "PORT")
+                        .map(|(_, v)| v)
+                        .unwrap()
+                        .clone(),
+                )
+                .current_dir(&pipe_dir)
+                .envs(env_vars)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
             // Run the Next.js project with bun
             debug!("starting next.js project with bun dev command");
             let mut child = Command::new(&bun_path)
@@ -244,10 +326,14 @@ mod pipes {
 
             debug!("streaming logs for next.js pipe");
             stream_logs(pipe, &mut child).await?;
+            debug!("streaming logs for next.js pipe");
+            stream_logs(pipe, &mut child).await?;
 
+            return Ok(child);
             return Ok(child);
         }
 
+        // If it's not a Next.js project, run as regular pipe
         // If it's not a Next.js project, run as regular pipe
         let main_module = find_pipe_file(&pipe_dir)?;
         info!("executing pipe: {:?}", main_module);
@@ -265,6 +351,7 @@ mod pipes {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
+        // Stream logs
         // Stream logs
         stream_logs(pipe, &mut child).await?;
 
@@ -303,8 +390,12 @@ mod pipes {
                     "See instructions",
                     "https://nextjs.org",
                     "⚠ See instructions",
+                    "⚠ See instructions",
                 ];
 
+                if info_patterns.iter().any(|pattern| line.contains(pattern))
+                    || line.trim().is_empty()
+                {
                 if info_patterns.iter().any(|pattern| line.contains(pattern))
                     || line.trim().is_empty()
                 {
@@ -929,6 +1020,8 @@ mod pipes {
         schedule: &str,
         screenpipe_dir: &Path,
         mut shutdown: watch::Receiver<bool>,
+        screenpipe_dir: &Path,
+        mut shutdown: watch::Receiver<bool>,
     ) {
         let schedule = match cron::Schedule::from_str(schedule) {
             Ok(s) => s,
@@ -947,7 +1040,17 @@ mod pipes {
 
         // Get pipe directory for state persistence
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
 
+        loop {
+            // Get last execution time at the start of each loop
+            let last_run = match get_last_cron_execution(&pipe_dir, path).await {
+                Ok(time) => time,
+                Err(e) => {
+                    error!("failed to get last cron execution: {}", e);
+                    None
+                }
+            };
         loop {
             // Get last execution time at the start of each loop
             let last_run = match get_last_cron_execution(&pipe_dir, path).await {
@@ -973,8 +1076,73 @@ mod pipes {
                     error!("no next execution time found for cron schedule");
                     break;
                 }
+                None => {
+                    error!("no next execution time found for cron schedule");
+                    break;
+                }
             };
 
+            let duration = match (next - now).to_std() {
+                Ok(duration) => duration,
+                Err(e) => {
+                    error!("invalid duration: {}", e);
+                    tokio::time::Duration::from_secs(60) // fallback to 1 minute
+                }
+            };
+
+            debug!(
+                "next cron execution for pipe {} at path {} in {} seconds",
+                pipe,
+                path,
+                duration.as_secs()
+            );
+
+            // Wait for either the next execution time or shutdown signal
+            tokio::select! {
+                _ = tokio::time::sleep(duration) => {
+                    debug!("executing cron job for pipe {} at path {}", pipe, path);
+                    match client
+                        .get(&format!("{}{}", base_url, path))
+                        .headers(headers.clone())
+                        .send()
+                        .await
+                    {
+                        Ok(res) => {
+                            if res.status().is_success() {
+                                // Save successful execution time
+                                if let Err(e) = save_cron_execution(&pipe_dir, path).await {
+                                    error!("failed to save cron execution time: {}", e);
+                                }
+                                debug!("cron job executed successfully");
+                            } else {
+                                error!("cron job failed with status: {}", res.status());
+                                if let Ok(text) = res.text().await {
+                                    error!("error response: {}", text);
+                                }
+                            }
+                        }
+                        Err(e) => error!("failed to execute cron job: {}", e),
+                    }
+                }
+                Ok(()) = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        info!("shutting down cron job for pipe at path: {}", path);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn cleanup_pipe_crons(pipe: &str) -> Result<()> {
+        if let Some(handles) = CRON_HANDLES.lock().await.remove(pipe) {
+            info!("cleaning up {} cron jobs for pipe {}", handles.len(), pipe);
+            for handle in handles {
+                handle.stop();
+            }
+            info!("stopped all cron jobs for pipe: {}", pipe);
+        }
+        Ok(())
             let duration = match (next - now).to_std() {
                 Ok(duration) => duration,
                 Err(e) => {

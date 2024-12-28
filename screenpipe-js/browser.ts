@@ -28,8 +28,21 @@ async function sendInputControl(action: InputAction): Promise<boolean> {
   }
 }
 
+export interface BrowserPipe {
+  sendDesktopNotification(options: NotificationOptions): Promise<boolean>;
+  queryScreenpipe(
+    params: ScreenpipeQueryParams
+  ): Promise<ScreenpipeResponse | null>;
+  input: {
+    type: (text: string) => Promise<boolean>;
+    press: (key: string) => Promise<boolean>;
+    moveMouse: (x: number, y: number) => Promise<boolean>;
+    click: (button: "left" | "right" | "middle") => Promise<boolean>;
+  };
+}
+
 // Browser-only implementations
-export const pipe = {
+export const pipe: BrowserPipe = {
   async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {

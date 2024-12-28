@@ -143,6 +143,7 @@
         function appendFrame(data) {
             const container = document.createElement('div');
             container.className = 'frame-container';
+            container.dataset.timestamp = new Date(data.timestamp).getTime();
             
             const ts = document.createElement('div');
             ts.className = 'frame-timestamp';
@@ -166,50 +167,59 @@
                 img.style.display = 'block';
                 img.style.minHeight = '100px';
                 
-                const metadata = document.createElement('div');
-                metadata.className = 'metadata-icons';
+                // const metadata = document.createElement('div');
+                // metadata.className = 'metadata-icons';
                 
-                metadata.innerHTML = `
-                    <span>device: ${device.device_id}</span>
-                    <span>window: ${device.metadata.window_name || 'N/A'}</span>
-                    <span>app: ${device.metadata.app_name || 'N/A'}</span>
-                `;
+                // metadata.innerHTML = `
+                //     <span>device: ${device.device_id}</span>
+                //     <span>window: ${device.metadata.window_name || 'N/A'}</span>
+                //     <span>app: ${device.metadata.app_name || 'N/A'}</span>
+                // `;
 
-                if (device.metadata.ocr_text) {
-                    const ocrIcon = document.createElement('div');
-                    ocrIcon.className = 'icon';
-                    ocrIcon.innerHTML = `
-                        📝
-                        <div class="tooltip">OCR: ${device.metadata.ocr_text}</div>
-                    `;
-                    metadata.appendChild(ocrIcon);
-                }
+                // if (device.metadata.ocr_text) {
+                //     const ocrIcon = document.createElement('div');
+                //     ocrIcon.className = 'icon';
+                //     ocrIcon.innerHTML = `
+                //         📝
+                //         <div class="tooltip">OCR: ${device.metadata.ocr_text}</div>
+                //     `;
+                //     metadata.appendChild(ocrIcon);
+                // }
 
-                device.audio.forEach(audio => {
-                    const audioIcon = document.createElement('div');
-                    audioIcon.className = 'icon';
-                    audioIcon.innerHTML = `
-                        ${audio.is_input ? '🎤' : '🔊'}
-                        <div class="tooltip">
-                            Device: ${audio.device_name}
-                            Duration: ${audio.duration_secs}s
-                            Offset: ${audio.start_offset}s
-                            Transcription: ${audio.transcription}
-                        </div>
-                    `;
-                    metadata.appendChild(audioIcon);
-                });
+                // device.audio.forEach(audio => {
+                //     const audioIcon = document.createElement('div');
+                //     audioIcon.className = 'icon';
+                //     audioIcon.innerHTML = `
+                //         ${audio.is_input ? '🎤' : '🔊'}
+                //         <div class="tooltip">
+                //             Device: ${audio.device_name}
+                //             Duration: ${audio.duration_secs}s
+                //             Offset: ${audio.start_offset}s
+                //             Transcription: ${audio.transcription}
+                //         </div>
+                //     `;
+                //     metadata.appendChild(audioIcon);
+                // });
                 
                 deviceFrame.appendChild(img);
-                deviceFrame.appendChild(metadata);
+                // deviceFrame.appendChild(metadata);
                 devicesContainer.appendChild(deviceFrame);
             });
             
             container.appendChild(devicesContainer);
             
             const frames = document.getElementById('frames');
-            frames.appendChild(container);
-            frames.scrollTop = frames.scrollHeight;
+            
+            const existingFrames = Array.from(frames.children);
+            const insertPosition = existingFrames.findIndex(frame => {
+                return parseInt(frame.dataset.timestamp) < parseInt(container.dataset.timestamp);
+            });
+            
+            if (insertPosition === -1) {
+                frames.appendChild(container);
+            } else {
+                frames.insertBefore(container, existingFrames[insertPosition]);
+            }
         }
         
         function startStream() {

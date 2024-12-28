@@ -1,11 +1,6 @@
 {
     "bundle": {
         "macOS": {
-            "frameworks": [
-                "../../screenpipe-vision/lib/libscreenpipe.dylib",
-                "../../screenpipe-vision/lib/libscreenpipe_x86_64.dylib",
-                "../../screenpipe-vision/lib/libscreenpipe_arm64.dylib"
-            ],
             "entitlements": "entitlements.plist",
             "hardenedRuntime": true,
             "exceptionDomain": "screenpi.pe",
