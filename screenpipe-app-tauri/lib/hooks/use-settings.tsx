@@ -34,7 +34,7 @@ export enum Shortcut {
   STOP_RECORDING = "stop_recording",
 }
 
-export interface User {
+export type User = {
   id?: string;
   email?: string;
   name?: string;
@@ -180,7 +180,7 @@ export interface StoreModel {
   resetSetting: Action<StoreModel, keyof Settings>;
 }
 
-function createDefaultSettingsObject(): Settings {
+export function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
   try {
     const currentPlatform = platform();

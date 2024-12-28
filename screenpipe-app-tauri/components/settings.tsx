@@ -47,6 +47,7 @@ export function Settings() {
     useState<SettingsSection>("account");
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
+  const { settings } = useSettings();
 
   const handleProfileChange = async () => {
     toast({
@@ -64,9 +65,19 @@ export function Settings() {
   };
 
   const handleCreateProfile = async () => {
+    if (newProfileName.trim() === "default") {
+      toast({
+        title: "profile name is not allowed",
+        description: "Please choose a different name for your profile",
+      });
+      return;
+    }
     if (newProfileName.trim()) {
       console.log("creating profile", newProfileName.trim());
-      createProfile(newProfileName.trim());
+      createProfile({
+        profileName: newProfileName.trim(),
+        currentSettings: settings,
+      });
       setActiveProfile(newProfileName.trim());
       setNewProfileName("");
       setIsCreatingProfile(false);

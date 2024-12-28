@@ -3,6 +3,15 @@ import { platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export type FlattenObjectKeys<
+  T extends Record<string, unknown>,
+  Key = keyof T
+> = Key extends string
+  ? T[Key] extends Record<string, unknown> | undefined
+    ? `${Key}.${FlattenObjectKeys<NonNullable<T[Key]>>}`
+    : `${Key}`
+  : never;
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
