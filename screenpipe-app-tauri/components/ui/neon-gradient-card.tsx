@@ -10,6 +10,8 @@ import {
 } from "react";
 
 import { cn } from "@/lib/utils";
+import { motion } from 'framer-motion';
+import { opacityVisibility } from "@/lib/motion/constants";
 
 interface NeonColorsProps {
   firstColor: string;
@@ -105,7 +107,10 @@ const NeonGradientCard: React.FC<NeonGradientCardProps> = ({
   }, [children]);
 
   return (
-    <div
+    <motion.div
+      initial={'hidden'}
+      animate={'visible'}
+      variants={opacityVisibility}
       ref={containerRef}
       style={
         {
@@ -123,14 +128,14 @@ const NeonGradientCard: React.FC<NeonGradientCardProps> = ({
         } as CSSProperties
       }
       className={cn(
-        "relative z-10 size-full rounded-[var(--border-radius)]",
+        "relative z-10 w-[98%] h-[98%] rounded-[var(--border-radius)]",
         className,
       )}
       {...props}
     >
       <div
         className={cn(
-          "relative size-full min-h-[inherit] rounded-[var(--card-content-radius)] bg-gray-100 p-6",
+          "relative size-full min-h-[inherit] rounded-[var(--card-content-radius)] bg-background p-6",
           "before:absolute before:-left-[var(--border-size)] before:-top-[var(--border-size)] before:-z-10 before:block",
           "before:h-[var(--pseudo-element-height)] before:w-[var(--pseudo-element-width)] before:rounded-[var(--border-radius)] before:content-['']",
           "before:bg-[linear-gradient(0deg,var(--neon-first-color),var(--neon-second-color))] before:bg-[length:100%_200%]",
@@ -144,7 +149,7 @@ const NeonGradientCard: React.FC<NeonGradientCardProps> = ({
       >
         {children}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
