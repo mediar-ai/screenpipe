@@ -55,7 +55,7 @@ const Pipe: React.FC = () => {
     <div className="w-full max-w-2xl mx-auto space-y-8 mt-2">
       <form onSubmit={handleSave} className="space-y-4 w-full">
         <div className="space-y-2">
-          <Label htmlFor="path">time interval</Label>
+          <Label htmlFor="path">time interval *</Label>
           <div className="flex gap-2">
             <Input
               id="interval"
@@ -68,7 +68,7 @@ const Pipe: React.FC = () => {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="pageSize">page size</Label>
+          <Label htmlFor="pageSize">page size *</Label>
           <Input
             id="pageSize"
             name="pageSize"
@@ -78,7 +78,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="summaryFrequency">summary Frequency</Label>
+          <Label htmlFor="summaryFrequency">summary frequency *</Label>
           <Input
             id="summaryFrequency"
             name="summaryFrequency"
@@ -87,7 +87,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="emailTime">email time</Label>
+          <Label htmlFor="emailTime">email time *</Label>
           <Input
             id="emailTime"
             name="emailTime"
@@ -97,7 +97,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="emailAddress">email address</Label>
+          <Label htmlFor="emailAddress">email address *</Label>
           <Input
             id="emailAddress"
             name="emailAddress"
@@ -107,7 +107,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2 relative items-center">
-          <Label htmlFor="emailPassword">email app specific password</Label>
+          <Label htmlFor="emailPassword">email app specific password *</Label>
           <Input
             id="emailPassword"
             name="emailPassword"
@@ -132,10 +132,11 @@ const Pipe: React.FC = () => {
           </Button>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="contentType">content type</Label>
+          <Label htmlFor="contentType">content type *</Label>
           <Input
             id="contentType"
             name="contentType"
+            defaultValue={settings.customSettings?.reddit_auto_posts?.contentType || "all"}
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
             placeholder="Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
           />
@@ -145,6 +146,7 @@ const Pipe: React.FC = () => {
           <Input
             id="windowName"
             name="windowName"
+            defaultValue={settings.customSettings?.reddit_auto_posts?.windowName || ""}
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
             placeholder="Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
           />
@@ -165,7 +167,7 @@ const Pipe: React.FC = () => {
             id="customPrompt"
             name="customPrompt"
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={ settings.customSettings?.reddit_auto_posts?.customPrompt || "" }
+            defaultValue={settings.customSettings?.reddit_auto_posts?.customPrompt || "" }
             placeholder="additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
           />
         </div>

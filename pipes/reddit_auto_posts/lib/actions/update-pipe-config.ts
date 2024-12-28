@@ -13,7 +13,6 @@ export default async function updatePipeConfig(
     throw new Error("Reddit settings not found");
   }
 
-  console.log("red setting", redditSettings)
   const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
   const pipeConfigPath = path.join(
     screenpipeDir,
@@ -26,7 +25,13 @@ export default async function updatePipeConfig(
     ...redditSettings,
     aiUrl,
     aiModel,
-    openaiApiKey 
+    openaiApiKey,
+    crons: [
+      {
+        path: "/api/logpipeline",
+        schedule: `0 */${redditSettings?.interval / 60} * * * *`,
+      },
+    ]
   };
 
   try {
