@@ -14,6 +14,39 @@ const Pipe: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
   const [showKey, setShowKey] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [lastLog, setLastLog] = React.useState<any>(null);
+
+  const testPipe = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/pipeline");
+      if (res.status === 500 || res.status === 400) {
+        toast({
+          title: "failed to intialize daily log",
+          description: "please check your credentials",
+          variant: "destructive"
+        }) 
+      } else if (res.status === 200) {
+        toast({
+          title: "pipe initalized sucessfully",
+          variant: "default"
+        }) 
+      }
+      const data = await res.json();
+      setLastLog(data);
+    } catch (err) {
+      console.error("error testing log:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getNextCronTime = (interval: number) => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + interval);
+    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,6 +98,9 @@ const Pipe: React.FC = () => {
               placeholder="value in seconds"
               className="flex-1"
             />
+          </div>
+          <div className="text-sm" >
+            next cron will at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.interval / 60)}
           </div>
         </div>
         <div className="space-y-2">
@@ -176,6 +212,25 @@ const Pipe: React.FC = () => {
           save settings
         </Button>
       </form>
+      <div className="space-y-4 w-full flex flex-col">
+        <Button
+          onClick={testPipe}
+          variant="outline"
+          disabled={loading}
+          className="w-full"
+        >
+          {loading ? "testing..." : "test log generation"}
+        </Button>
+
+        {lastLog && (
+          <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
+            <h4>last generated log:</h4>
+            <pre className="bg-muted p-2 rounded overflow-auto">
+              {JSON.stringify(lastLog, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

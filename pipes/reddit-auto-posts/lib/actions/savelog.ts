@@ -5,7 +5,7 @@ import { DailyLog } from "@/lib/types";
 
 export default async function saveDailyLog(logEntry: DailyLog): Promise<void> {
   console.log("creating logs dir");
-  const logsDir = `${process.env.PIPE_DIR}/logs`;
+  const logsDir = `${process.env.PIPE_DIR}/logs` || `${process.cwd()}/logs`;
   console.log("logs dir:", logsDir);
   console.log("saving log entry:", logEntry);
   console.log("logs dir:", logsDir);
