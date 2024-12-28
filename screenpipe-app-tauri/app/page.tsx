@@ -27,9 +27,12 @@ import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { useProfiles } from "@/lib/hooks/use-profiles";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 export default function Home() {
   const { settings } = useSettings();
+  const { setActiveProfile } = useProfiles();
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
@@ -52,6 +55,25 @@ export default function Home() {
           title: 'recording stopped',
           description: 'screen recording has been stopped'
         });
+      }),
+
+      listen<string>('switch-profile', async (event) => {
+        const profile = event.payload;
+        setActiveProfile(profile);
+  
+        toast({
+          title: 'profile switched',
+          description: `switched to ${profile} profile, restarting screenpipe now`
+        });
+
+        await invoke("kill_all_sreenpipes");
+    
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    
+        await invoke("spawn_screenpipe");
+    
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        relaunch();
       })
     ]);
 

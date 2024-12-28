@@ -8,6 +8,9 @@ import { remove } from "@tauri-apps/plugin-fs";
 export interface ProfilesModel {
   activeProfile: string;
   profiles: string[];
+  shortcuts: {
+    [profileName: string]: string;
+  };
   setActiveProfile: Action<ProfilesModel, string>;
   createProfile: Action<
     ProfilesModel,
@@ -17,6 +20,7 @@ export interface ProfilesModel {
     }
   >;
   deleteProfile: Action<ProfilesModel, string>;
+  updateShortcut: Action<ProfilesModel, { profile: string; shortcut: string }>;
 }
 
 let profilesStorePromise: Promise<LazyStore> | null = null;
@@ -159,8 +163,16 @@ export const profilesStore = createContextStore<ProfilesModel>(
     {
       activeProfile: "default",
       profiles: ["default"],
+      shortcuts: {},
       setActiveProfile: action((state, payload) => {
         state.activeProfile = payload;
+      }),
+      updateShortcut: action((state, { profile, shortcut }) => {
+        if (shortcut === '') {
+          delete state.shortcuts[profile];
+        } else {
+          state.shortcuts[profile] = shortcut;
+        }
       }),
       createProfile: action((state, payload) => {
         state.profiles.push(payload.profileName);
@@ -191,10 +203,14 @@ export const profilesStore = createContextStore<ProfilesModel>(
 );
 
 export const useProfiles = () => {
-  const { profiles, activeProfile } = profilesStore.useStoreState((state) => ({
-    activeProfile: state.activeProfile,
-    profiles: state.profiles,
-  }));
+  const { profiles, activeProfile, shortcuts } = profilesStore.useStoreState(
+    (state) => ({
+      activeProfile: state.activeProfile,
+      profiles: state.profiles,
+      shortcuts: state.shortcuts,
+    })
+  );
+
   const setActiveProfile = profilesStore.useStoreActions(
     (actions) => actions.setActiveProfile
   );
@@ -204,12 +220,17 @@ export const useProfiles = () => {
   const deleteProfile = profilesStore.useStoreActions(
     (actions) => actions.deleteProfile
   );
+  const updateShortcut = profilesStore.useStoreActions(
+    (actions) => actions.updateShortcut
+  );
 
   return {
     profiles,
     activeProfile,
+    shortcuts,
     setActiveProfile,
     createProfile,
     deleteProfile,
+    updateShortcut,
   };
 };

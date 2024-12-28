@@ -64,6 +64,8 @@ pub use permissions::request_permission;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use std::collections::HashMap;
+
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -72,6 +74,7 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    profile_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
@@ -92,6 +95,10 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            profile_shortcuts: store
+                .get("profileShortcuts")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default(),
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -140,6 +147,7 @@ async fn update_global_shortcuts(
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        profile_shortcuts: HashMap::new(),
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -152,7 +160,6 @@ async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
-    // Unregister all existing shortcuts first
     global_shortcut.unregister_all().unwrap();
 
     // Register show shortcut
@@ -198,6 +205,18 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
+
+    // Register only non-empty profile shortcuts
+    for (profile, shortcut) in &config.profile_shortcuts {
+        if !shortcut.is_empty() {
+            let profile = profile.clone();
+            register_shortcut(app, shortcut, false, move |app| {
+                info!("switch-profile shortcut triggered for profile: {}", profile);
+                let _ = app.emit("switch-profile", profile.clone());
+            })
+            .await?;
+        }
+    }
 
     Ok(())
 }

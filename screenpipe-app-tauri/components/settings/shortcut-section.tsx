@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Shortcut, useSettings } from "@/lib/hooks/use-settings";
+import { Settings, Shortcut, useSettings } from "@/lib/hooks/use-settings";
+import { useProfiles } from "@/lib/hooks/use-profiles";
 import { parseKeyboardShortcut } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
@@ -16,31 +17,37 @@ interface ShortcutState {
 
 const ShortcutSection = () => {
   const { settings, updateSettings } = useSettings();
-  const [shortcutStates, setShortcutStates] = useState<
-    Record<Shortcut, ShortcutState>
-  >({
+  const { profiles, shortcuts, updateShortcut: updateProfileShortcut } = useProfiles();
+  const [shortcutStates, setShortcutStates] = useState<Record<string, ShortcutState>>({
     [Shortcut.SHOW_SCREENPIPE]: { isRecording: false, pressedKeys: [] },
     [Shortcut.START_RECORDING]: { isRecording: false, pressedKeys: [] },
     [Shortcut.STOP_RECORDING]: { isRecording: false, pressedKeys: [] },
+    // Initialize states for profile shortcuts
+    ...profiles.reduce((acc, profile) => ({
+      ...acc,
+      [`profile_${profile}`]: { isRecording: false, pressedKeys: [] }
+    }), {})
   });
 
-  const updateShortcut = async (shortcut: Shortcut, keys: string) => {
+  const updateShortcut = async (shortcutId: string, keys: string) => {
     try {
-      // Update the appropriate flat key
-      const updates = {
-        [Shortcut.SHOW_SCREENPIPE]: { showScreenpipeShortcut: keys },
-        [Shortcut.START_RECORDING]: { startRecordingShortcut: keys },
-        [Shortcut.STOP_RECORDING]: { stopRecordingShortcut: keys },
-      }[shortcut];
+      if (shortcutId.startsWith('profile_')) {
+        const profileName = shortcutId.replace('profile_', '');
+        updateProfileShortcut({ profile: profileName, shortcut: keys });
+      } else {
+        const updates: Partial<Settings> = {};
+        if (shortcutId === Shortcut.SHOW_SCREENPIPE) updates.showScreenpipeShortcut = keys;
+        if (shortcutId === Shortcut.START_RECORDING) updates.startRecordingShortcut = keys;
+        if (shortcutId === Shortcut.STOP_RECORDING) updates.stopRecordingShortcut = keys;
+        updateSettings(updates);
+      }
 
-      // Update settings first
-      updateSettings(updates);
-
-      // Then update Rust backend
+      // Update Rust backend
       await invoke("update_global_shortcuts", {
         showShortcut: settings.showScreenpipeShortcut,
         startShortcut: settings.startRecordingShortcut,
         stopShortcut: settings.stopRecordingShortcut,
+        profileShortcuts: shortcuts,
       });
 
       return true;
@@ -177,15 +184,19 @@ const ShortcutSection = () => {
     shortcut,
     title,
     description,
+    shortcutValue,
   }: {
-    shortcut: Shortcut;
+    shortcut: string;
     title: string;
     description: string;
+    shortcutValue?: string;
   }) => {
     const state = shortcutStates[shortcut];
-    const currentKeys = state.isRecording
+    const currentKeys = state.isRecording 
       ? state.pressedKeys
-      : parseKeyboardShortcut(getShortcut(shortcut)).split("+");
+      : shortcutValue 
+        ? parseKeyboardShortcut(shortcutValue).split("+")
+        : ["Unassigned"];
 
     return (
       <div className="flex items-center justify-between">
@@ -205,7 +216,8 @@ const ShortcutSection = () => {
               "relative min-w-[140px] rounded-md border px-3 py-2 text-sm",
               "bg-muted/50 hover:bg-muted/70 transition-colors",
               "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring",
-              state.isRecording && "border-primary"
+              state.isRecording && "border-primary",
+              !shortcutValue && "text-muted-foreground"
             )}
           >
             {state.isRecording ? (
@@ -213,7 +225,10 @@ const ShortcutSection = () => {
             ) : (
               <span className="flex items-center justify-between gap-2">
                 {currentKeys.map((key, i) => (
-                  <kbd key={i} className="px-1 bg-background/50 rounded">
+                  <kbd key={i} className={cn(
+                    "px-1 rounded",
+                    shortcutValue ? "bg-background/50" : "bg-transparent"
+                  )}>
                     {key}
                   </kbd>
                 ))}
@@ -223,8 +238,16 @@ const ShortcutSection = () => {
           </button>
 
           <Switch
-            checked={isShortcutEnabled(shortcut)}
-            onCheckedChange={(checked) => toggleShortcut(shortcut, checked)}
+            checked={!!shortcutValue}
+            disabled={!shortcutValue}
+            onCheckedChange={(checked) => {
+              if (shortcut.startsWith('profile_')) {
+                const profileName = shortcut.replace('profile_', '');
+                if (!checked) {
+                  updateProfileShortcut({ profile: profileName, shortcut: '' });
+                }
+              }
+            }}
           />
         </div>
       </div>
@@ -253,6 +276,27 @@ const ShortcutSection = () => {
           title="stop recording"
           description="global shortcut to stop screen recording"
         />
+
+        {profiles.length > 1 && (
+          <>
+            <div className="mt-8 mb-4">
+              <h2 className="text-lg font-semibold">profile shortcuts</h2>
+              <p className="text-sm text-muted-foreground">
+                assign shortcuts to quickly switch between profiles
+              </p>
+            </div>
+            
+            {profiles.map(profile => (
+              <ShortcutRow
+                key={profile}
+                shortcut={`profile_${profile}`}
+                title={`switch to ${profile}`}
+                description={`activate ${profile} profile`}
+                shortcutValue={shortcuts[profile]}
+              />
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
