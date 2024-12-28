@@ -175,7 +175,7 @@ const ShortcutSection = () => {
             disabled={typeof currentValue === "undefined"}
             onCheckedChange={async (checked) => {
               if (!checked) {
-                handleShortcutUpdate(shortcut, "");
+                handleShortcutUpdate(shortcut, "", true);
               }
             }}
           />
@@ -184,24 +184,43 @@ const ShortcutSection = () => {
     );
   };
 
-  const handleShortcutUpdate = async (shortcut: string, keys: string) => {
+  const handleShortcutUpdate = async (
+    shortcut: string,
+    keys: string,
+    disable?: boolean
+  ) => {
     const success = await updateShortcut(shortcut, keys);
-
-    if (success) {
-      toast({
-        title: "shortcut updated",
-        description: `${shortcut.replace(/_/g, " ")} ${
-          keys ? `set to: ${parseKeyboardShortcut(keys)}` : "unassigned"
-        }`,
-      });
-    } else {
+    if (!success) {
       toast({
         title: "error updating shortcut",
         description:
           "failed to register shortcut. please try a different combination.",
         variant: "destructive",
       });
+      return;
     }
+
+    if (disable) {
+      updateSettings({
+        disabledShortcuts: [
+          ...settings.disabledShortcuts,
+          shortcut as Shortcut,
+        ],
+      });
+      toast({
+        title: "shortcut disabled",
+        description: `${shortcut.replace(/_/g, " ")} disabled`,
+      });
+      return;
+    }
+
+    toast({
+      title: "shortcut updated",
+      description: `${shortcut.replace(
+        /_/g,
+        " "
+      )} set to: ${parseKeyboardShortcut(keys)}`,
+    });
 
     // Reset recording state
     setShortcutStates((prev) => ({
