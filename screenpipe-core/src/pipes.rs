@@ -221,6 +221,7 @@ mod pipes {
             // Run the Next.js project with bun
             debug!("starting next.js project with bun dev command");
             let mut child = Command::new(&bun_path)
+                .arg("-b")
                 .arg("run")
                 .arg("dev")
                 .arg("--port")
