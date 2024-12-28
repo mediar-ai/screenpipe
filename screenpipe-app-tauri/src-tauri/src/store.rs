@@ -20,6 +20,14 @@ impl Default for ProfilesConfig {
     }
 }
 
+pub fn get_profiles_store(
+    app: &AppHandle,
+) -> anyhow::Result<Arc<tauri_plugin_store::Store<tauri::Wry>>> {
+    let base_dir = get_base_dir(app, None)?;
+    let profiles_path = base_dir.join("profiles.bin");
+    Ok(StoreBuilder::new(app, profiles_path).build()?)
+}
+
 pub fn get_store(
     app: &AppHandle,
     profile_name: Option<String>,

@@ -55,6 +55,7 @@ pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
 pub use store::get_store;
+pub use store::get_profiles_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
@@ -82,6 +83,24 @@ impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
         let store = get_store(app, None).map_err(|e| e.to_string())?;
 
+        let profile_shortcuts = match get_profiles_store(app) {
+            Ok(profiles_store) => {
+                let profiles = profiles_store
+                    .get("profiles")
+                    .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+                    .unwrap_or_default();
+                
+                profiles.into_iter()
+                    .filter_map(|profile| {
+                        profiles_store.get(&format!("shortcuts.{}", profile))
+                            .and_then(|v| v.as_str().map(String::from))
+                            .map(|shortcut| (profile, shortcut))
+                    })
+                    .collect()
+            },
+            Err(_) => HashMap::new()
+        };
+
         Ok(Self {
             show: store
                 .get("showScreenpipeShortcut")
@@ -95,10 +114,7 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
-            profile_shortcuts: store
-                .get("profileShortcuts")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_default(),
+            profile_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -205,9 +221,11 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-
+    info!("applying shortcuts for profiles {:?}", config.profile_shortcuts);
     // Register only non-empty profile shortcuts
     for (profile, shortcut) in &config.profile_shortcuts {
+        info!("profile: {}", profile);
+        info!("shortcut: {}", shortcut);
         if !shortcut.is_empty() {
             let profile = profile.clone();
             register_shortcut(app, shortcut, false, move |app| {
