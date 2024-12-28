@@ -119,7 +119,10 @@ const ShortcutSection = () => {
   }, [shortcutStates]);
 
   const ShortcutRow = ({ shortcut, title, description }: ShortcutRowProps) => {
-    const state = shortcutStates[shortcut];
+    const state = shortcutStates[shortcut] || {
+      isRecording: false,
+      pressedKeys: [],
+    };
     const currentValue = getShortcutValue(shortcut, settings, shortcuts);
 
     const currentKeys = state.isRecording
