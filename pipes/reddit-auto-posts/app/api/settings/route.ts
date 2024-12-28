@@ -18,8 +18,8 @@ export async function GET() {
     const settingsPath = path.join(
       screenpipeDir,
       "pipes",
-      "reddit_auto_posts",
-      "settings.json"
+      "reddit-auto-posts",
+      "pipe.json"
     );
 
     try {
@@ -32,8 +32,8 @@ export async function GET() {
         ...rawSettings,
         customSettings: {
           ...rawSettings.customSettings,
-          reddit_auto_posts: {
-            ...(rawSettings.customSettings?.reddit_auto_posts || {}),
+          ["reddit-auto-posts"]: {
+            ...(rawSettings.customSettings?.["reddit-auto-posts"] || {}),
             ...persistedSettings,
           },
         },

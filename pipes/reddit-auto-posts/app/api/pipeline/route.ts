@@ -10,7 +10,7 @@ export async function GET(): Promise<void> {
   console.log("starting daily log pipeline");
 
 
-  const settings = await pipe.settings.getNamespaceSettings("reddit_auto_posts");
+  const settings = await pipe.settings.getNamespaceSettings("reddit-auto-posts");
   console.log("loaded config:", JSON.stringify(settings, null, 2));
 
   const interval = settings?.interval * 1000 || 60000;

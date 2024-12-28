@@ -36,7 +36,7 @@ const Pipe: React.FC = () => {
     const openaiApiKey = settings.openaiApiKey;
 
     try {
-      await updateSettings(newSettings, "reddit_auto_posts");
+      await updateSettings(newSettings, "reddit-auto-posts");
       await updatePipeConfig(newSettings, aiUrl, aiModel, openaiApiKey);
       toast({
         title: "settings saved",
@@ -61,7 +61,7 @@ const Pipe: React.FC = () => {
               id="interval"
               name="interval"
               type="number"
-              defaultValue={settings.customSettings?.reddit_auto_posts?.interval || 60}
+              defaultValue={settings.customSettings?.["reddit-auto-posts"]?.interval || 60}
               placeholder="value in seconds"
               className="flex-1"
             />
@@ -73,7 +73,7 @@ const Pipe: React.FC = () => {
             id="pageSize"
             name="pageSize"
             type="number"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.pageSize || 100}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.pageSize || 100}
             placeholder="size of page"
           />
         </div>
@@ -82,7 +82,7 @@ const Pipe: React.FC = () => {
           <Input
             id="summaryFrequency"
             name="summaryFrequency"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.summaryFrequency || "daily"}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.summaryFrequency || "daily"}
             placeholder="frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
           />
         </div>
@@ -92,7 +92,7 @@ const Pipe: React.FC = () => {
             id="emailTime"
             name="emailTime"
             type="time"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.emailTime || "11:00"}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailTime || "11:00"}
             placeholder="time to send daily summary email (used only if summaryFrequency is 'daily')"
           />
         </div>
@@ -102,7 +102,7 @@ const Pipe: React.FC = () => {
             id="emailAddress"
             name="emailAddress"
             type="email"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.emailAddress || ""}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailAddress || ""}
             placeholder="email address to send the daily summary to"
           />
         </div>
@@ -114,7 +114,7 @@ const Pipe: React.FC = () => {
             type={showKey ? "text" : "password"}
             autoCorrect="off"
             autoComplete="off"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.emailPassword || ""}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailPassword || ""}
             placeholder="app specific password for your gmail account"
           />
           <Button
@@ -136,7 +136,7 @@ const Pipe: React.FC = () => {
           <Input
             id="contentType"
             name="contentType"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.contentType || "all"}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.contentType || "all"}
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
             placeholder="Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
           />
@@ -146,7 +146,7 @@ const Pipe: React.FC = () => {
           <Input
             id="windowName"
             name="windowName"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.windowName || ""}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.windowName || ""}
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
             placeholder="Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
           />
@@ -157,7 +157,7 @@ const Pipe: React.FC = () => {
             id="dailylogPrompt"
             name="dailylogPrompt"
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={ settings.customSettings?.reddit_auto_posts?.dailylogPrompt || "" }
+            defaultValue={ settings.customSettings?.["reddit-auto-posts"]?.dailylogPrompt || "" }
             placeholder="additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes"
           />
         </div>
@@ -167,7 +167,7 @@ const Pipe: React.FC = () => {
             id="customPrompt"
             name="customPrompt"
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={settings.customSettings?.reddit_auto_posts?.customPrompt || "" }
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.customPrompt || "" }
             placeholder="additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
           />
         </div>

@@ -17,7 +17,7 @@ export default async function updatePipeConfig(
   const pipeConfigPath = path.join(
     screenpipeDir,
     "pipes",
-    "reddit_auto_posts",
+    "reddit-auto-posts",
     "pipe.json"
   );
 
@@ -28,7 +28,7 @@ export default async function updatePipeConfig(
     openaiApiKey,
     crons: [
       {
-        path: "/api/logpipeline",
+        path: "/api/pipeline",
         schedule: `0 */${redditSettings?.interval / 60} * * * *`,
       },
     ]
