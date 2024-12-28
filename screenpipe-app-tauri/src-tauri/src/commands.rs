@@ -2,7 +2,7 @@ use crate::get_data_dir;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
-use tracing::info;
+use tracing::{error, info};
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -109,32 +109,12 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 #[tauri::command]
-pub fn show_timeline(app_handle: tauri::AppHandle<tauri::Wry>) {
-    if let Some(window) = app_handle.get_webview_window("timeline") {
-        #[cfg(target_os = "macos")]
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-        // let _ = window.set_visible_on_all_workspaces(true);
-        // let _ = window.set_always_on_top(true);
-        let _ = window.set_decorations(true);
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            "timeline",
-            tauri::WebviewUrl::App("timeline.html".into()),
-        )
-        .title("timeline")
-        .decorations(true)
-        .transparent(true)
-        // .always_on_top(true)
-        // .visible_on_all_workspaces(true) // Added this
-        .center()
-        .build()
-        .unwrap();
+pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.close();
     }
 }
+
 #[tauri::command]
 pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(window) = app_handle.get_webview_window("meetings") {
@@ -260,10 +240,6 @@ pub fn update_show_screenpipe_shortcut(
     Ok(())
 }
 
-
-
-
-
 // Add these new structs
 #[derive(Debug, Serialize)]
 pub struct AuthStatus {
@@ -271,72 +247,52 @@ pub struct AuthStatus {
     message: Option<String>,
 }
 
-// Command to open the auth window
-#[tauri::command]
-pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    let auth_url = "http://localhost:3001/login";
-    #[cfg(not(debug_assertions))]
-    let auth_url = "https://screenpi.pe/login";
 
-    // If window exists, try to close it and wait a bit
-    if let Some(existing_window) = app_handle.get_webview_window("auth") {
-        let _ = existing_window.destroy();
-        // Give it a moment to properly close
+
+#[tauri::command]
+pub async fn open_pipe_window(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+    port: u16,
+    title: String,
+) -> Result<(), String> {
+    // Close existing window if it exists
+    if let Some(existing_window) = app_handle.get_webview_window(&title) {
+        if let Err(e) = existing_window.destroy() {
+            error!("failed to destroy existing window: {}", e);
+        }
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let window = match tauri::WebviewWindowBuilder::new(
         &app_handle,
-        "auth",
-        tauri::WebviewUrl::External(auth_url.parse().unwrap()),
+        &title,
+        tauri::WebviewUrl::External(format!("http://localhost:{}", port).parse().unwrap()),
     )
-    .title("screenpipe auth")
-    .center()
+    .title(title)
+    .inner_size(1200.0, 850.0)
+    .always_on_top(true)
+    .visible_on_all_workspaces(true)
     .build()
-    .map_err(|e| format!("failed to open auth window: {}", e))?;
-
-    // Add close event listener to cleanup the window
-    let window_handle = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Destroyed = event {
-            if let Some(w) = window_handle.get_webview_window("auth") {
-                let _ = w.close();
-            }
+    {
+        Ok(window) => window,
+        Err(e) => {
+            error!("failed to create window: {}", e);
+            return Err(format!("failed to create window: {}", e));
         }
-    });
+    };
+
+    // Only try to manipulate window if creation succeeded
+    if let Err(e) = window.set_focus() {
+        error!("failed to set window focus: {}", e);
+    }
+    if let Err(e) = window.show() {
+        error!("failed to show window: {}", e);
+    }
+
+    #[cfg(target_os = "macos")]
+    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+        error!("failed to set activation policy: {}", e);
+    }
 
     Ok(())
 }
-
-
-
-
-
-
-
-
-#[tauri::command]
-pub fn show_search(app_handle: tauri::AppHandle<tauri::Wry>) {
-    if let Some(window) = app_handle.get_webview_window("search") {
-        #[cfg(target_os = "macos")]
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-        let _ = window.set_decorations(true);
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            "search",
-            tauri::WebviewUrl::App("search.html".into()),
-        )
-        .title("search")
-        .decorations(true)
-        .transparent(true)
-        .center()
-        .build()
-        .unwrap();
-    }
-}
-

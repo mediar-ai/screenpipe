@@ -80,17 +80,7 @@ jobs:
       - name: Create deployment package
         run: |
           mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin
-          mkdir -p screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib
           cp target/${{ matrix.target }}/release/screenpipe screenpipe-${{ env.VERSION }}-${{ matrix.target }}/bin/
-          cp screenpipe-vision/lib/libscreenpipe.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/libscreenpipe.dylib
-          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
-            cp screenpipe-vision/lib/libscreenpipe_x86_64.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/libscreenpipe_x86_64.dylib
-          elif [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
-            cp screenpipe-vision/lib/libscreenpipe_arm64.dylib screenpipe-${{ env.VERSION }}-${{ matrix.target }}/lib/libscreenpipe_arm64.dylib
-          else
-            echo "Unknown target: ${{ matrix.target }}"
-            exit 1
-          fi
           tar -czf screenpipe-${{ env.VERSION }}-${{ matrix.target }}.tar.gz -C screenpipe-${{ env.VERSION }}-${{ matrix.target }} .
 
       - name: Calculate SHA256
@@ -286,38 +276,9 @@ jobs:
           name: screenpipe-linux-${{ matrix.target }}
           path: screenpipe-*.tar.gz
 
-  update-homebrew:
-    needs: [build-macos, build-linux, build-windows]
-    runs-on: macos-latest
-    steps:
-      - name: Set version
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-          else
-            VERSION=$(git ls-remote --tags --refs --sort="version:refname" | tail -n1 | sed 's/.*\///' | sed 's/^v//')
-          fi
-          if [[ -z "$VERSION" ]]; then
-            VERSION="0.0.0"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Set version to: $VERSION"
-
-      - name: Update Homebrew Formula
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.PAT }}
-        run: |
-          brew update
-          brew bump-formula-pr screenpipe \
-            --version="${VERSION}" \
-            --message="Automated update to version ${VERSION}" \
-            --no-browse \
-            --force || true
-
   release:
     runs-on: ubuntu-latest
-    needs: [build-macos, build-windows, build-linux, update-homebrew]
+    needs: [build-macos, build-windows, build-linux]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

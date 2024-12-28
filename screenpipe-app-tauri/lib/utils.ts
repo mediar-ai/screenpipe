@@ -2,9 +2,6 @@ import { stat } from "@tauri-apps/plugin-fs";
 import { platform } from "@tauri-apps/plugin-os";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { ContentItem } from "./screenpipe";
-import levenshtein from "js-levenshtein";
-import { Duration } from "date-fns";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -63,46 +60,6 @@ export function getCliPath() {
   }
 }
 
-// Add this pure function outside of the SearchChat component
-export const removeDuplicateSelections = (
-  results: ContentItem[],
-  selectedResults: Set<number>,
-  similarityThreshold: number = 0.9
-): Set<number> => {
-  const newSelectedResults = new Set<number>();
-  const seenContents: string[] = [];
-
-  const getSimilarity = (str1: string, str2: string): number => {
-    const maxLength = Math.max(str1.length, str2.length);
-    const distance = levenshtein(str1, str2);
-    return 1 - distance / maxLength;
-  };
-
-  const isDuplicate = (content: string): boolean => {
-    return seenContents.some(
-      (seenContent) =>
-        getSimilarity(content, seenContent) >= similarityThreshold
-    );
-  };
-
-  Array.from(selectedResults).forEach((index) => {
-    const item = results[index];
-    if (!item || !item.type) return;
-
-    let content = "";
-    if (item.type === "OCR") content = item.content.text;
-    else if (item.type === "Audio") content = item.content.transcription;
-    else if (item.type === "FTS") content = item.content.matched_text;
-
-    if (!isDuplicate(content)) {
-      seenContents.push(content);
-      newSelectedResults.add(index);
-    }
-  });
-
-  return newSelectedResults;
-};
-
 export function parseKeyboardShortcut(shortcut: string): string {
   if (typeof window !== "undefined") {
     const os = platform();
@@ -147,3 +104,38 @@ export async function getFileSize(filePath: string): Promise<number> {
 
   return size;
 }
+
+// Helper functions to flatten/unflatten objects
+export const flattenObject = (obj: any, prefix = ""): Record<string, any> => {
+  return Object.keys(obj).reduce((acc: Record<string, any>, k: string) => {
+    const pre = prefix.length ? prefix + "." : "";
+    if (
+      typeof obj[k] === "object" &&
+      obj[k] !== null &&
+      !Array.isArray(obj[k])
+    ) {
+      Object.assign(acc, flattenObject(obj[k], pre + k));
+    } else {
+      acc[pre + k] = obj[k];
+    }
+    return acc;
+  }, {});
+};
+
+export const unflattenObject = (obj: Record<string, any>): any => {
+  const result: any = {};
+  for (const key in obj) {
+    const keys = key.split(".");
+    let current = result;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (i === keys.length - 1) {
+        current[k] = obj[key];
+      } else {
+        current[k] = current[k] || {};
+        current = current[k];
+      }
+    }
+  }
+  return result;
+};

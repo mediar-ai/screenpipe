@@ -1,44 +1,64 @@
-// import { DurableObject } from "cloudflare:workers";
-import { Env } from './types';
+import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
+import { verifyToken } from '@clerk/backend';
+import { Anthropic } from '@anthropic-ai/sdk';
 
-/**
- * Welcome to Cloudflare Workers! This is your first Durable Objects application.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your Durable Object in action
- * - Run `npm run deploy` to publish your application
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/durable-objects
- */
+async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
+	try {
+		const payload = await verifyToken(token, {
+			secretKey: env.CLERK_SECRET_KEY,
+		});
+		return !!payload.sub;
+	} catch (error) {
+		console.error('clerk verification failed:', error);
+		return false;
+	}
+}
 
-/** A Durable Object's behavior is defined in an exported Javascript class */
-// export class MyDurableObject extends DurableObject {
-// 	/**
-// 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
-// 	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
-// 	 *
-// 	 * @param ctx - The interface for interacting with Durable Object state
-// 	 * @param env - The interface to reference bindings declared in wrangler.toml
-// 	 */
-// 	constructor(ctx: DurableObjectState, env: Env) {
-// 		super(ctx, env);
-// 	}
+export class RateLimiter {
+	private state: DurableObjectState;
+	private requests: Map<string, { count: number; lastReset: number }>;
 
-// 	/**
-// 	 * The Durable Object exposes an RPC method sayHello which will be invoked when when a Durable
-// 	 *  Object instance receives a request from a Worker via the same method invocation on the stub
-// 	 *
-// 	 * @param name - The name provided to a Durable Object instance from a Worker
-// 	 * @returns The greeting to be sent back to the Worker
-// 	 */
-// 	async sayHello(name: string): Promise<string> {
-// 		return `Hello, ${name}!`;
-// 	}
-// }
+	constructor(state: DurableObjectState) {
+		this.state = state;
+		this.requests = new Map();
+	}
+
+	async fetch(request: Request) {
+		const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+		const url = new URL(request.url);
+		const now = Date.now();
+
+		// different limits for different endpoints
+		const limits: Record<string, { rpm: number; window: number }> = {
+			'/v1/chat/completions': { rpm: 20, window: 60000 }, // 20 requests per minute for openai
+			default: { rpm: 60, window: 60000 }, // 60 rpm for other endpoints
+		};
+
+		const limit = limits[url.pathname] || limits.default;
+
+		// get or initialize request tracking
+		let tracking = this.requests.get(ip) || { count: 0, lastReset: now };
+
+		// reset if window expired
+		if (now - tracking.lastReset > limit.window) {
+			tracking = { count: 0, lastReset: now };
+		}
+
+		tracking.count++;
+		this.requests.set(ip, tracking);
+
+		const isAllowed = tracking.count <= limit.rpm;
+
+		return new Response(
+			JSON.stringify({
+				allowed: isAllowed,
+				remaining: Math.max(0, limit.rpm - tracking.count),
+				reset_in: Math.ceil((tracking.lastReset + limit.window - now) / 1000),
+			})
+		);
+	}
+}
 
 export default {
 	/**
@@ -79,9 +99,55 @@ export default {
 			});
 		}
 
+		const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+		const rateLimiterId = env.RATE_LIMITER.idFromName(ip);
+		const rateLimiter = env.RATE_LIMITER.get(rateLimiterId);
+
+		// Check rate limit
+		const rateLimitResponse = await rateLimiter.fetch(request.url);
+		const rateLimitData = (await rateLimitResponse.json()) as { allowed: boolean; remaining: number; reset_in: number };
+
+		if (!rateLimitData.allowed) {
+			return new Response(
+				JSON.stringify({
+					error: 'rate limit exceeded',
+					retry_after: 60, // seconds
+				}),
+				{
+					status: 429,
+					headers: {
+						...corsHeaders,
+						'Content-Type': 'application/json',
+						'Retry-After': '60',
+					},
+				}
+			);
+		}
+
 		try {
 			const url = new URL(request.url);
 			const path = url.pathname;
+
+			// Add auth check for protected routes
+			if (path !== '/test') {
+				const authHeader = request.headers.get('Authorization');
+				if (!authHeader?.startsWith('Bearer ')) {
+					return new Response(JSON.stringify({ error: 'unauthorized' }), {
+						status: 401,
+						headers: corsHeaders,
+					});
+				}
+
+				const token = authHeader.split(' ')[1];
+				const isValid = await verifyClerkToken(env, token);
+
+				if (!isValid) {
+					return new Response(JSON.stringify({ error: 'invalid token' }), {
+						status: 401,
+						headers: corsHeaders,
+					});
+				}
+			}
 
 			if (path === '/test') {
 				return new Response('ai proxy is working!', {
@@ -91,27 +157,50 @@ export default {
 			}
 
 			if (path === '/v1/chat/completions' && request.method === 'POST') {
-				const body = await request.json();
+				const body = (await request.json()) as {
+					model: string;
+					messages: any[];
+					stream: boolean;
+					response_format?: { type: string };
+					temperature?: number;
+				};
 				const isStreaming = body.stream === true;
+				const isAnthropicModel = body.model.toLowerCase().includes('claude');
+				const isGeminiModel = body.model.toLowerCase().includes('gemini');
 
 				const trace = langfuse.trace({
 					id: 'ai_call_' + Date.now(),
 					name: 'ai_call',
-					metadata: { expectJson: body.response_format?.type === 'json_object', streaming: isStreaming },
+					metadata: {
+						expectJson: body.response_format?.type === 'json_object',
+						streaming: isStreaming,
+						provider: isAnthropicModel ? 'anthropic' : isGeminiModel ? 'gemini' : 'openai',
+					},
 				});
 
 				const generation = trace.generation({
-					name: 'openai_completion',
-					startTime: new Date(),
+					name: 'completion',
 					model: body.model,
 					modelParameters: {
 						temperature: body.temperature,
-						expectJson: body.response_format?.type === 'json_object',
 						streaming: isStreaming,
 					},
-					input: body.messages,
-					output: null,
+					input: JSON.stringify(body.messages),
 				});
+
+				// Convert messages to Anthropic format if needed
+				const anthropicMessages = isAnthropicModel
+					? {
+							messages: body.messages.map((msg) => ({
+								role: msg.role === 'user' ? 'user' : 'assistant',
+								content: msg.content,
+							})),
+							model: body.model,
+							stream: isStreaming,
+							temperature: body.temperature,
+							max_tokens: 8192,
+					  }
+					: null;
 
 				if (isStreaming) {
 					const { readable, writable } = new TransformStream();
@@ -120,44 +209,104 @@ export default {
 					ctx.waitUntil(
 						(async () => {
 							try {
-								const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-									method: 'POST',
-									headers: {
-										Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-										'Content-Type': 'application/json',
-									},
-									body: JSON.stringify(body),
-								});
+								if (isAnthropicModel) {
+									const anthropic = new Anthropic({
+										apiKey: env.ANTHROPIC_API_KEY,
+									});
 
-								if (!openaiResponse.ok) {
-									const errorData = await openaiResponse.json();
-									throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
-								}
+									try {
+										const stream = await anthropic.messages.create({
+											messages: body.messages.map((msg) => ({
+												role: msg.role === 'user' ? 'user' : 'assistant',
+												content: msg.content,
+											})),
+											model: body.model,
+											stream: true,
+											max_tokens: 4096,
+										});
 
-								const reader = openaiResponse.body?.getReader();
-								if (!reader) {
-									throw new Error('Failed to get reader from OpenAI response');
-								}
+										for await (const chunk of stream) {
+											if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
+												const openaiChunk = {
+													choices: [
+														{
+															delta: {
+																content: chunk.delta.text,
+															},
+														},
+													],
+												};
+												await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
+											}
+										}
 
-								while (true) {
-									const { done, value } = await reader.read();
-									if (done) break;
-									await writer.write(value);
+										await writer.write(new TextEncoder().encode('data: [DONE]\n\n'));
+									} catch (error) {
+										console.error('Error in Anthropic stream:', error);
+										throw error;
+									}
+								} else if (isGeminiModel) {
+									const apiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+										method: 'POST',
+										headers: {
+											Authorization: `Bearer ${env.GEMINI_API_KEY}`,
+											'Content-Type': 'application/json',
+										},
+										body: JSON.stringify(body),
+									});
+
+									if (!apiResponse.ok) {
+										const errorData = await apiResponse.json();
+										throw new Error(`API error: ${JSON.stringify(errorData)}`);
+									}
+
+									const reader = apiResponse.body?.getReader();
+									if (!reader) {
+										throw new Error('Failed to get reader from API response');
+									}
+
+									while (true) {
+										const { done, value } = await reader.read();
+										if (done) break;
+										await writer.write(value);
+									}
+								} else {
+									// Original OpenAI format - keep the fetch call only for OpenAI
+									const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+										method: 'POST',
+										headers: {
+											Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+											'Content-Type': 'application/json',
+										},
+										body: JSON.stringify(body),
+									});
+
+									if (!apiResponse.ok) {
+										const errorData = await apiResponse.json();
+										throw new Error(`API error: ${JSON.stringify(errorData)}`);
+									}
+
+									const reader = apiResponse.body?.getReader();
+									if (!reader) {
+										throw new Error('Failed to get reader from API response');
+									}
+
+									while (true) {
+										const { done, value } = await reader.read();
+										if (done) break;
+										await writer.write(value);
+									}
 								}
 
 								generation.end({
 									completionStartTime: new Date(),
 									output: 'Streaming response completed',
-									endTime: new Date(),
-									status: 'success',
 								});
-							} catch (error) {
-								console.error('Error in OpenAI stream:', error);
+							} catch (error: any) {
+								console.error('Error in API stream:', error);
 								generation.end({
 									completionStartTime: new Date(),
-									completion: error.message,
-									endTime: new Date(),
-									status: 'error',
+									output: error.message,
 								});
 								await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
 							} finally {
@@ -177,42 +326,69 @@ export default {
 				} else {
 					// Non-streaming response
 					try {
-						const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-							method: 'POST',
-							headers: {
-								Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(body),
-						});
+						const apiResponse = await fetch(
+							isAnthropicModel
+								? 'https://api.anthropic.com/v1/messages'
+								: isGeminiModel
+								? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+								: 'https://api.openai.com/v1/chat/completions',
+							{
+								method: 'POST',
+								headers: {
+									...(isAnthropicModel
+										? {
+												'x-api-key': env.ANTHROPIC_API_KEY,
+												'anthropic-version': '2023-06-01',
+										  }
+										: isGeminiModel
+										? {
+												Authorization: `Bearer ${env.GEMINI_API_KEY}`,
+										  }
+										: {
+												Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+										  }),
+									'Content-Type': 'application/json',
+								},
+								body: JSON.stringify(isAnthropicModel ? anthropicMessages : body),
+							}
+						);
 
-						if (!openaiResponse.ok) {
-							const errorData = await openaiResponse.json();
-							throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`);
+						if (!apiResponse.ok) {
+							const errorData = await apiResponse.json();
+							throw new Error(`API error: ${JSON.stringify(errorData)}`);
 						}
 
-						const data = await openaiResponse.json();
+						const data = (await apiResponse.json()) as { choices: { message: { content: string } }[] };
+
+						// Normalize Anthropic response to match OpenAI format
+						const normalizedResponse = isAnthropicModel
+							? {
+									choices: [
+										{
+											message: {
+												content: data.choices[0].message.content,
+											},
+										},
+									],
+							  }
+							: data;
 
 						generation.end({
 							completionStartTime: new Date(),
-							output: data.choices[0]?.message?.content,
-							endTime: new Date(),
-							status: 'success',
+							output: normalizedResponse.choices[0]?.message?.content,
 						});
 
-						return new Response(JSON.stringify(data), {
+						return new Response(JSON.stringify(normalizedResponse), {
 							headers: {
 								...corsHeaders,
 								'Content-Type': 'application/json',
 							},
 						});
-					} catch (error) {
-						console.error('Error in OpenAI request:', error);
+					} catch (error: any) {
+						console.error('Error in API request:', error);
 						generation.end({
 							completionStartTime: new Date(),
-							completion: error.message,
-							endTime: new Date(),
-							status: 'error',
+							output: error.message,
 						});
 						return new Response(JSON.stringify({ error: error.message }), {
 							status: 500,
@@ -225,32 +401,23 @@ export default {
 				}
 			}
 
-			if (path === '/v1/transcribe' && request.method === 'POST') {
-				const formData = await request.formData();
-				const audioFile = formData.get('audio') as File;
-				const languages = formData.get('languages')?.toString().split(',') || [];
-
-				if (!audioFile) {
-					return new Response(JSON.stringify({ error: 'no audio file provided' }), {
-						status: 400,
-						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
-						},
-					});
-				}
-
+			if (path === '/v1/listen' && request.method === 'POST') {
+				// Get the raw body instead of form data
+				const audioBuffer = await request.arrayBuffer();
+				const languages = request.headers.get('detect_language')?.split(',') || [];
+				const sampleRate = request.headers.get('sample_rate') || '16000';
 				try {
 					const deepgramResponse = await fetch(
-						'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true' +
+						'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&sample_rate=' +
+							sampleRate +
 							(languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
 						{
 							method: 'POST',
 							headers: {
 								Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-								'Content-Type': audioFile.type,
+								'Content-Type': 'audio/wav', // Set correct content type
 							},
-							body: await audioFile.arrayBuffer(),
+							body: audioBuffer,
 						}
 					);
 
@@ -266,15 +433,21 @@ export default {
 							'Content-Type': 'application/json',
 						},
 					});
-				} catch (error) {
+				} catch (error: any) {
 					console.error('Error in Deepgram request:', error);
-					return new Response(JSON.stringify({ error: error.message }), {
-						status: 500,
-						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
-						},
-					});
+					return new Response(
+						JSON.stringify({
+							error: error.message,
+							details: error.stack,
+						}),
+						{
+							status: 500,
+							headers: {
+								...corsHeaders,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
 				}
 			}
 
@@ -300,6 +473,9 @@ interface Env {
 	LANGFUSE_SECRET_KEY: string;
 	ANTHROPIC_API_KEY: string;
 	DEEPGRAM_API_KEY: string;
+	RATE_LIMITER: DurableObjectNamespace;
+	CLERK_SECRET_KEY: string;
+	GEMINI_API_KEY: string;
 }
 
 /*
@@ -310,17 +486,22 @@ wrangler dev
 
 
 terminal 2
+HOST=https://ai-proxy.i-f9f.workers.dev
+HOST=http://localhost:8787
+TOKEN=foobar (check app settings)
 
-curl http://localhost:8787/test
-
-curl -X POST http://localhost:8787/v1/transcribe \
-  -F "audio=@./screenpipe-audio/test_data/poetic_kapil_gupta.wav" \
-  -F "languages=en,fr"
+curl $host/test
 
 
-curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
+curl -X POST $HOST/v1/listen \
+  -H "Content-Type: audio/wav" \
+  -H "detect_language: en" \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-binary "@./screenpipe-audio/test_data/poetic_kapil_gupta.wav"
+
+curl -X POST $HOST/v1/chat/completions \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_API_KEY" \
+-H "Authorization: Bearer $TOKEN" \
 -d '{
 "model": "gpt-4o",
 "messages": [
@@ -337,4 +518,63 @@ curl -X POST https://ai-proxy.i-f9f.workers.dev/v1/chat/completions \
 }' | while read -r line; do
 echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
 done | tr -d '\n'
+
+using anthropic
+
+curl -X POST $HOST/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $TOKEN" \
+-d '{
+"model": "claude-3-5-sonnet-20240620",
+"messages": [
+	{
+	"role": "system",
+	"content": "You are a helpful assistant."
+	},
+	{
+	"role": "user",
+	"content": "Tell me a short joke."
+	}
+],
+"stream": true
+}' | while read -r line; do
+echo "$line" | sed 's/^data: //g' | jq -r '.choices[0].delta.content // empty' 2>/dev/null
+done | tr -d '\n'
+
+using gemini
+
+curl -X POST $HOST/v1/chat/completions \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer $TOKEN" \
+-d '{
+"model": "gemini-1.5-flash-latest",
+"stream": true,
+"messages": [
+    {
+        "role": "system",
+        "content": "You are a helpful assistant."
+    },
+    {
+        "role": "user",
+        "content": "Tell me a short joke."
+    }
+]
+}'
+
+deployment
+
+wrangler deploy
+
+rate limit testing
+
+# test openai endpoint (should hit limit faster)
+for i in {1..25}; do
+  echo "Request $i"
+  curl -X POST "$HOST/v1/chat/completions" \
+    -H "Content-Type: application/json" \
+    -d '{"model":"gpt-4","messages":[{"role":"user","content":"hi"}]}' \
+    -w "\nStatus: %{http_code}\n"
+  sleep 0.1
+done
+
 */

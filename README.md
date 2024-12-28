@@ -13,8 +13,8 @@
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">one API to get all user desktop data  (local, cross platform, 24/7, screen, voice, keyboard, mouse, camera recording)</p>
-   <p align="center">sandboxed js plugin system. keyboard and mouse control</p>
+   <p align="center">build ai agents that have the full context</p>
+   <p align="center">open source | runs locally | developer friendly | 24/7 screen, mic, keyboard recording and control</p>
 </p>
 
 <!-- Slogan -->
@@ -50,6 +50,13 @@
 
 <p align="center">
    
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
+<img width="1312" alt="Screenshot 2024-12-16 at 2 39 32 PM" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
+
+<img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/08f1d8bd-803e-4cc5-8b8f-ad33bfebfd7e" />
+
+
 
 
 
@@ -70,23 +77,27 @@
 
 # how it works?
 
-we are shipping daily, make suggestions, post bugs, [give feedback](mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=I'd%20like%20to%20use%20Screenpipe%20for%20...%0D%0A%0D%0AI%20cannot%20because%20of%20...%0D%0A%0D%0AWe%20can%20also%20have%20a%20call,%20book%20at%20https://cal.com/louis030195/screenpipe).
+- we record everything 24/7, 100% locally
+- we index it into an api
+- dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
-![diagram](./content/diagram2.png)
+<img src="./content/diagram2.png" width="800" />
 
-![image](https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91)
+<img src="https://github.com/user-attachments/assets/da5b8583-550f-4a1f-b211-058e7869bc91" width="400" />
+
 
 
 # why?
 
-every second you are not recording is a missing context for AGI
+1. data is the biggest bottleneck in AI right now
+2. every second you are not recording is a missing context for AGI
 
 ## get started
 
 macos, linux:
 
 ```bash
-brew install screenpipe
+curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
 ```
 
 or on windows
@@ -101,6 +112,8 @@ then
 screenpipe
 ```
 
+make sure to allow permissions on macos (screen, mic)
+
 - [get the desktop app](https://screenpi.pe/)
 - [docs & build from source](https://docs.screenpi.pe/docs/getting-started)
 
@@ -110,7 +123,7 @@ screenpipe
 bunx @screenpipe/create-pipe@latest
 ```
 
-screenpipe has a plugin system called "pipe" which lets you run code in a sandboxed environment within the Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
+screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
 ## other examples
 

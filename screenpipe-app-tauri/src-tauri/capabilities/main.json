@@ -2,7 +2,9 @@
   "identifier": "migrated",
   "description": "permissions that were migrated from v1",
   "local": true,
-  "windows": ["main", "timeline", "search", "meetings", "identify-speakers"],
+  "windows": [
+    "*"
+  ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
@@ -15,11 +17,6 @@
     "core:tray:default",
     "shell:default",
     "store:default",
-    "store:allow-create-store",
-    "store:allow-get",
-    "store:allow-set",
-    "store:allow-save",
-    "store:allow-load",
     "shell:allow-open",
     "fs:allow-watch",
     "fs:allow-open",
@@ -131,7 +128,11 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["pipe", "purge", "-y"],
+          "args": [
+            "pipe",
+            "purge",
+            "-y"
+          ],
           "sidecar": true
         }
       ]
@@ -142,7 +143,9 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["setup"],
+          "args": [
+            "setup"
+          ],
           "sidecar": true
         }
       ]
@@ -153,7 +156,9 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": ["migrate"],
+          "args": [
+            "migrate"
+          ],
           "sidecar": true
         }
       ]
@@ -164,7 +169,9 @@
         {
           "name": "ollama",
           "cmd": "ollama",
-          "args": ["serve"],
+          "args": [
+            "serve"
+          ],
           "sidecar": true
         }
       ]
@@ -196,14 +203,19 @@
     "os:allow-os-type",
     "core:path:default",
     "process:default",
-    "store:default",
+    "core:webview:allow-internal-toggle-devtools",
     {
       "identifier": "shell:allow-execute",
       "allow": [
         {
           "name": "screenpipe-pipe-list",
           "cmd": "screenpipe",
-          "args": ["pipe", "list", "--output", "json"],
+          "args": [
+            "pipe",
+            "list",
+            "--output",
+            "json"
+          ],
           "sidecar": true
         }
       ]
@@ -317,6 +329,36 @@
           "sidecar": true
         }
       ]
-    }
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "http://**/*",
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        {
+          "url": "https://**/*",
+          "methods": [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "PATCH",
+            "HEAD",
+            "OPTIONS"
+          ]
+        }
+      ]
+    },
+    "deep-link:default"
   ]
 }

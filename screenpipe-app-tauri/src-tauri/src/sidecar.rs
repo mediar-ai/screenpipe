@@ -1,6 +1,6 @@
 use crate::{get_base_dir, SidecarState};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -8,10 +8,71 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::Store;
 use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserCredits {
+    #[serde(rename = "user.credits.amount")]
+    pub amount: i64,
+    #[serde(rename = "user.credits.created_at", default)]
+    pub created_at: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    #[serde(rename = "user.id", default)]
+    pub id: Option<String>,
+    #[serde(rename = "user.email", default)]
+    pub email: Option<String>,
+    #[serde(rename = "user.name", default)]
+    pub name: Option<String>,
+    #[serde(rename = "user.image", default)]
+    pub image: Option<String>,
+    #[serde(rename = "user.token", default)]
+    pub token: Option<String>,
+    #[serde(rename = "user.clerk_id", default)]
+    pub clerk_id: Option<String>,
+    #[serde(default)]
+    pub credits: Option<UserCredits>,
+}
+
+impl User {
+    pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
+        Self {
+            id: store
+                .get("user.id")
+                .and_then(|v| v.as_str().map(String::from)),
+            email: store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from)),
+            name: store
+                .get("user.name")
+                .and_then(|v| v.as_str().map(String::from)),
+            image: store
+                .get("user.image")
+                .and_then(|v| v.as_str().map(String::from)),
+            token: store
+                .get("user.token")
+                .and_then(|v| v.as_str().map(String::from)),
+            clerk_id: store
+                .get("user.clerk_id")
+                .and_then(|v| v.as_str().map(String::from)),
+            credits: Some(UserCredits {
+                amount: store
+                    .get("user.credits.amount")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0),
+                created_at: store
+                    .get("user.credits.created_at")
+                    .and_then(|v| v.as_str().map(String::from)),
+            }),
+        }
+    }
+}
 
 #[tauri::command]
 pub async fn kill_all_sreenpipes(
@@ -85,7 +146,7 @@ pub async fn spawn_screenpipe(
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
     let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(&app.clone(), path).build();
+    let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
 
     let audio_transcription_engine = store
         .get("audioTranscriptionEngine")
@@ -186,6 +247,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
+    let user = User::from_store(&store);
+
+    println!("user: {:?}", user);
     println!("audio_chunk_duration: {}", audio_chunk_duration);
 
     let port_str = port.to_string();
@@ -198,7 +262,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if audio_transcription_engine != "default" {
         args.push("--audio-transcription-engine");
-        let model = audio_transcription_engine.as_str();
+        let model = if audio_transcription_engine == "screenpipe-cloud" {
+            "deepgram"
+        } else {
+            audio_transcription_engine.as_str()
+        };
         args.push(model);
     }
 
@@ -291,34 +359,35 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
-
     if data_dir != "default" && data_dir != "" {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
 
-    // Add exe directory path before the Windows-specific block
-    let exe_dir = env::current_exe()
-        .expect("Failed to get current executable path")
-        .parent()
-        .expect("Failed to get parent directory of executable")
-        .to_path_buf();
+    args.push("--debug");
+
 
 
     if cfg!(windows) {
-
-        let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()
             .sidecar("screenpipe")
-            .unwrap()
-            .env("TESSDATA_PREFIX", tessdata_path);
-
+            .unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
-
+        // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
+        if user.credits.is_some() {
+            c = c.env(
+                "DEEPGRAM_API_URL",
+                "https://ai-proxy.i-f9f.workers.dev/v1/listen",
+            );
+            // Add token if screenpipe-cloud is selected and user has a token
+            if user.token.is_some() {
+                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+            }
+        }
 
         let c = c.args(&args);
 
@@ -332,15 +401,27 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         return Ok(child);
     }
 
-    let mut command = app.shell().sidecar("screenpipe").unwrap();
+    let mut c = app.shell().sidecar("screenpipe").unwrap();
 
     if use_chinese_mirror {
-        command = command.env("HF_ENDPOINT", "https://hf-mirror.com");
+        c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
     }
 
-    let command = command.args(&args);
+    // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
+    if user.credits.is_some() {
+        c = c.env(
+            "DEEPGRAM_API_URL",
+            "https://ai-proxy.i-f9f.workers.dev/v1/listen",
+        );
+        // Add token if screenpipe-cloud is selected and user has a token
+        if user.token.is_some() {
+            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+        }
+    }
 
-    let result = command.spawn();
+    let c = c.args(&args);
+
+    let result = c.spawn();
     if let Err(e) = result {
         error!("Failed to spawn sidecar: {}", e);
         return Err(e.to_string());
@@ -438,7 +519,7 @@ impl SidecarManager {
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
         let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(&app.clone(), path).build();
+        let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
 
         let restart_interval = store
             .get("restartInterval")

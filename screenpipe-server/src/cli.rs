@@ -105,7 +105,7 @@ pub struct Cli {
     /// Optimise based on your needs.
     /// Your screen rarely change more than 1 times within a second, right?
     #[cfg_attr(not(target_os = "macos"), arg(short, long, default_value_t = 1.0))]
-    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.2))] 
+    #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
     /// Audio chunk duration in seconds
@@ -135,10 +135,6 @@ pub struct Cli {
     /// Enable debug logging for screenpipe modules
     #[arg(long)]
     pub debug: bool,
-
-    /// Save text files
-    #[arg(long, default_value_t = false)]
-    pub save_text_files: bool,
 
     /// Audio transcription engine to use.
     /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
@@ -238,6 +234,10 @@ pub struct Cli {
     /// Enable experimental video frame cache (may increase CPU usage) - makes timeline UI available, frame streaming, etc.
     #[arg(long, default_value_t = false)]
     pub enable_frame_cache: bool,
+
+    /// Capture windows that are not focused (default: false)
+    #[arg(long, default_value_t = false)]
+    pub capture_unfocused_windows: bool,
 
     #[command(subcommand)]
     pub command: Option<Command>,

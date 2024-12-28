@@ -134,16 +134,6 @@ async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
-    if !is_local_ipv4_port_free(cli.port) {
-        error!(
-            "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
-        );
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::AddrInUse,
-            "Address in use",
-        ));
-    }
-
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -288,6 +278,13 @@ async fn main() -> anyhow::Result<()> {
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
+    }
+
+    if !is_local_ipv4_port_free(cli.port) {
+        error!(
+            "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
+        );
+        return Err(anyhow::anyhow!("port already in use"));
     }
 
     let all_audio_devices = list_audio_devices().await?;
@@ -447,7 +444,6 @@ async fn main() -> anyhow::Result<()> {
                     vision_control_clone.clone(),
                     audio_devices_control.clone(),
                     cli.disable_audio,
-                    cli.save_text_files,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
                     monitor_ids_clone.clone(),
@@ -461,6 +457,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
+                    cli.capture_unfocused_windows,
                 );
 
                 let result = tokio::select! {
@@ -528,7 +525,7 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬───────────────────────────────────┐");
+    println!("┌─────────────────────┬────────────────────────────────────┐");
     println!("│ setting             │ value                              │");
     println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ fps                 │ {:<34} │", cli.fps);
@@ -543,7 +540,6 @@ async fn main() -> anyhow::Result<()> {
     println!("│ port                │ {:<34} │", cli.port);
     println!("│ audio disabled      │ {:<34} │", cli.disable_audio);
     println!("│ vision disabled     │ {:<34} │", cli.disable_vision);
-    println!("│ save text files     │ {:<34} │", cli.save_text_files);
     println!(
         "│ audio engine        │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
@@ -600,7 +596,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add languages section
-    println!("├─────────────────────┼───────────────────────────────────���┤");
+    println!("├─────────────────────┼────────────────────────────────────┤");
     println!("│ languages           │                                    │");
     const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
