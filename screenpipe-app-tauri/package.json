@@ -46,6 +46,7 @@
     "@tauri-apps/plugin-shell": "2.0.0",
     "@tauri-apps/plugin-store": "^2.2.0",
     "@tauri-apps/plugin-updater": "2.0.0",
+    "@xstate/react": "^5.0.1",
     "ansi-to-html": "^0.7.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -57,6 +58,7 @@
     "localforage": "^1.10.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.414.0",
+    "motion": "^11.15.0",
     "next": "14.2.4",
     "posthog-js": "^1.154.6",
     "react": "^18",
@@ -70,7 +72,8 @@
     "tailwindcss-animate": "^1.0.7",
     "tauri-plugin-store-api": "^0.0.0",
     "use-debounce": "^10.0.4",
-    "use-immer": "^0.11.0"
+    "use-immer": "^0.11.0",
+    "xstate": "^5.19.1"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",
