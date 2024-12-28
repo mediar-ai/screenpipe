@@ -1,5 +1,5 @@
 {
-  "name": "pipe-for-reddit-post",
+  "name": "reddit_auto_posts",
   "version": "0.1.0",
   "private": true,
   "scripts": {
