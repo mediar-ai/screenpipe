@@ -136,9 +136,9 @@ export function LLMChat({ data, className }: LLMChatProps) {
   const AGENT = {
     id: "description",
     name: "description generator",
-    description: "analyzes text and generate description for the video",
+    description: "analyzes the given text and generate description for the video.",
     systemPrompt:
-    "you analyze text which is raw information and provide comprehensive insights.",
+    "you can analyze text which is raw information about a video and provide comprehensive insights.",
   }
 
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
@@ -176,19 +176,22 @@ export function LLMChat({ data, className }: LLMChatProps) {
       });
       console.log("API settings", settings.openaiApiKey, settings.aiUrl);
 
+
+      // - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
       const model = settings.aiModel;
       const customPrompt = settings.customPrompt || "";
       const context = removeDuplicateLines(data.map(item => item.content.text))
       const messages = [
         {
-          role: "user" as const,
+          role: "system" as const,
           content: `You are a helpful assistant specialized as a "${ AGENT.name }". ${AGENT.systemPrompt }
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
             - User timezone offset: ${new Date().getTimezoneOffset()}
-            - a same lines can be repeat multiple time, you can ignore the duplicate lines
             - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
+            - A same lines can be repeat multiple times, you can ignore the duplicate lines
+            - You can ignore the context if user's question is differnet from context as an example user says "hi"
             `,
         },
         ...chatMessages.map((msg) => ({
@@ -214,9 +217,9 @@ export function LLMChat({ data, className }: LLMChatProps) {
         },
         {
           signal: abortControllerRef.current.signal,
-          headers: {
-            Authorization: `Bearer ${settings.user?.token}`,
-          },
+          // headers: {
+          //   Authorization: `Bearer ${settings.user?.token}`,
+          // },
         }
       );
 
