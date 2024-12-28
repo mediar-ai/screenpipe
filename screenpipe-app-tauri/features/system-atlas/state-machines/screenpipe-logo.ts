@@ -1,5 +1,5 @@
 import { ActorRefFrom, assign, sendParent, setup } from "xstate";
-import animationController from './animation-controller';
+import animationController from './actors/animation-controller';
 
 const screenpipeLogoMachine = setup({
     types:{
