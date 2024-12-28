@@ -173,16 +173,9 @@ const ShortcutSection = () => {
           <Switch
             checked={!!currentValue}
             disabled={typeof currentValue === "undefined"}
-            onCheckedChange={(checked) => {
+            onCheckedChange={async (checked) => {
               if (!checked) {
-                if (shortcut.startsWith("profile_")) {
-                  updateProfileShortcut({
-                    profile: shortcut.replace("profile_", ""),
-                    shortcut: "",
-                  });
-                } else {
-                  updateSettings({ [shortcut]: "" });
-                }
+                handleShortcutUpdate(shortcut, "");
               }
             }}
           />
@@ -197,10 +190,9 @@ const ShortcutSection = () => {
     if (success) {
       toast({
         title: "shortcut updated",
-        description: `${shortcut.replace(
-          /_/g,
-          " "
-        )} set to: ${parseKeyboardShortcut(keys)}`,
+        description: `${shortcut.replace(/_/g, " ")} ${
+          keys ? `set to: ${parseKeyboardShortcut(keys)}` : "unassigned"
+        }`,
       });
     } else {
       toast({
@@ -228,7 +220,6 @@ const ShortcutSection = () => {
       const profileName = shortcut.replace("profile_", "");
       return profileShortcuts[profileName];
     }
-    console.log(shortcut, "KEYYYY");
     return settings[shortcut as keyof Settings] as string;
   };
 
