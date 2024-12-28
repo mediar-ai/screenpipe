@@ -1,13 +1,17 @@
+
 #[allow(clippy::module_inception)]
 #[cfg(feature = "pipes")]
 mod pipes {
     use regex::Regex;
+    use std::collections::HashMap;
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
+    use tokio::sync::watch;
 
+    use reqwest::Client;
     use serde_json::Value;
 
     use anyhow::Result;
@@ -16,6 +20,7 @@ mod pipes {
     use std::path::Path;
     use tokio::io::{AsyncBufReadExt, BufReader};
     use tracing::{debug, error, info};
+    use url::Url;
     use which::which;
 
     // Add these imports at the top of the file
@@ -34,6 +39,19 @@ mod pipes {
 
     #[cfg(target_os = "windows")]
     use powershell_script::PsScriptBuilder;
+
+    pub struct CronHandle {
+        shutdown: watch::Sender<bool>,
+    }
+
+    impl CronHandle {
+        pub fn stop(&self) {
+            let _ = self.shutdown.send(true);
+        }
+    }
+
+    static CRON_HANDLES: Lazy<tokio::sync::Mutex<HashMap<String, Vec<CronHandle>>>> =
+        Lazy::new(|| tokio::sync::Mutex::new(HashMap::new()));
 
     // Add this function to generate a secure cron secret
     fn generate_cron_secret() -> String {
@@ -61,9 +79,28 @@ mod pipes {
         let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
+        let package_json_path = pipe_dir.join("package.json");
+
+        debug!(
+            "checking if pipe is a next.js project at: {:?}",
+            package_json_path
+        );
+
+        // First check if it's a Next.js project by looking at package.json
+        let is_nextjs = if package_json_path.exists() {
+            debug!("found package.json, checking for next.js dependency");
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            let has_next = package_data["dependencies"].get("next").is_some();
+            debug!("is next.js project: {}", has_next);
+            has_next
+        } else {
+            false
+        };
 
         // Check if pipe is still enabled
         if pipe_json_path.exists() {
+            debug!("checking if pipe is enabled from: {:?}", pipe_json_path);
             let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
             let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
@@ -75,9 +112,11 @@ mod pipes {
                 debug!("pipe {} is disabled, stopping", pipe);
                 anyhow::bail!("pipe is disabled");
             }
+            debug!("pipe {} is enabled, continuing", pipe);
         }
 
         // Prepare environment variables
+        debug!("preparing environment variables for pipe: {}", pipe);
         let mut env_vars = std::env::vars().collect::<Vec<(String, String)>>();
         env_vars.push((
             "SCREENPIPE_DIR".to_string(),
@@ -89,24 +128,40 @@ mod pipes {
             pipe_dir.to_str().unwrap().to_string(),
         ));
 
-        if pipe_json_path.exists() {
-            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
-            let pipe_config: Value = serde_json::from_str(&pipe_json)?;
+        if is_nextjs {
+            debug!(
+                "setting up next.js specific configuration for pipe: {}",
+                pipe
+            );
+            // Handle Next.js specific setup including crons
+            if pipe_json_path.exists() {
+                debug!("reading pipe.json for next.js configuration");
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
-            if pipe_config["is_nextjs"] == json!(true) {
+                // Update pipe.json with the port
+                let port = pick_unused_port().expect("No ports free");
+                debug!("picked unused port {} for next.js pipe", port);
+                let mut updated_config = pipe_config.clone();
+                updated_config["port"] = json!(port);
+                let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
+                let mut file = File::create(&pipe_json_path).await?;
+                file.write_all(updated_pipe_json.as_bytes()).await?;
+                debug!("updated pipe.json with port configuration");
+
+                env_vars.push(("PORT".to_string(), port.to_string()));
+
                 // Handle cron jobs if they exist
                 if let Some(crons) = pipe_config.get("crons").and_then(Value::as_array) {
-                    let port = pipe_config["port"].as_u64().unwrap_or(3000) as u16;
+                    debug!("found {} cron jobs in configuration", crons.len());
                     let base_url = format!("http://localhost:{}", port);
+                    debug!("using base url: {} for cron jobs", base_url);
 
-                    // Generate a CRON_SECRET if not exists
                     let cron_secret = generate_cron_secret();
-
-                    // Add CRON_SECRET to environment variables
+                    debug!("generated cron secret for pipe: {}", pipe);
                     env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
 
-                    // Clone the crons array before the loop
-                    let crons = crons.to_vec();
+                    let mut handles = Vec::new();
 
                     for cron in crons {
                         let path = cron["path"]
@@ -118,13 +173,14 @@ mod pipes {
                             .ok_or_else(|| anyhow::anyhow!("missing schedule"))?
                             .to_string();
 
-                        // Validate cron expression
-                        cron::Schedule::from_str(&schedule)
-                            .map_err(|e| anyhow::anyhow!("invalid cron: {}", e))?;
+                        let (tx, rx) = watch::channel(false);
+                        let handle = CronHandle { shutdown: tx };
+                        handles.push(handle);
 
                         let base_url = base_url.clone();
                         let pipe_clone = pipe.to_string();
                         let secret_clone = cron_secret.clone();
+                        let screenpipe_dir = screenpipe_dir.clone();
 
                         tokio::spawn(async move {
                             run_cron_schedule(
@@ -133,14 +189,19 @@ mod pipes {
                                 &path,
                                 &secret_clone,
                                 &schedule,
+                                &screenpipe_dir,
+                                rx,
                             )
                             .await;
                         });
                     }
+
+                    // Store handles for later cleanup
+                    CRON_HANDLES.lock().await.insert(pipe.to_string(), handles);
                 }
 
                 // Install dependencies using bun
-                info!("installing dependencies for next.js pipe");
+                info!("installing dependencies for next.js pipe [{}]", pipe);
                 let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
@@ -154,42 +215,43 @@ mod pipes {
                     );
                     anyhow::bail!("failed to install dependencies for next.js pipe");
                 }
-
+                debug!("successfully installed dependencies for next.js pipe");
+            } else {
                 let port = pick_unused_port().expect("No ports free");
-
-                // Update pipe.json with the port
-                let mut updated_config = pipe_config.clone();
-                updated_config["port"] = json!(port);
-                let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
-                let mut file = File::create(&pipe_json_path).await?;
-                file.write_all(updated_pipe_json.as_bytes()).await?;
-
+                debug!("no pipe.json found, using port {} for next.js pipe", port);
                 env_vars.push(("PORT".to_string(), port.to_string()));
-
-                // Run the Next.js project with bun
-                let mut child = Command::new(&bun_path)
-                    .arg("run")
-                    .arg("dev")
-                    .arg("--port")
-                    .arg(port.to_string())
-                    .current_dir(&pipe_dir)
-                    .envs(env_vars)
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()?;
-
-                // Stream logs
-                stream_logs(pipe, &mut child).await?;
-
-                return Ok(child);
             }
+
+            // Run the Next.js project with bun
+            debug!("starting next.js project with bun dev command");
+            let mut child = Command::new(&bun_path)
+                .arg("run")
+                .arg("dev")
+                .arg("--port")
+                .arg(
+                    env_vars
+                        .iter()
+                        .find(|(k, _)| k == "PORT")
+                        .map(|(_, v)| v)
+                        .unwrap()
+                        .clone(),
+                )
+                .current_dir(&pipe_dir)
+                .envs(env_vars)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+
+            debug!("streaming logs for next.js pipe");
+            stream_logs(pipe, &mut child).await?;
+
+            return Ok(child);
         }
 
-        // If it's not a Next.js project, run the pipe as before
+        // If it's not a Next.js project, run as regular pipe
         let main_module = find_pipe_file(&pipe_dir)?;
         info!("executing pipe: {:?}", main_module);
 
-        // Add PIPE_FILE to environment variables for non-Next.js pipes
         env_vars.push((
             "PIPE_FILE".to_string(),
             main_module.to_str().unwrap().to_string(),
@@ -203,7 +265,7 @@ mod pipes {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
-        // Stream logs - don't block the main thread
+        // Stream logs
         stream_logs(pipe, &mut child).await?;
 
         Ok(child)
@@ -240,9 +302,12 @@ mod pipes {
                     "Webpack is configured",
                     "See instructions",
                     "https://nextjs.org",
+                    "⚠ See instructions",
                 ];
 
-                if info_patterns.iter().any(|pattern| line.contains(pattern)) {
+                if info_patterns.iter().any(|pattern| line.contains(pattern))
+                    || line.trim().is_empty()
+                {
                     info!("[{}] {}", pipe_clone, line);
                 } else {
                     error!("[{}] {}", pipe_clone, line);
@@ -250,7 +315,7 @@ mod pipes {
             }
         });
 
-        info!("pipe execution completed successfully");
+        info!("pipe execution completed successfully [{}]", pipe);
         Ok(())
     }
 
@@ -395,116 +460,251 @@ mod pipes {
         Ok(())
     }
 
+    // Add this helper function for retrying installations
+    async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Result<()> {
+        let mut attempt = 0;
+        let mut last_error = None;
+
+        while attempt < max_retries {
+            let mut install_child = Command::new(bun_path)
+                .arg("i")
+                .current_dir(dest_dir)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+
+            // Stream logs for npm install
+            if let Ok(()) = stream_logs("bun install", &mut install_child).await {
+                let status = install_child.wait().await?;
+                if status.success() {
+                    return Ok(());
+                }
+            }
+
+            attempt += 1;
+            let delay = std::time::Duration::from_secs(2u64.pow(attempt)); // exponential backoff
+            error!(
+                "install attempt {} failed, retrying in {} seconds",
+                attempt,
+                delay.as_secs()
+            );
+            tokio::time::sleep(delay).await;
+            last_error = Some(anyhow::anyhow!(
+                "installation failed after {} attempts",
+                attempt
+            ));
+        }
+
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("installation failed")))
+    }
+
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
         ensure_git_installed().await?;
+        info!("Processing pipe from source: {}", source);
 
         let source = source.trim();
-
-        // Handle local path
-        if let Ok(local_path) = PathBuf::from(source).canonicalize() {
+        let pipe_name = if let Ok(local_path) = PathBuf::from(source).canonicalize() {
             if local_path.is_dir() {
-                let pipe_name = sanitize_pipe_name(
+                sanitize_pipe_name(
                     local_path
                         .file_name()
                         .unwrap_or_default()
                         .to_str()
                         .unwrap_or_default(),
-                );
-                let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
-                let temp_dir = dest_dir.with_extension("_temp");
-
-                // Copy to temp location first
-                tokio::fs::create_dir_all(&temp_dir).await?;
-                copy_dir_all(&local_path, &temp_dir).await?;
-
-                // Move to final location
-                if dest_dir.exists() {
-                    tokio::fs::remove_dir_all(&dest_dir).await?;
-                }
-                tokio::fs::rename(&temp_dir, &dest_dir).await?;
-
-                return Ok(dest_dir);
+                )
+            } else {
+                sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap())
             }
-        }
-
-        // Rest of the GitHub URL handling code...
-        let parsed_url = url::Url::parse(source)?;
-        let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-
-        // Extract repo URL and subdirectory path
-        let (repo_url, subdir_path) = if path_segments.contains(&"tree") {
-            let tree_index = path_segments.iter().position(|&s| s == "tree").unwrap();
-            let repo = format!("{}/{}", path_segments[0], path_segments[1]);
-            let subdir = path_segments[tree_index + 2..].join("/");
-            (format!("https://github.com/{}", repo), subdir)
         } else {
-            (source.to_string(), String::new())
+            // Handle GitHub URL
+            let parsed_url = url::Url::parse(source)?;
+            let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
+            let subdir_path = if path_segments.contains(&"tree") {
+                let tree_index = path_segments.iter().position(|&s| s == "tree").unwrap();
+                path_segments[tree_index + 2..].join("/")
+            } else {
+                String::new()
+            };
+            sanitize_pipe_name(
+                Path::new(&subdir_path)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            )
         };
 
-        println!("cloning from repo url: {}", repo_url);
-        println!("subdirectory path: {}", subdir_path);
-
-        let pipe_name = sanitize_pipe_name(
-            Path::new(&subdir_path)
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap(),
-        );
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        debug!("Destination directory: {:?}", dest_dir);
+
+        // Save existing pipe.json content before downloading
+        let pipe_json_path = dest_dir.join("pipe.json");
+        let existing_config = if pipe_json_path.exists() {
+            debug!("Existing pipe.json found");
+            let content = tokio::fs::read_to_string(&pipe_json_path).await?;
+            Some(serde_json::from_str::<Value>(&content)?)
+        } else {
+            debug!("No existing pipe.json found");
+            None
+        };
+
+        // Create temp directory for download
         let temp_dir = dest_dir.with_extension("_temp");
 
-        // Clone with optimizations to only get what we need
-        let temp_repo_dir = temp_dir.with_extension("_full_repo");
+        // Download/copy to temp directory first
+        if let Ok(local_path) = PathBuf::from(source).canonicalize() {
+            if local_path.is_dir() {
+                debug!("Source is a local path");
+                tokio::fs::create_dir_all(&temp_dir).await?;
+                copy_dir_all(&local_path, &temp_dir).await?;
+            }
+        } else {
+            debug!("Source is a URL, using git sparse checkout");
+            let parsed_url = url::Url::parse(source)?;
+            let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
 
-        // First init and set up sparse checkout
-        let status = Command::new("git")
-            .args(&[
-                "clone",
-                "--filter=blob:none", // Only get metadata
-                "--sparse",           // Enable sparse checkout
-                "--depth=1",          // Shallow clone
-                &repo_url,
-                temp_repo_dir.to_str().unwrap(),
-            ])
-            .status()
-            .await?;
+            // Extract repo URL and subdirectory path
+            let (repo_url, subdir_path) = if path_segments.contains(&"tree") {
+                let tree_index = path_segments.iter().position(|&s| s == "tree").unwrap();
+                let repo = format!("{}/{}", path_segments[0], path_segments[1]);
+                let subdir = path_segments[tree_index + 2..].join("/");
+                (format!("https://github.com/{}", repo), subdir)
+            } else {
+                (source.to_string(), String::new())
+            };
 
-        if !status.success() {
-            anyhow::bail!(
-                "git clone failed with status code: {}",
-                status.code().unwrap_or(0)
-            );
+            let temp_repo_dir = temp_dir.with_extension("_full_repo");
+
+            // Git sparse checkout process
+            let status = Command::new("git")
+                .args(&[
+                    "clone",
+                    "--filter=blob:none",
+                    "--sparse",
+                    "--depth=1",
+                    &repo_url,
+                    temp_repo_dir.to_str().unwrap(),
+                ])
+                .status()
+                .await?;
+
+            if !status.success() {
+                anyhow::bail!(
+                    "git clone failed with status code: {}",
+                    status.code().unwrap_or(0)
+                );
+            }
+
+            let status = Command::new("git")
+                .current_dir(&temp_repo_dir)
+                .args(&["sparse-checkout", "set", &subdir_path])
+                .status()
+                .await?;
+
+            if !status.success() {
+                anyhow::bail!(
+                    "git sparse-checkout failed with status code: {}",
+                    status.code().unwrap_or(0)
+                );
+            }
+
+            // Move only the specific subdirectory to temp location
+            let source_dir = temp_repo_dir.join(&subdir_path);
+            tokio::fs::create_dir_all(&temp_dir).await?;
+            tokio::fs::rename(&source_dir, &temp_dir).await?;
+
+            // Cleanup the full repo
+            tokio::fs::remove_dir_all(&temp_repo_dir).await?;
         }
 
-        // Set up sparse-checkout for the specific subdirectory
-        let status = Command::new("git")
-            .current_dir(&temp_repo_dir)
-            .args(&["sparse-checkout", "set", &subdir_path])
-            .status()
-            .await?;
-
-        if !status.success() {
-            anyhow::bail!(
-                "git sparse-checkout failed with status code: {}",
-                status.code().unwrap_or(0)
-            );
-        }
-
-        // Move only the specific subdirectory to the final temp location
-        let source_dir = temp_repo_dir.join(&subdir_path);
-        tokio::fs::create_dir_all(&temp_dir).await?;
-        tokio::fs::rename(&source_dir, &temp_dir).await?;
-
-        // Cleanup the full repo
-        tokio::fs::remove_dir_all(&temp_repo_dir).await?;
-
-        // Move to final location
+        // If download successful, move temp dir to final location
         if dest_dir.exists() {
             tokio::fs::remove_dir_all(&dest_dir).await?;
         }
         tokio::fs::rename(&temp_dir, &dest_dir).await?;
 
+        // Restore or merge pipe.json if needed
+        if let Some(ref existing_config) = existing_config {
+            let new_config_path = dest_dir.join("pipe.json");
+            if new_config_path.exists() {
+                let content = tokio::fs::read_to_string(&new_config_path).await?;
+                let new_json: Value = serde_json::from_str(&content)?;
+
+                // Create merged config
+                let mut merged_config = new_json.clone();
+
+                if let (Some(existing_obj), Some(new_obj)) =
+                    (existing_config.as_object(), merged_config.as_object_mut())
+                {
+                    // Copy over non-fields properties
+                    for (key, value) in existing_obj {
+                        if key != "fields" {
+                            new_obj.insert(key.clone(), value.clone());
+                        }
+                    }
+
+                    // Preserve user values in fields array
+                    if let (Some(existing_fields), Some(new_fields)) = (
+                        existing_config["fields"].as_array(),
+                        new_obj.get_mut("fields").and_then(|f| f.as_array_mut()),
+                    ) {
+                        for new_field in new_fields {
+                            if let Some(name) = new_field.get("name").and_then(Value::as_str) {
+                                if let Some(existing_field) = existing_fields
+                                    .iter()
+                                    .find(|f| f.get("name").and_then(Value::as_str) == Some(name))
+                                {
+                                    if let Some(user_value) = existing_field.get("value") {
+                                        if let Some(new_field_obj) = new_field.as_object_mut() {
+                                            new_field_obj
+                                                .insert("value".to_string(), user_value.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let config_str = serde_json::to_string_pretty(&merged_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            } else {
+                // If no new config exists, keep the existing one
+                let config_str = serde_json::to_string_pretty(&existing_config)?;
+                tokio::fs::write(&new_config_path, config_str).await?;
+            }
+        }
+
+        // Check for Next.js project
+        let package_json_path = dest_dir.join("package.json");
+        if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+
+            let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+
+            // Make bun install mandatory for all package.json pipes with retries
+            retry_install(&bun_path, &dest_dir, 3).await?;
+
+            if package_data["dependencies"].get("next").is_some() {
+                info!("Detected Next.js project, setting up for production");
+                let mut pipe_config = if let Some(existing_json) = &existing_config {
+                    existing_json.clone()
+                } else if pipe_json_path.exists() {
+                    let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                    serde_json::from_str(&pipe_json)?
+                } else {
+                    json!({})
+                };
+
+                pipe_config["is_nextjs"] = json!(true);
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                let mut file = File::create(&pipe_json_path).await?;
+                file.write_all(updated_pipe_json.as_bytes()).await?;
+            }
+        }
+
+        info!("pipe copied successfully to: {:?}", dest_dir);
         Ok(dest_dir)
     }
 
@@ -727,6 +927,8 @@ mod pipes {
         path: &str,
         secret: &str,
         schedule: &str,
+        screenpipe_dir: &Path,
+        mut shutdown: watch::Receiver<bool>,
     ) {
         let schedule = match cron::Schedule::from_str(schedule) {
             Ok(s) => s,
@@ -744,19 +946,18 @@ mod pipes {
         );
 
         // Get pipe directory for state persistence
-        let screenpipe_dir = std::env::var("SCREENPIPE_DIR").expect("SCREENPIPE_DIR not set");
-        let pipe_dir = PathBuf::from(screenpipe_dir).join("pipes").join(pipe);
-
-        // Get last execution time
-        let last_run = match get_last_cron_execution(&pipe_dir, path).await {
-            Ok(time) => time,
-            Err(e) => {
-                error!("failed to get last cron execution: {}", e);
-                None
-            }
-        };
+        let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
 
         loop {
+            // Get last execution time at the start of each loop
+            let last_run = match get_last_cron_execution(&pipe_dir, path).await {
+                Ok(time) => time,
+                Err(e) => {
+                    error!("failed to get last cron execution: {}", e);
+                    None
+                }
+            };
+
             let now = chrono::Utc::now();
             let next = if let Some(last) = last_run {
                 // Get next occurrence after the last execution
@@ -768,38 +969,73 @@ mod pipes {
 
             let next = match next {
                 Some(next) => next,
-                None => continue,
+                None => {
+                    error!("no next execution time found for cron schedule");
+                    break;
+                }
             };
 
-            let duration = (next - now)
-                .to_std()
-                .unwrap_or(tokio::time::Duration::from_secs(1));
-            tokio::time::sleep(duration).await;
+            let duration = match (next - now).to_std() {
+                Ok(duration) => duration,
+                Err(e) => {
+                    error!("invalid duration: {}", e);
+                    tokio::time::Duration::from_secs(60) // fallback to 1 minute
+                }
+            };
 
-            debug!("executing cron job for pipe {} at path {}", pipe, path);
+            debug!(
+                "next cron execution for pipe {} at path {} in {} seconds",
+                pipe,
+                path,
+                duration.as_secs()
+            );
 
-            match client
-                .get(&format!("{}{}", base_url, path))
-                .headers(headers.clone())
-                .send()
-                .await
-            {
-                Ok(res) => {
-                    if res.status().is_success() {
-                        // Save successful execution time
-                        if let Err(e) = save_cron_execution(&pipe_dir, path).await {
-                            error!("failed to save cron execution time: {}", e);
+            // Wait for either the next execution time or shutdown signal
+            tokio::select! {
+                _ = tokio::time::sleep(duration) => {
+                    debug!("executing cron job for pipe {} at path {}", pipe, path);
+                    match client
+                        .get(&format!("{}{}", base_url, path))
+                        .headers(headers.clone())
+                        .send()
+                        .await
+                    {
+                        Ok(res) => {
+                            if res.status().is_success() {
+                                // Save successful execution time
+                                if let Err(e) = save_cron_execution(&pipe_dir, path).await {
+                                    error!("failed to save cron execution time: {}", e);
+                                }
+                                debug!("cron job executed successfully");
+                            } else {
+                                error!("cron job failed with status: {}", res.status());
+                                if let Ok(text) = res.text().await {
+                                    error!("error response: {}", text);
+                                }
+                            }
                         }
-                    } else {
-                        error!("cron job failed with status: {}", res.status());
-                        if let Ok(text) = res.text().await {
-                            error!("error response: {}", text);
-                        }
+                        Err(e) => error!("failed to execute cron job: {}", e),
                     }
                 }
-                Err(e) => error!("failed to execute cron job: {}", e),
+                Ok(()) = shutdown.changed() => {
+                    if *shutdown.borrow() {
+                        info!("shutting down cron job for pipe at path: {}", path);
+                        break;
+                    }
+                }
             }
         }
+    }
+
+    pub async fn cleanup_pipe_crons(pipe: &str) -> Result<()> {
+        if let Some(handles) = CRON_HANDLES.lock().await.remove(pipe) {
+            info!("cleaning up {} cron jobs for pipe {}", handles.len(), pipe);
+            for handle in handles {
+                handle.stop();
+            }
+            info!("stopped all cron jobs for pipe: {}", pipe);
+        }
+        Ok(())
     }
 }
 
