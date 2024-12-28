@@ -1,30 +1,32 @@
 "use server";
-import { pipe } from "@screenpipe/js";
+import { pipe } from "@screenpipe/js/node";
 import fs from "node:fs";
-import sendEmail from "./send-email";
-import generateDailyLog from "./generate-log";
-import generateRedditQuestions from "./generate-reddit-question";
-import saveDailyLog from "./savelog";
+import sendEmail from "@/lib/actions/send-email";
+import generateDailyLog from "@/lib/actions/generate-log";
+import generateRedditQuestions from "@/lib/actions/generate-reddit-question";
+import saveDailyLog from "@/lib/actions/savelog";
 
-export default async function dailyLogPipeline(): Promise<void> {
+export async function GET(): Promise<void> {
   console.log("starting daily log pipeline");
 
-  const config = pipe.loadPipeConfig();
-  console.log("loaded config:", JSON.stringify(config, null, 2));
 
-  const interval = config.interval * 1000;
-  const summaryFrequency = config.summaryFrequency;
-  const emailTime = config.emailTime;
-  const emailAddress = config.emailAddress;
-  const emailPassword = config.emailPassword;
-  const customPrompt = config.customPrompt!;
-  const dailylogPrompt = config.dailylogPrompt!;
-  const gptModel = config.gptModel;
-  const gptApiUrl = config.gptApiUrl;
-  const openaiApiKey = config.openaiApiKey;
-  const windowName = config.windowName || "";
-  const pageSize = config.pageSize;
-  const contentType = config.contentType || "ocr";
+  const settings = await pipe.settings.getNamespaceSettings("reddit_auto_posts");
+  console.log("loaded config:", JSON.stringify(settings, null, 2));
+
+  const interval = settings?.interval * 1000 || 60000;
+  console.log("INEn", interval)
+  const summaryFrequency = settings?.summaryFrequency;
+  const emailTime = settings?.emailTime;
+  const emailAddress = settings?.emailAddress;
+  const emailPassword = settings?.emailPassword;
+  const customPrompt = settings?.customPrompt!;
+  const dailylogPrompt = settings?.dailylogPrompt!;
+  const gptModel = settings?.gptModel;
+  const gptApiUrl = settings?.gptApiUrl;
+  const openaiApiKey = settings?.openaiApiKey;
+  const windowName = settings?.windowName || "";
+  const pageSize = settings?.pageSize;
+  const contentType = settings?.contentType || "ocr";
 
   const emailEnabled = !!(emailAddress && emailPassword);
   console.log("email enabled:", emailEnabled);
@@ -76,7 +78,7 @@ export default async function dailyLogPipeline(): Promise<void> {
       if (screenData && screenData.data && screenData.data.length > 0) {
         const logEntry = await generateDailyLog(
           screenData.data,
-          dailylogPrompt, // Use dailylogPrompt here instead of customPrompt
+          dailylogPrompt,
           gptModel,
           gptApiUrl,
           openaiApiKey

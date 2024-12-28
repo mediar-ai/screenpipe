@@ -4,7 +4,7 @@ import Pipe from "@/components/pipe"
 
 export default function Home() {
   return (
-    <main className="min-h-[1500px]">
+    <main className="min-h-[1200px]">
       <Header />
       <Pipe />
     </main>

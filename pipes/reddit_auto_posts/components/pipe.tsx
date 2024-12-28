@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,11 +7,13 @@ import { Label } from "@/components/ui/label";
 import { FileCheck } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
+import { Eye, EyeOff } from "lucide-react";
 
 const Pipe: React.FC = () => {
 
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
+  const [showKey, setShowKey] = React.useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +36,7 @@ const Pipe: React.FC = () => {
     const openaiApiKey = settings.openaiApiKey;
 
     try {
-      await updateSettings(newSettings, "reddit");
+      await updateSettings(newSettings, "reddit_auto_posts");
       await updatePipeConfig(newSettings, aiUrl, aiModel, openaiApiKey);
       toast({
         title: "settings saved",
@@ -58,7 +61,7 @@ const Pipe: React.FC = () => {
               id="interval"
               name="interval"
               type="number"
-              defaultValue={settings.customSettings?.reddit?.interval || 60}
+              defaultValue={settings.customSettings?.reddit_auto_posts?.interval || 60}
               placeholder="value in seconds"
               className="flex-1"
             />
@@ -70,7 +73,7 @@ const Pipe: React.FC = () => {
             id="pageSize"
             name="pageSize"
             type="number"
-            defaultValue={settings.customSettings?.reddit?.pageSize || 100}
+            defaultValue={settings.customSettings?.reddit_auto_posts?.pageSize || 100}
             placeholder="size of page"
           />
         </div>
@@ -79,7 +82,7 @@ const Pipe: React.FC = () => {
           <Input
             id="summaryFrequency"
             name="summaryFrequency"
-            defaultValue={settings.customSettings?.reddit?.summaryFrequency || "daily"}
+            defaultValue={settings.customSettings?.reddit_auto_posts?.summaryFrequency || "daily"}
             placeholder="frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
           />
         </div>
@@ -89,7 +92,7 @@ const Pipe: React.FC = () => {
             id="emailTime"
             name="emailTime"
             type="time"
-            defaultValue={settings.customSettings?.reddit?.emailTime || "11:00"}
+            defaultValue={settings.customSettings?.reddit_auto_posts?.emailTime || "11:00"}
             placeholder="time to send daily summary email (used only if summaryFrequency is 'daily')"
           />
         </div>
@@ -99,19 +102,34 @@ const Pipe: React.FC = () => {
             id="emailAddress"
             name="emailAddress"
             type="email"
-            defaultValue={settings.customSettings?.reddit?.emailAddress || ""}
+            defaultValue={settings.customSettings?.reddit_auto_posts?.emailAddress || ""}
             placeholder="email address to send the daily summary to"
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 relative items-center">
           <Label htmlFor="emailPassword">email app specific password</Label>
           <Input
             id="emailPassword"
             name="emailPassword"
-            type="password"
-            defaultValue={settings.customSettings?.reddit?.emailPassword || ""}
+            type={showKey ? "text" : "password"}
+            autoCorrect="off"
+            autoComplete="off"
+            defaultValue={settings.customSettings?.reddit_auto_posts?.emailPassword || ""}
             placeholder="app specific password for your gmail account"
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-[25px]"
+            onClick={() => setShowKey(!showKey)}
+          >
+            {showKey ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+                <Eye className="h-4 w-4" />
+              )}
+          </Button>
         </div>
         <div className="space-y-2">
           <Label htmlFor="contentType">content type</Label>
@@ -137,7 +155,7 @@ const Pipe: React.FC = () => {
             id="dailylogPrompt"
             name="dailylogPrompt"
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={ settings.customSettings?.reddit?.dailylogPrompt || "" }
+            defaultValue={ settings.customSettings?.reddit_auto_posts?.dailylogPrompt || "" }
             placeholder="additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes"
           />
         </div>
@@ -147,7 +165,7 @@ const Pipe: React.FC = () => {
             id="customPrompt"
             name="customPrompt"
             className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={ settings.customSettings?.reddit?.customPrompt || "" }
+            defaultValue={ settings.customSettings?.reddit_auto_posts?.customPrompt || "" }
             placeholder="additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
           />
         </div>

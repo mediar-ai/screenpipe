@@ -18,7 +18,7 @@ export default async function updatePipeConfig(
   const pipeConfigPath = path.join(
     screenpipeDir,
     "pipes",
-    "reddit",
+    "reddit_auto_posts",
     "pipe.json"
   );
 
