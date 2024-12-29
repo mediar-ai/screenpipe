@@ -16,11 +16,11 @@ const PermissionStatus = (props: {
     className?: string,
     isContainerActive?: boolean
 }) => {
-    const peripheralDeviceSetupMachine: PeripheralDevicesMachineType  = useMemo(() => {
-        return screenpipeOnboardingMachine.system.get('peripheralDeviceSetupMachine')
+    const peripheralDevicesMachine: PeripheralDevicesMachineType  = useMemo(() => {
+        return screenpipeOnboardingMachine.system.get('peripheralDevicesMachine')
     },[])
 
-    const state = useSelector(peripheralDeviceSetupMachine, (snap)=> snap.value)
+    const state = useSelector(peripheralDevicesMachine, (snap)=> snap.value)
     return (
         <AnimatedGroupContainer
             color="#cece66"

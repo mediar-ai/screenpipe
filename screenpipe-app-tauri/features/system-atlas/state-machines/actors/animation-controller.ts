@@ -39,9 +39,11 @@ const animationController = fromCallback<EventObject, AnimationControllerInput>(
     update: function(anim) {
         sendBack({ 
             type: 'UPDATE', 
-            duration: anim.animations[0].currentValue, 
-            strokeWidth: anim.animations[1].currentValue,
-            size: anim.animations[2].currentValue
+            payload: {
+              duration: anim.animations[0].currentValue, 
+              strokeWidth: anim.animations[1].currentValue,
+              size: anim.animations[2].currentValue
+            }
         });
     },
     complete: function() {

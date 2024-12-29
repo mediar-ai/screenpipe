@@ -59,7 +59,6 @@ export const screenpipeOnboardingFlow = setup({
         screenpipeEngineStartup
     }
 }).createMachine({
-    id: 'screenpipe-system-setup',
     initial:'welcome',
     entry: [
         spawnChild('conversationBoxMachine', { id:'convoBoxMachine', systemId: 'convoBoxMachine' }),
@@ -162,22 +161,22 @@ export const screenpipeOnboardingFlow = setup({
                                 }],
                             }
                         },{ delay: 500 }),
-                        sendTo('peripheralDeviceSetupMachine',{type: 'PENDING_MIC'})
+                        sendTo('peripheralDevicesMachine',{type: 'PENDING_MIC'})
                     ],
                     on: {
                         'REQUEST': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'REQUEST_MIC'})
+                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_MIC'})
                             ]
                         },
                         'CHECK': {
-                            actions: sendTo('peripheralDeviceSetupMachine',{type: 'CHECK_MIC'})
+                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_MIC'})
                         },
                         'SKIP': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'SKIP_MIC'}),
+                                sendTo('peripheralDevicesMachine',{type: 'SKIP_MIC'}),
                             ],
                             target: 'keyboard'
                         },
@@ -204,22 +203,22 @@ export const screenpipeOnboardingFlow = setup({
                                 }],
                             }
                         },{delay:500}),
-                        sendTo('peripheralDeviceSetupMachine',{type: 'PENDING_ACCESSIBILITY'})
+                        sendTo('peripheralDevicesMachine',{type: 'PENDING_ACCESSIBILITY'})
                     ],
                     on: {
                         'REQUEST': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'REQUEST_ACCESSIBILITY'})
+                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_ACCESSIBILITY'})
                             ]
                         },
                         'CHECK': {
-                            actions: sendTo('peripheralDeviceSetupMachine',{type: 'CHECK_ACCESSIBILITY'})
+                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_ACCESSIBILITY'})
                         },
                         'SKIP': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'SKIP_ACCESSIBILITY'}),
+                                sendTo('peripheralDevicesMachine',{type: 'SKIP_ACCESSIBILITY'}),
                             ],
                             target: 'monitor'
                         },
@@ -246,28 +245,31 @@ export const screenpipeOnboardingFlow = setup({
                                 }],
                             }
                         },{delay:500}),
-                        sendTo('peripheralDeviceSetupMachine',{type: 'PENDING_MONITOR'})
+                        sendTo('peripheralDevicesMachine',{type: 'PENDING_MONITOR'})
                     ],
                     on: {
                         'REQUEST': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'REQUEST_MONITOR'})
+                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_MONITOR'})
                             ]
                         },
                         'CHECK': {
-                            actions: sendTo('peripheralDeviceSetupMachine',{type: 'CHECK_MONITOR'})
+                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_MONITOR'})
                         },
                         'SKIP': {
                             actions: [
                                 sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDeviceSetupMachine',{type: 'SKIP_MONITOR'}),
+                                sendTo('peripheralDevicesMachine',{type: 'SKIP_MONITOR'}),
                             ],
                             target: '#core_models'
                         },
                         'HEALTHY': {
-                            tagret: '#core_models',
-                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                            target: '#core_models',
+                            actions: [
+                                ()=>console.log("CORE"),
+                                sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                            ]
                         }
                     }
                 }
