@@ -4,7 +4,7 @@
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 - Windows: `notepad $env:AppData\Claude\claude_desktop_config.json`
-- Mac: `code ~/Library/Application Support/Claude/claude_desktop_config.json`
+- Mac: `code "~/Library/Application Support/Claude/claude_desktop_config.json"`
 
 ```json
 {
