@@ -3,15 +3,16 @@ import React, { useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { onboardingFlow } from './onboarding/entities/constants';
-import { useOnboardingFlow } from "./onboarding/context/onboarding-context";
+import { useSelector } from "@xstate/react";
+import { screenpipeOnboardingMachine } from "@/features/onboarding/state-machine/onboarding-flow";
+import ScreenpipeSystemAtlas from "@/features/system-atlas/views/atlas";
+import WelcomeScreen from "@/features/onboarding/views/welcome-screen";
 
 const setFirstTimeUserFlag = async () => {
   await localforage.setItem("isFirstTimeUser", false);
 };
 
 const Onboarding: React.FC = () => {
-  const { currentStep } = useOnboardingFlow()
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { updateSettings } = useSettings();
 
@@ -28,7 +29,7 @@ const Onboarding: React.FC = () => {
   }, [showOnboarding]);
   
   const handleDialogClose = (open: boolean) => {
-    if (!open && currentStep) {
+    if (!open) {
       setShowOnboarding(open);
     }
   };
@@ -43,10 +44,8 @@ const Onboarding: React.FC = () => {
 
   return (
     <Dialog open={true} onOpenChange={handleDialogClose}>
-      <DialogContent className="max-w-5xl min-h-[740px] max-h-[100vh]">
-        <div className="flex flex-col w-full h-full">
-          <T/>
-        </div>
+      <DialogContent className="max-w-5xl min-h-[740px] max-h-[100vh] p-0">
+        <OnboardingFlow/>
       </DialogContent>
     </Dialog>
   );
@@ -54,14 +53,13 @@ const Onboarding: React.FC = () => {
 
 export default Onboarding;
 
-export const T = () => {
-  const { currentStep, track, handleNextSlide } = useOnboardingFlow()
 
-  return (
-    <>
-    {onboardingFlow[currentStep].component()}
-    </>
-  )
+
+function OnboardingFlow(){
+  const activeStep = useSelector(screenpipeOnboardingMachine,(snapshot) => snapshot.value)
+
+  if ( activeStep === 'welcome' ) return <WelcomeScreen/>
+
+  return <ScreenpipeSystemAtlas actorRef={screenpipeOnboardingMachine}/>
+
 }
-
-
