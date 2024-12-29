@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/create-pipe",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "create a new screenpipe pipe with nextjs",
   "type": "module",
   "bin": {

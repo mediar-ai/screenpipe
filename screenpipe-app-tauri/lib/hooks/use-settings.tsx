@@ -31,6 +31,8 @@ export type EmbeddedLLMConfig = {
 
 export enum Shortcut {
   SHOW_SCREENPIPE = "show_screenpipe",
+  START_RECORDING = "start_recording",
+  STOP_RECORDING = "stop_recording",
 }
 
 export interface User {
@@ -76,13 +78,15 @@ export type Settings = {
   embeddedLLM: EmbeddedLLMConfig;
   languages: Language[];
   enableBeta: boolean;
-  showScreenpipeShortcut: string;
   isFirstTimeUser: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
   disabledShortcuts: Shortcut[];
   user: User;
+  showScreenpipeShortcut: string;
+  startRecordingShortcut: string;
+  stopRecordingShortcut: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -113,7 +117,7 @@ const DEFAULT_SETTINGS: Settings = {
   includedWindows: [],
   aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 30000,
+  aiMaxContextChars: 512000,
   fps: 0.5,
   vadSensitivity: "high",
   analyticsEnabled: true,
@@ -126,13 +130,15 @@ const DEFAULT_SETTINGS: Settings = {
     port: 11438,
   },
   enableBeta: false,
-  showScreenpipeShortcut: "Super+Alt+S",
   isFirstTimeUser: true,
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
   disabledShortcuts: [],
   user: {},
+  showScreenpipeShortcut: "Super+Alt+S",
+  startRecordingShortcut: "Super+Alt+R",
+  stopRecordingShortcut: "Super+Alt+X",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -188,7 +194,7 @@ function createDefaultSettingsObject(): Settings {
         : "tesseract";
 
     defaultSettings.ocrEngine = ocrModel;
-    defaultSettings.fps = currentPlatform === "macos" ? 0.2 : 1;
+    defaultSettings.fps = currentPlatform === "macos" ? 0.5 : 1;
     defaultSettings.platform = currentPlatform;
 
     defaultSettings.ignoredWindows = [
@@ -198,7 +204,6 @@ function createDefaultSettingsObject(): Settings {
 
     return defaultSettings;
   } catch (e) {
-    console.error("failed to get platform", e);
     return DEFAULT_SETTINGS;
   }
 }
@@ -304,9 +309,7 @@ export function useSettings() {
     let p = "macos";
     try {
       p = platform();
-    } catch (e) {
-      console.error("failed to get platform", e);
-    }
+    } catch (e) {}
 
     return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`

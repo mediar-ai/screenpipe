@@ -2,7 +2,6 @@ use crate::kill_all_sreenpipes;
 use crate::SidecarState;
 use anyhow::Error;
 use log::{error, info};
-use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};

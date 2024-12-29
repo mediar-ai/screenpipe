@@ -17,7 +17,6 @@
     "core:tray:default",
     "shell:default",
     "store:default",
-
     "shell:allow-open",
     "fs:allow-watch",
     "fs:allow-open",
@@ -359,6 +358,7 @@
           ]
         }
       ]
-    }
+    },
+    "deep-link:default"
   ]
 }

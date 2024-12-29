@@ -1,7 +1,6 @@
 use crate::{get_base_dir, SidecarState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -9,11 +8,11 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::Store;
 use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tauri_plugin_store::Store;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -44,12 +43,24 @@ pub struct User {
 impl User {
     pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
         Self {
-            id: store.get("user.id").and_then(|v| v.as_str().map(String::from)),
-            email: store.get("user.email").and_then(|v| v.as_str().map(String::from)),
-            name: store.get("user.name").and_then(|v| v.as_str().map(String::from)),
-            image: store.get("user.image").and_then(|v| v.as_str().map(String::from)),
-            token: store.get("user.token").and_then(|v| v.as_str().map(String::from)),
-            clerk_id: store.get("user.clerk_id").and_then(|v| v.as_str().map(String::from)),
+            id: store
+                .get("user.id")
+                .and_then(|v| v.as_str().map(String::from)),
+            email: store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from)),
+            name: store
+                .get("user.name")
+                .and_then(|v| v.as_str().map(String::from)),
+            image: store
+                .get("user.image")
+                .and_then(|v| v.as_str().map(String::from)),
+            token: store
+                .get("user.token")
+                .and_then(|v| v.as_str().map(String::from)),
+            clerk_id: store
+                .get("user.clerk_id")
+                .and_then(|v| v.as_str().map(String::from)),
             credits: Some(UserCredits {
                 amount: store
                     .get("user.credits.amount")
@@ -355,21 +366,13 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     args.push("--debug");
 
-    // Add exe directory path before the Windows-specific block
-    let exe_dir = env::current_exe()
-        .expect("Failed to get current executable path")
-        .parent()
-        .expect("Failed to get parent directory of executable")
-        .to_path_buf();
+
 
     if cfg!(windows) {
-        let tessdata_path = exe_dir.join("tessdata");
         let mut c = app
             .shell()
             .sidecar("screenpipe")
-            .unwrap()
-            .env("TESSDATA_PREFIX", tessdata_path);
-
+            .unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
