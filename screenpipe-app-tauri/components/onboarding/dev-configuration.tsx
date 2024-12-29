@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { platform } from "@tauri-apps/plugin-os";
-import usePlatform from '@/lib/hooks/usePlatform';
+import usePlatform from '@/lib/hooks/use-platform';
 import { CodeBlock } from "@/components/onboarding/single-codeblock";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
@@ -126,7 +126,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
                   </p>
                   <CodeBlock
                     className="rounded-md mt-2"
-                    language={usePlatform() === "windows" ? "powershell" : "bash"}
+                    language={usePlatform() === "windows" ? "cmd" : "bash"}
                     value={instructions.command}
                   />
                 </li>

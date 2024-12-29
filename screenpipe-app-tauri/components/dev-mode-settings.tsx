@@ -3,7 +3,7 @@ import React, { useState } from "react";
 
 import { CodeBlock } from "@/components/ui/codeblock";
 import { platform } from "@tauri-apps/plugin-os";
-import usePlatform from '@/lib/hooks/usePlatform';
+import usePlatform from '@/lib/hooks/use-platform';
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -271,7 +271,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
             thru CLI 👇
           </p>
           <CodeBlock
-            language={usePlatform() === "windows" ? "powershell" : "bash"}
+            language={usePlatform() === "windows" ? "cmd" : "bash"}
             value={getDebuggingCommands(platform(), localDataDir)}
           />
 

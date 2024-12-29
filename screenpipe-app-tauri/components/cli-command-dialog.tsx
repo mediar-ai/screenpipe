@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { CodeBlock } from "./ui/codeblock";
-import usePlatform from '@/lib/hooks/usePlatform';
+import usePlatform from '@/lib/hooks/use-platform';
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
@@ -140,7 +140,7 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
           </DialogHeader>
           <div className="overflow-x-auto">
             <CodeBlock
-              language={usePlatform() === "windows" ? "powershell" : "bash"}
+              language={usePlatform() === "windows" ? "cmd" : "bash"}
               value={generateCliCommand()}
             />
           </div>
