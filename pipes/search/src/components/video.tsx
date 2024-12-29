@@ -82,7 +82,7 @@ export const VideoComponent = memo(function VideoComponent({
             throw new Error("unknown media validation status"); 
         }
       } catch (error) {
-        console.error("Failed to load media:", error);
+        console.warn("Failed to load media:", error);
         setError(
           `Failed to load media: ${
             error instanceof Error ? error.message : "Unknown error"

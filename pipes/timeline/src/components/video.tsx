@@ -75,7 +75,7 @@ export const VideoComponent = memo(function VideoComponent({
         const blob = new Blob([bytes], { type: mimeType });
         setMediaSrc(URL.createObjectURL(blob));
       } catch (error) {
-        console.error("Failed to load media:", error);
+        console.warn("Failed to load media:", error);
         setError(
           `Failed to load media: ${
             error instanceof Error ? error.message : "Unknown error"

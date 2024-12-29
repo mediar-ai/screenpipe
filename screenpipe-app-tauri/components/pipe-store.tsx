@@ -1262,21 +1262,34 @@ const PipeStore: React.FC = () => {
                         {pipe.id !== "pipe-linkedin-ai-assistant" && (
                           <>
                             {pipes.some((p) => p.id === pipe.id) ? (
-                              <Button
-                                size="icon"
-                                variant={pipe.enabled ? "default" : "outline"}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleEnabled(pipe);
-                                }}
-                                className={`${
-                                  pipe.enabled
-                                    ? "bg-primary hover:bg-primary/90"
-                                    : "hover:bg-muted"
-                                }`}
-                              >
-                                <Power className="h-3.5 w-3.5" />
-                              </Button>
+                              <>
+                                {pipes.find(p => p.id === pipe.id)?.config?.port && pipes.find(p => p.id === pipe.id)?.enabled ? (
+                                  <Button
+                                    size="icon"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const installedPipe = pipes.find(p => p.id === pipe.id);
+                                      if (installedPipe?.config?.port) {
+                                        invoke("open_pipe_window", {
+                                          port: installedPipe.config.port,
+                                          title: installedPipe.id,
+                                        }).catch(err => {
+                                          console.error("failed to open pipe window:", err);
+                                          toast({
+                                            title: "error opening pipe window",
+                                            description: "please try again or check the logs",
+                                            variant: "destructive",
+                                          });
+                                        });
+                                      }
+                                    }}
+                                    className="hover:bg-muted"
+                                  >
+                                    <Puzzle className="h-3.5 w-3.5" />
+                                  </Button>
+                                ) : null}
+                              </>
                             ) : (
                               <Button
                                 size="icon"
