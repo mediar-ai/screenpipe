@@ -7,13 +7,11 @@ import { usePostHog } from "posthog-js/react";
 import { useToast } from "@/components/ui/use-toast";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
-import { registerShortcuts } from "@/lib/shortcuts";
 import { ChangelogDialog } from "@/components/changelog-dialog";
 import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { OnboardingFlowProvider } from "@/components/onboarding/context/onboarding-context";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -61,9 +59,7 @@ export default function Home() {
     <div className="flex flex-col items-center flex-1">
       <NotificationHandler />
       {showOnboarding && 
-        <OnboardingFlowProvider>
           <Onboarding />
-        </OnboardingFlowProvider>
       }
       <ChangelogDialog />
       <Header />
