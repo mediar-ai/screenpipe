@@ -20,6 +20,8 @@ import ScreenpipeLogo from '../components/screenpipe-logo/index';
 export default function ScreenpipeSystemAtlas(props:{
     actorRef: ActorRef<any,any,any>,
 }) {
+
+    console.log("HELLO")
   const { handleClick } = useConfettiFireworks()
   const containerRef = useRef<HTMLDivElement>(null);
   const micRef = useRef<HTMLDivElement>(null);
@@ -53,7 +55,7 @@ export default function ScreenpipeSystemAtlas(props:{
   return (
     <main
         id="main-container"
-        className="relative w-[100vw] h-[100vh] flex flex-col justify-center items-center "
+        className="relative w-[100%] h-[100%] flex flex-col justify-center items-center "
     >
         <ConversationBox
             className="top-[30px] left-[30px] absolute z-[100]"
