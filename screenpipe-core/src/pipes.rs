@@ -575,7 +575,7 @@ mod pipes {
                 .with(Cache(HttpCache {
                     mode: CacheMode::Default,
                     manager: CACacheManager {
-                        path: home_dir().unwrap().join(".screenpipe/.http-cacache"),
+                        path: home_dir().unwrap().join(".screenpipe").join(".http-cacache"),
                     },
                     options: HttpCacheOptions::default(),
                 }))
