@@ -10,7 +10,7 @@ export default function Header() {
       />
       <h1 className="font-bold text-center text-2xl">screenpipe</h1>
       <h1 className='font-medium text-lg text-center mt-1'>
-        automate reddit posts using your screenpipe data
+        get reddit posts recommendation using your screenpipe data
       </h1>
     </div>
   );

@@ -42,10 +42,15 @@ const Pipe: React.FC = () => {
     }
   };
 
-  const getNextCronTime = (interval: number) => {
+  const getNextCronTime = (lastIntervalChangeTime: string, interval: number) => {
+    const lastChangeDate = new Date(lastIntervalChangeTime) || new Date().toISOString();
     const now = new Date();
-    now.setMinutes(now.getMinutes() + interval);
-    return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let nextCronTime = new Date(lastChangeDate.getTime());
+    nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
+    while (nextCronTime < now) {
+      nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
+    }
+    return nextCronTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -54,6 +59,7 @@ const Pipe: React.FC = () => {
 
     const newSettings = {
       interval: parseInt(formData.get("interval") as string),
+      lastIntervalChangeTime: new Date().toISOString(),
       pageSize: parseInt(formData.get("pageSize") as string),
       summaryFrequency: formData.get("summaryFrequency") as string,
       emailAddress: formData.get("emailAddress") as string,
@@ -99,8 +105,9 @@ const Pipe: React.FC = () => {
               className="flex-1"
             />
           </div>
-          <div className="text-sm" >
-            next cron will at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.interval / 60)}
+          <div className="text-sm">
+            next cron will run at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.lastIntervalChangeTime,
+              settings.customSettings?.["reddit-auto-posts"]?.interval / 60)} 
           </div>
         </div>
         <div className="space-y-2">
