@@ -34,6 +34,8 @@ const ShortcutSection = () => {
     showScreenpipeShortcut: { isRecording: false, pressedKeys: [] },
     startRecordingShortcut: { isRecording: false, pressedKeys: [] },
     stopRecordingShortcut: { isRecording: false, pressedKeys: [] },
+    stopAudioShortcut: { isRecording: false, pressedKeys: [] },
+    startAudioShortcut: { isRecording: false, pressedKeys: [] },
     ...Object.fromEntries(
       profiles.map((profile) => [
         `profile_${profile}`,
@@ -62,6 +64,8 @@ const ShortcutSection = () => {
         showShortcut: updatedSettings.showScreenpipeShortcut,
         startShortcut: updatedSettings.startRecordingShortcut,
         stopShortcut: updatedSettings.stopRecordingShortcut,
+        startAudioShortcut: updatedSettings.startAudioShortcut,
+        stopAudioShortcut: updatedSettings.stopAudioShortcut,
         profileShortcuts: shortcuts,
       });
 
@@ -270,6 +274,18 @@ const ShortcutSection = () => {
           shortcut={"stopRecordingShortcut"}
           title="stop recording"
           description="global shortcut to stop screen recording"
+        />
+
+        <ShortcutRow
+          shortcut={"startAudioShortcut"}
+          title="start audio recording"
+          description="global shortcut to start audio recording"
+        />
+
+        <ShortcutRow
+          shortcut={"stopAudioShortcut"}
+          title="stop audio recording"
+          description="global shortcut to stop audio recording"
         />
 
         {profiles.length > 1 && (
