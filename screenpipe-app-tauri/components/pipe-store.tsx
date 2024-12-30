@@ -62,6 +62,15 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "memories-gallery",
+    name: "memories gallery",
+    description:
+      "google-photo like gallery of your screen recordings memories, with AI-powered insights and timeline visualization",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/memories",
+    credits: 0,
+    paid: false,
+  },
+  {
     id: "data-table",
     name: "data table",
     description:
@@ -1263,22 +1272,30 @@ const PipeStore: React.FC = () => {
                           <>
                             {pipes.some((p) => p.id === pipe.id) ? (
                               <>
-                                {pipes.find(p => p.id === pipe.id)?.config?.port && pipes.find(p => p.id === pipe.id)?.enabled ? (
+                                {pipes.find((p) => p.id === pipe.id)?.config
+                                  ?.port &&
+                                pipes.find((p) => p.id === pipe.id)?.enabled ? (
                                   <Button
                                     size="icon"
                                     variant="outline"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      const installedPipe = pipes.find(p => p.id === pipe.id);
+                                      const installedPipe = pipes.find(
+                                        (p) => p.id === pipe.id
+                                      );
                                       if (installedPipe?.config?.port) {
                                         invoke("open_pipe_window", {
                                           port: installedPipe.config.port,
                                           title: installedPipe.id,
-                                        }).catch(err => {
-                                          console.error("failed to open pipe window:", err);
+                                        }).catch((err) => {
+                                          console.error(
+                                            "failed to open pipe window:",
+                                            err
+                                          );
                                           toast({
                                             title: "error opening pipe window",
-                                            description: "please try again or check the logs",
+                                            description:
+                                              "please try again or check the logs",
                                             variant: "destructive",
                                           });
                                         });
