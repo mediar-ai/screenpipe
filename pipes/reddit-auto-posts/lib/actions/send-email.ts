@@ -18,13 +18,13 @@ export default async function sendEmail(
       },
     });
     const info = await transporter.sendMail({
-      from: to, // sender address
-      to: to, // list of receivers
-      subject: subject, // Subject line
-      text: body, // plain text body
+      from: to,
+      to: to,
+      subject: subject,
+      text: body,
     });
     if (!info) {
-      throw new Error("failed to send email");
+      throw new Error("failed to send email, no info found");
     }
   } catch (error){
     throw new Error(`failed to send email ${error}`);

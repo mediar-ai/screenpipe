@@ -8,53 +8,58 @@ import generateRedditQuestions from "@/lib/actions/generate-reddit-question";
 import saveDailyLog from "@/lib/actions/savelog";
 
 export async function GET() {
-  console.log("starting daily log pipeline");
-  const settings = await pipe.settings.getNamespaceSettings("reddit-auto-posts");
-  const interval = settings?.interval * 1000 || 60000;
-  const summaryFrequency = settings?.summaryFrequency;
-  const emailTime = settings?.emailTime;
-  const emailAddress = settings?.emailAddress;
-  const emailPassword = settings?.emailPassword;
-  const customPrompt = settings?.customPrompt!;
-  const dailylogPrompt = settings?.dailylogPrompt!;
-  const gptModel = settings?.gptModel;
-  const gptApiUrl = settings?.gptApiUrl;
-  const openaiApiKey = settings?.openaiApiKey;
-  const windowName = settings?.windowName || "";
-  const pageSize = settings?.pageSize;
-  const contentType = settings?.contentType || "ocr";
-  const logsDir = `${process.env.PIPE_DIR}/logs` || `${process.cwd()}/logs`;
-  const emailEnabled = !!(emailAddress && emailPassword);
-
   try {
-    fs.mkdirSync(logsDir);
-  } catch (_error) {
-    console.warn("failed to create logs dir, probably already exists");
-  }
+    console.log("starting daily log pipeline");
+    const settings = await pipe.settings.getNamespaceSettings("reddit-auto-posts");
+    const interval = settings?.interval * 1000 || 60000;
+    const summaryFrequency = settings?.summaryFrequency;
+    const emailTime = settings?.emailTime;
+    const emailAddress = settings?.emailAddress;
+    const emailPassword = settings?.emailPassword;
+    const customPrompt = settings?.customPrompt!;
+    const dailylogPrompt = settings?.dailylogPrompt!;
+    const gptModel = settings?.gptModel;
+    const gptApiUrl = settings?.gptApiUrl;
+    const openaiApiKey = settings?.openaiApiKey;
+    const windowName = settings?.windowName || "";
+    const pageSize = settings?.pageSize;
+    const contentType = settings?.contentType || "ocr";
+    const logsDir = `${process.env.PIPE_DIR}/logs` || `${process.cwd()}/logs`;
+    const emailEnabled = !!(emailAddress && emailPassword);
 
-  let lastEmailSent = new Date(0);
+    try {
+      fs.mkdirSync(logsDir);
+    } catch (_error) {
+      console.warn("failed to create logs dir, probably already exists");
+    }
 
-  // Only send welcome email if email is enabled
-  if (emailEnabled) {
-    const welcomeEmail = `
-      Welcome to the daily reddit questions pipeline!
+    if (emailEnabled) {
+      const welcomeEmail = `
+        Welcome to the daily reddit questions pipeline!
 
-      This pipe will send you a daily list of reddit questions based on your screen data.
-      ${
-        summaryFrequency === "daily"
-          ? `It will run at ${emailTime} every day.`
-          : `It will run every ${summaryFrequency} hours.`
+        This pipe will send you a daily list of reddit questions based on your screen data.
+        ${
+          summaryFrequency === "daily"
+            ? `It will run at ${emailTime} every day.`
+            : `It will run every ${summaryFrequency} hours.`
+        }
+      `;
+
+      try {
+        await sendEmail(
+          emailAddress!,
+          emailPassword!,
+          "daily reddit questions",
+          welcomeEmail
+        );
+      } catch (error) {
+        return NextResponse.json(
+          { error: `Error in sending welcome email: ${error}` },
+          { status: 500 }
+        );
       }
-    `;
-    await sendEmail(
-      emailAddress!,
-      emailPassword!,
-      "daily reddit questions",
-      welcomeEmail
-    );
-  }
+    }
 
-  try {
     const now = new Date();
     const oneMinuteAgo = new Date(now.getTime() - interval);
 
@@ -76,12 +81,13 @@ export async function GET() {
       );
       saveDailyLog(logEntry);
     } else {
-        return NextResponse.json(
-          { error: "no screenpipe data is found" },
-          { status: 500 }
-        );
+      return NextResponse.json(
+        { message: "no screenpipe data is found, is screenpipe running?" },
+        { status: 200 }
+      );
     }
 
+    let lastEmailSent = new Date(0);
     let shouldSendSummary = false;
 
     if (summaryFrequency === "daily") {
@@ -95,7 +101,7 @@ export async function GET() {
       );
       shouldSendSummary =
         now >= emailTimeToday &&
-        now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
+          now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
     } else if (summaryFrequency.startsWith("hourly:")) {
       const hours = parseInt(summaryFrequency.split(":")[1], 10);
       shouldSendSummary =
@@ -121,7 +127,6 @@ export async function GET() {
         );
         console.log("reddit questions:", redditQuestions);
 
-        // Send email only if enabled
         if (emailEnabled) {
           try {
             await sendEmail(
@@ -147,23 +152,17 @@ export async function GET() {
           body: "just sent you some reddit questions",
         });
         lastEmailSent = now;
-      } else {
+      } else if(screenData && screenData.data && screenData.data.length === 0) {
         return NextResponse.json(
-          { error: "no screenpipe data is found" },
-          { status: 500 }
+          { message: "no screenpipe data is found, is screenpipe running?" },
+          { status: 200 }
         );
       }
     }
   } catch (error) {
-    console.warn("error in daily log pipeline:", error);
     return NextResponse.json(
-      { error: "please check your configuration", "message": `sleeping for ${interval}` },
+      { error: `please check your configuration ${error}` },
       { status: 400 }
     );
-  } finally {
-    return NextResponse.json(
-      { message: `sleeping for ${interval / 60000} minutes` },
-      { status: 200 }
-    );
   }
-};
+} 
