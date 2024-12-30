@@ -222,6 +222,7 @@ mod pipes {
             debug!("starting next.js project with bun dev command");
             let mut child = Command::new(&bun_path)
                 .arg("run")
+                .arg("--bun")
                 .arg("dev")
                 .arg("--port")
                 .arg(
@@ -255,6 +256,7 @@ mod pipes {
 
         let mut child = Command::new(&bun_path)
             .arg("run")
+            .arg("--bun")
             .arg(&main_module)
             .envs(env_vars)
             .stdout(std::process::Stdio::piped())
