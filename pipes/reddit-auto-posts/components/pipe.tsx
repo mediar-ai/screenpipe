@@ -184,7 +184,8 @@ const Pipe: React.FC = () => {
         </div>
         <div className="space-y-3 relative items-center">
           <Label htmlFor="emailPassword">email app specific password *</Label>
-          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;app specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en</span>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;app specific password for your gmail account, you can find it
+            <a href="https://support.google.com/accounts/answer/185833?hl=en" className="hover:underline text-sky-700"> here</a></span>
           <Input
             id="emailPassword"
             name="emailPassword"
