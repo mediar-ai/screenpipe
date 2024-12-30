@@ -44,6 +44,7 @@ const ShortcutSection = () => {
 
   const updateShortcut = async (shortcutId: string, keys: string) => {
     try {
+      let updatedSettings = { ...settings };
       if (shortcutId.startsWith("profile_")) {
         const profileName = shortcutId.replace("profile_", "");
         updateProfileShortcut({ profile: profileName, shortcut: keys });
@@ -51,13 +52,16 @@ const ShortcutSection = () => {
         const updates: Partial<Settings> = {
           [shortcutId]: keys,
         };
+        updatedSettings = { ...settings, ...updates };
         updateSettings(updates);
       }
 
+      // wait 2 seconds to make sure store has synced to disk
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       await invoke("update_global_shortcuts", {
-        showShortcut: settings.showScreenpipeShortcut,
-        startShortcut: settings.startRecordingShortcut,
-        stopShortcut: settings.stopRecordingShortcut,
+        showShortcut: updatedSettings.showScreenpipeShortcut,
+        startShortcut: updatedSettings.startRecordingShortcut,
+        stopShortcut: updatedSettings.stopRecordingShortcut,
         profileShortcuts: shortcuts,
       });
 
