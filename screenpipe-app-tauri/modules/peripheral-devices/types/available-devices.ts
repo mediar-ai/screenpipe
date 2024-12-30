@@ -4,5 +4,5 @@ export const AvailablePeripheralDevices = {
     accessibility: "accessibility"
   } as const
   
-export type AvailablePeripheralDevices = (typeof AvailablePeripheralDevices)[keyof typeof AvailablePeripheralDevices]
+export type AvailablePeripheralDevicesEnum = (typeof AvailablePeripheralDevices)[keyof typeof AvailablePeripheralDevices]
   

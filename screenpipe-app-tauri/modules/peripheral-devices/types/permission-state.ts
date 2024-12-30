@@ -17,4 +17,4 @@ export const PermissionState = {
   denied: "denied"
 } as const
 
-export type OSPermissionStatusEnum = (typeof PermissionState)[keyof typeof PermissionState];
+export type PermissionStateEnum = (typeof PermissionState)[keyof typeof PermissionState];
