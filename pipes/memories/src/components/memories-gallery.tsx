@@ -130,15 +130,15 @@ export function MemoriesGallery() {
                 key={memory.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative rounded-lg overflow-hidden bg-background border flex flex-col"
+                className="relative rounded-lg overflow-hidden bg-background border flex flex-col h-full"
               >
-                <div className="relative aspect-video flex-shrink-0">
+                <div className="relative aspect-video">
                   <VideoComponent
                     filePath={memory.preview_url}
                     className="w-full h-full"
                   />
                 </div>
-                <div className="p-3 space-y-1 flex-1">
+                <div className="p-3 space-y-1 flex-grow">
                   <div className="flex items-center justify-center text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3 mr-1" />
                     {format(new Date(memory.timestamp), "PPp")}
