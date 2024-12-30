@@ -582,59 +582,106 @@ mod pipes {
                 .build();
 
             let api_url = get_raw_github_url(url.as_str())?;
+            debug!("using github api url: {}", api_url);
 
             let response = client
                 .get(&api_url)
                 .header("Accept", "application/vnd.github.v3+json")
                 .header("User-Agent", "screenpipe")
                 .send()
-                .await
-                .unwrap();
+                .await?;
 
-            // print x-cache header
             info!("GitHub API cache hit: {:?}", response.headers().get("x-cache"));
 
             let contents: Value = response.text().await?.parse()?;
+            let tree = contents["tree"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("invalid response from github api"))?;
 
-            if !contents.is_array() {
-                anyhow::bail!("invalid response from github api");
+            // Extract repo info from URL
+            let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
+            let (owner, repo, _, branch) = (
+                path_segments[0],
+                path_segments[1],
+                path_segments[2],
+                path_segments[3],
+            );
+
+            // Extract the base path for subfolder downloads
+            let base_path = url.path_segments()
+                .and_then(|segments| {
+                    let segments: Vec<_> = segments.collect();
+                    if segments.len() >= 5 && segments[2] == "tree" {
+                        Some(segments[4..].join("/"))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default();
+
+            debug!("base path for download: {}", base_path);
+
+            // Process all files in parallel
+            let mut tasks = Vec::new();
+
+            for item in tree {
+                let path = item["path"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("missing path in github response"))?;
+
+                // Skip if file is not in the target directory
+                if !path.starts_with(&base_path) {
+                    continue;
+                }
+
+                let file_name = Path::new(path)
+                    .file_name()
+                    .ok_or_else(|| anyhow::anyhow!("invalid path"))?;
+
+                // Skip hidden files and ignored directories
+                if should_ignore(file_name) {
+                    debug!("skipping ignored file/directory: {}", path);
+                    continue;
+                }
+
+                let item_type = item["type"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("missing type in github response"))?;
+
+                if item_type == "blob" {
+                    // Calculate relative path from base_path
+                    let relative_path = if let Some(stripped) = path.strip_prefix(&base_path) {
+                        stripped.trim_start_matches('/')
+                    } else {
+                        path
+                    };
+
+                    let file_dest = dest_dir.join(relative_path);
+                    let client = client.clone();
+
+                    // Use raw.githubusercontent.com URL
+                    let raw_url = format!(
+                        "https://raw.githubusercontent.com/{}/{}/{}/{}",
+                        owner, repo, branch, path
+                    );
+
+                    // Create task for parallel download
+                    tasks.push(tokio::spawn(async move {
+                        if let Some(parent) = file_dest.parent() {
+                            tokio::fs::create_dir_all(parent).await?;
+                        }
+
+                        let file_content = client.get(&raw_url).send().await?.bytes().await?;
+                        tokio::fs::write(&file_dest, &file_content).await?;
+                        debug!("downloaded file: {:?}", file_dest);
+                        Ok::<_, anyhow::Error>(())
+                    }));
+                }
             }
 
-            for item in contents.as_array().unwrap() {
-                let file_name = item["name"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("missing name in github response"))?;
-
-                if !is_hidden_file(std::ffi::OsStr::new(file_name)) {
-                    let file_type = item["type"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("missing type in github response"))?;
-
-                    match file_type {
-                        "file" => {
-                            let download_url = item["download_url"].as_str().ok_or_else(|| {
-                                anyhow::anyhow!("missing download_url in github response")
-                            })?;
-
-                            let file_content =
-                                client.get(download_url).send().await?.bytes().await?;
-                            let file_path = dest_dir.join(file_name);
-                            tokio::fs::write(&file_path, &file_content).await?;
-                            debug!("downloaded file: {:?}", file_path);
-                        }
-                        "dir" => {
-                            let new_dest_dir = dest_dir.join(file_name);
-                            tokio::fs::create_dir_all(&new_dest_dir).await?;
-
-                            let new_url = format!("{}/{}", url.as_str(), file_name);
-                            download_github_folder(&Url::parse(&new_url)?, &new_dest_dir).await?;
-                            debug!("downloaded directory: {:?}", new_dest_dir);
-                        }
-                        _ => debug!("skipping unknown type: {}", file_type),
-                    }
-                } else {
-                    debug!("skipping hidden file: {}", file_name);
-                }
+            // Wait for all downloads to complete
+            for task in tasks {
+                task.await??;
             }
 
             Ok(())
@@ -653,10 +700,9 @@ mod pipes {
                     path_segments[2],
                     path_segments[3],
                 );
-                let raw_path = path_segments[4..].join("/");
                 let raw_url = format!(
-                    "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-                    owner, repo, raw_path, branch
+                    "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
+                    owner, repo, branch
                 );
                 info!("Converted to GitHub API URL: {}", raw_url);
                 return Ok(raw_url);
