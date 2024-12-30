@@ -1,9 +1,9 @@
 import { assign, createActor, fromPromise, sendTo, setup, spawnChild } from 'xstate';
 import conversationBoxMachine from '@/features/system-atlas/state-machines/conversation-box';
 import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screenpipe-logo';
-import peripheralDevicesMachine from '@/features/system-atlas/state-machines/peripheral-devices';
 import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/modules/peripheral-devices/types/available-devices';
 import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters/state-machine/onboarding-flow.utils';
+import peripheralDevicesMachine from '@/modules/peripheral-devices/adapters/state-machine/management.state-machine';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
