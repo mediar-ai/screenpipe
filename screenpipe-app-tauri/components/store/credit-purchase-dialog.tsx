@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useUser } from "@/lib/hooks/use-user";
 import { Loader2 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip"; // Import Tooltip component
 
 interface CreditPurchaseDialogProps {
   open: boolean;
@@ -51,7 +52,7 @@ export function CreditPurchaseDialog({
         </DialogHeader>
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            you need {requiredCredits} credits but only have {currentCredits}
+            you need {requiredCredits} <Tooltip content="Credits are used to purchase services. Learn more about costs and details."><span className="underline cursor-pointer">credits</span></Tooltip> but only have {currentCredits}
           </p>
 
           <div className="grid grid-cols-1 gap-3">
