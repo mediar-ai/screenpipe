@@ -591,7 +591,7 @@ mod pipes {
                 .send()
                 .await?;
 
-            info!("GitHub API cache hit: {:?}", response.headers().get("x-cache"));
+            debug!("GitHub API cache hit: {:?}", response.headers().get("x-cache"));
 
             let contents: Value = response.text().await?.parse()?;
             let tree = contents["tree"]
@@ -689,7 +689,7 @@ mod pipes {
     }
 
     fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
-        info!("Attempting to get raw GitHub URL for: {}", url);
+        debug!("Attempting to get raw GitHub URL for: {}", url);
         let parsed_url = Url::parse(url)?;
         if parsed_url.host_str() == Some("github.com") {
             let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
@@ -704,7 +704,7 @@ mod pipes {
                     "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
                     owner, repo, branch
                 );
-                info!("Converted to GitHub API URL: {}", raw_url);
+                debug!("Converted to GitHub API URL: {}", raw_url);
                 return Ok(raw_url);
             }
         }
