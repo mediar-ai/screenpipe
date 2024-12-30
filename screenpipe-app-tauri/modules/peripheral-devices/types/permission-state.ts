@@ -14,7 +14,21 @@ export const PermissionState = {
   /**
    * @description The user has denied permission, or has granted it but not yet restarted
    */
-  denied: "denied"
+  denied: "denied",
 } as const
 
 export type PermissionStateEnum = (typeof PermissionState)[keyof typeof PermissionState];
+
+export const PermissionStateWithUIRelatedStates = {
+  ...PermissionState,
+  /**
+   * @description The user skipped granting permissions during onboarding flow.
+   */
+  skipped: 'skipped',
+  /**
+   * @description User triggered action to grant or check permission and its not done yet.
+   */
+  pending: 'pending'
+} as const
+
+export type PermissionStateWithUIRelatedStatesEnum = (typeof PermissionStateWithUIRelatedStates)[keyof typeof PermissionStateWithUIRelatedStates];

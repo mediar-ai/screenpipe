@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PermissionState } from './permission-state';
+import { PermissionStateWithUIRelatedStates } from './permission-state';
 
 
 // the following zod schema is not using AvailablePeripheralDevices to generate its keys because it would require either
@@ -10,9 +10,9 @@ import { PermissionState } from './permission-state';
 //    which translates to Record<AvailablePeripheralDevices, string>, loosing strict validation for its values. 
 // 2. some really obnoxious generator function.
 export const OSPermissionsStatesPerDeviceZodSchema = z.object({
-    screenRecording: z.nativeEnum(PermissionState),
-    microphone: z.nativeEnum(PermissionState),
-    accessibility: z.nativeEnum(PermissionState),
+    screenRecording: z.nativeEnum(PermissionStateWithUIRelatedStates),
+    microphone: z.nativeEnum(PermissionStateWithUIRelatedStates),
+    accessibility: z.nativeEnum(PermissionStateWithUIRelatedStates),
 })
   
 export type OSPermissionsStatesPerDevice = z.infer<typeof OSPermissionsStatesPerDeviceZodSchema>;
