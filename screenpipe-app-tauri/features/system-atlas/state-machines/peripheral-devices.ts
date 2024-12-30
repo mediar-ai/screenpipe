@@ -1,7 +1,8 @@
 import { ActorRefFrom, fromPromise, sendTo, setup } from "xstate";
+import { AvailablePeripheralDevices } from '../peripheral-devices/data-transfer-objects/available-devices';
 
 let isActive=false
-const checkPermissions = (device: string) =>{
+const checkPermissions = (device: AvailablePeripheralDevices) =>{
     return  new Promise<boolean>((resolve) => {
         setTimeout(() => {
             resolve(isActive)
