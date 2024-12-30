@@ -673,6 +673,9 @@ export function SearchChat() {
           model: model,
           messages: messages,
           stream: true,
+        },
+        {
+          signal: abortControllerRef.current.signal,
         }
       );
 
