@@ -2,6 +2,8 @@ import { assign, createActor, fromPromise, sendTo, setup, spawnChild } from 'xst
 import conversationBoxMachine from '@/features/system-atlas/state-machines/conversation-box';
 import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screenpipe-logo';
 import peripheralDevicesMachine from '@/features/system-atlas/state-machines/peripheral-devices';
+import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/modules/peripheral-devices/types/available-devices';
+import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters/state-machine/onboarding-flow.utils';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
@@ -59,7 +61,7 @@ export const screenpipeOnboardingFlow = setup({
         screenpipeEngineStartup
     }
 }).createMachine({
-    initial:'welcome',
+    initial:'permissions',
     entry: [
         spawnChild('conversationBoxMachine', { id:'convoBoxMachine', systemId: 'convoBoxMachine' }),
         spawnChild('screenpipeLogoMachine', { id:'screenpipeLogoMachine', systemId: 'screenpipeLogoMachine' }),
@@ -141,139 +143,11 @@ export const screenpipeOnboardingFlow = setup({
             },
         },
         permissions: {
-            initial:'mic',
-            states: {
-                mic: {
-                    entry: [   
-                        sendTo('convoBoxMachine', { 
-                            type:'UPDATE',
-                            payload: {
-                                textBox: {
-                                    id: 2,
-                                    text: 'screenpipe needs mic access permissions to enable audio recording and transcription. while recording is at your discretion, granting the required permission is necessary to use this feature.',
-                                },
-                                button:[{
-                                    variant: 'default',
-                                    size: 'default',
-                                    skip: true,
-                                    label: 'enable mic recording',
-                                    event: {type: 'REQUEST'}
-                                }],
-                            }
-                        },{ delay: 500 }),
-                        sendTo('peripheralDevicesMachine',{type: 'PENDING_MIC'})
-                    ],
-                    on: {
-                        'REQUEST': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_MIC'})
-                            ]
-                        },
-                        'CHECK': {
-                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_MIC'})
-                        },
-                        'SKIP': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDevicesMachine',{type: 'SKIP_MIC'}),
-                            ],
-                            target: 'keyboard'
-                        },
-                        'HEALTHY': {
-                            target: 'keyboard',
-                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'})
-                        }
-                    }
-                },
-                keyboard: {
-                    entry: [
-                        sendTo('convoBoxMachine', { type:'UPDATE', 
-                            payload: {
-                                textBox:{
-                                    id: 3,
-                                    text: 'screenpipe needs accessibility permissions to capture precise mouse movements and hotkeys. while recording is at your discretion, granting the required permission is necessary to use this feature.',
-                                },
-                                button:[{
-                                    event: {type: 'REQUEST'},
-                                    variant: 'default',
-                                    size: 'default',
-                                    label: 'grant accessibility permissions',
-                                    skip: true,
-                                }],
-                            }
-                        },{delay:500}),
-                        sendTo('peripheralDevicesMachine',{type: 'PENDING_ACCESSIBILITY'})
-                    ],
-                    on: {
-                        'REQUEST': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_ACCESSIBILITY'})
-                            ]
-                        },
-                        'CHECK': {
-                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_ACCESSIBILITY'})
-                        },
-                        'SKIP': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDevicesMachine',{type: 'SKIP_ACCESSIBILITY'}),
-                            ],
-                            target: 'monitor'
-                        },
-                        'HEALTHY': {
-                            target: 'monitor',
-                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'})
-                        }
-                    }
-                },
-                monitor:{
-                    entry: [
-                        sendTo('convoBoxMachine', { type:'UPDATE', 
-                            payload: {
-                                textBox:{
-                                    id: 4,
-                                    text: 'screenpipe needs screen recording permissions to capture activity of selected windows.  while recording is at your discretion, granting the required permission is necessary to use this feature',
-                                },
-                                button:[{
-                                    label: 'enable screen recording',
-                                    event: {type: 'REQUEST'},
-                                    variant: 'default',
-                                    size: 'default',
-                                    skip: true
-                                }],
-                            }
-                        },{delay:500}),
-                        sendTo('peripheralDevicesMachine',{type: 'PENDING_MONITOR'})
-                    ],
-                    on: {
-                        'REQUEST': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'LOADING'}),
-                                sendTo('peripheralDevicesMachine',{type: 'REQUEST_MONITOR'})
-                            ]
-                        },
-                        'CHECK': {
-                            actions: sendTo('peripheralDevicesMachine',{type: 'CHECK_MONITOR'})
-                        },
-                        'SKIP': {
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                sendTo('peripheralDevicesMachine',{type: 'SKIP_MONITOR'}),
-                            ],
-                            target: '#core_models'
-                        },
-                        'HEALTHY': {
-                            target: '#core_models',
-                            actions: [
-                                ()=>console.log("CORE"),
-                                sendTo('convoBoxMachine',{type:'NEXT_STEP'})
-                            ]
-                        }
-                    }
-                }
-            },
+            initial: AvailablePeripheralDevices.microphone,
+            states: Object.keys(AvailablePeripheralDevices).reduce((acc, key) => {
+                acc[key] = generatePermissionsStates(key as AvailablePeripheralDevicesEnum)
+                return acc
+            }, {} as any)
         },
         core_models: {
             id: 'core_models',
