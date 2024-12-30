@@ -1,5 +1,9 @@
 
 
+
+https://github.com/user-attachments/assets/7466a689-7703-4f0b-b3e1-b1cb9ed70cff
+
+
 ### 1. Configure Claude Desktop
 
 [Download Claude desktop app ](https://claude.ai/download)
