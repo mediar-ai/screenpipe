@@ -47,12 +47,15 @@ mod server;
 mod sidecar;
 mod tray;
 mod updates;
+mod store;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use store::get_store;
+pub use store::get_profiles_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
@@ -62,6 +65,8 @@ pub use permissions::request_permission;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use std::collections::HashMap;
+
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -70,16 +75,31 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    profile_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let base_dir = get_base_dir(app, None).map_err(|e| e.to_string())?;
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(app, path)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+
+        let profile_shortcuts = match get_profiles_store(app) {
+            Ok(profiles_store) => {
+                let profiles = profiles_store
+                    .get("profiles")
+                    .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+                    .unwrap_or_default();
+                
+                profiles.into_iter()
+                    .filter_map(|profile| {
+                        profiles_store.get(&format!("shortcuts.{}", profile))
+                            .and_then(|v| v.as_str().map(String::from))
+                            .map(|shortcut| (profile, shortcut))
+                    })
+                    .collect()
+            },
+            Err(_) => HashMap::new()
+        };
 
         Ok(Self {
             show: store
@@ -94,6 +114,7 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            profile_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -137,11 +158,13 @@ async fn update_global_shortcuts(
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    profile_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        profile_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -154,7 +177,6 @@ async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
-    // Unregister all existing shortcuts first
     global_shortcut.unregister_all().unwrap();
 
     // Register show shortcut
@@ -200,6 +222,20 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
+    info!("applying shortcuts for profiles {:?}", config.profile_shortcuts);
+    // Register only non-empty profile shortcuts
+    for (profile, shortcut) in &config.profile_shortcuts {
+        info!("profile: {}", profile);
+        info!("shortcut: {}", shortcut);
+        if !shortcut.is_empty() {
+            let profile = profile.clone();
+            register_shortcut(app, shortcut, false, move |app| {
+                info!("switch-profile shortcut triggered for profile: {}", profile);
+                let _ = app.emit("switch-profile", profile.clone());
+            })
+            .await?;
+        }
+    }
 
     Ok(())
 }
@@ -264,15 +300,17 @@ fn send_recording_notification(
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let base_dir = get_base_dir(app, None)?;
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(app, path).build();
+    // Create a new runtime for this synchronous function
+
+    let store = get_store(app, None)?;
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store?
+
+    let data_dir = store
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
+
     if data_dir == "default" {
         Ok(default_path)
     } else {

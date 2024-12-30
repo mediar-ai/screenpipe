@@ -106,28 +106,43 @@ class SettingsManager {
     const platform = process.platform;
     const home = os.homedir();
 
+    // Get base screenpipe data directory path based on platform
+    let baseDir: string;
     switch (platform) {
       case "darwin":
-        return path.join(
-          home,
-          "Library",
-          "Application Support",
-          "screenpipe",
-          "store.bin"
-        );
+        baseDir = path.join(home, "Library", "Application Support", "screenpipe");
+        break;
       case "linux":
-        const xdgData =
-          process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
-        return path.join(xdgData, "screenpipe", "store.bin");
+        const xdgData = process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
+        baseDir = path.join(xdgData, "screenpipe");
+        break;
       case "win32":
-        return path.join(
+        baseDir = path.join(
           process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
-          "screenpipe",
-          "store.bin"
+          "screenpipe"
         );
+        break;
       default:
         throw new Error(`unsupported platform: ${platform}`);
     }
+
+    // First check profiles.bin to get active profile
+    const profilesPath = path.join(baseDir, "profiles.bin");
+    let activeProfile = "default";
+    try {
+      const profilesData = await fs.readFile(profilesPath);
+      const profiles = JSON.parse(profilesData.toString());
+      if (profiles.activeProfile) {
+        activeProfile = profiles.activeProfile;
+      }
+    } catch (error) {
+      // Profiles file doesn't exist yet, use default
+    }
+
+    // Return store path for active profile
+    return activeProfile === "default" 
+      ? path.join(baseDir, "store.bin")
+      : path.join(baseDir, `store-${activeProfile}.bin`);
   }
 
   async init(): Promise<void> {
