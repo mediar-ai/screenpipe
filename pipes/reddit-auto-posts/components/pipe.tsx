@@ -1,21 +1,47 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileCheck } from "lucide-react";
+import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
+import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 
 const Pipe: React.FC = () => {
 
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
-  const [showKey, setShowKey] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
-  const [lastLog, setLastLog] = React.useState<any>(null);
+  const [showKey, setShowKey] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lastLog, setLastLog] = useState<any>(null);
+  const [appName, setAppName] = useState("");
+  const [contentType, setContentType] = useState("");
+
+
+  const defaultDailylogPrompt = 
+`- Analyze user activities and summarize them into a structured daily log.
+- Focus on identifying the purpose and context of each activity, categorizing them into clear categories like 'work', 'email', 'slack', etc.
+- Assign appropriate tags that provide context and detail about the activity.
+- Ensure the summary is concise, relevant, and uses simple language.
+`;
+  
+  const defaultCustomPrompt = 
+`- Craft engaging and community-friendly posts based on given screen data. 
+- Focus on generating specific and thoughtful questions that encourage discussion or helpful responses from the Reddit community. 
+- Use casual and approachable language, keeping the posts concise and easy to read. 
+- Include context when it adds value to the question but avoid overly personal details.
+- Ensure posts are well-structured, starting with a clear title, followed by a detailed body, and end with relevant subreddit recommendations.
+`;
 
   const testPipe = async () => {
     setLoading(true);
@@ -53,13 +79,16 @@ const Pipe: React.FC = () => {
     return nextCronTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const isMacOS = () => {
+    return navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
 
     const newSettings = {
       interval: parseInt(formData.get("interval") as string),
-      lastIntervalChangeTime: new Date().toISOString(),
       pageSize: parseInt(formData.get("pageSize") as string),
       summaryFrequency: formData.get("summaryFrequency") as string,
       emailAddress: formData.get("emailAddress") as string,
@@ -67,8 +96,9 @@ const Pipe: React.FC = () => {
       emailTime: (formData).get("emailTime") as string,
       customPrompt: formData.get("customPrompt") as string,
       dailylogPrompt: formData.get("dailylogPrompt") as string,
-      contentType: formData.get("contentType") as string,
-      windowName: formData.get("windowName") as string
+      windowName: formData.get("windowName") as string,
+      contentType: contentType as string,
+      lastIntervalChangeTime: new Date().toISOString()
     }
 
     try {
@@ -92,6 +122,7 @@ const Pipe: React.FC = () => {
       <form onSubmit={handleSave} className="space-y-4 w-full">
         <div className="space-y-2">
           <Label htmlFor="path">time interval *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;interval in seconds to read screen data, extract logs, and send summary email</span>
           <div className="flex gap-2">
             <Input
               id="interval"
@@ -102,13 +133,14 @@ const Pipe: React.FC = () => {
               className="flex-1"
             />
           </div>
-          <div className="text-sm">
+          <div className="text-sm text-muted-foreground">
             next cron will run at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.lastIntervalChangeTime,
               settings.customSettings?.["reddit-auto-posts"]?.interval / 60)} 
           </div>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="pageSize">page size *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;number of records to retrieve per page for extraction, considering LLM context limits</span>
           <Input
             id="pageSize"
             name="pageSize"
@@ -117,8 +149,10 @@ const Pipe: React.FC = () => {
             placeholder="size of page"
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="summaryFrequency">summary frequency *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email frequency: &apos;daily&apos; at email time or &apos;hourly:X&apos;(e.g.
+            &apos;hourly:4&apos; for every 4 hrs).</span>
           <Input
             id="summaryFrequency"
             name="summaryFrequency"
@@ -128,6 +162,7 @@ const Pipe: React.FC = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="emailTime">email time *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summaryFrequency is &apos;daily&apos;)</span>
           <Input
             id="emailTime"
             name="emailTime"
@@ -138,16 +173,18 @@ const Pipe: React.FC = () => {
         </div>
         <div className="space-y-2">
           <Label htmlFor="emailAddress">email address *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email address to send the daily summary to: (eg. me@mail.com)</span>
           <Input
             id="emailAddress"
             name="emailAddress"
             type="email"
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailAddress || ""}
-            placeholder="email address to send the daily summary to"
+            placeholder="email address"
           />
         </div>
-        <div className="space-y-2 relative items-center">
+        <div className="space-y-3 relative items-center">
           <Label htmlFor="emailPassword">email app specific password *</Label>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;app specific password for your gmail account, https://support.google.com/accounts/answer/185833?hl=en</span>
           <Input
             id="emailPassword"
             name="emailPassword"
@@ -155,13 +192,13 @@ const Pipe: React.FC = () => {
             autoCorrect="off"
             autoComplete="off"
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailPassword || ""}
-            placeholder="app specific password for your gmail account"
+            placeholder="password"
           />
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="absolute right-0 top-[25px]"
+            className="absolute right-0 top-[48px]"
             onClick={() => setShowKey(!showKey)}
           >
             {showKey ? (
@@ -171,43 +208,60 @@ const Pipe: React.FC = () => {
               )}
           </Button>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="contentType">content type *</Label>
-          <Input
-            id="contentType"
-            name="contentType"
+        <div className="space-y-3">
+          <Label htmlFor="contentType">
+            <span>content type *</span>
+            <span className="text-[13px] text-muted-foreground !font-normal">&nbsp;&nbsp;type of content to analyze &apos;ocr&apos;, &apos;audio&apos;, or &apos;all&apos;. &apos;ocr&apos; is recommended due to more content</span>
+          </Label>
+          <Select
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.contentType || "all"}
-            className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            placeholder="Type of content to analyze: 'ocr', 'audio', or 'all'. OCR usually contains more content, so it's recommended to choose either OCR or audio rather than 'all' for better performance."
-          />
+            onValueChange={(value) => {
+                setContentType(value);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="select content type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">all</SelectItem>
+              <SelectItem value="ocr">ocr</SelectItem>
+              <SelectItem value="audio">audio</SelectItem>
+              {isMacOS() && <SelectItem value="ui">ui</SelectItem>}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="windowName">window name</Label>
-          <Input
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;specific window name to filter the screen data, for example &apos;gmail&apos;,
+            &apos;john&apos;, &apos;slack&apos; etc.</span>
+          <SqlAutocompleteInput
             id="windowName"
             name="windowName"
-            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.windowName || ""}
-            className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            placeholder="Specific window name to filter the screen data, for example 'gmail', 'john', 'slack', 'myCodeFile.tsx', etc. this will filter out audio"
+            type="window"
+            icon={<Laptop className="h-4 w-4" />}
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.windowName}
+            onChange={setAppName}
+            placeholder="window name to filter the screen data"
+            className="flex-grow"
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="dailylogPrompt">daily prompt</Label>
           <textarea
             id="dailylogPrompt"
             name="dailylogPrompt"
-            className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={ settings.customSettings?.["reddit-auto-posts"]?.dailylogPrompt || "" }
+            className="w-full text-sm min-h-[30px] p-2 rounded-md border bg-background"
+            defaultValue={ settings.customSettings?.["reddit-auto-posts"]?.dailylogPrompt || `${defaultDailylogPrompt}` }
             placeholder="additional prompt for the AI assistant that will be used to extract information from the screen data every specified amount of minutes"
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label htmlFor="customPrompt">custom prompt</Label>
           <textarea
             id="customPrompt"
             name="customPrompt"
-            className="w-full text-sm min-h-[20px] p-2 rounded-md border bg-background"
-            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.customPrompt || "" }
+            className="w-full text-sm min-h-[30px] p-2 rounded-md border bg-background"
+            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.customPrompt || `${defaultCustomPrompt}` }
             placeholder="additional prompt for the AI assistant that will be used to generate a list of questions to post on reddit based on the logs previously extracted"
           />
         </div>

@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 interface SqlAutocompleteInputProps {
   id: string;
   placeholder: string;
-  value: string;
+  value?: string;
+  defaultValue: string;
   name: string;
   onChange: (value: string) => void;
   type: "app" | "window";
@@ -21,6 +22,7 @@ export function SqlAutocompleteInput({
   id,
   name,
   placeholder,
+  defaultValue,
   value,
   onChange,
   type,
@@ -92,6 +94,7 @@ export function SqlAutocompleteInput({
             name={name}
             placeholder={placeholder}
             value={inputValue}
+            defaultValue={defaultValue}
             onChange={handleInputChange}
             onFocus={() => setOpen(true)}
             className={cn("pr-8 w-full", icon ? "pl-7" : "pl-3")}
@@ -129,7 +132,7 @@ export function SqlAutocompleteInput({
             ) : (
               items
                 .filter((item) =>
-                  item.name.toLowerCase().includes(inputValue.toLowerCase())
+                  item.name.toLowerCase().includes(inputValue?.toLowerCase() as string)
                 )
                 .map((item: any) => (
                   <Command.Item
@@ -151,3 +154,4 @@ export function SqlAutocompleteInput({
     </div>
   );
 }
+
