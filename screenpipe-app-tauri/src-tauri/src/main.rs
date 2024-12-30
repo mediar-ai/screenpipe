@@ -158,6 +158,7 @@ async fn update_global_shortcuts(
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    profile_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
