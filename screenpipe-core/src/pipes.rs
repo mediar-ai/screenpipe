@@ -1,6 +1,7 @@
 #[allow(clippy::module_inception)]
 #[cfg(feature = "pipes")]
 mod pipes {
+    use dirs::home_dir;
     use regex::Regex;
     use std::collections::HashMap;
     use std::future::Future;
@@ -10,11 +11,9 @@ mod pipes {
     use tokio::process::Command;
     use tokio::sync::watch;
 
-    use reqwest::Client;
     use serde_json::Value;
 
     use anyhow::Result;
-    use reqwest;
     use std::fs;
     use std::path::Path;
     use tokio::io::{AsyncBufReadExt, BufReader};
@@ -33,8 +32,11 @@ mod pipes {
     // Add near other imports
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
-    use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use std::str::FromStr;
+    use reqwest_middleware::reqwest::Client;
+    use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+    use reqwest_middleware::ClientBuilder;
+    use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 
     pub struct CronHandle {
         shutdown: watch::Sender<bool>,
@@ -568,7 +570,17 @@ mod pipes {
         let dest_dir = dest_dir.to_path_buf();
 
         Box::pin(async move {
-            let client = Client::new();
+            // Create a cached client
+            let client = ClientBuilder::new(Client::new())
+                .with(Cache(HttpCache {
+                    mode: CacheMode::Default,
+                    manager: CACacheManager {
+                        path: home_dir().unwrap().join(".screenpipe/.http-cacache"),
+                    },
+                    options: HttpCacheOptions::default(),
+                }))
+                .build();
+
             let api_url = get_raw_github_url(url.as_str())?;
 
             let response = client
@@ -576,9 +588,13 @@ mod pipes {
                 .header("Accept", "application/vnd.github.v3+json")
                 .header("User-Agent", "screenpipe")
                 .send()
-                .await?;
+                .await
+                .unwrap();
 
-            let contents: Value = response.json().await?;
+            // print x-cache header
+            info!("GitHub API cache hit: {:?}", response.headers().get("x-cache"));
+
+            let contents: Value = response.text().await?.parse()?;
 
             if !contents.is_array() {
                 anyhow::bail!("invalid response from github api");
@@ -816,7 +832,7 @@ mod pipes {
             }
         };
 
-        let client = reqwest::Client::new();
+        let client = Client::new();
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
