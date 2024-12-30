@@ -109,33 +109,49 @@ export function MemoriesGallery() {
   return (
     <div className="w-full max-w-7xl mx-auto p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
-        {memories.map((memory) => (
-          <motion.div
-            key={memory.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative rounded-lg overflow-hidden bg-background border flex flex-col"
-          >
-            <div className="relative aspect-video flex-shrink-0">
-              <VideoComponent
-                filePath={memory.preview_url}
-                className="w-full h-full"
-              />
-            </div>
-            <div className="p-3 space-y-1 flex-1">
-              <div className="flex items-center justify-center text-xs text-muted-foreground">
-                <Calendar className="h-3 w-3 mr-1" />
-                {format(new Date(memory.timestamp), "PPp")}
-              </div>
+        {isLoading
+          ? // Initial loading skeletons
+            [...Array(6)].map((_, i) => (
               <div
-                className="text-xs text-muted-foreground truncate text-center"
-                title={memory.preview_url}
+                key={`initial-skeleton-${i}`}
+                className="rounded-lg overflow-hidden bg-background border"
               >
-                {memory.app_name}
+                <Skeleton className="aspect-video w-full" />
+                <div className="p-3 space-y-1">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
+            ))
+          : // Existing memories rendering
+            memories.map((memory) => (
+              <motion.div
+                key={memory.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative rounded-lg overflow-hidden bg-background border flex flex-col"
+              >
+                <div className="relative aspect-video flex-shrink-0">
+                  <VideoComponent
+                    filePath={memory.preview_url}
+                    className="w-full h-full"
+                  />
+                </div>
+                <div className="p-3 space-y-1 flex-1">
+                  <div className="flex items-center justify-center text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    {format(new Date(memory.timestamp), "PPp")}
+                  </div>
+                  <div
+                    className="text-xs text-muted-foreground truncate text-center"
+                    title={memory.preview_url}
+                  >
+                    {memory.app_name}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
 
         {/* Loading skeletons for load more */}
         {loadingMore && (
