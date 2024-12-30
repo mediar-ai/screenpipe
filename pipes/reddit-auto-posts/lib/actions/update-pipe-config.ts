@@ -4,9 +4,6 @@ import path from 'path';
 
 export default async function updatePipeConfig(
   redditSettings: any, 
-  aiUrl: string,
-  aiModel: string,
-  openaiApiKey: string,
 ) {
 
   if (!redditSettings) {
@@ -22,16 +19,12 @@ export default async function updatePipeConfig(
   );
 
   const configData = {
-    ...redditSettings,
-    aiUrl,
-    aiModel,
-    openaiApiKey,
     crons: [
       {
         path: "/api/pipeline",
         schedule: `0 */${redditSettings?.interval / 60} * * * *`,
       },
-    ]
+    ],
   };
 
   try {

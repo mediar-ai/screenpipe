@@ -70,13 +70,10 @@ const Pipe: React.FC = () => {
       contentType: formData.get("contentType") as string,
       windowName: formData.get("windowName") as string
     }
-    const aiUrl = settings.aiUrl;
-    const aiModel = settings.aiModel;
-    const openaiApiKey = settings.openaiApiKey;
 
     try {
       await updateSettings(newSettings, "reddit-auto-posts");
-      await updatePipeConfig(newSettings, aiUrl, aiModel, openaiApiKey);
+      await updatePipeConfig(newSettings);
       toast({
         title: "settings saved",
         description: "your reddit pipe settings have been updated",
