@@ -2,7 +2,7 @@ import { Keyboard, MicIcon, Monitor } from "lucide-react"
 import { Ref, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { ActorRef } from "xstate"
-import { useSelector } from "@xstate/react"
+import { shallowEqual, useSelector } from "@xstate/react"
 import { PeripheralDevicesMachineType } from "../state-machines/peripheral-devices"
 import { screenpipeOnboardingMachine } from "@/features/onboarding/state-machine/onboarding-flow"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
@@ -20,7 +20,8 @@ const PermissionStatus = (props: {
         return screenpipeOnboardingMachine.system.get('peripheralDevicesMachine')
     },[])
 
-    const state = useSelector(peripheralDevicesMachine, (snap)=> snap.value)
+    const state = useSelector(peripheralDevicesMachine, (snap) => snap.context.permissionStatesPerDevice, shallowEqual)
+
     return (
         <AnimatedGroupContainer
             color="#cece66"
@@ -30,7 +31,7 @@ const PermissionStatus = (props: {
             shouldScale={props.isContainerActive}
         >
             <CircleIcon
-                state={state.mic}
+                state={state.microphone}
                 ref={props.micRef}
             >
                 <MicIcon className="h-4 w-4"/>
@@ -42,7 +43,7 @@ const PermissionStatus = (props: {
                 <Keyboard className="h-4 w-4"/>
             </CircleIcon>
             <CircleIcon
-                state={state.monitor}
+                state={state.screenRecording}
                 ref={props.monitorRef}
             >
                 <Monitor className="h-4 w-4"/>
