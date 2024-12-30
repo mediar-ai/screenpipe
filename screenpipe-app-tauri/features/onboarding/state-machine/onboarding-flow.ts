@@ -1,7 +1,7 @@
 import { assign, createActor, fromPromise, sendTo, setup, spawnChild } from 'xstate';
-import conversationBoxMachine from '../../system-atlas/state-machines/conversation-box';
-import screenpipeLogoMachine from '../../system-atlas/state-machines/screenpipe-logo';
-import peripheralDevicesMachine from '../../system-atlas/state-machines/peripheral-devices';
+import conversationBoxMachine from '@/features/system-atlas/state-machines/conversation-box';
+import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screenpipe-logo';
+import peripheralDevicesMachine from '@/features/system-atlas/state-machines/peripheral-devices';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
