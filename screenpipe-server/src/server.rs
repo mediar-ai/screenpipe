@@ -1571,6 +1571,59 @@ async fn get_similar_speakers_handler(
     Ok(JsonResponse(similar_speakers))
 }
 
+// Add these new structs after the other request/response structs
+#[derive(Deserialize)]
+pub struct AudioDeviceControlRequest {
+    device_name: String,
+    #[serde(default)]
+    device_type: Option<DeviceType>,
+}
+
+#[derive(Serialize)]
+pub struct AudioDeviceControlResponse {
+    success: bool,
+    message: String,
+}
+
+// Add these new handler functions before create_router()
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device = AudioDevice {
+        name: payload.device_name.clone(),
+        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+    };
+
+    state.audio_devices_control.push((device.clone(), DeviceControl { is_running: true, is_paused: false }));
+    
+    info!("queued start command for audio device: {}", device.name);
+    
+    Ok(JsonResponse(AudioDeviceControlResponse {
+        success: true,
+        message: format!("started audio device: {}", device.name),
+    }))
+}
+
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device = AudioDevice {
+        name: payload.device_name.clone(),
+        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+    };
+
+    state.audio_devices_control.push((device.clone(), DeviceControl { is_running: false, is_paused: false }));
+    
+    info!("queued stop command for audio device: {}", device.name);
+    
+    Ok(JsonResponse(AudioDeviceControlResponse {
+        success: true,
+        message: format!("stopped audio device: {}", device.name),
+    }))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1612,6 +1665,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
+        .route("/audio/start", post(start_audio_device))
+        .route("/audio/stop", post(stop_audio_device))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
