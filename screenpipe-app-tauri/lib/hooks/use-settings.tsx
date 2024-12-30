@@ -3,12 +3,11 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import { Language } from "@/lib/language";
 import {
-  createStore as createStoreEasyPeasy,
   action,
   Action,
   persist,
-  createTypedHooks,
   PersistStorage,
+  createContextStore,
 } from "easy-peasy";
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
@@ -35,7 +34,7 @@ export enum Shortcut {
   STOP_RECORDING = "stop_recording",
 }
 
-export interface User {
+export type User = {
   id?: string;
   email?: string;
   name?: string;
@@ -181,7 +180,7 @@ export interface StoreModel {
   resetSetting: Action<StoreModel, keyof Settings>;
 }
 
-function createDefaultSettingsObject(): Settings {
+export function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
   try {
     const currentPlatform = platform();
@@ -211,11 +210,22 @@ function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
+/** 
+ * @warning Do not change autoSave to true, it causes race conditions
+ */
 const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
-      return new TauriStore(`${dir}/screenpipe/store.bin`);
+      const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
+        autoSave: false,
+      });
+      const activeProfile = await profilesStore.get("activeProfile") || "default";
+      const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
+      console.log("activeProfile", activeProfile, file);
+      return new TauriStore(`${dir}/screenpipe/${file}`, {
+        autoSave: false,
+      });
     })();
   }
   return storePromise;
@@ -261,7 +271,7 @@ const tauriStorage: PersistStorage = {
   },
 };
 
-export const store = createStoreEasyPeasy<StoreModel>(
+export const store = createContextStore<StoreModel>(
   persist(
     {
       settings: createDefaultSettingsObject(),
@@ -286,15 +296,11 @@ export const store = createStoreEasyPeasy<StoreModel>(
   )
 );
 
-const typedHooks = createTypedHooks<StoreModel>();
-const useStoreActions = typedHooks.useStoreActions;
-const useStoreState = typedHooks.useStoreState;
-
 export function useSettings() {
-  const settings = useStoreState((state) => state.settings);
-  const setSettings = useStoreActions((actions) => actions.setSettings);
-  const resetSettings = useStoreActions((actions) => actions.resetSettings);
-  const resetSetting = useStoreActions((actions) => actions.resetSetting);
+  const settings = store.useStoreState((state) => state.settings);
+  const setSettings = store.useStoreActions((actions) => actions.setSettings);
+  const resetSettings = store.useStoreActions((actions) => actions.resetSettings);
+  const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
