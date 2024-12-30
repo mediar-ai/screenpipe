@@ -29,15 +29,20 @@ export const VideoComponent = memo(function VideoComponent({
       .trim()
       .replace(/\//g, "/");
   }, []);
+
   const renderFileLink = () => (
     <div className="mt-2 text-center text-xs text-gray-500 truncate px-2" title={filePath}>
       {customDescription || filePath}
     </div>
   );
 
-  const validateMedia = async(path: string): Promise<string> => {
+  const validateMedia = async (path: string): Promise<string> => {
     try {
-      const response = await fetch(`http://localhost:3030/experimental/validate/media?file_path=${encodeURIComponent(path)}`);
+      const response = await fetch(
+        `http://localhost:3030/experimental/validate/media?file_path=${encodeURIComponent(
+          path
+        )}`
+      );
       const result = await response.json();
       return result.status;
     } catch (error) {
@@ -57,12 +62,12 @@ export const VideoComponent = memo(function VideoComponent({
         }
 
         const validationStatus = await validateMedia(sanitizedPath);
-        console.log("Media file:", validationStatus)
+        console.log("Media file:", validationStatus);
 
         if (validationStatus === "valid media file") {
           setIsAudio(
             sanitizedPath.toLowerCase().includes("input") ||
-            sanitizedPath.toLowerCase().includes("output")
+              sanitizedPath.toLowerCase().includes("output")
           );
           const { data, mimeType } = await getMediaFile(sanitizedPath);
           const binaryData = atob(data);
@@ -73,11 +78,19 @@ export const VideoComponent = memo(function VideoComponent({
           const blob = new Blob([bytes], { type: mimeType });
           setMediaSrc(URL.createObjectURL(blob));
         } else if (validationStatus.startsWith("media file does not exist")) {
-            throw new Error(`${isAudio ? "audio" : "video" } file not exists, it might get deleted`);
+          throw new Error(
+            `${
+              isAudio ? "audio" : "video"
+            } file not exists, it might get deleted`
+          );
         } else if (validationStatus.startsWith("invalid media file")) {
-            throw new Error(`the ${isAudio ? "audio" : "video" } file is not written completely, please try again later`);
-        } else { 
-            throw new Error("unknown media validation status"); 
+          throw new Error(
+            `the ${
+              isAudio ? "audio" : "video"
+            } file is not written completely, please try again later`
+          );
+        } else {
+          throw new Error("unknown media validation status");
         }
       } catch (error) {
         console.warn("Failed to load media:", error);
