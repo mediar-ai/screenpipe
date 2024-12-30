@@ -52,12 +52,12 @@ async def handle_list_tools() -> list[types.Tool]:
                     "start_time": {
                         "type": "string",
                         "format": "date-time",
-                        "description": "Start time in ISO format (e.g. 2024-01-01T00:00:00Z)"
+                        "description": "Start time in ISO format UTC (e.g. 2024-01-01T00:00:00Z). Make sure to use user's time and timezone."
                     },
                     "end_time": {
                         "type": "string",
                         "format": "date-time",
-                        "description": "End time in ISO format (e.g. 2024-01-01T00:00:00Z)"
+                        "description": "End time in ISO format UTC (e.g. 2024-01-01T00:00:00Z). Make sure to use user's time and timezone."
                     },
                     "app_name": {
                         "type": "string",
