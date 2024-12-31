@@ -1,8 +1,13 @@
 import { Command } from "@tauri-apps/plugin-shell";
 import { ScreenpipeSetupParams } from "../types/screenpipe-setup-params";
 import { ScreenpipeCliService } from "../interfaces/cli.service.interface";
+import { EventEmitter } from "@/modules/event-management/emitter/interfaces/event-emitter.service.interface";
 
 class TauriCliService implements ScreenpipeCliService {
+    constructor(
+        private readonly eventEmitterService: EventEmitter,
+    ) {}
+    
     async setup({enableBeta = false}: ScreenpipeSetupParams) {
           const command = Command.sidecar("screenpipe", getSetupParams(enableBeta));
     
@@ -16,7 +21,7 @@ class TauriCliService implements ScreenpipeCliService {
             command.on("error", (error) => reject(new Error(error)));
             
             command.stdout.on("data", (line) => {
-              window.dispatchEvent(new CustomEvent('command-update', { detail: line }));
+              this.eventEmitterService.emit('command-update', line)
               if (line.includes("screenpipe setup complete")) {
                 resolve("ok");
               }
