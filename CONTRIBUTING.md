@@ -49,8 +49,6 @@ before you begin:
    bun tauri build
    ```
 
-
-
 ### windows
 
 1. **Install winget (Prerequisite)**:
