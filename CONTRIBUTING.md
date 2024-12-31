@@ -51,10 +51,10 @@ before you begin:
 
 ### windows
 
-1. **Install winget (Prerequisite)**:
+1. **install winget (Prerequisite)**:
    - Before proceeding with the other installations, make sure you have `winget` installed. You can download and install it by following this guide: [Install winget](https://winget.pro/winget-install-powershell/).
 
-2. **Install required tools**:
+2. **install required tools**:
    ```powershell
    winget install -e --id Microsoft.VisualStudio.2022.BuildTools
    winget install -e --id Rustlang.Rustup
