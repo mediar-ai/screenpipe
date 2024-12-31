@@ -3,7 +3,6 @@ use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use crossbeam::queue::SegQueue;
-use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::AudioStream;
@@ -20,7 +19,28 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
+
+#[derive(Clone)]
+pub struct ShutdownSignal {
+    tx: broadcast::Sender<()>,
+}
+
+impl ShutdownSignal {
+    pub fn new() -> Self {
+        let (tx, _) = broadcast::channel(1);
+        Self { tx }
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<()> {
+        self.tx.subscribe()
+    }
+
+    pub fn signal(&self) {
+        let _ = self.tx.send(());
+    }
+}
 
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
@@ -28,7 +48,6 @@ pub async fn start_continuous_recording(
     fps: f64,
     audio_chunk_duration: Duration,
     video_chunk_duration: Duration,
-    vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
     audio_disabled: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
@@ -37,71 +56,20 @@ pub async fn start_continuous_recording(
     use_pii_removal: bool,
     vision_disabled: bool,
     vad_engine: CliVadEngine,
-    vision_handle: &Handle,
-    audio_handle: &Handle,
     ignored_windows: &[String],
     include_windows: &[String],
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    shutdown: ShutdownSignal,
+    #[cfg(feature = "keyboard")] enable_keyboard: bool,
 ) -> Result<()> {
-    debug!("Starting video recording for monitor {:?}", monitor_ids);
-    let video_tasks = if !vision_disabled {
-        monitor_ids
-            .iter()
-            .map(|&monitor_id| {
-                let db_manager_video = Arc::clone(&db);
-                let output_path_video = Arc::clone(&output_path);
-                let is_running_video = Arc::clone(&vision_control);
-                let ocr_engine = Arc::clone(&ocr_engine);
-                let ignored_windows_video = ignored_windows.to_vec();
-                let include_windows_video = include_windows.to_vec();
+    let mut shutdown_rx = shutdown.subscribe();
 
-                let languages = languages.clone();
-
-                debug!("Starting video recording for monitor {}", monitor_id);
-                vision_handle.spawn(async move {
-                    record_video(
-                        db_manager_video,
-                        output_path_video,
-                        fps,
-                        is_running_video,
-                        ocr_engine,
-                        monitor_id,
-                        use_pii_removal,
-                        &ignored_windows_video,
-                        &include_windows_video,
-                        video_chunk_duration,
-                        languages.clone(),
-                        capture_unfocused_windows,
-                    )
-                    .await
-                })
-            })
-            .collect::<Vec<_>>()
-    } else {
-        vec![vision_handle.spawn(async move {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            Ok(())
-        })]
-    };
-
+    // Create channels for each component
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
-        // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (
-            crossbeam::channel::Sender<AudioInput>,
-            crossbeam::channel::Receiver<AudioInput>,
-        ) = crossbeam::channel::bounded(100);
-        let (_, output_receiver): (
-            crossbeam::channel::Sender<TranscriptionResult>,
-            crossbeam::channel::Receiver<TranscriptionResult>,
-        ) = crossbeam::channel::bounded(100);
-        (
-            input_sender,
-            output_receiver,
-            Arc::new(AtomicBool::new(false)),
-        )
+        create_dummy_channels()
     } else {
         create_whisper_channel(
             audio_transcription_engine.clone(),
@@ -113,58 +81,180 @@ pub async fn start_continuous_recording(
         )
         .await?
     };
-    let whisper_sender_clone = whisper_sender.clone();
-    let db_manager_audio = Arc::clone(&db);
 
-    let audio_task = if !audio_disabled {
-        audio_handle.spawn(async move {
-            record_audio(
-                db_manager_audio,
-                audio_chunk_duration,
-                whisper_sender,
-                whisper_receiver,
-                audio_devices_control,
-                audio_transcription_engine,
-            )
-            .await
-        })
+    let whisper_sender_shutdown = whisper_sender.clone();
+
+    // Spawn video recording tasks
+    let video_tasks = if !vision_disabled {
+        monitor_ids
+            .iter()
+            .map(|&monitor_id| {
+                let db = Arc::clone(&db);
+                let output_path = Arc::clone(&output_path);
+                let ocr_engine = Arc::clone(&ocr_engine);
+                let ignored_windows = ignored_windows.to_vec();
+                let include_windows = include_windows.to_vec();
+                let languages = languages.clone();
+                let mut shutdown_rx = shutdown.subscribe();
+
+                tokio::spawn(async move {
+                    loop {
+                        tokio::select! {
+                            result = record_video(
+                                db.clone(),
+                                output_path.clone(),
+                                fps,
+                                ocr_engine.clone(),
+                                monitor_id,
+                                use_pii_removal,
+                                &ignored_windows,
+                                &include_windows,
+                                video_chunk_duration,
+                                languages.clone(),
+                                capture_unfocused_windows,
+                            ) => {
+                                if let Err(e) = result {
+                                    error!("video recording error: {}", e);
+                                }
+                                break;
+                            }
+                            _ = shutdown_rx.recv() => {
+                                debug!("received shutdown signal for video recording");
+                                break;
+                            }
+                        }
+                    }
+                    Ok::<(), anyhow::Error>(())
+                })
+            })
+            .collect()
     } else {
-        audio_handle.spawn(async move {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            Ok(())
-        })
+        vec![]
     };
 
-    // Join all video tasks
-    let video_results = join_all(video_tasks);
+    // Spawn audio recording task
+    let audio_task = if !audio_disabled {
+        let db = Arc::clone(&db);
+        let mut shutdown_rx = shutdown.subscribe();
 
-    // Handle any errors from the tasks
-    for (i, result) in video_results.await.into_iter().enumerate() {
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    result = record_audio(
+                        db.clone(),
+                        audio_chunk_duration,
+                        whisper_sender_shutdown.clone(),
+                        whisper_receiver.clone(),
+                        audio_devices_control.clone(),
+                        audio_transcription_engine.clone(),
+                    ) => {
+                        if let Err(e) = result {
+                            error!("audio recording error: {}", e);
+                        }
+                        break;
+                    }
+                    _ = shutdown_rx.recv() => {
+                        debug!("received shutdown signal for audio recording");
+                        break;
+                    }
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        })
+    } else {
+        tokio::spawn(async { Ok(()) })
+    };
+
+    // Spawn keyboard recording task if enabled
+    #[cfg(feature = "keyboard")]
+    let keyboard_task = if enable_keyboard {
+        let db = Arc::clone(&db);
+        let mut shutdown_rx = shutdown.subscribe();
+
+        tokio::spawn(async move {
+            use screenpipe_core::KeyboardCapture;
+            use tokio::sync::mpsc;
+
+            let (tx, mut rx) = mpsc::channel(100);
+            let keyboard_capture = Arc::new(KeyboardCapture::new(tx));
+            let keyboard_capture_clone = keyboard_capture.clone();
+
+            tokio::select! {
+                _ = async {
+                    let keyboard_future = keyboard_capture.start();
+                    tokio::select! {
+                        _ = keyboard_future => {},
+                        _ = async {
+                            while let Some(event) = rx.recv().await {
+                                if let Err(e) = db.insert_keyboard_event(
+                                    event.timestamp,
+                                    &event.key,
+                                    &event.event_type.to_string(),
+                                ).await {
+                                    error!("Failed to insert keyboard event: {}", e);
+                                }
+                            }
+                        } => {}
+                    }
+                } => {},
+                _ = shutdown_rx.recv() => {
+                    debug!("received shutdown signal for keyboard recording");
+                    keyboard_capture_clone.stop();
+                }
+            }
+
+            Ok::<(), anyhow::Error>(())
+        })
+    } else {
+        tokio::spawn(async { Ok::<(), anyhow::Error>(()) })
+    };
+
+    // Wait for shutdown signal
+    shutdown_rx.recv().await?;
+    info!("initiating graceful shutdown");
+
+    // Signal whisper to shutdown
+    whisper_shutdown_flag.store(true, Ordering::Relaxed);
+
+    // Wait for all tasks to complete
+    let results = futures::future::join_all(video_tasks).await;
+    for (i, result) in results.into_iter().enumerate() {
         if let Err(e) = result {
-            error!("Video recording error for monitor {}: {:?}", i, e);
+            error!("video task {} error during shutdown: {:?}", i, e);
         }
     }
+
     if let Err(e) = audio_task.await {
-        error!("Audio recording error: {:?}", e);
+        error!("audio task error during shutdown: {:?}", e);
     }
 
-    // Shutdown the whisper channel
-    whisper_shutdown_flag.store(true, Ordering::Relaxed);
-    drop(whisper_sender_clone); // Close the sender channel
+    #[cfg(feature = "keyboard")]
+    if let Err(e) = keyboard_task.await {
+        error!("keyboard task error during shutdown: {:?}", e);
+    }
 
-    // TODO: process any remaining audio chunks
-    // TODO: wait a bit for whisper to finish processing
-    // TODO: any additional cleanup like device controls to release
-
-    info!("Stopped recording");
+    info!("all recording tasks completed");
     Ok(())
+}
+
+fn create_dummy_channels() -> (
+    crossbeam::channel::Sender<AudioInput>,
+    crossbeam::channel::Receiver<TranscriptionResult>,
+    Arc<AtomicBool>,
+) {
+    let (input_sender, _) = crossbeam::channel::bounded(1);
+    let (_, output_receiver) = crossbeam::channel::bounded(1);
+    (
+        input_sender,
+        output_receiver,
+        Arc::new(AtomicBool::new(false)),
+    )
 }
 
 async fn record_video(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    is_running: Arc<AtomicBool>,
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     use_pii_removal: bool,
@@ -211,7 +301,7 @@ async fn record_video(
         capture_unfocused_windows,
     );
 
-    while is_running.load(Ordering::SeqCst) {
+    loop {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db.insert_frame(&device_name, None).await {
@@ -253,8 +343,6 @@ async fn record_video(
         }
         tokio::time::sleep(Duration::from_secs_f64(1.0 / fps)).await;
     }
-
-    Ok(())
 }
 
 async fn record_audio(

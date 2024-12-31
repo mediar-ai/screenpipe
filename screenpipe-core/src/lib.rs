@@ -31,6 +31,10 @@ pub mod pii_removal;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
+#[cfg(feature = "keyboard")]
+pub mod keyboard_capture;
+#[cfg(feature = "keyboard")]
+pub use keyboard_capture::*;
 
 #[cfg(feature = "security")]
 pub use pii_removal::*;
