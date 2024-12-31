@@ -62,7 +62,7 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
-    id: "memories-gallery",
+    id: "memories",
     name: "memories gallery",
     description:
       "google-photo like gallery of your screen recordings memories, with AI-powered insights and timeline visualization",
@@ -140,33 +140,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
     credits: 10,
     paid: true,
-  },
-  {
-    id: "pipe-obsidian-time-logs",
-    name: "obsidian time logger",
-    description:
-      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
-    credits: 0,
-    paid: false,
-  },
-  {
-    id: "pipe-post-questions-on-reddit",
-    name: "reddit question bot",
-    description:
-      "get more followers, promote your content/product while being useful, without doing any work",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
-    credits: 0,
-    paid: false,
-  },
-  {
-    id: "pipe-notion-table-logs",
-    name: "notion time logger",
-    description:
-      "continuously write logs of your days in a notion table using ollama",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
-    credits: 0,
-    paid: false,
   },
   {
     id: "pipe-simple-nextjs",

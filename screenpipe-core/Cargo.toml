@@ -23,9 +23,10 @@ hf-hub = { workspace = true, features = [
     "native-tls",
 ], optional = true }
 screenpipe-actions = { path = "../screenpipe-actions", optional = true }
-
-# pipes
+http-cache-reqwest = "0.15.0"
 reqwest = { workspace = true }
+reqwest-middleware = "0.4.0"
+# pipes
 tokio = { workspace = true }
 
 # Security
