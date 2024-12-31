@@ -49,9 +49,14 @@ before you begin:
    bun tauri build
    ```
 
+
+
 ### windows
 
-1. **install required tools**:
+1. **Install winget (Prerequisite)**:
+   - Before proceeding with the other installations, make sure you have `winget` installed. You can download and install it by following this guide: [Install winget](https://winget.pro/winget-install-powershell/).
+
+2. **Install required tools**:
    ```powershell
    winget install -e --id Microsoft.VisualStudio.2022.BuildTools
    winget install -e --id Rustlang.Rustup
@@ -61,8 +66,7 @@ before you begin:
    winget install -e --id Git.Git
    irm https://bun.sh/install.ps1 | iex
    ```
-
-2. **clone and setup vcpkg**:
+3. **clone and setup vcpkg**:
    ```powershell
    cd C:\dev
    $env:DEV_DIR = $(pwd)
@@ -73,7 +77,7 @@ before you begin:
    ./vcpkg.exe install ffmpeg:x64-windows
    ```
 
-3. **set environment variables**:
+4. **set environment variables**:
    ```powershell
    [System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
    [System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
@@ -81,7 +85,7 @@ before you begin:
    [System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
    ```
 
-4. **clone and build**:
+5. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
