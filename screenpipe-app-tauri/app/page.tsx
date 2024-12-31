@@ -38,6 +38,12 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
+    const restartScreenpipe = async () => {
+      await invoke("kill_all_sreenpipes");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await invoke("spawn_screenpipe");
+    };
+
     const unlisten = Promise.all([
       listen('shortcut-start-recording', async () => {
         await invoke("spawn_screenpipe");
@@ -66,16 +72,27 @@ export default function Home() {
           description: `switched to ${profile} profile, restarting screenpipe now`
         });
 
-        await invoke("kill_all_sreenpipes");
-    
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-        await invoke("spawn_screenpipe");
-    
+        await restartScreenpipe();
         await new Promise((resolve) => setTimeout(resolve, 1000));
         relaunch();
       })
     ]);
+
+    listen('shortcut-start-audio', async () => {
+      toast({
+        title: 'audio recording started',
+        description: 'audio recording has been initiated'
+      });
+      await restartScreenpipe();
+    });
+
+    listen('shortcut-stop-audio', async () => {
+      toast({
+        title: 'audio recording stopped',
+        description: 'audio recording has been stopped'
+      });
+      await restartScreenpipe();
+    });
 
     return () => {
       unlisten.then(listeners => {
