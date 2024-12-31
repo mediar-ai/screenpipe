@@ -64,6 +64,7 @@ before you begin:
    winget install -e --id Git.Git
    irm https://bun.sh/install.ps1 | iex
    ```
+   
 3. **clone and setup vcpkg**:
    ```powershell
    cd C:\dev
