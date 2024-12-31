@@ -62,7 +62,7 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
-    id: "memories-gallery",
+    id: "memories",
     name: "memories gallery",
     description:
       "google-photo like gallery of your screen recordings memories, with AI-powered insights and timeline visualization",
