@@ -87,7 +87,7 @@ const Pipe: React.FC = () => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
 
-    const newSettings = {
+    const newRedditSettings = {
       interval: parseInt(formData.get("interval") as string),
       pageSize: parseInt(formData.get("pageSize") as string),
       summaryFrequency: formData.get("summaryFrequency") as string,
@@ -102,8 +102,8 @@ const Pipe: React.FC = () => {
     }
 
     try {
-      await updateSettings(newSettings, "reddit-auto-posts");
-      await updatePipeConfig(newSettings);
+      await updateSettings(newRedditSettings, "reddit-auto-posts");
+      await updatePipeConfig(newRedditSettings);
       toast({
         title: "settings saved",
         description: "your reddit pipe settings have been updated",
@@ -122,7 +122,7 @@ const Pipe: React.FC = () => {
       <form onSubmit={handleSave} className="space-y-4 w-full">
         <div className="space-y-2">
           <Label htmlFor="path">time interval *</Label>
-          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;interval in seconds to read screen data, extract logs, and send summary email</span>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;we will extract information chunks at this interval to create posts</span>
           <div className="flex gap-2">
             <Input
               id="interval"
@@ -185,7 +185,7 @@ const Pipe: React.FC = () => {
         <div className="space-y-3 relative items-center">
           <Label htmlFor="emailPassword">email app specific password *</Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;app specific password for your gmail account, you can find it
-            <a href="https://support.google.com/accounts/answer/185833?hl=en" target="_blank" className="hover:underline text-sky-700"> here</a></span>
+            <a target="_blank" onClick={() => window.open("https://support.google.com/accounts/answer/185833?hl=en")} className="hover:underline text-sky-700"> here</a></span>
           <Input
             id="emailPassword"
             name="emailPassword"
@@ -199,7 +199,7 @@ const Pipe: React.FC = () => {
             type="button"
             variant="ghost"
             size="icon"
-            className="absolute right-0 top-[48px]"
+            className="absolute right-0 top-[25px]"
             onClick={() => setShowKey(!showKey)}
           >
             {showKey ? (

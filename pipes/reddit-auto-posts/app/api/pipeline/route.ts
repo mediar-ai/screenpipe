@@ -10,20 +10,33 @@ import saveDailyLog from "@/lib/actions/savelog";
 export async function GET() {
   try {
     console.log("starting daily log pipeline");
-    const settings = await pipe.settings.getNamespaceSettings("reddit-auto-posts");
-    const interval = settings?.interval * 1000 || 60000;
-    const summaryFrequency = settings?.summaryFrequency;
-    const emailTime = settings?.emailTime;
-    const emailAddress = settings?.emailAddress;
-    const emailPassword = settings?.emailPassword;
-    const customPrompt = settings?.customPrompt!;
-    const dailylogPrompt = settings?.dailylogPrompt!;
-    const gptModel = settings?.gptModel;
-    const gptApiUrl = settings?.gptApiUrl;
-    const openaiApiKey = settings?.openaiApiKey;
-    const windowName = settings?.windowName || "";
-    const pageSize = settings?.pageSize;
-    const contentType = settings?.contentType || "ocr";
+    const settingsManager = pipe.settings;
+    const redditSettings = await pipe.settings.getNamespaceSettings("reddit-auto-posts");
+
+    if (!settingsManager) {
+      return NextResponse.json(
+        { error: `no setting manager founder` },
+        { status: 500 }
+      );
+    }
+
+    const rawSettings = await settingsManager.getAll();
+    const aiModel = rawSettings?.aiModel;
+    const aiUrl = rawSettings?.aiUrl;
+    const openaiApiKey = rawSettings?.openaiApiKey;
+    const aiProvider = rawSettings?.aiProviderType;
+    const userToken = rawSettings?.user?.token;
+
+    const interval = redditSettings?.interval * 1000 || 60000;
+    const summaryFrequency = redditSettings?.summaryFrequency;
+    const emailTime = redditSettings?.emailTime;
+    const emailAddress = redditSettings?.emailAddress;
+    const emailPassword = redditSettings?.emailPassword;
+    const customPrompt = redditSettings?.customPrompt!;
+    const dailylogPrompt = redditSettings?.dailylogPrompt!;
+    const windowName = redditSettings?.windowName || "";
+    const pageSize = redditSettings?.pageSize;
+    const contentType = redditSettings?.contentType || "ocr";
     const logsDir = `${process.env.PIPE_DIR}/logs` || `${process.cwd()}/logs`;
     const emailEnabled = !!(emailAddress && emailPassword);
 
@@ -72,12 +85,20 @@ export async function GET() {
     });
 
     if (screenData && screenData.data && screenData.data.length > 0) {
+      if (aiProvider === "screenpipe-cloud" && !userToken) {
+        return NextResponse.json(
+          { error: `seems like you don't have screenpipe-cloud access :(` },
+          { status: 500 }
+        );
+      }
       const logEntry = await generateDailyLog(
         screenData.data,
         dailylogPrompt,
-        gptModel,
-        gptApiUrl,
-        openaiApiKey
+        aiProvider,
+        aiModel,
+        aiUrl,
+        openaiApiKey,
+        userToken,
       );
       saveDailyLog(logEntry);
     } else {
@@ -118,12 +139,20 @@ export async function GET() {
       });
 
       if (screenData && screenData.data && screenData.data.length > 0) {
+        if (aiProvider === "screenpipe-cloud" && !userToken) {
+          return NextResponse.json(
+            { error: `seems like you don't have screenpipe-cloud access :(` },
+            { status: 500 }
+          );
+        }
         const redditQuestions = await generateRedditQuestions(
           screenData.data,
           customPrompt,
-          gptModel,
-          gptApiUrl,
-          openaiApiKey
+          aiProvider,
+          aiModel,
+          aiUrl,
+          openaiApiKey,
+          userToken,
         );
         console.log("reddit questions:", redditQuestions);
 
@@ -137,7 +166,7 @@ export async function GET() {
             );
           } catch(error) {
             return NextResponse.json(
-              { error: `error in sending mail` },
+              { error: `error in sending mail ${error}` },
               { status: 500 }
             );
           }

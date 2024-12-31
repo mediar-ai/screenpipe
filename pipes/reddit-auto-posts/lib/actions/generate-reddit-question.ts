@@ -1,14 +1,17 @@
 "use server";
 
+import { OpenAI } from "openai";
 import { ContentItem } from "@screenpipe/js";
 import generateRedditLinks from "./generate-reddit-links";
 
 export default async function generateRedditQuestions(
   screenData: ContentItem[],
   customPrompt: string,
+  aiProviderType: string,
   gptModel: string,
   gptApiUrl: string,
-  openaiApiKey: string
+  openaiApiKey: string,
+  userToken?: string
 ): Promise<string> {
   const prompt = `${customPrompt}
 
@@ -28,28 +31,28 @@ export default async function generateRedditQuestions(
   `;
 
   console.log("reddit questions prompt:", prompt);
-  const response = await fetch(gptApiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${openaiApiKey}`,
-    },
-    body: JSON.stringify({
-      model: gptModel,
-      messages: [{ role: "user", content: prompt }],
-    }),
+  const openai = new OpenAI({
+    apiKey:
+      aiProviderType === "screenpipe-cloud"
+      ? userToken
+      : openaiApiKey,
+    baseURL: gptApiUrl,
+    dangerouslyAllowBrowser: true,
   });
-  console.log("reddit questions gpt response:", response);
 
-  if (!response.ok) {
-    console.log("gpt response:", await response.text());
-    throw new Error(`http error! status: ${response.status}`);
+  const response = await openai.chat.completions.create({
+    model: gptModel,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  console.log("reddit questions gpt response:", response);
+  if (!response.choices || response.choices.length === 0) {
+    throw new Error("no choices returned from openai");
   }
 
-  const result = await response.json();
-
-  console.log("ai reddit questions:", result);
-
-  const content = result.choices[0].message.content;
+  const content = response.choices[0].message.content;
+  if(!content){
+    throw new Error("no content response got from ai, please try again");
+  }
   return generateRedditLinks(content);
 }
