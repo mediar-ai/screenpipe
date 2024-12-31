@@ -676,9 +676,9 @@ export function SearchChat() {
         },
         {
           signal: abortControllerRef.current.signal,
-          // headers: {
-          //   Authorization: `Bearer ${settings.user?.token}`,
-          // },
+          headers: {
+            Authorization: `Bearer ${settings.user?.token}`,
+          },
         }
       );
 
