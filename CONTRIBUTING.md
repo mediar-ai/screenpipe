@@ -63,6 +63,7 @@ before you begin:
    winget install -e --id GnuWin32.UnZip
    winget install -e --id Git.Git
    winget install -e --id JernejSimoncic.Wget
+   winget install -e --id 7zip.7zip
    irm https://bun.sh/install.ps1 | iex
    ```
 
