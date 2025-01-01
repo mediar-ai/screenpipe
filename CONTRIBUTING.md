@@ -62,6 +62,7 @@ before you begin:
    winget install -e --id Kitware.CMake
    winget install -e --id GnuWin32.UnZip
    winget install -e --id Git.Git
+   winget install -e --id JernejSimoncic.Wget
    irm https://bun.sh/install.ps1 | iex
    ```
 
