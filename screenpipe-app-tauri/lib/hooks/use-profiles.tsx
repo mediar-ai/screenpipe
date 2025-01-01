@@ -227,10 +227,10 @@ export const useProfiles = () => {
   return {
     profiles,
     activeProfile,
-    shortcuts,
+    profileShortcuts: shortcuts,
     setActiveProfile,
     createProfile,
     deleteProfile,
-    updateShortcut,
+    updateProfileShortcut: updateShortcut,
   };
 };
