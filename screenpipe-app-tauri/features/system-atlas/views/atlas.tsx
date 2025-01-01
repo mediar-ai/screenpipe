@@ -20,8 +20,6 @@ import ScreenpipeLogo from '../components/screenpipe-logo/index';
 export default function ScreenpipeSystemAtlas(props:{
     actorRef: ActorRef<any,any,any>,
 }) {
-
-    console.log("HELLO")
   const { handleClick } = useConfettiFireworks()
   const containerRef = useRef<HTMLDivElement>(null);
   const micRef = useRef<HTMLDivElement>(null);
