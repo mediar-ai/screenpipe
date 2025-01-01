@@ -51,7 +51,10 @@ before you begin:
 
 ### windows
 
-1. **install required tools**:
+1. **install winget (Prerequisite)**:
+   - Before proceeding with the other installations, make sure you have `winget` installed. You can download and install it by following this guide: [Install winget](https://winget.pro/winget-install-powershell/).
+
+2. **install required tools**:
    ```powershell
    winget install -e --id Microsoft.VisualStudio.2022.BuildTools
    winget install -e --id Rustlang.Rustup
@@ -59,10 +62,12 @@ before you begin:
    winget install -e --id Kitware.CMake
    winget install -e --id GnuWin32.UnZip
    winget install -e --id Git.Git
+   winget install -e --id JernejSimoncic.Wget
+   winget install -e --id 7zip.7zip
    irm https://bun.sh/install.ps1 | iex
    ```
 
-2. **clone and setup vcpkg**:
+3. **clone and setup vcpkg**:
    ```powershell
    cd C:\dev
    $env:DEV_DIR = $(pwd)
@@ -73,7 +78,7 @@ before you begin:
    ./vcpkg.exe install ffmpeg:x64-windows
    ```
 
-3. **set environment variables**:
+4. **set environment variables**:
    ```powershell
    [System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
    [System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
@@ -81,7 +86,31 @@ before you begin:
    [System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
    ```
 
-4. **clone and build**:
+5. **setup Intel OpenMP DLLs**:
+   - Ensure Python and `pip` are installed before running the script.
+   
+   ```powershell
+   # Define the target directory where Intel OpenMP DLLs will be copied 
+   $mkl_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\mkl"
+   New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
+
+   python -m pip install --upgrade pip
+   $temp_dir = "temp_omp"
+   New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
+
+   Write-Host "Installing Intel OpenMP..."
+   python -m pip install intel-openmp --target $temp_dir
+
+   Write-Host "Copying DLL files..."
+   Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+       Write-Host "Copying $_"
+       Copy-Item $_.FullName -Destination $mkl_dir -Force
+   }
+   # Clean up the temporary directory
+   Remove-Item -Path $temp_dir -Recurse -Force
+   ```
+
+6. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
