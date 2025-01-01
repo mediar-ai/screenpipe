@@ -106,7 +106,7 @@ before you begin:
        Write-Host "Copying $_"
        Copy-Item $_.FullName -Destination $mkl_dir -Force
    }
-
+   # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
 
