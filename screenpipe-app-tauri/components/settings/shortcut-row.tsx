@@ -146,7 +146,7 @@ const ShortcutRow = ({
       ? ["Unassigned"]
       : parseKeyboardShortcut(value).split("+");
 
-  const isDisabled = settings.disabledShortcuts.includes(shortcut as Shortcut);
+  const isDisabled = settings.disabledShortcuts.includes(shortcut as Shortcut) || value === "";
 
   return (
     <div className="flex items-center justify-between">
