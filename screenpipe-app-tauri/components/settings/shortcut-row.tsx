@@ -187,6 +187,7 @@ const ShortcutRow = ({
 
         <Switch
           checked={!isDisabled}
+          disabled={value === ""}
           onCheckedChange={async (checked) => {
             if (checked && value) {
               console.log("re-enabling shortcut", value);
