@@ -86,7 +86,41 @@ before you begin:
    [System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
    ```
 
-5. **clone and build**:
+5. **Setup Intel OpenMP DLLs**:
+
+Ensure Python and `pip` are installed before running the script.
+
+```powershell
+# Define the target directory where Intel OpenMP DLLs will be copied 
+$mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
+
+# Install and copy Intel OpenMP DLLs
+python -m pip install --upgrade pip
+$temp_dir = "temp_omp"
+New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
+
+Write-Host "Installing Intel OpenMP..."
+python -m pip install intel-openmp --target $temp_dir
+
+Write-Host "Copying DLL files..."
+Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+    Write-Host "Copying $_"
+    Copy-Item $_.FullName -Destination $mkl_dir -Force
+}
+
+# Verify that DLLs were copied
+$dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
+Write-Host "Found $dll_count DLLs in target directory"
+if ($dll_count -eq 0) {
+    throw "No DLLs found in target directory!"
+}
+
+# Clean up the temporary directory
+Remove-Item -Path $temp_dir -Recurse -Force
+```
+
+6. **clone and build**:
    ```powershell
    git clone https://github.com/mediar-ai/screenpipe
    cd screenpipe
