@@ -91,10 +91,9 @@ before you begin:
    
    ```powershell
    # Define the target directory where Intel OpenMP DLLs will be copied 
-   $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
+   $mkl_dir = (pwd).Path + "\screenpipe-app-tauri\src-tauri\mkl"
    New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
 
-   # Install and copy Intel OpenMP DLLs
    python -m pip install --upgrade pip
    $temp_dir = "temp_omp"
    New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
@@ -108,14 +107,6 @@ before you begin:
        Copy-Item $_.FullName -Destination $mkl_dir -Force
    }
 
-   # Verify that DLLs were copied
-   $dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
-   Write-Host "Found $dll_count DLLs in target directory"
-   if ($dll_count -eq 0) {
-       throw "No DLLs found in target directory!"
-   }
-
-   # Clean up the temporary directory
    Remove-Item -Path $temp_dir -Recurse -Force
    ```
 
