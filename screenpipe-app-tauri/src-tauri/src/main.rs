@@ -39,6 +39,7 @@ mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
+use crate::commands::open_pipe_window;
 
 mod commands;
 mod llm_sidecar;
@@ -76,6 +77,7 @@ struct ShortcutConfig {
     start: String,
     stop: String,
     profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
@@ -101,6 +103,11 @@ impl ShortcutConfig {
             Err(_) => HashMap::new()
         };
 
+        let pipe_shortcuts = store
+            .get("pipeShortcuts")
+            .and_then(|v| serde_json::from_value::<HashMap<String, String>>(v.clone()).ok())
+            .unwrap_or_default();
+
         Ok(Self {
             show: store
                 .get("showScreenpipeShortcut")
@@ -115,6 +122,7 @@ impl ShortcutConfig {
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
             profile_shortcuts,
+            pipe_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -159,12 +167,14 @@ async fn update_global_shortcuts(
     start_shortcut: String,
     stop_shortcut: String,
     profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
         profile_shortcuts,
+        pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -222,16 +232,34 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-    info!("applying shortcuts for profiles {:?}", config.profile_shortcuts);
-    // Register only non-empty profile shortcuts
+
+    // Register profile shortcuts
     for (profile, shortcut) in &config.profile_shortcuts {
-        info!("profile: {}", profile);
-        info!("shortcut: {}", shortcut);
         if !shortcut.is_empty() {
             let profile = profile.clone();
             register_shortcut(app, shortcut, false, move |app| {
                 info!("switch-profile shortcut triggered for profile: {}", profile);
                 let _ = app.emit("switch-profile", profile.clone());
+            })
+            .await?;
+        }
+    }
+
+    // Register pipe shortcuts
+    for (pipe_id, shortcut) in &config.pipe_shortcuts {
+        if !shortcut.is_empty() {
+            let pipe_id = pipe_id.clone();
+            register_shortcut(app, shortcut, false, move |app| {
+                info!("pipe shortcut triggered for pipe: {}", pipe_id);
+                let pipe_id = pipe_id.clone();
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(port) = get_pipe_port(&pipe_id).await {
+                        let _ = open_pipe_window(app, port, pipe_id.clone());
+                    } else {
+                        error!("failed to get port for pipe: {}", pipe_id);
+                    }
+                });
             })
             .await?;
         }

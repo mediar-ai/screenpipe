@@ -8,16 +8,12 @@ import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import hotkeys from "hotkeys-js";
+import { PipeApi } from "@/lib/api";
 
 interface ShortcutRowProps {
   shortcut: string;
   title: string;
   description: string;
-}
-
-interface ShortcutState {
-  isRecording: boolean;
-  pressedKeys: string[];
 }
 
 const ShortcutSection = () => {
@@ -28,112 +24,123 @@ const ShortcutSection = () => {
     updateShortcut: updateProfileShortcut,
   } = useProfiles();
 
-  const [shortcutStates, setShortcutStates] = useState<
-    Record<string, ShortcutState>
-  >(() => ({
-    showScreenpipeShortcut: { isRecording: false, pressedKeys: [] },
-    startRecordingShortcut: { isRecording: false, pressedKeys: [] },
-    stopRecordingShortcut: { isRecording: false, pressedKeys: [] },
-    ...Object.fromEntries(
-      profiles.map((profile) => [
-        `profile_${profile}`,
-        { isRecording: false, pressedKeys: [] },
-      ])
-    ),
-  }));
+  const [pipes, setPipes] = useState<{ id: string; source: string }[]>([]);
+  const pipeApi = new PipeApi();
+
+  const [recordingShortcut, setRecordingShortcut] = useState<string | null>(
+    null
+  );
+
+  useEffect(() => {
+    const loadPipes = async () => {
+      try {
+        const pipeList = await pipeApi.listPipes();
+        setPipes(pipeList.map((p) => ({ id: p.id, source: p.source })));
+      } catch (error) {
+        console.error("failed to load pipes:", error);
+      }
+    };
+    loadPipes();
+  }, []);
 
   const updateShortcut = async (shortcutId: string, keys: string) => {
     try {
-      let updatedSettings = { ...settings };
+      // Handle profile shortcuts
       if (shortcutId.startsWith("profile_")) {
         const profileName = shortcutId.replace("profile_", "");
         updateProfileShortcut({ profile: profileName, shortcut: keys });
-      } else {
-        const updates: Partial<Settings> = {
-          [shortcutId]: keys,
-        };
-        updatedSettings = { ...settings, ...updates };
-        updateSettings(updates);
+        return await syncShortcuts();
       }
 
-      // wait 2 seconds to make sure store has synced to disk
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await invoke("update_global_shortcuts", {
-        showShortcut: updatedSettings.showScreenpipeShortcut,
-        startShortcut: updatedSettings.startRecordingShortcut,
-        stopShortcut: updatedSettings.stopRecordingShortcut,
-        profileShortcuts: shortcuts,
-      });
+      // Handle pipe shortcuts
+      if (shortcutId.startsWith("pipe_")) {
+        const pipeId = shortcutId.replace("pipe_", "");
+        console.log("new PipeShortcut", {
+          ...settings.pipeShortcuts,
+          [pipeId]: keys,
+        });
 
-      return true;
+        updateSettings({
+          pipeShortcuts: {
+            ...settings.pipeShortcuts,
+            [pipeId]: keys,
+          },
+        });
+        return await syncShortcuts();
+      }
+
+      // Handle global shortcuts
+      updateSettings({ [shortcutId]: keys });
+      return await syncShortcuts();
     } catch (error) {
       console.error("failed to update shortcut:", error);
       return false;
     }
   };
 
-  const processKeyboardEvent = (event: KeyboardEvent, shortcutKey: string) => {
-    event.preventDefault();
+  // Helper to sync shortcuts with the backend
+  const syncShortcuts = async () => {
+    // Wait for store to sync
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const MODIFIER_KEYS = ["SUPER", "CTRL", "ALT", "SHIFT"] as const;
-    const KEY_CODE_MAP: Record<number, string> = {
-      91: "SUPER", // Command/Windows key
-      93: "SUPER", // Right Command/Windows
-      16: "SHIFT",
-      17: "CTRL",
-      18: "ALT",
-    };
+    await invoke("update_global_shortcuts", {
+      showShortcut: settings.showScreenpipeShortcut,
+      startShortcut: settings.startRecordingShortcut,
+      stopShortcut: settings.stopRecordingShortcut,
+      profileShortcuts: shortcuts,
+      pipeShortcuts: settings.pipeShortcuts,
+    });
 
-    const pressedKeys = hotkeys
-      .getPressedKeyCodes()
-      .map((code) => KEY_CODE_MAP[code] || String.fromCharCode(code))
-      .filter((value, index, self) => self.indexOf(value) === index);
-
-    const modifiers = pressedKeys.filter((k) =>
-      MODIFIER_KEYS.includes(k as any)
-    );
-    const normalKeys = pressedKeys.filter(
-      (k) => !MODIFIER_KEYS.includes(k as any)
-    );
-    const finalKeys = [...modifiers, ...normalKeys];
-
-    setShortcutStates((prev) => ({
-      ...prev,
-      [shortcutKey]: {
-        ...prev[shortcutKey],
-        pressedKeys: finalKeys,
-      },
-    }));
-
-    if (normalKeys.length > 0) {
-      handleShortcutUpdate(shortcutKey, finalKeys.join("+"));
-    }
+    return true;
   };
 
   useEffect(() => {
-    const activeShortcut = Object.entries(shortcutStates).find(
-      ([_, state]) => state.isRecording
-    );
-    if (!activeShortcut) return;
+    if (!recordingShortcut) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+
+      const MODIFIER_KEYS = ["SUPER", "CTRL", "ALT", "SHIFT"] as const;
+      const KEY_CODE_MAP: Record<number, string> = {
+        91: "SUPER", // Command/Windows key
+        93: "SUPER", // Right Command/Windows
+        16: "SHIFT",
+        17: "CTRL",
+        18: "ALT",
+      };
+
+      const pressedKeys = hotkeys
+        .getPressedKeyCodes()
+        .map((code) => KEY_CODE_MAP[code] || String.fromCharCode(code))
+        .filter((value, index, self) => self.indexOf(value) === index);
+
+      const modifiers = pressedKeys.filter((k) =>
+        MODIFIER_KEYS.includes(k as any)
+      );
+      const normalKeys = pressedKeys.filter(
+        (k) => !MODIFIER_KEYS.includes(k as any)
+      );
+      const finalKeys = [...modifiers, ...normalKeys];
+
+      if (normalKeys.length > 0) {
+        handleShortcutUpdate(recordingShortcut, finalKeys.join("+"));
+        setRecordingShortcut(null);
+      }
+    };
 
     hotkeys.filter = () => true;
-    hotkeys("*", (event) => processKeyboardEvent(event, activeShortcut[0]));
+    hotkeys("*", handleKeyDown);
 
     return () => hotkeys.unbind("*");
-  }, [shortcutStates]);
+  }, [recordingShortcut]);
 
   const ShortcutRow = ({ shortcut, title, description }: ShortcutRowProps) => {
-    const state = shortcutStates[shortcut] || {
-      isRecording: false,
-      pressedKeys: [],
-    };
     const currentValue = getShortcutValue(shortcut, settings, shortcuts);
-
-    const currentKeys = state.isRecording
-      ? state.pressedKeys
-      : currentValue
+    const currentKeys = currentValue
       ? parseKeyboardShortcut(currentValue).split("+")
       : ["Unassigned"];
+
+    const isRecording = recordingShortcut === shortcut;
 
     return (
       <div className="flex items-center justify-between">
@@ -143,21 +150,16 @@ const ShortcutSection = () => {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() =>
-              setShortcutStates((prev) => ({
-                ...prev,
-                [shortcut]: { ...prev[shortcut], isRecording: true },
-              }))
-            }
+            onClick={() => setRecordingShortcut(shortcut)}
             className={cn(
               "relative min-w-[140px] rounded-md border px-3 py-2 text-sm",
               "bg-muted/50 hover:bg-muted/70 transition-colors",
               "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring",
-              state.isRecording && "border-primary",
+              isRecording && "border-primary",
               !currentValue && "text-muted-foreground"
             )}
           >
-            {state.isRecording ? (
+            {isRecording ? (
               <span className="animate-pulse">recording...</span>
             ) : (
               <span className="flex items-center justify-between gap-2">
@@ -228,12 +230,6 @@ const ShortcutSection = () => {
         " "
       )} set to: ${parseKeyboardShortcut(keys)}`,
     });
-
-    // Reset recording state
-    setShortcutStates((prev) => ({
-      ...prev,
-      [shortcut]: { isRecording: false, pressedKeys: [] },
-    }));
   };
 
   // Helper to get shortcut value
@@ -245,6 +241,10 @@ const ShortcutSection = () => {
     if (shortcut.startsWith("profile_")) {
       const profileName = shortcut.replace("profile_", "");
       return profileShortcuts[profileName];
+    }
+    if (shortcut.startsWith("pipe_")) {
+      const pipeId = shortcut.replace("pipe_", "");
+      return settings.pipeShortcuts[pipeId];
     }
     return settings[shortcut as keyof Settings] as string;
   };
@@ -287,6 +287,26 @@ const ShortcutSection = () => {
                 shortcut={`profile_${profile}`}
                 title={`switch to ${profile}`}
                 description={`activate ${profile} profile`}
+              />
+            ))}
+          </>
+        )}
+
+        {pipes.length > 0 && (
+          <>
+            <div className="mt-8 mb-4">
+              <h2 className="text-lg font-semibold">pipe shortcuts</h2>
+              <p className="text-sm text-muted-foreground">
+                assign shortcuts to quickly trigger installed pipes
+              </p>
+            </div>
+
+            {pipes.map((pipe) => (
+              <ShortcutRow
+                key={pipe.id}
+                shortcut={`pipe_${pipe.id}`}
+                title={`trigger ${pipe.id} pipe`}
+                description={`run pipe ${pipe.id}`}
               />
             ))}
           </>
