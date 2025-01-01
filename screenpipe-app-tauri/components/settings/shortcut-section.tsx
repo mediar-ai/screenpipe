@@ -14,26 +14,39 @@ interface ShortcutRowProps {
   shortcut: string;
   title: string;
   description: string;
+  type: "global" | "profile" | "pipe";
+  onUpdate: (keys: string) => Promise<void>;
+  value?: string;
 }
 
 const ShortcutSection = () => {
-  const { settings, updateSettings } = useSettings();
+  const [pipes, setPipes] = useState<{ id: string; source: string }[]>([]);
+  const { settings } = useSettings();
   const {
     profiles,
-    shortcuts,
+    shortcuts: profileShortcuts,
     updateShortcut: updateProfileShortcut,
   } = useProfiles();
 
-  const [pipes, setPipes] = useState<{ id: string; source: string }[]>([]);
-  const pipeApi = new PipeApi();
+  const syncShortcuts = async () => {
+    // Wait for store to sync
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  const [recordingShortcut, setRecordingShortcut] = useState<string | null>(
-    null
-  );
+    await invoke("update_global_shortcuts", {
+      showShortcut: settings.showScreenpipeShortcut,
+      startShortcut: settings.startRecordingShortcut,
+      stopShortcut: settings.stopRecordingShortcut,
+      profileShortcuts: profileShortcuts,
+      pipeShortcuts: settings.pipeShortcuts,
+    });
+
+    return true;
+  };
 
   useEffect(() => {
     const loadPipes = async () => {
       try {
+        const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
         setPipes(pipeList.map((p) => ({ id: p.id, source: p.source })));
       } catch (error) {
@@ -43,104 +56,119 @@ const ShortcutSection = () => {
     loadPipes();
   }, []);
 
-  const updateShortcut = async (shortcutId: string, keys: string) => {
-    try {
-      // Handle profile shortcuts
-      if (shortcutId.startsWith("profile_")) {
-        const profileName = shortcutId.replace("profile_", "");
-        updateProfileShortcut({ profile: profileName, shortcut: keys });
-        return await syncShortcuts();
-      }
+  const ShortcutRow = ({
+    shortcut,
+    title,
+    description,
+    type,
+    value,
+  }: Omit<ShortcutRowProps, "onUpdate">) => {
+    const [isRecording, setIsRecording] = useState(false);
+    const { settings, updateSettings } = useSettings();
 
-      // Handle pipe shortcuts
-      if (shortcutId.startsWith("pipe_")) {
-        const pipeId = shortcutId.replace("pipe_", "");
-        console.log("new PipeShortcut", {
-          ...settings.pipeShortcuts,
-          [pipeId]: keys,
-        });
+    useEffect(() => {
+      if (!isRecording) return;
 
-        updateSettings({
-          pipeShortcuts: {
-            ...settings.pipeShortcuts,
-            [pipeId]: keys,
-          },
-        });
-        return await syncShortcuts();
-      }
+      const handleKeyDown = (event: KeyboardEvent) => {
+        event.preventDefault();
 
-      // Handle global shortcuts
-      updateSettings({ [shortcutId]: keys });
-      return await syncShortcuts();
-    } catch (error) {
-      console.error("failed to update shortcut:", error);
-      return false;
-    }
-  };
+        const MODIFIER_KEYS = ["SUPER", "CTRL", "ALT", "SHIFT"] as const;
+        const KEY_CODE_MAP: Record<number, string> = {
+          91: "SUPER",
+          93: "SUPER",
+          16: "SHIFT",
+          17: "CTRL",
+          18: "ALT",
+        };
 
-  // Helper to sync shortcuts with the backend
-  const syncShortcuts = async () => {
-    // Wait for store to sync
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+        const pressedKeys = hotkeys
+          .getPressedKeyCodes()
+          .map((code) => KEY_CODE_MAP[code] || String.fromCharCode(code))
+          .filter((value, index, self) => self.indexOf(value) === index);
 
-    await invoke("update_global_shortcuts", {
-      showShortcut: settings.showScreenpipeShortcut,
-      startShortcut: settings.startRecordingShortcut,
-      stopShortcut: settings.stopRecordingShortcut,
-      profileShortcuts: shortcuts,
-      pipeShortcuts: settings.pipeShortcuts,
-    });
+        const modifiers = pressedKeys.filter((k) =>
+          MODIFIER_KEYS.includes(k as any)
+        );
+        const normalKeys = pressedKeys.filter(
+          (k) => !MODIFIER_KEYS.includes(k as any)
+        );
+        const finalKeys = [...modifiers, ...normalKeys];
 
-    return true;
-  };
-
-  useEffect(() => {
-    if (!recordingShortcut) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      event.preventDefault();
-
-      const MODIFIER_KEYS = ["SUPER", "CTRL", "ALT", "SHIFT"] as const;
-      const KEY_CODE_MAP: Record<number, string> = {
-        91: "SUPER", // Command/Windows key
-        93: "SUPER", // Right Command/Windows
-        16: "SHIFT",
-        17: "CTRL",
-        18: "ALT",
+        if (normalKeys.length > 0) {
+          handleEnableShortcut(finalKeys.join("+"));
+          setIsRecording(false);
+        }
       };
 
-      const pressedKeys = hotkeys
-        .getPressedKeyCodes()
-        .map((code) => KEY_CODE_MAP[code] || String.fromCharCode(code))
-        .filter((value, index, self) => self.indexOf(value) === index);
+      hotkeys.filter = () => true;
+      hotkeys("*", handleKeyDown);
 
-      const modifiers = pressedKeys.filter((k) =>
-        MODIFIER_KEYS.includes(k as any)
-      );
-      const normalKeys = pressedKeys.filter(
-        (k) => !MODIFIER_KEYS.includes(k as any)
-      );
-      const finalKeys = [...modifiers, ...normalKeys];
+      return () => hotkeys.unbind("*");
+    }, [isRecording]);
 
-      if (normalKeys.length > 0) {
-        handleShortcutUpdate(recordingShortcut, finalKeys.join("+"));
-        setRecordingShortcut(null);
+    const handleEnableShortcut = async (keys: string) => {
+      try {
+        switch (type) {
+          case "global":
+            updateSettings({ [shortcut]: keys });
+            break;
+          case "profile":
+            updateProfileShortcut({
+              profile: shortcut.replace("profile_", ""),
+              shortcut: keys,
+            });
+            break;
+          case "pipe":
+            updateSettings({
+              pipeShortcuts: {
+                ...settings.pipeShortcuts,
+                [shortcut.replace("pipe_", "")]: keys,
+              },
+            });
+            break;
+        }
+
+        // Remove from disabled shortcuts if it exists
+        updateSettings({
+          disabledShortcuts: settings.disabledShortcuts.filter(
+            (s) => s !== shortcut
+          ),
+        });
+
+        await syncShortcuts();
+      } catch (error) {
+        toast({
+          title: "error updating shortcut",
+          description:
+            "failed to register shortcut. please try a different combination.",
+          variant: "destructive",
+        });
       }
     };
 
-    hotkeys.filter = () => true;
-    hotkeys("*", handleKeyDown);
+    const handleDisableShortcut = async () => {
+      updateSettings({
+        disabledShortcuts: Array.from(
+          new Set([...settings.disabledShortcuts, shortcut as Shortcut])
+        ),
+      });
 
-    return () => hotkeys.unbind("*");
-  }, [recordingShortcut]);
+      await syncShortcuts();
 
-  const ShortcutRow = ({ shortcut, title, description }: ShortcutRowProps) => {
-    const currentValue = getShortcutValue(shortcut, settings, shortcuts);
-    const currentKeys = currentValue
-      ? parseKeyboardShortcut(currentValue).split("+")
-      : ["Unassigned"];
+      toast({
+        title: "shortcut disabled",
+        description: `${shortcut.replace(/_/g, " ")} disabled`,
+      });
+    };
 
-    const isRecording = recordingShortcut === shortcut;
+    const currentKeys =
+      value === "" || typeof value === "undefined"
+        ? ["Unassigned"]
+        : parseKeyboardShortcut(value).split("+");
+
+    const isDisabled = settings.disabledShortcuts.includes(
+      shortcut as Shortcut
+    );
 
     return (
       <div className="flex items-center justify-between">
@@ -150,13 +178,13 @@ const ShortcutSection = () => {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setRecordingShortcut(shortcut)}
+            onClick={() => setIsRecording(true)}
             className={cn(
               "relative min-w-[140px] rounded-md border px-3 py-2 text-sm",
               "bg-muted/50 hover:bg-muted/70 transition-colors",
               "focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring",
               isRecording && "border-primary",
-              !currentValue && "text-muted-foreground"
+              !value && "text-muted-foreground"
             )}
           >
             {isRecording ? (
@@ -168,7 +196,7 @@ const ShortcutSection = () => {
                     key={i}
                     className={cn(
                       "px-1 rounded",
-                      currentValue ? "bg-background/50" : "bg-transparent"
+                      value ? "bg-background/50" : "bg-transparent"
                     )}
                   >
                     {key}
@@ -180,11 +208,14 @@ const ShortcutSection = () => {
           </button>
 
           <Switch
-            checked={!!currentValue}
-            disabled={typeof currentValue === "undefined"}
+            checked={!isDisabled}
             onCheckedChange={async (checked) => {
-              if (!checked) {
-                handleShortcutUpdate(shortcut, "", true);
+              if (checked && value) {
+                console.log("re-enabling shortcut", value);
+                await handleEnableShortcut(value);
+              } else {
+                console.log("disabling shortcut", shortcut);
+                await handleDisableShortcut();
               }
             }}
           />
@@ -193,83 +224,33 @@ const ShortcutSection = () => {
     );
   };
 
-  const handleShortcutUpdate = async (
-    shortcut: string,
-    keys: string,
-    disable?: boolean
-  ) => {
-    const success = await updateShortcut(shortcut, keys);
-    if (!success) {
-      toast({
-        title: "error updating shortcut",
-        description:
-          "failed to register shortcut. please try a different combination.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (disable) {
-      updateSettings({
-        disabledShortcuts: [
-          ...settings.disabledShortcuts,
-          shortcut as Shortcut,
-        ],
-      });
-      toast({
-        title: "shortcut disabled",
-        description: `${shortcut.replace(/_/g, " ")} disabled`,
-      });
-      return;
-    }
-
-    toast({
-      title: "shortcut updated",
-      description: `${shortcut.replace(
-        /_/g,
-        " "
-      )} set to: ${parseKeyboardShortcut(keys)}`,
-    });
-  };
-
-  // Helper to get shortcut value
-  const getShortcutValue = (
-    shortcut: string,
-    settings: Settings,
-    profileShortcuts: Record<string, string>
-  ): string | undefined => {
-    if (shortcut.startsWith("profile_")) {
-      const profileName = shortcut.replace("profile_", "");
-      return profileShortcuts[profileName];
-    }
-    if (shortcut.startsWith("pipe_")) {
-      const pipeId = shortcut.replace("pipe_", "");
-      return settings.pipeShortcuts[pipeId];
-    }
-    return settings[shortcut as keyof Settings] as string;
-  };
-
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">shortcuts</h1>
 
       <div className="space-y-6">
         <ShortcutRow
-          shortcut={"showScreenpipeShortcut"}
+          type="global"
+          shortcut="showScreenpipeShortcut"
           title="toggle screenpipe overlay"
           description="global shortcut to show/hide the main interface"
+          value={settings.showScreenpipeShortcut}
         />
 
         <ShortcutRow
-          shortcut={"startRecordingShortcut"}
+          type="global"
+          shortcut="startRecordingShortcut"
           title="start recording"
           description="global shortcut to start screen recording"
+          value={settings.startRecordingShortcut}
         />
 
         <ShortcutRow
-          shortcut={"stopRecordingShortcut"}
+          type="global"
+          shortcut="stopRecordingShortcut"
           title="stop recording"
           description="global shortcut to stop screen recording"
+          value={settings.stopRecordingShortcut}
         />
 
         {profiles.length > 1 && (
@@ -284,9 +265,11 @@ const ShortcutSection = () => {
             {profiles.map((profile) => (
               <ShortcutRow
                 key={profile}
+                type="profile"
                 shortcut={`profile_${profile}`}
                 title={`switch to ${profile}`}
                 description={`activate ${profile} profile`}
+                value={profileShortcuts[profile]}
               />
             ))}
           </>
@@ -304,9 +287,11 @@ const ShortcutSection = () => {
             {pipes.map((pipe) => (
               <ShortcutRow
                 key={pipe.id}
+                type="pipe"
                 shortcut={`pipe_${pipe.id}`}
                 title={`trigger ${pipe.id} pipe`}
                 description={`run pipe ${pipe.id}`}
+                value={settings.pipeShortcuts[pipe.id]}
               />
             ))}
           </>

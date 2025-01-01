@@ -104,9 +104,18 @@ impl ShortcutConfig {
         };
 
         let pipe_shortcuts = store
-            .get("pipeShortcuts")
-            .and_then(|v| serde_json::from_value::<HashMap<String, String>>(v.clone()).ok())
-            .unwrap_or_default();
+            .keys()
+            .into_iter()
+            .filter_map(|key| {
+                if key.starts_with("pipeShortcuts.") {
+                    store.get(key.clone())
+                    .and_then(|v| v.as_str().map(String::from))
+                        .map(|v| (key.trim_start_matches("pipeShortcuts.").to_string(), v.to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<String, String>>();
 
         Ok(Self {
             show: store
@@ -249,17 +258,15 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     for (pipe_id, shortcut) in &config.pipe_shortcuts {
         if !shortcut.is_empty() {
             let pipe_id = pipe_id.clone();
-            register_shortcut(app, shortcut, false, move |app| {
+            let shortcut_id = format!("pipe_{}", pipe_id);
+            debug!(
+                "registering pipe shortcut for pipe: {}, is disabled: {}",
+                shortcut_id,
+                config.is_disabled(&shortcut_id)
+            );
+            register_shortcut(app, shortcut, config.is_disabled(&shortcut_id), move |app| {
                 info!("pipe shortcut triggered for pipe: {}", pipe_id);
-                let pipe_id = pipe_id.clone();
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Ok(port) = get_pipe_port(&pipe_id).await {
-                        let _ = open_pipe_window(app, port, pipe_id.clone());
-                    } else {
-                        error!("failed to get port for pipe: {}", pipe_id);
-                    }
-                });
+                let _ = app.emit("open-pipe", pipe_id.clone());
             })
             .await?;
         }
