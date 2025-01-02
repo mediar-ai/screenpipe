@@ -1,12 +1,15 @@
 import { ActorRef } from "xstate"
 import { useSelector } from "@xstate/react"
-import { Ref } from "react"
+import { ReactNode, Ref } from "react"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
 import { CircleIcon } from "@/components/ui/circle-icon"
 import { OpenAiIcon } from "@/components/icons/open-ai"
 import { OllamaIcon } from "@/components/icons/ollama"
 import { PerplexityIcon } from "@/components/icons/perplexity"
 import { MixtralIcon } from "@/components/icons/mixtral"
+import { Tooltip as TooltipShadcn, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import WhisperIcon from "@/components/icons/whisper-huggingface"
+import OnnxGithubIcon from "@/components/icons/onnx-github"
 
 const LlmModelsStatus = (props: {
     llmModelsRef: Ref<HTMLDivElement> | null,
@@ -25,27 +28,17 @@ const LlmModelsStatus = (props: {
                 color="#cece66"
                 shouldScale={props.isContainerActive}
                 ref={props.llmModelsRef} 
-                className={'bg-white rounded-lg h-[130px] w-[130px] place-items-center grid grid-rows-2 grid-cols-2 gap-2 p-2'}
+                className={'bg-white rounded-lg h-[65px] w-[130px] flex flex-row justify-around'}
             >
                 <CircleIcon
                     state={deviceStates.openai}
                 >
-                    <OpenAiIcon/>
+                    <WhisperIcon/>
                 </CircleIcon>
                 <CircleIcon
                     state={deviceStates.llama}
                 >
-                    <OllamaIcon/>
-                </CircleIcon>
-                <CircleIcon
-                    state={deviceStates.perplexity}
-                >
-                    <PerplexityIcon/>
-                </CircleIcon>
-                <CircleIcon
-                    state={deviceStates.mixtral}
-                >
-                    <MixtralIcon/>
+                    <OnnxGithubIcon/>
                 </CircleIcon>
             </AnimatedGroupContainer>
         </span>

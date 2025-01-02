@@ -76,7 +76,7 @@ export default function ScreenpipeSystemAtlas(props:{
                 <LlmModelsStatus
                     actorRef={props.actorRef}
                     isContainerActive={state.matches('core_models')}
-                    className="absolute z-[10] bottom-[-100px]"
+                    className="absolute z-[10] bottom-[0px]"
                     llmModelsRef={llmModelsRef}
                 />
             </div>
