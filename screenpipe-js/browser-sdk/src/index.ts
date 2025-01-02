@@ -4,8 +4,8 @@ import type {
   NotificationOptions,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
-} from "../common/types";
-import { toSnakeCase, convertToCamelCase } from "../common/utils";
+} from "../../common/types";
+import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -118,5 +118,5 @@ const queryScreenpipe = pipe.queryScreenpipe;
 const input = pipe.input;
 
 export { sendDesktopNotification, queryScreenpipe, input };
-export { toCamelCase, toSnakeCase, convertToCamelCase } from "../common/utils";
-export * from "../common/types";
+export { toCamelCase, toSnakeCase, convertToCamelCase } from "../../common/utils";
+export * from "../../common/types";
