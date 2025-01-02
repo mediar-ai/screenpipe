@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@screenpipe/js": "^0.1.3",
+    "@screenpipe/browser": "0.1.12",
     "ai": "^4.0.10",
     "exa-js": "^1.3.3",
     "nodemailer": "^6.9.16",
