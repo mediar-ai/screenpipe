@@ -2,6 +2,9 @@
   "name": "pipe-notion-table-logs",
   "module": "pipe.ts",
   "type": "module",
+  "scripts": {
+    "dev": "bun run pipe.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
