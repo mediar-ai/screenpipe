@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 const svgPathAnimations = {
   hidden: { 
     opacity:0,
-    strokeWidth: '10px',
     pathLength: 0,
     transition: {
       pathLength: {
@@ -18,7 +17,6 @@ const svgPathAnimations = {
   visible: {
       opacity: 1,
       pathLength: 1,
-      strokeWidth: '20px',
       color: 'white',
       transition: {
         pathLength: { 
@@ -45,11 +43,6 @@ const svgPathAnimations = {
 
 type AnimatedBorderSvgProps = {
   /**
-   * @default "0 0 600 600"
-   * @description exposed to easily allow the svg border to fit a rectangle if needed.
-  */
-  viewBox?: string,
-  /**
    * @description mainly exposed to allow for positioning and z-indexing.
   */
   className: string
@@ -71,7 +64,6 @@ type AnimatedBorderSvgProps = {
 export function AnimatedBorderSvg(props: AnimatedBorderSvgProps) {
   return (
     <motion.svg
-      viewBox={props.viewBox ?? "0 0 600 600"}
       className={cn('absolute top-1/2 left-1/2 transform transition duration-500 -translate-x-1/2 -translate-y-1/2  w-[100%] h-[100%]', props.className)}
       initial={props.undrawSVG ? "visible" : "hidden"}
       animate={"visible"}
@@ -81,8 +73,9 @@ export function AnimatedBorderSvg(props: AnimatedBorderSvgProps) {
     >
       <motion.rect
         className="w-full h-full bg-transparent"
-        rx="25" 
+        rx="5" 
         stroke={'#e4e4e7'}
+        strokeWidth={'4px'}
         variants={svgPathAnimations}
       />
     </motion.svg>

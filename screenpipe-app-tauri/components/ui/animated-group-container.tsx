@@ -22,14 +22,12 @@ export const AnimatedGroupContainer = forwardRef<
     HTMLDivElement,
     {
         children: ReactNode,
-        isRectangle?: boolean,
         className?: string,
         shouldScale?: boolean,
         color?: string,
         hiddenBorder?: boolean
     }>(({
         children,
-        isRectangle,
         className,
         shouldScale,
         hiddenBorder
@@ -47,7 +45,6 @@ export const AnimatedGroupContainer = forwardRef<
             <AnimatedBorder 
                 showGreenBorder={shouldScale} 
                 hidden={hiddenBorder}
-                viewBox={isRectangle ? "0 0 600 1800" : undefined} 
             />
             {children}
         </motion.div>

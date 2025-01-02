@@ -5,11 +5,6 @@ import { opacityVisibility } from "@/lib/motion/constants";
 
 type AnimatedBorderType = {
   /**
-   * @default "0 0 600 600"
-   * @description exposed to easily allow the svg border to fit a rectangle if needed.
-  */
-  viewBox?: string
-  /**
    * @description if true css border will be green. used to highlight component.
   */
   showGreenBorder?: boolean
@@ -59,7 +54,6 @@ export const AnimatedBorder = (props: AnimatedBorderType) => {
                         key={'draw'}
                         setRendered={setSVGRendered}
                         className="rounded-[6px] z-[10]"
-                        viewBox={props.viewBox}
                     />
                 } 
                 {(!isSVGUnrendered && shouldUndraw) &&
@@ -68,7 +62,6 @@ export const AnimatedBorder = (props: AnimatedBorderType) => {
                         undrawSVG
                         setRendered={()=>resetComponent()}
                         className="rounded-[6px]"
-                        viewBox={props.viewBox}
                     />
                 }
             </AnimatePresence>
