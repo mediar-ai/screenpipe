@@ -1,5 +1,5 @@
 {
-  "name": "@screenpipe/js",
+  "name": "@screenpipe/browser",
   "version": "0.1.12",
   "type": "module",
   "main": "./dist/index.cjs",
