@@ -4,11 +4,10 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
+  "dev": "next build && next start",
+  "build": "next build",
+  "start": "next start"
+},
   "dependencies": {
     "react": "^18",
     "react-dom": "^18",

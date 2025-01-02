@@ -7,19 +7,9 @@ interface KeywordCount {
   count: number;
 }
 
-interface ScreenpipeQueryParams {
-  content_type?: string;
-  start_time?: string;
-  end_time?: string;
-  limit?: number;
-}
-
-interface ContentItem {
-  type: "OCR" | "Audio";
-  content: {
-    text?: string;
-    transcription?: string;
-  };
+interface KeywordRow {
+  word: string;
+  count: number;
 }
 
 export const KeywordCloud: React.FC = () => {
@@ -30,7 +20,7 @@ export const KeywordCloud: React.FC = () => {
   const processContentStreaming = async () => {
     console.log("fetching keyword stats...");
     const url = new URL("http://localhost:3030/raw_sql");
-    
+
     const query = `
       WITH RECURSIVE
       split(word, str) AS (
@@ -66,9 +56,9 @@ export const KeywordCloud: React.FC = () => {
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ query }),
       });
@@ -80,11 +70,12 @@ export const KeywordCloud: React.FC = () => {
       const result = await response.json();
       console.log("received keyword stats:", result);
 
-      setKeywords(result.map((row: any) => ({
-        word: row.word,
-        count: row.count
-      })));
-
+      setKeywords(
+        result.map((row: KeywordRow) => ({
+          word: row.word,
+          count: row.count,
+        }))
+      );
     } catch (err) {
       console.error("failed to fetch keyword stats:", err);
       setError("error fetching keyword stats");

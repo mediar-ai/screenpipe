@@ -1,10 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['screenpi.pe'],
+    domains: ['screenpi.pe'], // Allowed domains for optimized images
   },
   experimental: {
-    darkMode: false,
+    // Remove invalid options here
   },
 };
 
