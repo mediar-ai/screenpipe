@@ -7,7 +7,6 @@ import { useSelector } from "@xstate/react";
 import { screenpipeOnboardingMachine } from "@/features/onboarding/state-machine/onboarding-flow";
 import ConversationBox from "../components/conversation-box";
 import PermissionStatus from "../components/permissions";
-import LlmModelsStatus from "../components/llm-models-status";
 import SystemTerminals from "../components/system-terminals";
 import SystemApps from "../components/system-apps";
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container";
@@ -15,6 +14,7 @@ import { AnimatePresence } from "framer-motion";
 import SystemComponentRelationships from "../components/system-component-relationships";
 import { CircleIcon } from "@/components/ui/circle-icon";
 import ScreenpipeLogo from '../components/screenpipe-logo/index';
+import LocalModels from "../components/local-models";
 
 
 export default function ScreenpipeSystemAtlas(props:{
@@ -73,7 +73,7 @@ export default function ScreenpipeSystemAtlas(props:{
             />
             <div className="relative flex flex-col items-center justify-center">
                 <ScreenpipeLogo ref={screenpipeRef}/>
-                <LlmModelsStatus
+                <LocalModels
                     actorRef={props.actorRef}
                     isContainerActive={state.matches('core_models')}
                     className="absolute z-[10] bottom-[0px]"

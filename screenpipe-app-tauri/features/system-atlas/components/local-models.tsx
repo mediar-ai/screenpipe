@@ -1,17 +1,12 @@
 import { ActorRef } from "xstate"
 import { useSelector } from "@xstate/react"
-import { ReactNode, Ref } from "react"
+import { Ref } from "react"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
 import { CircleIcon } from "@/components/ui/circle-icon"
-import { OpenAiIcon } from "@/components/icons/open-ai"
-import { OllamaIcon } from "@/components/icons/ollama"
-import { PerplexityIcon } from "@/components/icons/perplexity"
-import { MixtralIcon } from "@/components/icons/mixtral"
-import { Tooltip as TooltipShadcn, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import WhisperIcon from "@/components/icons/whisper-huggingface"
 import OnnxGithubIcon from "@/components/icons/onnx-github"
 
-const LlmModelsStatus = (props: {
+const LocalModels = (props: {
     llmModelsRef: Ref<HTMLDivElement> | null,
     className: string,
     actorRef: ActorRef<any,any,any>,
@@ -20,7 +15,6 @@ const LlmModelsStatus = (props: {
     const deviceStates = useSelector(props.actorRef, (snapshot) => {
         return snapshot.context.ai
     })
-
 
     return (
         <span className={props.className}>
@@ -45,4 +39,4 @@ const LlmModelsStatus = (props: {
     )
 }
 
-export default LlmModelsStatus
+export default LocalModels
