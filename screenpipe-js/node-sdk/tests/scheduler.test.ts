@@ -1,5 +1,5 @@
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test";
-import { pipe } from "../main";
+import { pipe } from "../src/index";
 import cron from "node-cron";
 
 describe("Scheduler", () => {

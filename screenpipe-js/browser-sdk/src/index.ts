@@ -1,16 +1,14 @@
-// browser.ts
 import type {
+  InputAction,
+  InputControlResponse,
   NotificationOptions,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
-  InputAction,
-  InputControlResponse,
-} from "./types";
-
-import { toSnakeCase, convertToCamelCase } from "./next";
+} from "../../common/types";
+import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
-  const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+  const apiUrl = "http://localhost:3030";
   try {
     const response = await fetch(`${apiUrl}/experimental/input_control`, {
       method: "POST",
@@ -115,7 +113,10 @@ export const pipe: BrowserPipe = {
   },
 };
 
-// Export individual functions for more granular usage
-export const sendDesktopNotification = pipe.sendDesktopNotification;
-export const queryScreenpipe = pipe.queryScreenpipe;
-export const input = pipe.input;
+const sendDesktopNotification = pipe.sendDesktopNotification;
+const queryScreenpipe = pipe.queryScreenpipe;
+const input = pipe.input;
+
+export { sendDesktopNotification, queryScreenpipe, input };
+export { toCamelCase, toSnakeCase, convertToCamelCase } from "../../common/utils";
+export * from "../../common/types";

@@ -6,7 +6,7 @@ import { Play, Pause, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { pipe, ContentItem } from "@screenpipe/js";
+import { pipe, ContentItem } from "@screenpipe/browser";
 import { VideoComponent } from "@/components/video";
 import { Skeleton } from "@/components/ui/skeleton";
 

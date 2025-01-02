@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@screenpipe/js": "^0.1.3",
+    "@screenpipe/browser": "0.1.12",
     "nodemailer": "^6.9.16"
   }
 }

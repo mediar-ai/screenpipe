@@ -4,7 +4,7 @@ import React, { JSX, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { pipe, ContentItem } from "@screenpipe/js";
+import { pipe, ContentItem } from "@screenpipe/browser";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -90,7 +90,7 @@ import {
   CommandItem,
   Command,
 } from "./ui/command";
-import { Speaker } from "@screenpipe/js";
+import { Speaker } from "@screenpipe/browser";
 import {
   Popover,
   PopoverContent,
