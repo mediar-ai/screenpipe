@@ -202,13 +202,21 @@ export async function GET() {
             title: "reddit questions",
             body: redditQuestions,
           });
+        } catch(error) {
+          return NextResponse.json(
+            { error: `error in sending inbox notification ${error}` },
+            { status: 500 }
+          );
+        }
+
+        try {
           await pipe.sendDesktopNotification({
             title: "reddit questions",
             body: "just sent you some reddit questions",
           });
-        } catch(error) {
+        } catch (error) {
           return NextResponse.json(
-            { error: `error in sending mail ${error}` },
+            { error: `error in sending desktop notification ${error}` },
             { status: 500 }
           );
         }
