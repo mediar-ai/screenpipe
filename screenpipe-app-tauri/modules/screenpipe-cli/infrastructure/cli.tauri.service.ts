@@ -3,6 +3,7 @@ import { ScreenpipeSetupParams } from "../types/screenpipe-setup-params";
 import { ScreenpipeCliService } from "../interfaces/cli.service.interface";
 import { EventEmitter } from "@/modules/event-management/emitter/interfaces/event-emitter.service.interface";
 import { invoke } from "@tauri-apps/api/core";
+import { getSetupParams, timeout } from "../utils/cli.service.utils";
 
 class TauriCliService implements ScreenpipeCliService {
     constructor(
