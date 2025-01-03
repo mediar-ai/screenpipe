@@ -2,10 +2,10 @@ import { WindowEventEmitter } from "@/modules/event-management/emitter/infrastru
 import { ScreenpipeSetupParams } from "../types/screenpipe-setup-params";
 import TauriCliService from "../infrastructure/cli.tauri.service";
 
-async function requestAccessUseCase(params: ScreenpipeSetupParams) {
+async function downloadModelsUseCase(params: ScreenpipeSetupParams) { 
         const eventEmitterService = new WindowEventEmitter()
-        const permissionsService = new TauriCliService(eventEmitterService)
-        await permissionsService.setup(params);
+        const cliService = new TauriCliService(eventEmitterService)
+        await cliService.setup(params);
 }
 
-export default requestAccessUseCase
+export default downloadModelsUseCase
