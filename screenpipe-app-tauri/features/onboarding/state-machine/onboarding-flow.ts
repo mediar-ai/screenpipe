@@ -4,11 +4,11 @@ import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screen
 import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/modules/peripheral-devices/types/available-devices';
 import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters/state-machine/onboarding-flow.utils';
 import peripheralDevicesMachine from '@/modules/peripheral-devices/adapters/state-machine/management.state-machine';
-import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/setup-screenpipe.use-case';
+import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/download-local-models.use-case';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
-    const response = await downloadModelsUseCase({enableBeta: false})
+    await downloadModelsUseCase({enableBeta: false})
 })
 
 const screenpipeEngineStartup = fromPromise(async () => {
