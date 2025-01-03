@@ -27,10 +27,9 @@ export const VideoComponent = memo(function VideoComponent({
   }, []);
 
   const renderFileLink = () => (
-    // TODO button open link
-    <p className={"mt-2 text-center text-xs text-gray-500"}>
+    <div className="mt-2 text-center text-xs text-gray-500 truncate px-2" title={filePath}>
       {customDescription || filePath}
-    </p>
+    </div>
   );
 
   const getMimeType = (path: string): string => {
@@ -75,7 +74,7 @@ export const VideoComponent = memo(function VideoComponent({
         const blob = new Blob([bytes], { type: mimeType });
         setMediaSrc(URL.createObjectURL(blob));
       } catch (error) {
-        console.error("Failed to load media:", error);
+        console.warn("Failed to load media:", error);
         setError(
           `Failed to load media: ${
             error instanceof Error ? error.message : "Unknown error"

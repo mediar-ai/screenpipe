@@ -1,4 +1,4 @@
-use crate::icons::AppIcon;
+use crate::{get_store, icons::AppIcon};
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
@@ -8,10 +8,8 @@ use http::header::HeaderValue;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tauri::Emitter;
-use tauri::Manager;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -186,15 +184,7 @@ async fn handle_auth(
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
     info!("received auth data: {:?}", payload);
 
-    let path = state
-        .app_handle
-        .path()
-        .local_data_dir()
-        .unwrap()
-        .join("screenpipe")
-        .join("store.bin");
-    info!("store path: {:?}", path);
-    let store = StoreBuilder::new(&state.app_handle, path).build().unwrap();
+    let store = get_store(&state.app_handle, None).unwrap();
 
     if payload.token.is_some() {
         let auth_data = AuthData {
