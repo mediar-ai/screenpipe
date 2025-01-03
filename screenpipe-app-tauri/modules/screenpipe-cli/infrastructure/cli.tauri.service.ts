@@ -23,13 +23,13 @@ class TauriCliService implements ScreenpipeCliService {
         command.on("error", (error) => reject(new Error(error)));
         
         command.stdout.on("data", (line) => {
-          this.eventEmitterService.emit('command-update', line)
+          this.eventEmitterService.emit('model-download-update', line)
           if (line.includes("screenpipe setup complete")) {
             resolve("ok");
           }
         });
       });
-
+      
       try {
         await command.spawn();
         await Promise.race([outputPromise, timeoutPromise]);
