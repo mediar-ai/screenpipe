@@ -214,6 +214,11 @@ mod pipes {
                     anyhow::bail!("failed to install dependencies for next.js pipe");
                 }
                 debug!("successfully installed dependencies for next.js pipe");
+                // build the pipe after installing dependencies
+                match build_nextjs_pipe(&bun_path, &pipe_dir).await {
+                    Ok(_) => println!("pipe build successfully"),
+                    Err(e) => eprintln!("pipe: {:?} build failed: {:?}", &pipe_dir, e),
+                }
             } else {
                 let port = pick_unused_port().expect("No ports free");
                 debug!("no pipe.json found, using port {} for next.js pipe", port);
@@ -225,7 +230,7 @@ mod pipes {
             let mut child = Command::new(&bun_path)
                 .arg("run")
                 .arg("--bun")
-                .arg("dev")
+                .arg("start")
                 .arg("--port")
                 .arg(
                     env_vars
@@ -317,6 +322,27 @@ mod pipes {
 
         info!("pipe execution completed successfully [{}]", pipe);
         Ok(())
+    }
+
+    async fn build_nextjs_pipe(bun_path: &Path, dest_dir: &Path) -> Result<()> {
+        let mut build_child = Command::new(bun_path)
+            .arg("run")
+            .arg("build")
+            .current_dir(dest_dir)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        // Stream logs for bun run build
+        stream_logs("bun run build", &mut build_child).await?;
+
+        let status = build_child.wait().await?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("build failed for pipe: {:?} stderr: {:?}",
+                &dest_dir, &build_child.stderr))
+        }
     }
 
     // Add this helper function for retrying installations
