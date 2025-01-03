@@ -4,31 +4,11 @@ import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screen
 import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/modules/peripheral-devices/types/available-devices';
 import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters/state-machine/onboarding-flow.utils';
 import peripheralDevicesMachine from '@/modules/peripheral-devices/adapters/state-machine/management.state-machine';
+import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/setup-screenpipe.use-case';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
-  
-    return new Promise((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 5;
-  
-        input.parent.send({
-          type: 'PROGRESS_UPDATE',
-          progress,
-        });
-  
-        if (progress >= 100) {
-          clearInterval(interval);
-          console.log(`Finished download: ${input.fileName}`);
-          
-          resolve({
-            type: 'DOWNLOAD_COMPLETE',
-            output: `Downloaded ${input.fileName}`,
-          });
-        }
-      }, 1000);
-    });
+    const response = await downloadModelsUseCase({enableBeta: false})
 })
 
 const screenpipeEngineStartup = fromPromise(async () => {
@@ -61,7 +41,7 @@ export const screenpipeOnboardingFlow = setup({
         screenpipeEngineStartup
     }
 }).createMachine({
-    initial:'permissions',
+    initial:'core_models',
     entry: [
         spawnChild('conversationBoxMachine', { id:'convoBoxMachine', systemId: 'convoBoxMachine' }),
         spawnChild('screenpipeLogoMachine', { id:'screenpipeLogoMachine', systemId: 'screenpipeLogoMachine' }),
@@ -151,7 +131,7 @@ export const screenpipeOnboardingFlow = setup({
         },
         core_models: {
             id: 'core_models',
-            initial: 'introduction',
+            initial: 'chineseMirrorToggle',
             on: {
                 NEXT: 'backend',
                 SKIP: 'backend'
