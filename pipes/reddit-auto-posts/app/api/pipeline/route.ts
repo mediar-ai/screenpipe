@@ -21,7 +21,6 @@ async function saveDailyLog(logEntry: DailyLog) {
     .replace(/:/g, "-")
     .replace(/\..+/, "");
   const filename = `${timestamp}-${logEntry.category.replace(/[\/\\?%*:|"<>']/g, "-")}.json`;
-  console.log("filename:", filename)
   const logFile = path.join(logsDir, filename)
   try {
     fs.writeFileSync(logFile, JSON.stringify(logEntry, null, 2));
@@ -109,6 +108,7 @@ export async function GET() {
       contentType: contentType,
     });
 
+    let logEntry: DailyLog | undefined;
     if (screenData && screenData.data && screenData.data.length > 0) {
       if (aiProvider === "screenpipe-cloud" && !userToken) {
         return NextResponse.json(
@@ -116,7 +116,7 @@ export async function GET() {
           { status: 500 }
         );
       }
-      const logEntry = await generateDailyLog(
+      logEntry = await generateDailyLog(
         screenData.data,
         dailylogPrompt,
         aiProvider,
@@ -125,7 +125,7 @@ export async function GET() {
         openaiApiKey,
         userToken,
       );
-      saveDailyLog(logEntry);
+      await saveDailyLog(logEntry);
     } else {
       return NextResponse.json(
         { message: "no screenpipe data is found, is screenpipe running?" },
@@ -221,17 +221,26 @@ export async function GET() {
           );
         }
         lastEmailSent = now;
-      } else if(screenData && screenData.data && screenData.data.length === 0) {
+        return NextResponse.json(
+          { message: "pipe executed successfully", logEntry: JSON.stringify(logEntry, null, 2) },
+          { status: 200 }
+        );
+      } else {
         return NextResponse.json(
           { message: "no screenpipe data is found, is screenpipe running?" },
           { status: 200 }
         );
       }
+    } else {
+      return NextResponse.json(
+        { message: "pipe executed successfully!", logEntry: JSON.stringify(logEntry, null, 2) },
+        { status: 200 }
+      );
     }
   } catch (error) {
     console.error("error in GET handler:", error);
     return NextResponse.json(
-      { error: `please check your configuration ${error}` },
+      { error: `${error}` },
       { status: 400 }
     );
   }
