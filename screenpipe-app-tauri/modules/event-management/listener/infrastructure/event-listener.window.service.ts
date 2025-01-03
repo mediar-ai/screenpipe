@@ -3,9 +3,9 @@ import { EventListenerService } from "../interfaces/event-listener.service.inter
 export class WindowEventListener implements EventListenerService {
     private listeners: Record<string, (eventData: any) => void> = {}
 
-    on(event: string, listener: (eventData: any) => void) {
-      window.addEventListener(event, listener);
-      this.listeners[event] = listener
+    on(event: string, callback: (eventData: any) => void) {
+      window.addEventListener(event, callback);
+      this.listeners[event] = callback 
     }
   
     off(event: string) {

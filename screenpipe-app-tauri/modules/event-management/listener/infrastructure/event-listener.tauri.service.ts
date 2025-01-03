@@ -4,8 +4,8 @@ import { EventListenerService } from "../interfaces/event-listener.service.inter
 export class TauriEventListener implements EventListenerService { 
     private listeners: Record<string, UnlistenFn> = {}
 
-    async on(event: string, listener: (eventData: any) => void) {
-        const newListener = await listen(event, listener);
+    async on(event: string, callback: (eventData: any) => void) {
+        const newListener = await listen(event, callback);
         this.listeners[event] = newListener
     }
 
