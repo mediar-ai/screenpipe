@@ -1,11 +1,12 @@
 import { ActorRef } from "xstate"
 import { useSelector } from "@xstate/react"
-import { Ref } from "react"
+import { Ref, useEffect } from "react"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
 import { CircleIcon } from "@/components/ui/circle-icon"
 import WhisperIcon from "@/components/icons/whisper-huggingface"
 import OnnxGithubIcon from "@/components/icons/onnx-github"
-import { HoverCard, HoverCardContent, HoverCardInfo, HoverCardTrigger } from "@/components/ui/hover-card"
+import { HoverCardInfo } from "@/components/ui/hover-card"
+import { useWindowEventLister } from "@/modules/event-management/listener/adapters/react/window.hook"
 
 const LocalModels = (props: {
     llmModelsRef: Ref<HTMLDivElement> | null,
@@ -13,6 +14,8 @@ const LocalModels = (props: {
     actorRef: ActorRef<any,any,any>,
     isContainerActive?: boolean
 }) => { 
+    const data = useWindowEventLister('model-download-update')
+
     const deviceStates = useSelector(props.actorRef, (snapshot) => {
         return snapshot.context.ai
     })
