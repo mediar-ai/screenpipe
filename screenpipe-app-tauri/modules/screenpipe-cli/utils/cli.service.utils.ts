@@ -1,4 +1,4 @@
-function getSetupParams(enableBeta: boolean) {
+export function getSetupParams(enableBeta: boolean) {
     let args = ['setup']
     if (enableBeta) {
         args.push('--enable-beta')
@@ -18,6 +18,6 @@ function getSetupParams(enableBeta: boolean) {
  * // Rejects after 15 minutes with the message "setup timed out"
  * const timeoutPromise = timeout(900000, "setup timed out");
  */
-function timeout(ms: number, message: string) {
+export function timeout(ms: number, message: string) {
     return new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms));
   }
