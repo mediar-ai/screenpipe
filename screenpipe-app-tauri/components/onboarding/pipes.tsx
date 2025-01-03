@@ -1,23 +1,11 @@
 import React from "react";
-import { CodeBlock } from "@/components/onboarding/single-codeblock";
 import { ArrowUpRight } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
 import { open } from "@tauri-apps/plugin-shell";
 
-interface OnboardingPipesProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
-const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingPipes = () => {
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
+    <div className={`w-full flex justify-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
@@ -57,13 +45,6 @@ const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
           <ArrowUpRight className="inline w-4 h-4 ml-1 " />
         </a>
       </div>
-      <OnboardingNavigation
-        className="mt-8"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
-        nextBtnText="next"
-      />
     </div>
   );
 };

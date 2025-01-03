@@ -14,7 +14,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import OnboardingNavigation from "@/components/onboarding/navigation";
 import {
   Select,
   SelectContent,
@@ -22,20 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import OnboardingNavigation from "./navigation";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
-interface OnboardingAPISetupProps {
-  className?: string;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
-}
-
-const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
-  className,
-  handleNextSlide,
-  handlePrevSlide,
-}) => {
+const OnboardingAPISetup = () => {
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
+  const { handlePrevSlide } = useOnboardingFlow();
   const [localSettings, setLocalSettings] = React.useState(settings);
   const [showApiKey, setShowApiKey] = React.useState(false);
   const [areAllInputsFilled, setAreAllInputsFilled] = React.useState(false);
@@ -134,7 +126,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
       //   description: "ai setup completed successfully",
       //   variant: "default",
       // });
-      handleNextSlide();
+      // handleNextSlide();
     }
   };
 
@@ -276,7 +268,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   };
 
   return (
-    <div className={`flex h-[80%] flex-col ${className}`}>
+    <div className={`flex h-[80%] flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
@@ -434,20 +426,15 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         don&apos;t have api key ? set up ollama locally
         <ArrowUpRight className="inline w-4 h-4 ml-1 " />
       </a>
+
       <OnboardingNavigation
-        className="mt-8"
-        isLoading={isValidating}
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={
-          areAllInputsFilled
-            ? handleValidationMoveNextSlide
-            : () => {
-                updateSettings(localSettings);
-                handleNextSlide();
-              }
-        }
+        className="mt-9"
+        nextBtnText="next"
         prevBtnText="previous"
-        nextBtnText={areAllInputsFilled ? "setup" : "i'll setup later"}
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          // await handleNextWithPreference();
+        }}
       />
     </div>
   );

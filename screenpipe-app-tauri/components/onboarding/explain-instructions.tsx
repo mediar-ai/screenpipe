@@ -9,20 +9,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useOnboardingFlow } from "./context/onboarding-context";
 
-interface OnboardingInstructionsProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
-const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingInstructions = () => {
+  const { handlePrevSlide } = useOnboardingFlow();
   return (
-    <div className={`${className} w-full flex justify-center flex-col overflow-y-auto`}>
+    <div className={`w-full flex justify-center flex-col overflow-y-auto`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
@@ -114,13 +106,14 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
       </div>
 
       <div className="h-[100px] my-16" />
-
       <OnboardingNavigation
-        className="mt-8"
-        handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
-        prevBtnText="previous"
+        className="mt-9"
         nextBtnText="next"
+        prevBtnText="previous"
+        handlePrevSlide={handlePrevSlide}
+        handleNextSlide={async () => {
+          // await handleNextWithPreference();
+        }}
       />
     </div>
   );
