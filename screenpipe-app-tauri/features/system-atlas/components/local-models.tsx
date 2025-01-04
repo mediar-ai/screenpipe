@@ -14,8 +14,6 @@ const LocalModels = (props: {
     actorRef: ActorRef<any,any,any>,
     isContainerActive?: boolean
 }) => { 
-    const data = useWindowEventLister('model-download-update')
-
     const deviceStates = useSelector(props.actorRef, (snapshot) => {
         return snapshot.context.ai
     })
