@@ -5,6 +5,7 @@ import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/mo
 import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters/state-machine/onboarding-flow.utils';
 import peripheralDevicesMachine from '@/modules/peripheral-devices/adapters/state-machine/management.state-machine';
 import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/download-local-models.use-case';
+import spawnScreenpipeUseCase from '@/modules/screenpipe-cli/use-cases/spawn-screenpipe.use-case';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     console.log(`Starting download: ${input.fileName}`);
@@ -13,20 +14,8 @@ const modelDownload = fromPromise(async ({ input }: { input: { fileName: string,
 
 const screenpipeEngineStartup = fromPromise(async () => {
     console.log(`Starting screenpipe`);
-  
-    return new Promise<void>((resolve) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 5;
-  
-        if (progress >= 100) {
-          clearInterval(interval);
-          console.log(`initiated screenpipe successfully`);
-          
-          resolve();
-        }
-      }, 300);
-    });
+
+    await spawnScreenpipeUseCase()
 })
 
 export const screenpipeOnboardingFlow = setup({
