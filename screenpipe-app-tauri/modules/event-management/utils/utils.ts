@@ -1,15 +1,18 @@
 function stripAnsiCodes(log: string) {
-    return log.replace(/\u001b\[[0-9;]*m/g, '');
-}
+    log = log.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-ntqry=><]/g, '');
+    log = log.replace(/[\n\r]+/g, '');
+    return log
+}    
 
 export type ReactLogPresenterOutput = ReturnType<typeof reactLogPresenter>
 export function reactLogPresenter(log: string) {
-    const strippedLog = stripAnsiCodes(log);
-    const logRegex = /^(?<timestamp>[\d\-T:\.Z]+)\s+(?<level>[A-Z]+)\s+(?<module>[\w:]+):\s+(?<message>.+)$/;
-
+    const strippedLog = stripAnsiCodes(log)
+    
+    const logRegex = /^(?<timestamp>[\d\-T:\.Z]+)\s+(?<level>[A-Z]+)\s+(?<module>[\w:]+):\s+(?<message>[\s\S]+)$/;
     const match = strippedLog.match(logRegex);
+    
     if (!match || !match.groups) {
-        return { raw: strippedLog }; // Return raw log if parsing fails
+        return { raw: strippedLog };
     }
 
     return {
