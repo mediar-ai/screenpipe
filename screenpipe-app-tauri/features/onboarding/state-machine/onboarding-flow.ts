@@ -296,7 +296,10 @@ export const screenpipeOnboardingFlow = setup({
                         },{delay:500}),
                     ],
                     on: {
-                        'NEXT': "#backend"
+                        'NEXT': {
+                            target: "#backend",
+                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                        }
                     }
                 }
             }
@@ -382,7 +385,10 @@ export const screenpipeOnboardingFlow = setup({
                         sendTo('screenpipeLogoMachine', { type: 'ANIMATE' }),
                     ],
                     on: {
-                        "ANIMATION_DONE": 'complete'
+                        "ANIMATION_DONE": {
+                            target: 'complete',
+                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                        }
                     }
                 },
                 complete: {
