@@ -20,4 +20,28 @@ export function getSetupParams(enableBeta: boolean) {
  */
 export function timeout(ms: number, message: string) {
     return new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms));
-  }
+}
+
+export function stripAnsiCodes(log: string) {
+    log = log.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-ntqry=><]/g, '');
+    log = log.replace(/[\n\r]+/g, '');
+    return log
+}    
+
+export function formatDateString(dateString: string, timestring?: boolean) {
+    const date = new Date(dateString);
+    let formattedDate: string
+    if (timestring) {
+        formattedDate = date.toLocaleTimeString('en-US')
+    } else {
+        formattedDate = date.toLocaleString('en-US',  {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+    }
+
+   return formattedDate 
+}
+

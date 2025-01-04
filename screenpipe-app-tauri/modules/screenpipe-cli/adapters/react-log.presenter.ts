@@ -1,8 +1,4 @@
-function stripAnsiCodes(log: string) {
-    log = log.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-ntqry=><]/g, '');
-    log = log.replace(/[\n\r]+/g, '');
-    return log
-}    
+import { formatDateString, stripAnsiCodes } from "../utils/cli.service.utils";
 
 export type ReactLogPresenterOutput = ReturnType<typeof reactLogPresenter>
 export function reactLogPresenter(log: string) {
@@ -16,10 +12,9 @@ export function reactLogPresenter(log: string) {
     }
 
     return {
-        timestamp: match.groups.timestamp,
+        timestamp: formatDateString(match.groups.timestamp, true),
         level: match.groups.level,
         module: match.groups.module,
         message: match.groups.message,
     };
 }
-
