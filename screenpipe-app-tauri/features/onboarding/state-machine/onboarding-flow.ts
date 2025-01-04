@@ -130,6 +130,7 @@ export const screenpipeOnboardingFlow = setup({
             }, {} as any)
         },
         core_models: {
+            tags: ['showTerminalLogs'],
             id: 'core_models',
             initial: 'chineseMirrorToggle',
             on: {
@@ -231,7 +232,7 @@ export const screenpipeOnboardingFlow = setup({
                             payload: {
                                 textBox: {
                                     id: 7,
-                                    text: "we're downloading two ai models for you. this may take a few minutes depending on your internet connection",
+                                    text: "we're downloading two ai models for you. this may take a few minutes depending on your internet connection.",
                                 },
                                 button: [
                                     {
@@ -258,7 +259,7 @@ export const screenpipeOnboardingFlow = setup({
                             chineseModel: context.chineseModel
                         }),
                         onDone: {
-                            target: '#backend',
+                            target: 'downloadComplete',
                             actions: [
                                 sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
                                 assign({
@@ -278,6 +279,35 @@ export const screenpipeOnboardingFlow = setup({
                                     downloadProgress: ({event}) => event.progress
                                 })
                         }
+                    }
+                },
+                downloadComplete: {
+                    entry: [
+                        sendTo('convoBoxMachine', { type: 'IDLE' }),
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 7,
+                                    text: "both models have been downloaded and initiated successfully.",
+                                },
+                                button: [
+                                    {
+                                        variant: 'secondary',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'okay',
+                                        event: {type: 'NEXT'}
+                                    }
+                                ],
+                                process: {
+                                    skippable: false
+                                }
+                            }
+                        },{delay:500}),
+                    ],
+                    on: {
+                        'NEXT': "#backend"
                     }
                 }
             }
