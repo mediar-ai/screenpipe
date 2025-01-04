@@ -15,6 +15,7 @@ import SystemComponentRelationships from "../components/system-component-relatio
 import { CircleIcon } from "@/components/ui/circle-icon";
 import ScreenpipeLogo from '../components/screenpipe-logo/index';
 import LocalModels from "../components/local-models";
+import { TerminalLogsDisplay } from "@/components/terminal-logs-display";
 
 
 export default function ScreenpipeSystemAtlas(props:{
@@ -49,6 +50,10 @@ export default function ScreenpipeSystemAtlas(props:{
     return snapshot
   })
 
+  const showTerminalLogs = useSelector(screenpipeOnboardingMachine, (snapshot) => {
+    return snapshot.hasTag('showTerminalLogs')
+  })
+
 
   return (
     <main
@@ -58,6 +63,13 @@ export default function ScreenpipeSystemAtlas(props:{
         <ConversationBox
             className="top-[30px] left-[30px] absolute z-[100]"
         />
+        {showTerminalLogs && 
+            <AnimatePresence>
+                <TerminalLogsDisplay
+                    className="absolute right-[30px] top-[30px] z-[100]"
+                />
+            </AnimatePresence>
+        }
         <section
             id="atlas"
             className="relative flex h-[500px] w-[95%] flex-row items-stretch p-5 justify-between bg-background"
