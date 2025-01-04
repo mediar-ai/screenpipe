@@ -5,6 +5,7 @@ import { screenpipeOnboardingMachine } from "@/features/onboarding/state-machine
 import { ConversationBoxMachineType } from "../../state-machines/conversation-box";
 import { TextBox } from "./text-box";
 import ConvoBoxButtonGroup from "./button-group";
+import { TerminalTextDisplay } from "@/components/terminal-text-display";
 
 function useConvoBox() {
     const convoBoxMachine: ConversationBoxMachineType = useMemo(() => {
@@ -42,6 +43,7 @@ export default function ConversationBox({
                     convoBoxMachine={convoBoxMachine}
                 />
             </div>
+            <TerminalTextDisplay/>
         </div>
     )
 }
