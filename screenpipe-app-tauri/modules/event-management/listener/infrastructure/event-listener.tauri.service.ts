@@ -1,11 +1,14 @@
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { EventListenerService } from "../interfaces/event-listener.service.interface";
+import { EventListenerCallback, EventListenerService } from "../interfaces/event-listener.service.interface";
+import { ScreenpipeAppEvent } from "../../emitter/interfaces/event-emitter.service.interface";
 
 export class TauriEventListener implements EventListenerService { 
     private listeners: Record<string, UnlistenFn> = {}
 
-    async on(event: string, callback: (eventData: any) => void) {
-        const newListener = await listen(event, callback);
+    async on(event: string, callback: EventListenerCallback) {
+        const newListener = await listen<ScreenpipeAppEvent>(event, (event) => {
+            callback(event.payload)
+        });
         this.listeners[event] = newListener
     }
 
