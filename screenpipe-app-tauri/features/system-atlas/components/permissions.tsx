@@ -3,10 +3,10 @@ import { Ref, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { ActorRef } from "xstate"
 import { shallowEqual, useSelector } from "@xstate/react"
-import { PeripheralDevicesMachineType } from "../state-machines/peripheral-devices"
 import { screenpipeOnboardingMachine } from "@/features/onboarding/state-machine/onboarding-flow"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
 import { CircleIcon } from "@/components/ui/circle-icon"
+import { PeripheralDevicesMachineType } from "@/modules/peripheral-devices/adapters/state-machine/management.state-machine"
 
 const PermissionStatus = (props: {
     actorRef: ActorRef<any,any,any>,
@@ -26,7 +26,6 @@ const PermissionStatus = (props: {
         <AnimatedGroupContainer
             color="#cece66"
             hiddenBorder
-            isRectangle 
             className={cn("h-[300px] w-[100px] p-2 py-4", props.className)}
             shouldScale={props.isContainerActive}
         >
