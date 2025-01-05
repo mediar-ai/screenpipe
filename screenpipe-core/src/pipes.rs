@@ -220,26 +220,43 @@ mod pipes {
                 env_vars.push(("PORT".to_string(), port.to_string()));
             }
 
-            // Run the Next.js project with bun
-            debug!("starting next.js project with bun dev command");
-            let mut child = Command::new(&bun_path)
+            // Try to build the Next.js project
+            let build_success = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            
+            let port = env_vars
+                .iter()
+                .find(|(k, _)| k == "PORT")
+                .map(|(_, v)| v)
+                .unwrap()
+                .clone();
+
+            // Run the Next.js project
+            info!(
+                "starting next.js project in {} mode",
+                if build_success { "production" } else { "development" }
+            );
+            
+            let mut command = Command::new(&bun_path);
+            command
                 .arg("run")
-                .arg("--bun")
-                .arg("dev")
+                .arg("--bun");
+
+            if build_success {
+                command.arg("start");
+            } else {
+                info!("falling back to dev mode due to build failure");
+                command.arg("dev");
+            }
+
+            command
                 .arg("--port")
-                .arg(
-                    env_vars
-                        .iter()
-                        .find(|(k, _)| k == "PORT")
-                        .map(|(_, v)| v)
-                        .unwrap()
-                        .clone(),
-                )
+                .arg(port)
                 .current_dir(&pipe_dir)
                 .envs(env_vars)
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .spawn()?;
+                .stderr(std::process::Stdio::piped());
+
+            let mut child = command.spawn()?;
 
             debug!("streaming logs for next.js pipe");
             stream_logs(pipe, &mut child).await?;
@@ -976,6 +993,43 @@ mod pipes {
             info!("stopped all cron jobs for pipe: {}", pipe);
         }
         Ok(())
+    }
+
+    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
+        debug!("attempting to build next.js project in: {:?}", pipe_dir);
+        
+        // Check if build already exists and is valid
+        let build_dir = pipe_dir.join(".next");
+        if build_dir.exists() {
+            let build_manifest = build_dir.join("build-manifest.json");
+            if build_manifest.exists() {
+                debug!("found existing next.js build, skipping rebuild");
+                return Ok(true);
+            }
+            // Invalid/incomplete build directory - remove it
+            debug!("removing invalid next.js build directory");
+            tokio::fs::remove_dir_all(&build_dir).await?;
+        }
+
+        info!("running next.js build");
+        let build_output = Command::new(bun_path)
+            .arg("run")
+            .arg("--bun")
+            .arg("build")
+            .current_dir(pipe_dir)
+            .output()
+            .await?;
+
+        if build_output.status.success() {
+            info!("next.js build completed successfully");
+            Ok(true)
+        } else {
+            error!(
+                "next.js build failed: {}",
+                String::from_utf8_lossy(&build_output.stderr)
+            );
+            Ok(false)
+        }
     }
 }
 
