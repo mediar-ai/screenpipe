@@ -15,8 +15,10 @@ const LocalModels = (props: {
     isContainerActive?: boolean
 }) => { 
     const deviceStates = useSelector(props.actorRef, (snapshot) => {
-        return snapshot.context.ai
+        return snapshot.context.localModels
     })
+
+    console.log({deviceStates})
 
     return (
         <span className={props.className}>
@@ -33,7 +35,7 @@ const LocalModels = (props: {
                     footer="will be downloaded from hugging face."
                 >
                     <CircleIcon
-                        state={deviceStates.openai}
+                        state={deviceStates.whisper}
                     >
                         <WhisperIcon/>
                     </CircleIcon>
@@ -44,7 +46,7 @@ const LocalModels = (props: {
                     footer="will be downloaded from github."
                 >
                     <CircleIcon
-                        state={deviceStates.llama}
+                        state={deviceStates.silero}
                     >
                         <OnnxGithubIcon/>
                     </CircleIcon>
