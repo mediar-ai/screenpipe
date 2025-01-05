@@ -46,7 +46,17 @@ const [rendered, setRendered] = useState(false)
         ref={ref}
         data-state={state}
         className={cn(
-            "relative z-10 flex w-[50px] h-[50px] transition duration-1000 items-center justify-center rounded-full bg-white p-3 data-[state=empty]:bg-white data-[state=granted]:bg-[#cece66] data-[state=notNeeded]:bg-[#cece66] data-[state=checking]:bg-[#FFCE00] data-[state=requesting]:bg-[#FFCE00] data-[state=pending]:bg-[#FFCE00] data-[state=denied]:bg-[#E8292E] data-[state=skipped]:bg-input",
+            `relative z-10 p-3 flex w-[50px] h-[50px] transition duration-1000 items-center justify-center rounded-full 
+              bg-white 
+              data-[state=empty]:bg-white 
+              data-[state=granted]:bg-[#cece66] 
+              data-[state=healthy]:bg-[#cece66]
+              data-[state=notNeeded]:bg-[#cece66] 
+              data-[state=checking]:bg-[#FFCE00] 
+              data-[state=requesting]:bg-[#FFCE00] 
+              data-[state=pending]:bg-[#FFCE00] 
+              data-[state=denied]:bg-[#E8292E] 
+              data-[state=skipped]:bg-input`,
             className,
         )}
         initial="hidden"
