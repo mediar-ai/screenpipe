@@ -10,7 +10,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import { debounce } from "lodash";
 
 interface TemplateEditorProps {
-  initialTemplate: any;
+  initialTemplate: unknown;
   defaultOpen?: boolean;
 }
 
@@ -182,7 +182,7 @@ export default function TemplateEditor({ initialTemplate, defaultOpen = true }: 
                 <textarea
                   className="w-full min-h-[100px] p-4 border rounded-lg font-mono text-sm 
                     bg-white dark:bg-black text-black dark:text-white resize-vertical"
-                  value={value}
+                  value={value as string}
                   onChange={(e) => handleChange(key, e.target.value)}
                   placeholder={`Enter ${key}...`}
                 />

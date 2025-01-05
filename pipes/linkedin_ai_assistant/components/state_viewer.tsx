@@ -371,8 +371,8 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
                           }
                           transition={{ duration: 0.5 }}
                         >
-                          {Object.entries(profile.actions)
-                            .sort(([_actionA, statusA], [_actionB, statusB]) => {
+                          {Object.entries(profile.actions as Record<string, string>)
+                            .sort(([, statusA], [, statusB]) => {
                               return getActionPriority(statusA) - getActionPriority(statusB);
                             })
                             .map(([action, status]) => (

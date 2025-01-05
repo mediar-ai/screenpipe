@@ -24,7 +24,13 @@ export async function GET(req: NextRequest) {
     headers.set('Content-Type', contentType);
     headers.set('Accept-Ranges', 'bytes');
 
-    return new NextResponse(fileStream, { headers });
+    const transform = new TransformStream();
+    const writer = transform.writable.getWriter();
+    
+    fileStream.on('data', (chunk) => writer.write(chunk));
+    fileStream.on('end', () => writer.close());
+    
+    return new Response(transform.readable, { headers });
   } catch (error :any) {
     console.error('Error fetching file:', error);
     if (error.code === 'ENOENT') {

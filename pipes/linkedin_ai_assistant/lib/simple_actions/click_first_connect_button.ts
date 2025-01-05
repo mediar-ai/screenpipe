@@ -19,7 +19,7 @@ export async function clickFirstConnectButton(page: Page): Promise<{
         // Get profile URL before clicking connect
         const profileUrl = await page.evaluate(() => {
             const link = document.querySelector('a.EvQUJBaxIRgFetdTQjAXvpGhCNvVbYEbE');
-            return link?.href;
+            return link?.getAttribute('href');
         });
 
         console.log('found connect button');
@@ -56,10 +56,10 @@ export async function clickFirstConnectButton(page: Page): Promise<{
             }
         } catch {
             // No weekly limit modal appeared, connection was successful
-            return { success: true, profileUrl };
+            return { success: true, profileUrl: profileUrl || undefined };
         }
 
-        return { success: true, profileUrl };
+        return { success: true, profileUrl: profileUrl || undefined };
     } catch (e) {
         console.error('failed to click connect button:', e);
         return { success: false };

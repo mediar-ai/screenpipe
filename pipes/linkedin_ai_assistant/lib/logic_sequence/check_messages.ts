@@ -87,6 +87,6 @@ export async function startMessageCheck() {
         return { success: true };
     } catch (error) {
         console.error('message check automation failed:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: (error as Error).message };
     }
 } 
