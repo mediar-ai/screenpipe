@@ -1,4 +1,4 @@
-import { assign, createActor, fromPromise, sendTo, setup, spawnChild } from 'xstate';
+import { assign, createActor, fromPromise, sendParent, sendTo, setup, spawnChild } from 'xstate';
 import conversationBoxMachine from '@/features/system-atlas/state-machines/conversation-box';
 import screenpipeLogoMachine from '@/features/system-atlas/state-machines/screenpipe-logo';
 import { AvailablePeripheralDevices, AvailablePeripheralDevicesEnum } from '@/modules/peripheral-devices/types/available-devices';
@@ -6,21 +6,30 @@ import { generatePermissionsStates } from '@/modules/peripheral-devices/adapters
 import peripheralDevicesMachine from '@/modules/peripheral-devices/adapters/state-machine/management.state-machine';
 import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/download-local-models.use-case';
 import spawnScreenpipeUseCase from '@/modules/screenpipe-cli/use-cases/spawn-screenpipe.use-case';
+import listenToEventUseCase from '@/modules/event-management/listener/use-cases/listen-to-event.use-case';
+import { ScreenpipeAppEvent } from '@/modules/event-management/emitter/interfaces/event-emitter.service.interface';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
-    console.log(`Starting download: ${input.fileName}`);
+    function callback(event: ScreenpipeAppEvent) {
+        if(event.detail.includes('SileroVad Model downloaded')) {
+            input.parent.send({type: 'PROGRESS_UPDATE', payload: { silero: 'healthy', whisper: 'healthy' }})
+        }
+    }
+
+    const listener = listenToEventUseCase('model-download-update', callback)
     await downloadModelsUseCase({enableBeta: false})
+
+    // TODOO: fix react state management, looks like terminal text display is rerendering unnecessarily
+    // listener.off(listener.event)
 })
 
 const screenpipeEngineStartup = fromPromise(async () => {
-    console.log(`Starting screenpipe`);
-
     await spawnScreenpipeUseCase()
 })
 
 export const screenpipeOnboardingFlow = setup({
     types:{
-        events: {} as {type:'NEXT'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',progress:number}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
+        events: {} as {type:'NEXT'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
     },
     actors: {
         conversationBoxMachine,
@@ -42,6 +51,10 @@ export const screenpipeOnboardingFlow = setup({
             openai: 'asleep',
             perplexity: 'asleep',
             mixtral: 'asleep'
+        },
+        localModels: {
+            silero: 'asleep',
+            whisper: 'asleep'
         }
     },
     states: {
@@ -238,6 +251,12 @@ export const screenpipeOnboardingFlow = setup({
                             }
                         },{delay:500}),
                         sendTo('convoBoxMachine', {type:'LOADING'}, {delay: 300}),
+                        assign({
+                            localModels: {
+                                silero: 'pending',
+                                whisper: 'pending'
+                            }
+                        })
                     ],
                     invoke: {
                         id: 'aiModelDownload',
@@ -260,13 +279,20 @@ export const screenpipeOnboardingFlow = setup({
                                     },
                                 }),
                             ],
-                        }
+                        },
                     },
                     on: {
                         PROGRESS_UPDATE: {
-                            actions: assign({
-                                    downloadProgress: ({event}) => event.progress
+                            actions: [
+                                assign({
+                                    localModels: ({context, event}) => {
+                                        return {
+                                            ...context.localModels,
+                                            ...event.payload
+                                        }
+                                    }
                                 })
+                            ]
                         }
                     }
                 },
