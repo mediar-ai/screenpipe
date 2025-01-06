@@ -446,6 +446,7 @@ async fn main() -> anyhow::Result<()> {
     let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
+    let realtime_audio_devices_clone = realtime_audio_devices.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -485,6 +486,9 @@ async fn main() -> anyhow::Result<()> {
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
                     cli.capture_unfocused_windows,
+                    realtime_audio_devices.clone(),
+                    cli.enable_realtime_audio_transcription,
+                    Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
                 );
 
                 let result = tokio::select! {
@@ -720,11 +724,11 @@ async fn main() -> anyhow::Result<()> {
 
     if cli.disable_audio || !cli.enable_realtime_audio_transcription {
         println!("│ {:<22} │ {:<34} │", "", "disabled");
-    } else if realtime_audio_devices.is_empty() {
+    } else if realtime_audio_devices_clone.is_empty() {
         println!("│ {:<22} │ {:<34} │", "", "no devices available");
     } else {
-        let total_devices = realtime_audio_devices.len();
-        for (_, device) in realtime_audio_devices
+        let total_devices = realtime_audio_devices_clone.len();
+        for (_, device) in realtime_audio_devices_clone
             .iter()
             .enumerate()
             .take(MAX_ITEMS_TO_DISPLAY)

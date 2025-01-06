@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
 use image::ImageEncoder;
+use screenpipe_vision::capture_screenshot_by_window::WindowFilters;
 use screenpipe_vision::{
     continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
@@ -86,7 +87,6 @@ async fn main() -> Result<()> {
         continuous_capture(
             result_tx,
             Duration::from_secs_f64(1.0 / cli.fps),
-            save_text_files,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
                 OcrEngine::AppleNative
@@ -96,9 +96,12 @@ async fn main() -> Result<()> {
                 OcrEngine::Tesseract
             },
             id,
-            &cli.ignored_windows,
-            &cli.included_windows,
+            Arc::new(WindowFilters::new(
+                &cli.ignored_windows,
+                &cli.included_windows,
+            )),
             vec![],
+            false,
         )
         .await
     });

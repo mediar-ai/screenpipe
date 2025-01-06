@@ -38,7 +38,9 @@ fn apple_ocr_benchmark(c: &mut Criterion) {
                     }
                 }
 
-                let result = perform_ocr_apple(&image, vec![]);
+                let languages = cidre::ns::ArrayMut::from_slice(&[]);
+
+                let result = perform_ocr_apple(&image, &languages);
                 assert!(
                     result.0.contains("receiver_count"),
                     "OCR failed: {:?}",

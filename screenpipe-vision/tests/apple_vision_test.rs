@@ -25,7 +25,9 @@ mod tests {
         let rgb_image = image.to_rgb8();
         println!("RGB image dimensions: {:?}", rgb_image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let languages = cidre::ns::ArrayMut::from_slice(&[]);
+
+        let (result, _, _) = perform_ocr_apple(&image, &languages);
 
         println!("OCR text: {:?}", result);
         assert!(
@@ -45,7 +47,9 @@ mod tests {
         let image = image::open(&path).expect("Failed to open Chinese test image");
         println!("Image dimensions: {:?}", image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let languages = cidre::ns::ArrayMut::from_slice(&[]);
+
+        let (result, _, _) = perform_ocr_apple(&image, &languages);
 
         println!("OCR text: {:?}", result);
         assert!(

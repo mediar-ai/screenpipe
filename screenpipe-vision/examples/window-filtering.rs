@@ -1,9 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
 use screenpipe_vision::{
-    continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
+    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::get_default_monitor,
+    CaptureResult, OcrEngine,
 };
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
@@ -40,7 +41,6 @@ async fn main() -> Result<()> {
         continuous_capture(
             result_tx,
             Duration::from_secs(1),
-            false,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
                 OcrEngine::AppleNative
@@ -50,9 +50,9 @@ async fn main() -> Result<()> {
                 OcrEngine::Tesseract
             },
             id,
-            &cli.ignore,
-            &cli.include,
+            Arc::new(WindowFilters::new(&cli.ignore, &cli.include)),
             vec![],
+            false,
         )
         .await
     });
