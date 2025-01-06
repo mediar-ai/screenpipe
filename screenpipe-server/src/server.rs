@@ -18,11 +18,7 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{
-        merge_videos,
-        validate_media,
-        MergeVideosRequest,
-        MergeVideosResponse,
-        ValidateMediaParams
+        merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
@@ -920,15 +916,12 @@ async fn validate_media_handler(
     State(_state): State<Arc<AppState>>,
     Query(params): Query<ValidateMediaParams>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-
     match validate_media(&params.file_path).await {
         Ok(_) => Ok(Json(json!({"status": "valid media file"}))),
-        Err(e) => {
-            Err((
-                StatusCode::EXPECTATION_FAILED,
-                Json(json!({"status": e.to_string()})),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::EXPECTATION_FAILED,
+            Json(json!({"status": e.to_string()})),
+        )),
     }
 }
 
@@ -1010,7 +1003,7 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(&device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -1018,9 +1011,9 @@ async fn add_frame_to_db(
             db.insert_ocr_text(
                 frame_id,
                 &ocr.text,
-                &ocr.text_json.as_deref().unwrap_or(""),
-                &frame.app_name.as_deref().unwrap_or(""),
-                &frame.window_name.as_deref().unwrap_or(""),
+                ocr.text_json.as_deref().unwrap_or(""),
+                frame.app_name.as_deref().unwrap_or(""),
+                frame.window_name.as_deref().unwrap_or(""),
                 Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
                 false,
             )
@@ -1613,6 +1606,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
         .layer(cors);
+    // TODO: Add SSE stream for realtime audio transcription
 
     #[cfg(feature = "experimental")]
     {

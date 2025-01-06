@@ -80,7 +80,7 @@ pub fn perform_ocr_apple(
         let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
         let mut request = RecognizeTextRequest::new();
         // Recognize all languages
-        request.set_recognition_langs(&languages);
+        request.set_recognition_langs(languages);
         request.set_uses_lang_correction(false);
         let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
         let result = handler.perform(&requests);
@@ -125,10 +125,11 @@ pub fn perform_ocr_apple(
                     ocr_text.push_str(text.to_string().as_str());
                 });
 
-                let json_output_string = serde_json::to_string(&ocr_results_vec).unwrap_or_else(|e| {
-                    error!("Failed to serialize JSON output: {}", e);
-                    "[]".to_string()
-                });
+                let json_output_string =
+                    serde_json::to_string(&ocr_results_vec).unwrap_or_else(|e| {
+                        error!("Failed to serialize JSON output: {}", e);
+                        "[]".to_string()
+                    });
 
                 return (ocr_text, json_output_string, Some(overall_confidence));
             }
