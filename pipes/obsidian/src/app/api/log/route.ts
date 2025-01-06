@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { ContentItem } from "@screenpipe/js";
-import { pipe } from "@screenpipe/js/node";
+import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
