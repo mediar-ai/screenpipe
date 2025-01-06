@@ -1,19 +1,12 @@
 use anyhow::Result;
 use hound::{WavSpec, WavWriter};
-use lazy_static::lazy_static;
 use log::{debug, error, info};
 use reqwest::Client;
 use screenpipe_core::Language;
 use serde_json::Value;
-use std::env;
 use std::io::Cursor;
 
-lazy_static! {
-    static ref DEEPGRAM_API_URL: String = env::var("DEEPGRAM_API_URL")
-        .unwrap_or_else(|_| "https://api.deepgram.com/v1/listen".to_string());
-    static ref CUSTOM_DEEPGRAM_API_TOKEN: String =
-        env::var("CUSTOM_DEEPGRAM_API_TOKEN").unwrap_or_else(|_| String::new());
-}
+use crate::deepgram::{CUSTOM_DEEPGRAM_API_TOKEN, DEEPGRAM_API_URL};
 
 pub async fn transcribe_with_deepgram(
     api_key: &str,
