@@ -295,6 +295,7 @@ mod pipes {
                     "Download",
                     "Task dev ",
                     "$ next dev",
+                    "$ next start",
                     "$ next lint",
                     "$ next build",
                     "ready started server",
