@@ -198,26 +198,15 @@ mod pipes {
                     CRON_HANDLES.lock().await.insert(pipe.to_string(), handles);
                 }
 
-                // Install dependencies using bun
-                info!("installing dependencies for next.js pipe [{}]", pipe);
-                let install_output = Command::new(&bun_path)
-                    .arg("install")
-                    .current_dir(&pipe_dir)
-                    .output()
-                    .await?;
-
-                if !install_output.status.success() {
-                    error!(
-                        "failed to install dependencies: {}",
-                        String::from_utf8_lossy(&install_output.stderr)
-                    );
-                    anyhow::bail!("failed to install dependencies for next.js pipe");
-                }
-                debug!("successfully installed dependencies for next.js pipe");
-                // build the pipe after installing dependencies
-                match build_nextjs_pipe(&bun_path, &pipe_dir).await {
-                    Ok(_) => println!("pipe build successfully"),
-                    Err(e) => eprintln!("pipe: {:?} build failed: {:?}", &pipe_dir, e),
+                // Install dependencies only if "bun i" failed at "download_pipe"
+                if pipe_config.get("installed_package").and_then(Value::as_bool) == Some(false) {
+                    info!("Packages are not installed, installing dependencies for next.js pipe [{}]", pipe);
+                    match retry_install(&bun_path, &pipe_dir, 1).await {
+                        Ok(_) => info!("Successfully installed dependencies for next.js pipe [{}]", pipe),
+                        Err(_) => anyhow::bail!("Failed to install dependencies for next.js pipe [{}]", pipe)
+                    }
+                } else {
+                    info!("Dependencies already installed for next.js pipe [{}], skipping installation", pipe);
                 }
             } else {
                 let port = pick_unused_port().expect("No ports free");
@@ -227,10 +216,14 @@ mod pipes {
 
             // Run the Next.js project with bun
             debug!("starting next.js project with bun dev command");
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            let pipe_config: Value = serde_json::from_str(&pipe_json)?;
+            let is_build = pipe_config.get("build").and_then(Value::as_bool);
+
             let mut child = Command::new(&bun_path)
                 .arg("run")
                 .arg("--bun")
-                .arg("start")
+                .arg(if is_build == Some(true) { "start" } else { "dev" })
                 .arg("--port")
                 .arg(
                     env_vars
@@ -302,6 +295,8 @@ mod pipes {
                     "Download",
                     "Task dev ",
                     "$ next dev",
+                    "$ next lint",
+                    "$ next build",
                     "ready started server",
                     "Local:",
                     "Webpack is configured",
@@ -325,6 +320,12 @@ mod pipes {
     }
 
     async fn build_nextjs_pipe(bun_path: &Path, dest_dir: &Path) -> Result<()> {
+        let pipe_json_path = dest_dir.join("pipe.json");
+        let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+        let pipe_config: Value = serde_json::from_str(&pipe_json)?;
+        let mut updated_config = pipe_config.clone();
+
+        info!("Building next.js pipe, [{:?}]", &dest_dir);
         let mut build_child = Command::new(bun_path)
             .arg("run")
             .arg("build")
@@ -333,15 +334,23 @@ mod pipes {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
-        // Stream logs for bun run build
         stream_logs("bun run build", &mut build_child).await?;
 
         let status = build_child.wait().await?;
         if status.success() {
+            updated_config["build"] = json!(true);
+            let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
+            let mut file = File::create(&pipe_json_path).await?;
+            file.write_all(updated_pipe_json.as_bytes()).await?;
+            debug!("Updated pipe.json for build");
             Ok(())
         } else {
-            Err(anyhow::anyhow!("build failed for pipe: {:?} stderr: {:?}",
-                &dest_dir, &build_child.stderr))
+            updated_config["build"] = json!(false);
+            let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
+            let mut file = File::create(&pipe_json_path).await?;
+            file.write_all(updated_pipe_json.as_bytes()).await?;
+            debug!("Updated pipe.json for build");
+            Err(anyhow::anyhow!("Next.js pipe build failed: {:?}", &build_child.stderr))
         }
     }
 
@@ -349,6 +358,24 @@ mod pipes {
     async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Result<()> {
         let mut attempt = 0;
         let mut last_error = None;
+        let pipe_json_path = dest_dir.join("pipe.json");
+        let existing_config = if pipe_json_path.exists() {
+            debug!("Existing pipe.json found");
+            let content = tokio::fs::read_to_string(&pipe_json_path).await?;
+            Some(serde_json::from_str::<Value>(&content)?)
+        } else {
+            debug!("No existing pipe.json found");
+            None
+        };
+
+        let mut pipe_config = if let Some(existing_json) = &existing_config {
+            existing_json.clone()
+        } else if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            serde_json::from_str(&pipe_json)?
+        } else {
+            json!({})
+        };
 
         while attempt < max_retries {
             let mut install_child = Command::new(bun_path)
@@ -358,12 +385,17 @@ mod pipes {
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
 
-            // Stream logs for npm install
-            if let Ok(()) = stream_logs("bun install", &mut install_child).await {
-                let status = install_child.wait().await?;
-                if status.success() {
-                    return Ok(());
-                }
+            // Stream logs for bun install
+            stream_logs("bun install", &mut install_child).await?;
+
+            let status = install_child.wait().await?;
+            if status.success() {
+                pipe_config["installed_package"] = json!(true);
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                let mut file = File::create(&pipe_json_path).await?;
+                file.write_all(updated_pipe_json.as_bytes()).await?;
+                debug!("updated pipe.json for installed packages");
+                return Ok(());
             }
 
             attempt += 1;
@@ -380,6 +412,11 @@ mod pipes {
             ));
         }
 
+        pipe_config["installed_package"] = json!(false);
+        let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+        let mut file = File::create(&pipe_json_path).await?;
+        file.write_all(updated_pipe_json.as_bytes()).await?;
+        debug!("updated pipe.json for installed packages");
         Err(last_error.unwrap_or_else(|| anyhow::anyhow!("installation failed")))
     }
 
@@ -518,6 +555,11 @@ mod pipes {
                 let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
+                // Build next js pipe along with downloading
+                match build_nextjs_pipe(&bun_path, &dest_dir).await {
+                    Ok(_) => info!("Next.js pipe build successfully, [{:?}]", &dest_dir),
+                    Err(e) => error!("Next.js pipe build failed: [{:?}]", e)
+                }
             }
         }
 
