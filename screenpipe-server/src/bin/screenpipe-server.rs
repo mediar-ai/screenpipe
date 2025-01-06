@@ -308,6 +308,8 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_devices_control_server = audio_devices_control.clone();
 
+    let mut realtime_audio_devices = Vec::new();
+
     // Add all available audio devices to the controls
     for device in &all_audio_devices {
         let device_control = DeviceControl {
@@ -368,6 +370,29 @@ async fn main() -> anyhow::Result<()> {
                 });
             }
         }
+
+        if cli.enable_realtime_audio_transcription {
+            if cli.realtime_audio_device.is_empty() {
+                // Use default devices
+                if let Ok(input_device) = default_input_device() {
+                    realtime_audio_devices.push(Arc::new(input_device.clone()));
+                }
+                // audio output only on macos <15.0 atm ?
+                // see https://github.com/mediar-ai/screenpipe/pull/106
+                if let Ok(output_device) = default_output_device() {
+                    realtime_audio_devices.push(Arc::new(output_device.clone()));
+                }
+            } else {
+                for d in &cli.realtime_audio_device {
+                    let device = parse_audio_device(d).expect("failed to parse audio device");
+                    realtime_audio_devices.push(Arc::new(device.clone()));
+                }
+            }
+
+            if realtime_audio_devices.is_empty() {
+                eprintln!("no realtime audio devices available. realtime audio transcription will be disabled.");
+            }
+        }
     }
 
     let resource_monitor = ResourceMonitor::new();
@@ -391,6 +416,8 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
+    let warning_realtime_audio_transcription_engine_clone =
+        cli.realtime_audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
         all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
     } else {
@@ -525,56 +552,73 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
-    println!("│ setting             │ value                              │");
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ fps                 │ {:<34} │", cli.fps);
+    println!("┌────────────────────────┬────────────────────────────────────┐");
+    println!("│ setting                │ value                              │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ fps                    │ {:<34} │", cli.fps);
     println!(
-        "│ audio chunk duration│ {:<34} │",
+        "│ audio chunk duration   │ {:<34} │",
         format!("{} seconds", cli.audio_chunk_duration)
     );
     println!(
-        "│ video chunk duration│ {:<34} │",
+        "│ video chunk duration   │ {:<34} │",
         format!("{} seconds", cli.video_chunk_duration)
     );
-    println!("│ port                │ {:<34} │", cli.port);
-    println!("│ audio disabled      │ {:<34} │", cli.disable_audio);
-    println!("│ vision disabled     │ {:<34} │", cli.disable_vision);
+    println!("│ port                   │ {:<34} │", cli.port);
     println!(
-        "│ audio engine        │ {:<34} │",
+        "│ realtime audio enabled │ {:<34} │",
+        cli.enable_realtime_audio_transcription
+    );
+    println!("│ audio disabled         │ {:<34} │", cli.disable_audio);
+    println!("│ vision disabled        │ {:<34} │", cli.disable_vision);
+    println!(
+        "│ audio engine           │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
     );
     println!(
-        "│ ocr engine          │ {:<34} │",
+        "│ realtime audio engine  │ {:<34} │",
+        format!("{:?}", warning_realtime_audio_transcription_engine_clone)
+    );
+    println!(
+        "│ ocr engine             │ {:<34} │",
         format!("{:?}", ocr_engine_clone)
     );
     println!(
-        "│ vad engine          │ {:<34} │",
+        "│ vad engine             │ {:<34} │",
         format!("{:?}", vad_engine_clone)
     );
     println!(
-        "│ vad sensitivity     │ {:<34} │",
+        "│ vad sensitivity        │ {:<34} │",
         format!("{:?}", vad_sensitivity_clone)
     );
     println!(
-        "│ data directory      │ {:<34} │",
+        "│ data directory         │ {:<34} │",
         local_data_dir_clone.display()
     );
-    println!("│ debug mode          │ {:<34} │", cli.debug);
-    println!("│ telemetry           │ {:<34} │", !cli.disable_telemetry);
-    println!("│ local llm           │ {:<34} │", cli.enable_llm);
-
-    println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
+    println!("│ debug mode             │ {:<34} │", cli.debug);
     println!(
-        "│ ignored windows     │ {:<34} │",
+        "│ telemetry              │ {:<34} │",
+        !cli.disable_telemetry
+    );
+    println!("│ local llm              │ {:<34} │", cli.enable_llm);
+
+    println!("│ use pii removal        │ {:<34} │", cli.use_pii_removal);
+    println!(
+        "│ ignored windows        │ {:<34} │",
         format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)
     );
     println!(
-        "│ included windows    │ {:<34} │",
+        "│ included windows       │ {:<34} │",
         format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
     );
-    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
-    println!("│ frame cache         │ {:<34} │", cli.enable_frame_cache);
+    println!(
+        "│ ui monitoring          │ {:<34} │",
+        cli.enable_ui_monitoring
+    );
+    println!(
+        "│ frame cache            │ {:<34} │",
+        cli.enable_frame_cache
+    );
 
     const VALUE_WIDTH: usize = 34;
 
@@ -596,12 +640,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add languages section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ languages           │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ languages              │                                    │");
     const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.language.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "all languages");
+        println!("│ {:<22} │ {:<34} │", "", "all languages");
     } else {
         let total_languages = cli.language.len();
         for (_, language) in languages_clone
@@ -611,11 +655,11 @@ async fn main() -> anyhow::Result<()> {
         {
             let language_str = format!("id: {}", language);
             let formatted_language = format_cell(&language_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_language);
+            println!("│ {:<22} │ {:<34} │", "", formatted_language);
         }
         if total_languages > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_languages - MAX_ITEMS_TO_DISPLAY)
             );
@@ -623,23 +667,23 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add monitors section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ monitors            │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ monitors               │                                    │");
 
     if cli.disable_vision {
-        println!("│ {:<19} │ {:<34} │", "", "vision disabled");
+        println!("│ {:<22} │ {:<34} │", "", "vision disabled");
     } else if monitor_ids.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no monitors available");
+        println!("│ {:<22} │ {:<34} │", "", "no monitors available");
     } else {
         let total_monitors = monitor_ids.len();
         for (_, monitor) in monitor_ids.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let monitor_str = format!("id: {}", monitor);
             let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
+            println!("│ {:<22} │ {:<34} │", "", formatted_monitor);
         }
         if total_monitors > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_monitors - MAX_ITEMS_TO_DISPLAY)
             );
@@ -647,24 +691,52 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Audio devices section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ audio devices       │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ audio devices          │                                    │");
 
     if cli.disable_audio {
-        println!("│ {:<19} │ {:<34} │", "", "disabled");
+        println!("│ {:<22} │ {:<34} │", "", "disabled");
     } else if audio_devices.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no devices available");
+        println!("│ {:<22} │ {:<34} │", "", "no devices available");
     } else {
         let total_devices = audio_devices.len();
         for (_, device) in audio_devices.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
-            println!("│ {:<19} │ {:<34} │", "", formatted_device);
+            println!("│ {:<22} │ {:<34} │", "", formatted_device);
         }
         if total_devices > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
+                "",
+                format!("... and {} more", total_devices - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+    // Realtime Audio devices section
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ realtime audio devices │                                    │");
+
+    if cli.disable_audio || !cli.enable_realtime_audio_transcription {
+        println!("│ {:<22} │ {:<34} │", "", "disabled");
+    } else if realtime_audio_devices.is_empty() {
+        println!("│ {:<22} │ {:<34} │", "", "no devices available");
+    } else {
+        let total_devices = realtime_audio_devices.len();
+        for (_, device) in realtime_audio_devices
+            .iter()
+            .enumerate()
+            .take(MAX_ITEMS_TO_DISPLAY)
+        {
+            let device_str = device.deref().to_string();
+            let formatted_device = format_cell(&device_str, VALUE_WIDTH);
+
+            println!("│ {:<22} │ {:<34} │", "", formatted_device);
+        }
+        if total_devices > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_devices - MAX_ITEMS_TO_DISPLAY)
             );
@@ -672,11 +744,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Pipes section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ pipes               │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ pipes                  │                                    │");
     let pipes = pipe_manager.list_pipes().await;
     if pipes.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no pipes available");
+        println!("│ {:<22} │ {:<34} │", "", "no pipes available");
     } else {
         let total_pipes = pipes.len();
         for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
@@ -686,18 +758,18 @@ async fn main() -> anyhow::Result<()> {
                 pipe.id,
             );
             let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_pipe);
+            println!("│ {:<22} │ {:<34} │", "", formatted_pipe);
         }
         if total_pipes > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_pipes - MAX_ITEMS_TO_DISPLAY)
             );
         }
     }
 
-    println!("└─────────────────────┴────────────────────────────────────┘");
+    println!("└────────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
     if warning_audio_transcription_engine_clone == CliAudioTranscriptionEngine::Deepgram
