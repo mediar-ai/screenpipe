@@ -1,26 +1,30 @@
+use crate::audio_processing::{average_noise_spectrum, spectral_subtraction, write_audio_to_file};
+use crate::pyannote::models::{get_or_download_model, PyannoteModel};
+use crate::resample;
 use crate::{
     audio_processing::normalize_v2,
-    encode_single_audio, multilingual,
     pyannote::{
         embedding::EmbeddingExtractor,
         identify::EmbeddingManager,
         segment::{get_segments, SpeechSegment},
     },
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
-    whisper::{Decoder, WhisperModel},
+    whisper::{process_with_whisper, WhisperModel},
     AudioDevice, AudioTranscriptionEngine,
 };
 use anyhow::{anyhow, Result};
-use candle::Tensor;
-use candle_transformers::models::whisper::{self as m, audio};
-use chrono::Utc;
+use candle_transformers::models::whisper as m;
+use hound::{WavSpec, WavWriter};
+use lazy_static::lazy_static;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
-use std::collections::HashSet;
+use reqwest::Client;
+use screenpipe_core::Language;
+use serde_json::Value;
+use std::env;
+use std::io::Cursor;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -28,17 +32,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
-
-use hound::{WavSpec, WavWriter};
-use regex::Regex;
-use reqwest::Client;
-use screenpipe_core::Language;
-use serde_json::Value;
-use std::io::Cursor;
-
-use crate::pyannote::models::{get_or_download_model, PyannoteModel};
-use lazy_static::lazy_static;
-use std::env;
+use vad_rs::VadStatus;
 
 lazy_static! {
     static ref DEEPGRAM_API_URL: String = env::var("DEEPGRAM_API_URL")
@@ -202,110 +196,6 @@ pub fn stt_sync(
     handle.join().unwrap()
 }
 
-fn process_with_whisper(
-    whisper_model: &mut WhisperModel,
-    audio: &[f32],
-    mel_filters: &[f32],
-    languages: Vec<Language>,
-) -> Result<String> {
-    let model = &mut whisper_model.model;
-    let tokenizer = &whisper_model.tokenizer;
-    let device = &whisper_model.device;
-
-    debug!("converting pcm to mel spectrogram");
-    let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);
-    let mel_len = mel.len();
-
-    debug!("creating tensor from mel spectrogram");
-    let mel = Tensor::from_vec(
-        mel,
-        (
-            1,
-            model.config().num_mel_bins,
-            mel_len / model.config().num_mel_bins,
-        ),
-        device,
-    )?;
-
-    debug!("detecting language");
-    let language_token = Some(multilingual::detect_language(
-        model,
-        tokenizer,
-        &mel,
-        languages.clone(),
-    )?);
-
-    debug!("initializing decoder");
-    let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
-
-    debug!("starting decoding process");
-    let segments = dc.run(&mel)?;
-    debug!("decoding complete");
-
-    let mut ranges: HashSet<String> = HashSet::new();
-    let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
-    let mut transcript = String::new();
-
-    let mut min_time: f32 = f32::MAX;
-    let mut max_time: f32 = f32::MIN;
-    let segments_len = segments.len();
-
-    for (i, segment) in segments.iter().enumerate() {
-        let mut text = segment.dr.text.clone();
-
-        // Extract start and end times
-        let (start, end) = extract_time_tokens(&text, &token_regex);
-        let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
-
-        let range = format!("{}{}", start, end);
-        if ranges.insert(range) {
-            if segments_len > 1 && i == segments_len - 1 && s_time == min_time && e_time == max_time
-            {
-                continue;
-            }
-
-            text = token_regex.replace_all(&text, "").to_string();
-            text.push('\n');
-            transcript.push_str(&text);
-        }
-    }
-
-    Ok(transcript)
-}
-
-fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
-    let tokens = token_regex
-        .find_iter(text)
-        .map(|m| m.as_str())
-        .collect::<Vec<&str>>();
-
-    let start = tokens.first().unwrap().to_string();
-    let end = tokens.last().unwrap().to_string();
-
-    (start, end)
-}
-
-fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut f32) -> (f32, f32) {
-    let num_regex = Regex::new(r"([<>|])").unwrap();
-    let s_time = num_regex
-        .replace_all(start, "")
-        .parse::<f32>()
-        .unwrap_or(*min_time);
-    let e_time = num_regex
-        .replace_all(end, "")
-        .parse::<f32>()
-        .unwrap_or(*max_time);
-
-    if *min_time > s_time {
-        *min_time = s_time;
-    }
-    if *max_time < e_time {
-        *max_time = e_time;
-    }
-
-    (s_time, e_time)
-}
-
 pub async fn prepare_segments(
     audio_data: &[f32],
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
@@ -424,31 +314,6 @@ pub async fn stt(
     transcription
 }
 
-pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
-    debug!("Resampling audio");
-    let params = SincInterpolationParameters {
-        sinc_len: 256,
-        f_cutoff: 0.95,
-        interpolation: SincInterpolationType::Linear,
-        oversampling_factor: 256,
-        window: WindowFunction::BlackmanHarris2,
-    };
-
-    let mut resampler = SincFixedIn::<f32>::new(
-        to_sample_rate as f64 / from_sample_rate as f64,
-        2.0,
-        params,
-        input.len(),
-        1,
-    )?;
-
-    let waves_in = vec![input.to_vec()];
-    debug!("Performing resampling");
-    let waves_out = resampler.process(&waves_in, None)?;
-    debug!("Resampling complete");
-    Ok(waves_out.into_iter().next().unwrap())
-}
-
 #[derive(Debug, Clone)]
 pub struct AudioInput {
     pub data: Arc<Vec<f32>>,
@@ -493,10 +358,6 @@ impl TranscriptionResult {
         None
     }
 }
-
-use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
-use std::sync::atomic::{AtomicBool, Ordering};
-use vad_rs::VadStatus;
 
 pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
@@ -744,31 +605,4 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
         (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
         _ => None,
     }
-}
-
-pub fn write_audio_to_file(
-    audio: &[f32],
-    sample_rate: u32,
-    output_path: &PathBuf,
-    device: &str,
-    skip_encoding: bool,
-) -> Result<String> {
-    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-    let sanitized_device_name = device.replace(['/', '\\'], "_");
-    let file_path = PathBuf::from(output_path)
-        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
-        .to_str()
-        .expect("Failed to create valid path")
-        .to_string();
-    let file_path_clone = file_path.clone();
-    // Run FFmpeg in a separate task
-    if !skip_encoding {
-        encode_single_audio(
-            bytemuck::cast_slice(audio),
-            sample_rate,
-            1,
-            &file_path.into(),
-        )?;
-    }
-    Ok(file_path_clone)
 }
