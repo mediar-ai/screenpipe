@@ -12,7 +12,7 @@ use sqlx::Row;
 use sqlx::TypeInfo;
 use sqlx::ValueRef;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tracing::info;
 
 use std::collections::BTreeMap;
@@ -1821,5 +1821,25 @@ impl DatabaseManager {
             .await?;
 
         Ok(())
+    }
+
+    pub async fn insert_keyboard_event(
+        &self,
+        timestamp: SystemTime,
+        key: &str,
+        event_type: &str,
+    ) -> anyhow::Result<i64> {
+        let datetime = DateTime::<Utc>::from(timestamp);
+        let id = sqlx::query(
+            "INSERT INTO keyboard_events (timestamp, key, event_type) VALUES (?, ?, ?)",
+        )
+        .bind(datetime)
+        .bind(key)
+        .bind(event_type)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+
+        Ok(id)
     }
 }

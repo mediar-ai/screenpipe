@@ -147,10 +147,11 @@ default = []
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-pipes = ["screenpipe-core/pipes", "url"]
+pipes = ["screenpipe-core/pipes"]
 llm = ["screenpipe-core/llm"]
-beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
+beta = ["screenpipe-core/beta"]
 experimental = ["enigo"]
+keyboard = ["screenpipe-core/keyboard"]
 
 [[bin]]
 name = "screenpipe"
