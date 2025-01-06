@@ -1,3 +1,4 @@
+use super::Segment;
 use crate::{
     multilingual,
     whisper::{Decoder, WhisperModel},
@@ -5,10 +6,15 @@ use crate::{
 use anyhow::Result;
 use candle::Tensor;
 use candle_transformers::models::whisper::audio;
+use lazy_static::lazy_static;
 use log::debug;
 use regex::Regex;
 use screenpipe_core::Language;
 use std::collections::HashSet;
+
+lazy_static! {
+    static ref TOKEN_REGEX: Regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>").unwrap();
+}
 
 pub fn process_with_whisper(
     whisper_model: &mut WhisperModel,
@@ -50,8 +56,11 @@ pub fn process_with_whisper(
     let segments = dc.run(&mel)?;
     debug!("decoding complete");
 
+    process_segments(segments)
+}
+
+fn process_segments(segments: Vec<Segment>) -> Result<String> {
     let mut ranges: HashSet<String> = HashSet::new();
-    let token_regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>")?;
     let mut transcript = String::new();
 
     let mut min_time: f32 = f32::MAX;
@@ -62,7 +71,7 @@ pub fn process_with_whisper(
         let mut text = segment.dr.text.clone();
 
         // Extract start and end times
-        let (start, end) = extract_time_tokens(&text, &token_regex);
+        let (start, end) = extract_time_tokens(&text, &TOKEN_REGEX);
         let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
 
         let range = format!("{}{}", start, end);
@@ -72,7 +81,7 @@ pub fn process_with_whisper(
                 continue;
             }
 
-            text = token_regex.replace_all(&text, "").to_string();
+            text = TOKEN_REGEX.replace_all(&text, "").to_string();
             text.push('\n');
             transcript.push_str(&text);
         }
