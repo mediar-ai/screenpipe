@@ -11,7 +11,7 @@ export default async function generateRedditQuestions(
   gptModel: string,
   gptApiUrl: string,
   openaiApiKey: string,
-  userToken?: string
+  userToken: string
 ): Promise<string> {
   const prompt = `${customPrompt}
 

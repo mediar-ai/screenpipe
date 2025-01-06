@@ -10,7 +10,7 @@ export default async function generateDailyLog(
   gptModel: string,
   gptApiUrl: string,
   openaiApiKey: string,
-  userToken?: string
+  userToken: string
 ): Promise<DailyLog> {
   const prompt = `${dailylogPrompt}
 

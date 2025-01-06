@@ -20,7 +20,7 @@ async function saveDailyLog(logEntry: DailyLog) {
     .toISOString()
     .replace(/:/g, "-")
     .replace(/\..+/, "");
-  const filename = `${timestamp}-${logEntry.category.replace(/[\/\\?%*:|"<>']/g, "-")}.json`;
+  const filename = `${timestamp}-${logEntry.category?.replace(/[\/\\?%*:|"<>']/g, "-")}.json`;
   const logFile = path.join(logsDir, filename)
   try {
     fs.writeFileSync(logFile, JSON.stringify(logEntry, null, 2));
@@ -123,7 +123,7 @@ export async function GET() {
         aiModel,
         aiUrl,
         openaiApiKey,
-        userToken,
+        userToken as string,
       );
       await saveDailyLog(logEntry);
     } else {
@@ -177,7 +177,7 @@ export async function GET() {
           aiModel,
           aiUrl,
           openaiApiKey,
-          userToken,
+          userToken as string,
         );
         console.log("reddit questions:", redditQuestions);
 
