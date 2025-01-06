@@ -1,6 +1,7 @@
 use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
+use crate::pyannote::segment::SpeechSegment;
 use crate::resample;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
@@ -257,41 +258,7 @@ pub async fn create_whisper_channel(
                                     #[cfg(target_os = "macos")]
                                     {
                                         autoreleasepool(|| {
-                                            match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
-                                                Ok(transcription) => TranscriptionResult {
-                                                    input: AudioInput {
-                                                        data: Arc::new(segment.samples),
-                                                        sample_rate: segment.sample_rate,
-                                                        channels: 1,
-                                                        device: audio.device.clone(),
-                                                    },
-                                                    transcription: Some(transcription),
-                                                    path,
-                                                    timestamp,
-                                                    error: None,
-                                                    speaker_embedding: segment.embedding.clone(),
-                                                    start_time: segment.start,
-                                                    end_time: segment.end,
-                                                },
-                                                Err(e) => {
-                                                    error!("STT error for input {}: {:?}", audio.device, e);
-                                                    TranscriptionResult {
-                                                        input: AudioInput {
-                                                            data: Arc::new(segment.samples),
-                                                            sample_rate: segment.sample_rate,
-                                                            channels: 1,
-                                                            device: audio.device.clone(),
-                                                        },
-                                                        transcription: None,
-                                                        path,
-                                                        timestamp,
-                                                        error: Some(e.to_string()),
-                                                        speaker_embedding: Vec::new(),
-                                                        start_time: segment.start,
-                                                        end_time: segment.end,
-                                                    }
-                                                },
-                                            }
+                                            run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
                                         })
                                     }
                                     #[cfg(not(target_os = "macos"))]
@@ -299,41 +266,7 @@ pub async fn create_whisper_channel(
                                         unreachable!("This code should not be reached on non-macOS platforms")
                                     }
                                 } else {
-                                    match stt_sync(&segment.samples, segment.sample_rate, &audio.device.to_string(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone()) {
-                                        Ok(transcription) => TranscriptionResult {
-                                            input: AudioInput {
-                                                data: Arc::new(segment.samples),
-                                                sample_rate: segment.sample_rate,
-                                                channels: 1,
-                                                device: audio.device.clone(),
-                                            },
-                                            transcription: Some(transcription),
-                                            path,
-                                            timestamp,
-                                            error: None,
-                                            speaker_embedding: segment.embedding.clone(),
-                                            start_time: segment.start,
-                                            end_time: segment.end,
-                                        },
-                                        Err(e) => {
-                                            error!("STT error for input {}: {:?}", audio.device, e);
-                                            TranscriptionResult {
-                                                input: AudioInput {
-                                                    data: Arc::new(segment.samples),
-                                                    sample_rate: segment.sample_rate,
-                                                    channels: 1,
-                                                    device: audio.device.clone(),
-                                                },
-                                                transcription: None,
-                                                path,
-                                                timestamp,
-                                                error: Some(e.to_string()),
-                                                speaker_embedding: Vec::new(),
-                                                start_time: segment.start,
-                                                end_time: segment.end,
-                                            }
-                                        },
-                                    }
+                                    run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
                                 };
 
                                 if output_sender.send(transcription_result).is_err() {
@@ -355,6 +288,64 @@ pub async fn create_whisper_channel(
     });
 
     Ok((input_sender, output_receiver, shutdown_flag))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_stt(
+    segment: SpeechSegment,
+    device: Arc<AudioDevice>,
+    whisper_model: &mut WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    deepgram_api_key: Option<String>,
+    languages: Vec<Language>,
+    path: String,
+    timestamp: u64,
+) -> TranscriptionResult {
+    let audio = segment.samples.clone();
+    let sample_rate = segment.sample_rate;
+    match stt_sync(
+        &audio,
+        sample_rate,
+        &device.to_string(),
+        whisper_model,
+        audio_transcription_engine.clone(),
+        deepgram_api_key.clone(),
+        languages.clone(),
+    ) {
+        Ok(transcription) => TranscriptionResult {
+            input: AudioInput {
+                data: Arc::new(audio),
+                sample_rate,
+                channels: 1,
+                device: device.clone(),
+            },
+            transcription: Some(transcription),
+            path,
+            timestamp,
+            error: None,
+            speaker_embedding: segment.embedding.clone(),
+            start_time: segment.start,
+            end_time: segment.end,
+        },
+        Err(e) => {
+            error!("STT error for input {}: {:?}", device, e);
+            TranscriptionResult {
+                input: AudioInput {
+                    data: Arc::new(segment.samples),
+                    sample_rate: segment.sample_rate,
+                    channels: 1,
+                    device: device.clone(),
+                },
+                transcription: None,
+                path,
+                timestamp,
+                error: Some(e.to_string()),
+                speaker_embedding: Vec::new(),
+                start_time: segment.start,
+                end_time: segment.end,
+            }
+        }
+    }
 }
 
 pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize)> {
