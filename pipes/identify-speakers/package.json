@@ -22,7 +22,7 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.1.5",
-    "@screenpipe/js": "0.1.10-beta.24",
+    "@screenpipe/js": "^1.0.0",
     "@screenpipe/browser": "0.1.12",
     "@shadcn/ui": "^0.0.4",
     "@tanstack/react-query": "^5.62.7",
