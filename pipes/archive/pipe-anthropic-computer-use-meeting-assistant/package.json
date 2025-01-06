@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "@screenpipe/js": "^0.1.13",
+    "@screenpipe/js": "^1.0.0",
     "@screenpipe/browser": "0.1.12"
   }
 }

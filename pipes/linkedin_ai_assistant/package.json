@@ -13,7 +13,7 @@
     "@radix-ui/react-collapsible": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-switch": "^1.1.1",
-    "@screenpipe/js": "latest",
+    "@screenpipe/js": "1.0.0",
     "@screenpipe/browser": "0.1.12",
     "@sentry/nextjs": "^8.42.0",
     "@tauri-apps/api": "^2.1.1",
