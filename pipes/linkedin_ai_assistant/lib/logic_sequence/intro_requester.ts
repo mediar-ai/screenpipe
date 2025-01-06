@@ -24,7 +24,7 @@ import { clickSend } from '../simple_actions/click_send';
 import { cleanProfileUrl } from '../simple_actions/extract_profiles_from_search_results';
 import { closeAllMessageDialogues } from '../simple_actions/close_dialogues';
 import { hasRecentMessages } from '../simple_actions/check_recent_messages';
-import { setRunningState, updateWorkflowStep, updateQueueStats } from '../../app/api/workflow/status/route';
+import { setRunningState, updateWorkflowStep, updateQueueStats } from '../../app/api/workflow/status/state';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 
@@ -245,7 +245,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
             
     } catch (error) {
         console.error('automation failed:', error);
-        updateWorkflowStep('error', 'error', error.message);
+        updateWorkflowStep('error', 'error', (error as Error).message);
     } finally {
         setRunningState(false);
     }

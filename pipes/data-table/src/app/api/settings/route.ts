@@ -27,6 +27,7 @@ export async function GET() {
     enableFrameCache: true,
     enableUiMonitoring: false,
     aiMaxContextChars: 128000,
+    user: {}
   };
 
   try {

@@ -1,5 +1,4 @@
 import { Page } from 'puppeteer-core';
-import { navigateToSearch } from '../simple_actions/go_to_search_results';
 import {
   loadConnections,
   saveConnection,
@@ -8,7 +7,7 @@ import {
   updateConnectionsSent,
 } from '../storage/storage';
 import { setupBrowser } from '../browser_setup';
-import { updateWorkflowStep } from '../../app/api/workflow/status/route';
+import { updateWorkflowStep } from '../../app/api/workflow/status/state';
 import { EventEmitter } from 'events';
 import { closeAllMessageDialogues } from '../simple_actions/close_dialogues';
 import { cleanProfileUrl } from '../simple_actions/extract_profiles_from_search_results';
@@ -84,7 +83,6 @@ export async function startHarvesting(
     console.log('Starting harvesting process');
 
     // Load existing connections
-    const connections = await loadConnections();
     updateWorkflowStep('setup', 'done', 'connections loaded');
 
     // Browser setup
@@ -96,7 +94,7 @@ export async function startHarvesting(
       throw new Error('chrome not connected');
     }
 
-    const { browser, page } = await setupBrowser(statusData.wsUrl);
+    const { page } = await setupBrowser(statusData.wsUrl);
     updateWorkflowStep('browser', 'done', 'browser connected');
 
     // Navigate to LinkedIn search results
@@ -320,7 +318,7 @@ async function clickNextConnectButton(
         const profileLink = container.querySelector(
           'a.EvQUJBaxIRgFetdTQjAXvpGhCNvVbYEbE'
         );
-        return profileLink?.href || null;
+        return profileLink?.getAttribute('href') || null;
       }, connectButton);
 
       if (!profileUrl) {
@@ -635,7 +633,7 @@ export async function navigateToSearch(
     });
   } catch (error) {
     // If navigation was aborted but page loaded, we can continue
-    if (error.message.includes('net::ERR_ABORTED')) {
+    if ((error as Error).message.includes('net::ERR_ABORTED')) {
       // Verify page actually loaded by checking for key elements
       try {
         await page.waitForSelector(
