@@ -1,14 +1,15 @@
 pub mod audio_processing;
 mod core;
+pub mod deepgram;
 pub mod encode;
 mod multilingual;
 pub mod pcm_decode;
 pub mod pyannote;
+mod segments;
 pub mod stt;
 mod tokenizer;
 pub mod vad_engine;
 pub mod whisper;
-
 pub use audio_processing::resample;
 pub use core::{
     default_input_device, default_output_device, get_device_and_config, list_audio_devices,
