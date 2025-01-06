@@ -18,18 +18,18 @@ export default async function updatePipeConfig(
     "pipe.json"
   );
 
-  const configData = {
-    crons: [
+  try {
+    const fileContent = await fs.readFile(pipeConfigPath, 'utf-8');
+    const configData = JSON.parse(fileContent);
+
+    configData.crons = [
       {
         path: "/api/pipeline",
         schedule: `0 */${redditSettings?.interval / 60} * * * *`,
       },
-    ],
-  };
+    ];
 
-  try {
     await fs.writeFile(pipeConfigPath, JSON.stringify(configData, null, 2));
-    console.log("Reddit settings saved to", pipeConfigPath);
   } catch (error) {
     console.error("Failed to save Reddit settings:", error);
     throw error;

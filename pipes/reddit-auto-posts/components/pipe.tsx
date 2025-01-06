@@ -121,7 +121,7 @@ const Pipe: React.FC = () => {
     <div className="w-full max-w-2xl mx-auto space-y-8 mt-2">
       <form onSubmit={handleSave} className="space-y-4 w-full">
         <div className="space-y-2">
-          <Label htmlFor="path">time interval *</Label>
+          <Label htmlFor="path">time interval </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;we will extract information chunks at this interval to create posts</span>
           <div className="flex gap-2">
             <Input
@@ -139,7 +139,7 @@ const Pipe: React.FC = () => {
           </div>
         </div>
         <div className="space-y-3">
-          <Label htmlFor="pageSize">page size *</Label>
+          <Label htmlFor="pageSize">page size </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;number of records to retrieve per page for extraction, considering LLM context limits</span>
           <Input
             id="pageSize"
@@ -150,7 +150,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-3">
-          <Label htmlFor="summaryFrequency">summary frequency *</Label>
+          <Label htmlFor="summaryFrequency">summary frequency </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email frequency: &apos;daily&apos; at email time or &apos;hourly:X&apos;(e.g.
             &apos;hourly:4&apos; for every 4 hrs).</span>
           <Input
@@ -161,7 +161,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="emailTime">email time *</Label>
+          <Label htmlFor="emailTime">email time </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summaryFrequency is &apos;daily&apos;)</span>
           <Input
             id="emailTime"
@@ -172,7 +172,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="emailAddress">email address *</Label>
+          <Label htmlFor="emailAddress">email address </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email address to send the daily summary to: (eg. me@mail.com)</span>
           <Input
             id="emailAddress"
@@ -183,7 +183,7 @@ const Pipe: React.FC = () => {
           />
         </div>
         <div className="space-y-3 relative items-center">
-          <Label htmlFor="emailPassword">email app specific password *</Label>
+          <Label htmlFor="emailPassword">email app specific password </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;app specific password for your gmail account, you can find it
             <a target="_blank" onClick={() => window.open("https://support.google.com/accounts/answer/185833?hl=en")} className="hover:underline text-sky-700"> here</a></span>
           <Input
@@ -211,7 +211,7 @@ const Pipe: React.FC = () => {
         </div>
         <div className="space-y-3">
           <Label htmlFor="contentType">
-            <span>content type *</span>
+            <span>content type </span>
             <span className="text-[13px] text-muted-foreground !font-normal">&nbsp;&nbsp;type of content to analyze &apos;ocr&apos;, &apos;audio&apos;, or &apos;all&apos;. &apos;ocr&apos; is recommended due to more content</span>
           </Label>
           <Select
