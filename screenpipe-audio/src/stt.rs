@@ -235,7 +235,6 @@ pub async fn create_whisper_channel(
                                 }
                             };
 
-
                             let path = match write_audio_to_file(
                                 &audio.data.to_vec(),
                                 audio.sample_rate,
