@@ -10,7 +10,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@screenpipe/js": "^0.1.13",
+    "@screenpipe/js": "^1.0.0",
     "@screenpipe/browser": "0.1.12",
     "nodemailer": "^6.9.16"
   }

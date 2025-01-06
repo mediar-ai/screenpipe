@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@notionhq/client": "^2.2.15",
-    "@screenpipe/js": "^0.1.13",
+    "@screenpipe/js": "^1.0.0",
     "@screenpipe/browser": "0.1.12",
     "ai": "^4.0.10",
     "ollama-ai-provider": "^1.0.0",
