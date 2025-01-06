@@ -996,12 +996,6 @@ const PipeStore: React.FC = () => {
                       </Button>
                     </div>
                   </div>
-                  <div className="rounded-lg border overflow-hidden bg-background">
-                    <iframe
-                      src={`http://localhost:${selectedPipe.config.port}`}
-                      className="w-full h-[600px] border-0"
-                    />
-                  </div>
                 </div>
               )}
 

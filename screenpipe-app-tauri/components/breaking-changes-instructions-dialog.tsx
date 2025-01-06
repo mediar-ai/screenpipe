@@ -19,12 +19,7 @@ export function BreakingChangesInstructionsDialog() {
     const init = async () => {
       const shown = await localforage.getItem("has-shown-delete-pipes-dialog");
       setHasShownDialog(!!shown);
-    };
-    init();
-  }, []);
 
-  useEffect(() => {
-    const checkPipes = async () => {
       try {
         const response = await fetch("http://localhost:3030/pipes/list");
         const data = await response.json();
@@ -33,8 +28,7 @@ export function BreakingChangesInstructionsDialog() {
         console.error("failed to check pipes:", error);
       }
     };
-
-    checkPipes();
+    init();
   }, []);
 
   useEffect(() => {
