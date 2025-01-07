@@ -17,6 +17,12 @@ interface ShortcutRowProps {
   value?: string;
 }
 
+enum ShortcutState {
+  ENABLED = "enabled",
+  DISABLED = "disabled",
+  UNASSIGNED = "unassigned",
+}
+
 const ShortcutRow = ({
   shortcut,
   title,
@@ -65,19 +71,42 @@ const ShortcutRow = ({
     hotkeys.filter = () => true;
     hotkeys("*", handleKeyDown);
 
-    return () => hotkeys.unbind("*");
+    return () => {
+      setIsRecording(false);
+      hotkeys.unbind("*");
+      hotkeys.filter = (event) => {
+        const target = (event.target || event.srcElement) as any;
+        return !(
+          target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA"
+        );
+      };
+    };
   }, [isRecording]);
 
-  const syncShortcuts = async () => {
-    // Wait for store to sync
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
+  const syncShortcuts = async (updatedShortcuts: {
+    showScreenpipeShortcut: string;
+    startRecordingShortcut: string;
+    stopRecordingShortcut: string;
+    profileShortcuts: Record<string, string>;
+    pipeShortcuts: Record<string, string>;
+  }) => {
+    console.log("syncing shortcuts:", {
+      showShortcut: updatedShortcuts.showScreenpipeShortcut,
+      startShortcut: updatedShortcuts.startRecordingShortcut,
+      stopShortcut: updatedShortcuts.stopRecordingShortcut,
+      profileShortcuts: updatedShortcuts.profileShortcuts,
+      pipeShortcuts: updatedShortcuts.pipeShortcuts,
+    });
+    // wait 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     await invoke("update_global_shortcuts", {
-      showShortcut: settings.showScreenpipeShortcut,
-      startShortcut: settings.startRecordingShortcut,
-      stopShortcut: settings.stopRecordingShortcut,
-      profileShortcuts: profileShortcuts,
-      pipeShortcuts: settings.pipeShortcuts,
+      showShortcut: updatedShortcuts.showScreenpipeShortcut,
+      startShortcut: updatedShortcuts.startRecordingShortcut,
+      stopShortcut: updatedShortcuts.stopRecordingShortcut,
+      profileShortcuts: updatedShortcuts.profileShortcuts,
+      pipeShortcuts: updatedShortcuts.pipeShortcuts,
     });
 
     return true;
@@ -89,25 +118,6 @@ const ShortcutRow = ({
         title: "shortcut enabled",
         description: `${shortcut.replace(/_/g, " ")} enabled`,
       });
-      switch (type) {
-        case "global":
-          updateSettings({ [shortcut]: keys });
-          break;
-        case "profile":
-          updateProfileShortcut({
-            profile: shortcut.replace("profile_", ""),
-            shortcut: keys,
-          });
-          break;
-        case "pipe":
-          updateSettings({
-            pipeShortcuts: {
-              ...settings.pipeShortcuts,
-              [shortcut.replace("pipe_", "")]: keys,
-            },
-          });
-          break;
-      }
 
       // Remove from disabled shortcuts if it exists
       updateSettings({
@@ -116,7 +126,49 @@ const ShortcutRow = ({
         ),
       });
 
-      await syncShortcuts();
+      switch (type) {
+        case "global":
+          updateSettings({ [shortcut]: keys });
+          await syncShortcuts({
+            ...settings,
+            [shortcut]: keys,
+            profileShortcuts,
+            pipeShortcuts: settings.pipeShortcuts,
+          });
+          break;
+        case "profile":
+          const profileId = shortcut.replace("profile_", "");
+          updateProfileShortcut({
+            profile: profileId,
+            shortcut: keys,
+          });
+          await syncShortcuts({
+            ...settings,
+            profileShortcuts: {
+              ...profileShortcuts,
+              [profileId]: keys,
+            },
+            pipeShortcuts: settings.pipeShortcuts,
+          });
+          break;
+        case "pipe":
+          const pipeId = shortcut.replace("pipe_", "");
+          updateSettings({
+            pipeShortcuts: {
+              ...settings.pipeShortcuts,
+              [pipeId]: keys,
+            },
+          });
+          await syncShortcuts({
+            ...settings,
+            profileShortcuts,
+            pipeShortcuts: {
+              ...settings.pipeShortcuts,
+              [pipeId]: keys,
+            },
+          });
+          break;
+      }
     } catch (error) {
       toast({
         title: "error updating shortcut",
@@ -138,15 +190,26 @@ const ShortcutRow = ({
       ),
     });
 
-    await syncShortcuts();
+    await syncShortcuts({
+      ...settings,
+      profileShortcuts,
+      pipeShortcuts: settings.pipeShortcuts,
+    });
   };
 
-  const currentKeys =
-    value === "" || typeof value === "undefined"
-      ? ["Unassigned"]
-      : parseKeyboardShortcut(value).split("+");
+  const isValueEmpty = (v: string | undefined): boolean =>
+    !v || v.trim() === "";
 
-  const isDisabled = settings.disabledShortcuts.includes(shortcut as Shortcut) || value === "";
+  const currentKeys = isValueEmpty(value)
+    ? ["Unassigned"]
+    : parseKeyboardShortcut(value || "").split("+");
+
+  const getShortcutState = (): ShortcutState => {
+    if (isValueEmpty(value)) return ShortcutState.UNASSIGNED;
+    return settings.disabledShortcuts.includes(shortcut as Shortcut)
+      ? ShortcutState.DISABLED
+      : ShortcutState.ENABLED;
+  };
 
   return (
     <div className="flex items-center justify-between">
@@ -186,8 +249,8 @@ const ShortcutRow = ({
         </button>
 
         <Switch
-          checked={!isDisabled}
-          disabled={value === ""}
+          checked={getShortcutState() === ShortcutState.ENABLED}
+          disabled={getShortcutState() === ShortcutState.UNASSIGNED}
           onCheckedChange={async (checked) => {
             if (checked && value) {
               console.log("re-enabling shortcut", value);

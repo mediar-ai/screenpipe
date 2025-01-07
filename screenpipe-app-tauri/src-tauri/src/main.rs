@@ -254,12 +254,14 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         }
     }
 
+    info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
+
     // Register pipe shortcuts
     for (pipe_id, shortcut) in &config.pipe_shortcuts {
         if !shortcut.is_empty() {
             let pipe_id = pipe_id.clone();
             let shortcut_id = format!("pipe_{}", pipe_id);
-            debug!(
+            info!(
                 "registering pipe shortcut for pipe: {}, is disabled: {}",
                 shortcut_id,
                 config.is_disabled(&shortcut_id)
