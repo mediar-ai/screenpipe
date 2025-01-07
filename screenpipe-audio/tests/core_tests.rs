@@ -299,7 +299,6 @@ mod tests {
         let vad_engine: Arc<tokio::sync::Mutex<Box<dyn VadEngine + Send>>> = Arc::new(
             tokio::sync::Mutex::new(Box::new(SileroVad::new().await.unwrap())),
         );
-        let output_path = Arc::new(PathBuf::from("test_output"));
         let audio_data = screenpipe_audio::pcm_decode("test_data/Arifi.wav")
             .expect("Failed to decode audio file");
 
@@ -309,7 +308,6 @@ mod tests {
             channels: 1,
             device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
         };
-
 
         // Create the missing parameters
         let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -334,11 +332,12 @@ mod tests {
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
         let mut segments = prepare_segments(
-            &audio_input,
+            &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
             embedding_manager,
             embedding_extractor,
+            "default",
         )
         .await
         .unwrap();
@@ -346,15 +345,13 @@ mod tests {
 
         let mut transcription_result = String::new();
         while let Some(segment) = segments.recv().await {
-            let (transcript, _) = stt(
+            let transcript = stt(
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
                 &mut whisper_model_guard,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
-                &output_path,
-                true,
                 vec![Language::English],
             )
             .await
@@ -436,26 +433,25 @@ mod tests {
         let start_time = Instant::now();
 
         let mut segments = prepare_segments(
-            &audio_input,
+            &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
             embedding_manager,
             embedding_extractor,
+            "default",
         )
         .await
         .unwrap();
 
         let mut transcription = String::new();
         while let Some(segment) = segments.recv().await {
-            let (transcript, _) = stt(
+            let transcript = stt(
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
                 &mut whisper_model,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
-                &output_path,
-                true,
                 vec![Language::English],
             )
             .await

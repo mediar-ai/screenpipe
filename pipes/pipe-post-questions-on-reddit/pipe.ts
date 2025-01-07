@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import nodemailer from "nodemailer";
 import {
-  ContentItem,
+  type ContentItem,
   pipe,
 } from "@screenpipe/js";
 import process from "node:process";

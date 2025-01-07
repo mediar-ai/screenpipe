@@ -62,6 +62,15 @@ interface CorePipe {
 
 const corePipes: CorePipe[] = [
   {
+    id: "memories",
+    name: "memories gallery",
+    description:
+      "google-photo like gallery of your screen recordings memories, with AI-powered insights and timeline visualization",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/memories",
+    credits: 0,
+    paid: false,
+  },
+  {
     id: "data-table",
     name: "data table",
     description:
@@ -131,33 +140,6 @@ const corePipes: CorePipe[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom",
     credits: 10,
     paid: true,
-  },
-  {
-    id: "pipe-obsidian-time-logs",
-    name: "obsidian time logger",
-    description:
-      "continuously write logs of your days in an obsidian table using ollama+llama3.2",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs",
-    credits: 0,
-    paid: false,
-  },
-  {
-    id: "pipe-post-questions-on-reddit",
-    name: "reddit question bot",
-    description:
-      "get more followers, promote your content/product while being useful, without doing any work",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-post-questions-on-reddit",
-    credits: 0,
-    paid: false,
-  },
-  {
-    id: "pipe-notion-table-logs",
-    name: "notion time logger",
-    description:
-      "continuously write logs of your days in a notion table using ollama",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-notion-table-logs",
-    credits: 0,
-    paid: false,
   },
   {
     id: "pipe-simple-nextjs",
@@ -257,6 +239,10 @@ const PipeStore: React.FC = () => {
 
   const handleResetAllPipes = async () => {
     try {
+      toast({
+        title: "resetting pipes",
+        description: "this will delete all your pipes and reinstall them.",
+      });
       const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -1010,12 +996,6 @@ const PipeStore: React.FC = () => {
                       </Button>
                     </div>
                   </div>
-                  <div className="rounded-lg border overflow-hidden bg-background">
-                    <iframe
-                      src={`http://localhost:${selectedPipe.config.port}`}
-                      className="w-full h-[600px] border-0"
-                    />
-                  </div>
                 </div>
               )}
 
@@ -1262,21 +1242,42 @@ const PipeStore: React.FC = () => {
                         {pipe.id !== "pipe-linkedin-ai-assistant" && (
                           <>
                             {pipes.some((p) => p.id === pipe.id) ? (
-                              <Button
-                                size="icon"
-                                variant={pipe.enabled ? "default" : "outline"}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleEnabled(pipe);
-                                }}
-                                className={`${
-                                  pipe.enabled
-                                    ? "bg-primary hover:bg-primary/90"
-                                    : "hover:bg-muted"
-                                }`}
-                              >
-                                <Power className="h-3.5 w-3.5" />
-                              </Button>
+                              <>
+                                {pipes.find((p) => p.id === pipe.id)?.config
+                                  ?.port &&
+                                pipes.find((p) => p.id === pipe.id)?.enabled ? (
+                                  <Button
+                                    size="icon"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const installedPipe = pipes.find(
+                                        (p) => p.id === pipe.id
+                                      );
+                                      if (installedPipe?.config?.port) {
+                                        invoke("open_pipe_window", {
+                                          port: installedPipe.config.port,
+                                          title: installedPipe.id,
+                                        }).catch((err) => {
+                                          console.error(
+                                            "failed to open pipe window:",
+                                            err
+                                          );
+                                          toast({
+                                            title: "error opening pipe window",
+                                            description:
+                                              "please try again or check the logs",
+                                            variant: "destructive",
+                                          });
+                                        });
+                                      }
+                                    }}
+                                    className="hover:bg-muted"
+                                  >
+                                    <Puzzle className="h-3.5 w-3.5" />
+                                  </Button>
+                                ) : null}
+                              </>
                             ) : (
                               <Button
                                 size="icon"
