@@ -85,11 +85,8 @@ export default function Home() {
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
         const pipe = pipeList.find(p => p.id === pipeId);
-        if (pipe) {
-          await invoke("open_pipe_window", {
-            port: pipe.port,
-            title: pipe.id,
-          });
+        if (pipe && pipe.port) {
+          await commands.openPipeWindow(pipe.port, pipe.id);
         }
       })
 
