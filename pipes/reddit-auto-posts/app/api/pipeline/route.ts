@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DailyLog } from "@/lib/types";
 import { NextResponse } from "next/server";
-import { pipe } from "@screenpipe/js/node";
+import { pipe } from "@screenpipe/js";
 import sendEmail from "@/lib/actions/send-email";
 import generateDailyLog from "@/lib/actions/generate-log";
 import generateRedditQuestions from "@/lib/actions/generate-reddit-question";
@@ -211,7 +211,7 @@ export async function GET() {
 
         try {
           await pipe.sendDesktopNotification({
-            title: "reddit questions",
+            badge: "reddit questions",
             body: "just sent you some reddit questions",
           });
         } catch (error) {

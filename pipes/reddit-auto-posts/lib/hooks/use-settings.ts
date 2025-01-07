@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Settings } from "@screenpipe/js";
+import type { Settings } from "@screenpipe/browser";
 
 export function useSettings() {
   const defaultSettings: Settings = {
