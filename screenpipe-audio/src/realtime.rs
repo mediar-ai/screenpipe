@@ -1,4 +1,4 @@
-use crate::{AudioStream, AudioTranscriptionEngine};
+use crate::{deepgram::stream_transcription_deepgram, AudioStream, AudioTranscriptionEngine};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use screenpipe_core::Language;
@@ -17,21 +17,35 @@ pub async fn realtime_stt(
     languages: Vec<Language>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
-) -> Result<String> {
-    while is_running.load(Ordering::Relaxed) {
-        realtime_transcription_sender.send(RealtimeTranscriptionEvent {
-            timestamp: Utc::now(),
-            device: stream.device.to_string(),
-            transcription: "test".to_string(),
-        });
-        tokio::time::sleep(Duration::from_secs(1)).await;
+) -> Result<()> {
+    // while is_running.load(Ordering::Relaxed) {
+    //     realtime_transcription_sender.send(RealtimeTranscriptionEvent {
+    //         timestamp: Utc::now(),
+    //         device: stream.device.to_string(),
+    //         transcription: "test".to_string(),
+    //     });
+    //     tokio::time::sleep(Duration::from_secs(1)).await;
+    // }
+    match *audio_transcription_engine {
+        AudioTranscriptionEngine::Deepgram => {
+            stream_transcription_deepgram(
+                stream,
+                realtime_transcription_sender,
+                languages,
+                is_running,
+            )
+            .await?;
+        }
+        _ => {
+            return Err(anyhow::anyhow!("Unsupported audio transcription engine"));
+        }
     }
-    Ok(String::new())
+    Ok(())
 }
 
 #[derive(Serialize, Clone)]
 pub struct RealtimeTranscriptionEvent {
-    timestamp: DateTime<Utc>,
-    device: String,
-    transcription: String,
+    pub timestamp: DateTime<Utc>,
+    pub device: String,
+    pub transcription: String,
 }

@@ -1588,12 +1588,15 @@ async fn sse_transcription_handler(
         ));
     }
 
-    let mut transcription_rx = state.realtime_transcription_sender.subscribe();
+    // Get a new subscription - this won't affect the sender
+    let rx = state.realtime_transcription_sender.subscribe();
 
     let stream = async_stream::stream! {
-        while let Ok(event) = transcription_rx.recv().await {
+        let mut rx = rx; // Create a new mutable reference to the receiver
+        while let Ok(event) = rx.recv().await {
             yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
         }
+        // Even if this stream ends, the sender remains active
     };
 
     Ok(Sse::new(stream).keep_alive(
