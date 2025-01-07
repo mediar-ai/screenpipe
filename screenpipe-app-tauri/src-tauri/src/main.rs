@@ -881,13 +881,16 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
 
-            // Start health check service
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_health_check(app_handle).await {
-                    error!("Failed to start health check service: {}", e);
-                }
-            });
+            // Start health check service, only on macos since it's crashing on windows
+            #[cfg(target_os = "macos")]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = start_health_check(app_handle).await {
+                        error!("Failed to start health check service: {}", e);
+                    }
+                });
+            }
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
