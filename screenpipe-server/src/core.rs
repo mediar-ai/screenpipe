@@ -112,7 +112,7 @@ pub async fn start_continuous_recording(
         create_whisper_channel(
             audio_transcription_engine.clone(),
             VadEngineEnum::from(vad_engine),
-            deepgram_api_key,
+            deepgram_api_key.clone(),
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
             languages.clone(),
@@ -136,6 +136,7 @@ pub async fn start_continuous_recording(
                 realtime_transcription_engine,
                 languages,
                 realtime_transcription_sender,
+                deepgram_api_key,
             )
             .await
         })
@@ -282,6 +283,7 @@ async fn record_audio(
     realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     languages: Vec<Language>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
@@ -310,10 +312,10 @@ async fn record_audio(
             let realtime_transcription_engine_clone = realtime_transcription_engine.clone();
             let languages_clone = languages.clone();
             let realtime_transcription_sender_clone = realtime_transcription_sender_clone.clone();
-
+            let deepgram_api_key_clone = deepgram_api_key.clone();
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
-
+                let deepgram_api_key = deepgram_api_key_clone.clone();
                 debug!(
                     "Starting audio capture thread for device: {}",
                     &audio_device
@@ -323,6 +325,7 @@ async fn record_audio(
                 let is_running = Arc::new(AtomicBool::new(device_control.is_running));
 
                 while is_running.load(Ordering::Relaxed) {
+                    let deepgram_api_key = deepgram_api_key.clone();
                     let is_running_loop = Arc::clone(&is_running); // Create separate reference for the loop
                     let audio_stream = match AudioStream::from_device(
                         audio_device_clone.clone(),
@@ -384,6 +387,7 @@ async fn record_audio(
                                 languages_clone.clone(),
                                 is_running_loop.clone(),
                                 realtime_transcription_sender_clone.clone(),
+                                deepgram_api_key.clone(),
                             )
                             .await;
                         }

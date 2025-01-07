@@ -1,7 +1,7 @@
 use axum::{
     extract::{Json, Path, Query, State},
     http::StatusCode,
-    response::{sse::Event, sse::KeepAlive, IntoResponse, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
     routing::{get, post},
     serve, Router,
 };

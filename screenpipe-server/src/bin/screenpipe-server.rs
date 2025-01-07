@@ -5,7 +5,6 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
-use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,

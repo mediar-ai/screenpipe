@@ -3,13 +3,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use screenpipe_core::Language;
 use serde::Serialize;
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::sync::{atomic::AtomicBool, Arc};
 
 pub async fn realtime_stt(
     stream: Arc<AudioStream>,
@@ -17,6 +11,7 @@ pub async fn realtime_stt(
     languages: Vec<Language>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
+    deepgram_api_key: Option<String>,
 ) -> Result<()> {
     // while is_running.load(Ordering::Relaxed) {
     //     realtime_transcription_sender.send(RealtimeTranscriptionEvent {
@@ -33,6 +28,7 @@ pub async fn realtime_stt(
                 realtime_transcription_sender,
                 languages,
                 is_running,
+                deepgram_api_key,
             )
             .await?;
         }

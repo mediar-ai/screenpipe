@@ -208,6 +208,7 @@ pub async fn start_realtime_recording(
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    deepgram_api_key: Option<String>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
@@ -216,6 +217,7 @@ pub async fn start_realtime_recording(
             languages.clone(),
             realtime_transcription_sender.clone(),
             is_running.clone(),
+            deepgram_api_key.clone(),
         )
         .await
         {

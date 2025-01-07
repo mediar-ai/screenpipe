@@ -25,8 +25,16 @@ pub async fn stream_transcription_deepgram(
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
+    deepgram_api_key: Option<String>,
 ) -> Result<()> {
-    start_deepgram_stream(stream, realtime_transcription_sender, is_running, languages).await?;
+    start_deepgram_stream(
+        stream,
+        realtime_transcription_sender,
+        is_running,
+        languages,
+        deepgram_api_key,
+    )
+    .await?;
 
     Ok(())
 }
@@ -35,9 +43,11 @@ async fn start_deepgram_stream(
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
     _languages: Vec<Language>,
+    deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let sample_rate = stream.device_config.sample_rate().0;
-    let deepgram = deepgram::Deepgram::new(CUSTOM_DEEPGRAM_API_TOKEN.as_str())?;
+    let deepgram =
+        deepgram::Deepgram::new(deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string()))?;
     let deepgram_transcription = deepgram.transcription();
 
     let audio_stream = stream.subscribe().await;
