@@ -2,6 +2,7 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use tracing::info;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 #[cfg(target_os = "windows")]
@@ -20,7 +21,7 @@ fn is_process_alive(pid: u32) -> bool {
 }
 
 pub async fn watch_pid(pid: u32) -> bool {
-    println!("starting to watch for app termination (pid: {})", pid);
+    info!("starting to watch for app termination (pid: {})", pid);
 
     loop {
         #[cfg(target_os = "windows")]

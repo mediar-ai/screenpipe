@@ -67,6 +67,10 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_specta::{collect_commands, Builder};
 
+
+mod health;
+use health::start_health_check;
+
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -76,6 +80,7 @@ struct ShortcutConfig {
     start: String,
     stop: String,
     profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
@@ -89,8 +94,9 @@ impl ShortcutConfig {
                     .get("profiles")
                     .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
                     .unwrap_or_default();
-                
-                profiles.into_iter()
+
+                profiles
+                    .into_iter()
                     .filter_map(|profile| {
                         profiles_store
                             .get(&format!("shortcuts.{}", profile))
@@ -98,9 +104,29 @@ impl ShortcutConfig {
                             .map(|shortcut| (profile, shortcut))
                     })
                     .collect()
-            },
-            Err(_) => HashMap::new()
+            }
+            Err(_) => HashMap::new(),
         };
+
+        let pipe_shortcuts = store
+            .keys()
+            .into_iter()
+            .filter_map(|key| {
+                if key.starts_with("pipeShortcuts.") {
+                    store
+                        .get(key.clone())
+                        .and_then(|v| v.as_str().map(String::from))
+                        .map(|v| {
+                            (
+                                key.trim_start_matches("pipeShortcuts.").to_string(),
+                                v.to_string(),
+                            )
+                        })
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<String, String>>();
 
         Ok(Self {
             show: store
@@ -116,6 +142,7 @@ impl ShortcutConfig {
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
             profile_shortcuts,
+            pipe_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -161,12 +188,14 @@ async fn update_global_shortcuts(
     start_shortcut: String,
     stop_shortcut: String,
     profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
         profile_shortcuts,
+        pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -224,17 +253,40 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-    info!("applying shortcuts for profiles {:?}", config.profile_shortcuts);
-    // Register only non-empty profile shortcuts
+
+    // Register profile shortcuts
     for (profile, shortcut) in &config.profile_shortcuts {
-        info!("profile: {}", profile);
-        info!("shortcut: {}", shortcut);
         if !shortcut.is_empty() {
             let profile = profile.clone();
             register_shortcut(app, shortcut, false, move |app| {
                 info!("switch-profile shortcut triggered for profile: {}", profile);
                 let _ = app.emit("switch-profile", profile.clone());
             })
+            .await?;
+        }
+    }
+
+    info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
+
+    // Register pipe shortcuts
+    for (pipe_id, shortcut) in &config.pipe_shortcuts {
+        if !shortcut.is_empty() {
+            let pipe_id = pipe_id.clone();
+            let shortcut_id = format!("pipe_{}", pipe_id);
+            info!(
+                "registering pipe shortcut for pipe: {}, is disabled: {}",
+                shortcut_id,
+                config.is_disabled(&shortcut_id)
+            );
+            register_shortcut(
+                app,
+                shortcut,
+                config.is_disabled(&shortcut_id),
+                move |app| {
+                    info!("pipe shortcut triggered for pipe: {}", pipe_id);
+                    let _ = app.emit("open-pipe", pipe_id.clone());
+                },
+            )
             .await?;
         }
     }
@@ -848,6 +900,14 @@ async fn main() {
             // Inside the main function, after the `app.manage(port);` line, add:
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
+
+            // Start health check service
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = start_health_check(app_handle).await {
+                    error!("Failed to start health check service: {}", e);
+                }
+            });
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
