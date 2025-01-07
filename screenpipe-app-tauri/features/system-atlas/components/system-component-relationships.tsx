@@ -11,7 +11,8 @@ const SystemComponentRelationships = (props: {
     searchRef: Ref<HTMLDivElement> | null,
     userRef: Ref<HTMLDivElement> | null,
     collectionRef: Ref<HTMLDivElement> | null,
-    llmModelsRef: Ref<HTMLDivElement> | null,
+    localModelsRef: Ref<HTMLDivElement> | null,
+    aiModelsRef: Ref<HTMLDivElement> | null,
 }) =>{
     return (
         <>
@@ -73,7 +74,15 @@ const SystemComponentRelationships = (props: {
         <AnimatedBeam
             containerRef={props.containerRef}
             fromRef={props.screenpipeRef}
-            toRef={props.llmModelsRef}
+            toRef={props.localModelsRef}
+            curvature={0}
+            endYOffset={0}
+            reverse
+        />
+        <AnimatedBeam
+            containerRef={props.containerRef}
+            fromRef={props.screenpipeRef}
+            toRef={props.aiModelsRef}
             curvature={0}
             endYOffset={0}
             reverse

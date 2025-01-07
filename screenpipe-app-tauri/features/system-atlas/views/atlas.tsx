@@ -16,6 +16,7 @@ import { CircleIcon } from "@/components/ui/circle-icon";
 import ScreenpipeLogo from '../components/screenpipe-logo/index';
 import LocalModels from "../components/local-models";
 import { TerminalLogsDisplay } from "@/components/terminal-logs-display";
+import AiModels from "../components/ai-models";
 
 
 export default function ScreenpipeSystemAtlas(props:{
@@ -31,7 +32,8 @@ export default function ScreenpipeSystemAtlas(props:{
   const searchRef = useRef<HTMLDivElement>(null);
   const collectionRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
-  const llmModelsRef = useRef<HTMLDivElement>(null);
+  const localModelsRef = useRef<HTMLDivElement>(null);
+  const aiModelsRef = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false)
   const [show1, setShow1] = useState(false)
   
@@ -72,7 +74,7 @@ export default function ScreenpipeSystemAtlas(props:{
         }
         <section
             id="atlas"
-            className="relative flex h-[500px] w-[95%] flex-row items-stretch p-5 justify-between bg-background"
+            className="relative top-[80px] flex h-[600px] w-[95%] flex-row items-stretch p-5 justify-between"
             ref={containerRef}
         >
             <PermissionStatus
@@ -84,12 +86,18 @@ export default function ScreenpipeSystemAtlas(props:{
                 className="self-center"
             />
             <div className="relative flex flex-col items-center justify-center">
+                <AiModels
+                    aiModelsRef={aiModelsRef}
+                    actorRef={props.actorRef}
+                    className="absolute z-[10] top-[0px]"
+                    isContainerActive={state.matches('ai')}
+                />
                 <ScreenpipeLogo ref={screenpipeRef}/>
                 <LocalModels
                     actorRef={props.actorRef}
                     isContainerActive={state.matches('core_models')}
-                    className="absolute z-[10] bottom-[0px]"
-                    llmModelsRef={llmModelsRef}
+                    className="absolute z-[10] bottom-[50px]"
+                    localsModelsRef={localModelsRef}
                 />
             </div>
             <div className="h-[300px] self-center flex flex-col items-center justify-between">
@@ -130,7 +138,8 @@ export default function ScreenpipeSystemAtlas(props:{
                         searchRef={searchRef}
                         userRef={userRef}
                         collectionRef={collectionRef}
-                        llmModelsRef={llmModelsRef}
+                        localModelsRef={localModelsRef}
+                        aiModelsRef={aiModelsRef}
                     />
                 }
             </AnimatePresence>

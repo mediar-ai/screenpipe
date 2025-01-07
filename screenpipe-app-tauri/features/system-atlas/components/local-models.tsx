@@ -1,15 +1,14 @@
 import { ActorRef } from "xstate"
 import { useSelector } from "@xstate/react"
-import { Ref, useEffect } from "react"
+import { Ref } from "react"
 import { AnimatedGroupContainer } from "@/components/ui/animated-group-container"
 import { CircleIcon } from "@/components/ui/circle-icon"
 import WhisperIcon from "@/components/icons/whisper-huggingface"
 import OnnxGithubIcon from "@/components/icons/onnx-github"
 import { HoverCardInfo } from "@/components/ui/hover-card"
-import { useWindowEventLister } from "@/modules/event-management/listener/adapters/react/window.hook"
 
 const LocalModels = (props: {
-    llmModelsRef: Ref<HTMLDivElement> | null,
+    localsModelsRef: Ref<HTMLDivElement> | null,
     className: string,
     actorRef: ActorRef<any,any,any>,
     isContainerActive?: boolean
@@ -25,7 +24,7 @@ const LocalModels = (props: {
             <AnimatedGroupContainer
                 color="#cece66"
                 shouldScale={props.isContainerActive}
-                ref={props.llmModelsRef} 
+                ref={props.localsModelsRef} 
                 className={'bg-white rounded-lg h-[65px] w-[130px] flex flex-row justify-around'}
             >
 
