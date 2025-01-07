@@ -81,6 +81,7 @@ async fn check_health(client: &reqwest::Client) -> Result<HealthCheckResponse> {
         .get("http://localhost:3030/health")
         .header("Cache-Control", "no-cache")
         .header("Pragma", "no-cache")
+        .timeout(Duration::from_secs(5)) // on windows it never times out
         .send()
         .await?;
 

@@ -232,6 +232,7 @@ const PipeStore: React.FC = () => {
   const { getDataDir } = useSettings();
   const { user, refreshUser } = useUser();
   const [showCreditDialog, setShowCreditDialog] = useState(false);
+  const [isEnabling, setIsEnabling] = useState(false);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -399,6 +400,11 @@ const PipeStore: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
+      // Set loading state when enabling
+      if (!pipe.enabled) {
+        setIsEnabling(true);
+      }
+
       const corePipe = corePipes.find((cp) => cp.id === pipe.id);
       console.log("attempting to toggle pipe:", {
         pipeId: pipe.id,
@@ -498,7 +504,8 @@ const PipeStore: React.FC = () => {
         throw new Error(data.error);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Wait for pipe to initialize
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       const freshPipes = await fetchInstalledPipes();
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -520,6 +527,9 @@ const PipeStore: React.FC = () => {
         description: "please try again or check the logs for more information.",
         variant: "destructive",
       });
+    } finally {
+      // Reset loading state
+      setIsEnabling(false);
     }
   };
 
@@ -969,9 +979,10 @@ const PipeStore: React.FC = () => {
                             `http://localhost:${selectedPipe.config!.port}`
                           )
                         }
+                        disabled={isEnabling}
                       >
                         <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        open in browser
+                        {isEnabling ? "initializing..." : "open in browser"}
                       </Button>
                       <Button
                         variant="default"
@@ -990,9 +1001,10 @@ const PipeStore: React.FC = () => {
                             });
                           }
                         }}
+                        disabled={isEnabling}
                       >
                         <Puzzle className="mr-2 h-3.5 w-3.5" />
-                        open as app
+                        {isEnabling ? "initializing..." : "open as app"}
                       </Button>
                     </div>
                   </div>
