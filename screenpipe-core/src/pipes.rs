@@ -320,6 +320,7 @@ mod pipes {
                     "See instructions",
                     "https://nextjs.org",
                     "⚠ See instructions",
+                    "$ next start",
                 ];
 
                 if info_patterns.iter().any(|pattern| line.contains(pattern))
