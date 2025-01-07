@@ -195,10 +195,10 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
       const granted =
         type === "screen"
-          ? perms.screenRecording === "Granted"
+          ? perms.screenRecording === "granted"
           : type === "audio"
-          ? perms.microphone === "Granted"
-          : perms.accessibility === "Granted";
+          ? perms.microphone === "granted"
+          : perms.accessibility === "granted";
 
       toastId.update({
         id: toastId.id,
