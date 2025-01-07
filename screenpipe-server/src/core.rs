@@ -5,6 +5,7 @@ use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
+use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
@@ -49,6 +50,7 @@ pub async fn start_continuous_recording(
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     realtime_audio_enabled: bool,
     realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -133,6 +135,7 @@ pub async fn start_continuous_recording(
                 realtime_audio_devices,
                 realtime_transcription_engine,
                 languages,
+                realtime_transcription_sender,
             )
             .await
         })
@@ -278,10 +281,12 @@ async fn record_audio(
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     languages: Vec<Language>,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
+    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
             debug!("Received audio device: {}", &audio_device);
@@ -304,6 +309,7 @@ async fn record_audio(
             let realtime_audio_devices_clone = realtime_audio_devices.clone();
             let realtime_transcription_engine_clone = realtime_transcription_engine.clone();
             let languages_clone = languages.clone();
+            let realtime_transcription_sender_clone = realtime_transcription_sender_clone.clone();
 
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
@@ -366,6 +372,8 @@ async fn record_audio(
                         realtime_transcription_engine_clone.clone();
                     let languages_clone = languages_clone.clone();
                     let is_running_loop = is_running_loop.clone();
+                    let realtime_transcription_sender_clone =
+                        realtime_transcription_sender_clone.clone();
                     let live_transcription_handle = Some(tokio::spawn(async move {
                         if realtime_audio_enabled
                             && realtime_audio_devices_clone.contains(&audio_device_clone)
@@ -375,6 +383,7 @@ async fn record_audio(
                                 realtime_transcription_engine_clone.clone(),
                                 languages_clone.clone(),
                                 is_running_loop.clone(),
+                                realtime_transcription_sender_clone.clone(),
                             )
                             .await;
                         }

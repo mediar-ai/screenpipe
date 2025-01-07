@@ -1,14 +1,3 @@
-use std::{
-    collections::HashMap,
-    env, fs,
-    io::Write,
-    net::SocketAddr,
-    ops::Deref,
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
-};
-
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
@@ -16,6 +5,7 @@ use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
+use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     AudioDevice, DeviceControl,
@@ -31,6 +21,16 @@ use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
+use std::{
+    collections::HashMap,
+    env, fs,
+    io::Write,
+    net::SocketAddr,
+    ops::Deref,
+    path::PathBuf,
+    sync::{atomic::AtomicBool, Arc},
+    time::Duration,
+};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -456,13 +456,15 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-
+    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
+    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
+                let realtime_transcription_sender_clone = realtime_transcription_sender.clone(); // Clone inside the loop
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
@@ -489,6 +491,7 @@ async fn main() -> anyhow::Result<()> {
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
                     Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
+                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                 );
 
                 let result = tokio::select! {
@@ -531,6 +534,7 @@ async fn main() -> anyhow::Result<()> {
             // Track search requests
         }
     };
+    // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -541,6 +545,8 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
+        cli.enable_realtime_audio_transcription,
+        realtime_transcription_sender_clone,
     );
 
     // print screenpipe in gradient
