@@ -24,11 +24,6 @@ use std::{
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
-
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
-
-#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
 #[cfg(target_os = "macos")]
