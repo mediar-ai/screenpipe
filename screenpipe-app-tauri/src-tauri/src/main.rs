@@ -39,35 +39,35 @@ mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
-use crate::commands::open_pipe_window;
 
 mod commands;
 mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod store;
 mod tray;
 mod updates;
-mod store;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use store::get_store;
 pub use store::get_profiles_store;
+pub use store::get_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 
+use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-use std::collections::HashMap;
-
+mod health;
+use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -91,16 +91,18 @@ impl ShortcutConfig {
                     .get("profiles")
                     .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
                     .unwrap_or_default();
-                
-                profiles.into_iter()
+
+                profiles
+                    .into_iter()
                     .filter_map(|profile| {
-                        profiles_store.get(&format!("shortcuts.{}", profile))
+                        profiles_store
+                            .get(&format!("shortcuts.{}", profile))
                             .and_then(|v| v.as_str().map(String::from))
                             .map(|shortcut| (profile, shortcut))
                     })
                     .collect()
-            },
-            Err(_) => HashMap::new()
+            }
+            Err(_) => HashMap::new(),
         };
 
         let pipe_shortcuts = store
@@ -108,9 +110,15 @@ impl ShortcutConfig {
             .into_iter()
             .filter_map(|key| {
                 if key.starts_with("pipeShortcuts.") {
-                    store.get(key.clone())
-                    .and_then(|v| v.as_str().map(String::from))
-                        .map(|v| (key.trim_start_matches("pipeShortcuts.").to_string(), v.to_string()))
+                    store
+                        .get(key.clone())
+                        .and_then(|v| v.as_str().map(String::from))
+                        .map(|v| {
+                            (
+                                key.trim_start_matches("pipeShortcuts.").to_string(),
+                                v.to_string(),
+                            )
+                        })
                 } else {
                     None
                 }
@@ -266,10 +274,15 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
                 shortcut_id,
                 config.is_disabled(&shortcut_id)
             );
-            register_shortcut(app, shortcut, config.is_disabled(&shortcut_id), move |app| {
-                info!("pipe shortcut triggered for pipe: {}", pipe_id);
-                let _ = app.emit("open-pipe", pipe_id.clone());
-            })
+            register_shortcut(
+                app,
+                shortcut,
+                config.is_disabled(&shortcut_id),
+                move |app| {
+                    info!("pipe shortcut triggered for pipe: {}", pipe_id);
+                    let _ = app.emit("open-pipe", pipe_id.clone());
+                },
+            )
             .await?;
         }
     }
@@ -867,6 +880,14 @@ async fn main() {
             // Inside the main function, after the `app.manage(port);` line, add:
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
+
+            // Start health check service
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = start_health_check(app_handle).await {
+                    error!("Failed to start health check service: {}", e);
+                }
+            });
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);

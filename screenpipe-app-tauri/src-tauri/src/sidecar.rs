@@ -1,5 +1,5 @@
-use crate::{get_base_dir, SidecarState};
 use crate::get_store;
+use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
@@ -365,13 +364,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     // args.push("--debug");
 
-
-
     if cfg!(windows) {
-        let mut c = app
-            .shell()
-            .sidecar("screenpipe")
-            .unwrap();
+        let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
