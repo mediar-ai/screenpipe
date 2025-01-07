@@ -10,7 +10,7 @@ use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
 #[cfg(target_os = "windows")]
 fn is_process_alive(pid: u32) -> bool {
     unsafe {
-        let process: HANDLE = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid);
+        let process: HANDLE = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid).unwrap();
         if process.is_invalid() {
             return false;
         }
