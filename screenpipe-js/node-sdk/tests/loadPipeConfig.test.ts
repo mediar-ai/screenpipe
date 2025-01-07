@@ -1,9 +1,10 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { v4 as uuid } from "uuid";
-import { ParsedConfig, loadPipeConfig } from "../main";
+import { pipe } from "../src/index";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { ParsedConfig } from "../../common/types";
 
 describe("loadPipeConfig", () => {
   let pipeDir: string;
@@ -30,8 +31,7 @@ describe("loadPipeConfig", () => {
   test("should return empty object if pipe.json is not found", async () => {
     process.env.SCREENPIPE_DIR = uuid();
     process.env.PIPE_ID = uuid();
-
-    const loadedConfig = loadPipeConfig();
+    const loadedConfig = await pipe.loadPipeConfig();
     expect(loadedConfig).toEqual({});
   });
 
@@ -46,7 +46,7 @@ describe("loadPipeConfig", () => {
       ],
     });
 
-    const loadedConfig = loadPipeConfig();
+    const loadedConfig = await pipe.loadPipeConfig();
     expect(loadedConfig).toEqual(config);
   });
 
@@ -61,7 +61,7 @@ describe("loadPipeConfig", () => {
       ],
     });
 
-    const loadedConfig = loadPipeConfig();
+    const loadedConfig = await pipe.loadPipeConfig();
     expect(loadedConfig).toEqual({ ...config, summaryFrequency: 5 });
   });
 });

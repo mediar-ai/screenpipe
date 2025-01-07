@@ -239,6 +239,10 @@ const PipeStore: React.FC = () => {
 
   const handleResetAllPipes = async () => {
     try {
+      toast({
+        title: "resetting pipes",
+        description: "this will delete all your pipes and reinstall them.",
+      });
       const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -991,12 +995,6 @@ const PipeStore: React.FC = () => {
                         open as app
                       </Button>
                     </div>
-                  </div>
-                  <div className="rounded-lg border overflow-hidden bg-background">
-                    <iframe
-                      src={`http://localhost:${selectedPipe.config.port}`}
-                      className="w-full h-[600px] border-0"
-                    />
                   </div>
                 </div>
               )}

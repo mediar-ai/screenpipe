@@ -473,8 +473,8 @@ jobs:
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
           USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          MAX_RETRIES: 3
-          RETRY_DELAY: 10
+          MAX_RETRIES: 5
+          RETRY_DELAY: 30
         run: |
           # create temp directory for cli
           $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"

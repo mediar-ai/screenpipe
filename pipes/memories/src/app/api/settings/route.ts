@@ -1,5 +1,5 @@
 // app/api/settings/route.ts
-import { pipe } from "@screenpipe/js/node";
+import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
 import type { Settings } from "@screenpipe/js";
 import { promises as fs } from "fs";

@@ -44,6 +44,8 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
                 screenpipe_audio::DeviceType::Input,
             ),
             None,
+            None,
+            None,
         )
         .await
         .unwrap();

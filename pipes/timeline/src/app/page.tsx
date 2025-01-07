@@ -54,7 +54,7 @@ export default function Timeline() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout>();
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCount = useRef(0);
   const [loadedTimeRange, setLoadedTimeRange] = useState<TimeRange | null>(
     null

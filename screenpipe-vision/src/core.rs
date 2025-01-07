@@ -310,7 +310,7 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
+pub fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
     let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
         let mut m = HashMap::new();
         m.insert(Language::English, "en-US");

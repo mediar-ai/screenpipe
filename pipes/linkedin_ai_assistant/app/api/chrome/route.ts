@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { quitBrowser } from '@/lib/browser_setup';
 const execPromise = promisify(exec);
@@ -14,7 +14,7 @@ export async function POST() {
 
     const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
     const chromeLaunchCommand = `"${chromePath}" --remote-debugging-port=9222 --restore-last-session`;
-    const chromeProcess = exec(chromeLaunchCommand, { detached: true, stdio: 'ignore' });
+    const chromeProcess = spawn(chromeLaunchCommand, { detached: true, stdio: 'ignore' });
 
     chromeProcess.unref();
 
@@ -47,6 +47,6 @@ async function quitChrome() {
     await execPromise(killCommand);
     console.log('chrome killed');
   } catch (error) {
-    console.log('no chrome process found to kill');
+    console.log('no chrome process found to kill', error);
   }
 }
