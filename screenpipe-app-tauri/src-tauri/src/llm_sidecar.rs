@@ -9,7 +9,8 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 use tokio::time::sleep;
 use tracing::{error, info};
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EmbeddedLLMSettings {
     pub enabled: bool,
     pub model: String,
@@ -234,6 +235,7 @@ impl LLMSidecar {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn start_ollama_sidecar(
     app: tauri::AppHandle,
     settings: EmbeddedLLMSettings,
@@ -246,6 +248,7 @@ pub async fn start_ollama_sidecar(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn stop_ollama_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     let mut llm_sidecar = LLMSidecar::new(EmbeddedLLMSettings {
         enabled: false,

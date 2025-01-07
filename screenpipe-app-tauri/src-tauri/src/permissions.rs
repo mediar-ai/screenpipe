@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-
+use specta::specta;
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
@@ -8,7 +8,7 @@ extern "C" {
         -> bool;
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
@@ -18,6 +18,7 @@ pub enum OSPermission {
 }
 
 #[tauri::command(async)]
+#[specta::specta]
 pub fn open_permission_settings(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -53,6 +54,7 @@ pub fn open_permission_settings(permission: OSPermission) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn request_permission(permission: OSPermission) {
     #[cfg(target_os = "macos")]
     {
@@ -82,7 +84,7 @@ fn request_av_permission(media_type: nokhwa_bindings_macos::AVMediaType) {
     };
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermissionStatus {
     // This platform does not require this permission
@@ -104,7 +106,7 @@ impl OSPermissionStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OSPermissionsCheck {
     pub screen_recording: OSPermissionStatus,
@@ -120,6 +122,7 @@ impl OSPermissionsCheck {
 }
 
 #[tauri::command(async)]
+#[specta::specta]
 pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
     #[cfg(target_os = "macos")]
     {

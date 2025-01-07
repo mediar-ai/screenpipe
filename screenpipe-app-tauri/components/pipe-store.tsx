@@ -36,10 +36,10 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { useUser } from "@/lib/hooks/use-user";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PublishDialog } from "./publish-dialog";
-import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
 import supabase from "@/lib/supabase/client";
 import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
+import { commands } from "@/types/tauri";
 
 export interface Pipe {
   enabled: boolean;
@@ -977,10 +977,10 @@ const PipeStore: React.FC = () => {
                         variant="default"
                         onClick={async () => {
                           try {
-                            await invoke("open_pipe_window", {
-                              port: selectedPipe.config!.port,
-                              title: selectedPipe.id,
-                            });
+                            await commands.openPipeWindow(
+                              selectedPipe.config!.port,
+                              selectedPipe.id
+                            );
                           } catch (err) {
                             console.error("failed to open pipe window:", err);
                             toast({
@@ -1255,10 +1255,10 @@ const PipeStore: React.FC = () => {
                                         (p) => p.id === pipe.id
                                       );
                                       if (installedPipe?.config?.port) {
-                                        invoke("open_pipe_window", {
-                                          port: installedPipe.config.port,
-                                          title: installedPipe.id,
-                                        }).catch((err) => {
+                                        commands.openPipeWindow(
+                                          installedPipe.config.port,
+                                          installedPipe.id
+                                        ).catch((err) => {
                                           console.error(
                                             "failed to open pipe window:",
                                             err

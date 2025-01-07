@@ -1,7 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
 use llm_sidecar::EmbeddedLLMSettings;
@@ -45,27 +44,28 @@ mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod store;
 mod tray;
 mod updates;
-mod store;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
-pub use store::get_store;
 pub use store::get_profiles_store;
+pub use store::get_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
 
+use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-use std::collections::HashMap;
+use tauri_specta::{collect_commands, Builder};
 
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
@@ -92,7 +92,8 @@ impl ShortcutConfig {
                 
                 profiles.into_iter()
                     .filter_map(|profile| {
-                        profiles_store.get(&format!("shortcuts.{}", profile))
+                        profiles_store
+                            .get(&format!("shortcuts.{}", profile))
                             .and_then(|v| v.as_str().map(String::from))
                             .map(|shortcut| (profile, shortcut))
                     })
@@ -153,6 +154,7 @@ async fn register_shortcut(
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn update_global_shortcuts(
     app: AppHandle,
     show_shortcut: String,
@@ -431,6 +433,34 @@ async fn main() {
     }
 
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
+
+    let specta_builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+        spawn_screenpipe,
+        kill_all_sreenpipes,
+        permissions::open_permission_settings,
+        permissions::request_permission,
+        permissions::do_permissions_check,
+        save_pipe_config,
+        reset_all_pipes,
+        set_tray_unhealth_icon,
+        set_tray_health_icon,
+        llm_sidecar::start_ollama_sidecar,
+        llm_sidecar::stop_ollama_sidecar,
+        commands::update_show_screenpipe_shortcut,
+        commands::show_meetings,
+        commands::show_identify_speakers,
+        commands::open_pipe_window,
+        update_global_shortcuts,
+    ]);
+
+    #[cfg(debug_assertions)]
+    specta_builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../types/tauri.ts",
+        )
+        .expect("Failed to export typescript bindings");
+
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
@@ -472,26 +502,14 @@ async fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(sidecar_state)
-        .invoke_handler(tauri::generate_handler![
-            spawn_screenpipe,
-            kill_all_sreenpipes,
-            permissions::open_permission_settings,
-            permissions::request_permission,
-            permissions::do_permissions_check,
-            load_pipe_config,
-            save_pipe_config,
-            reset_all_pipes,
-            set_tray_unhealth_icon,
-            set_tray_health_icon,
-            llm_sidecar::start_ollama_sidecar,
-            llm_sidecar::stop_ollama_sidecar,
-            commands::update_show_screenpipe_shortcut,
-            commands::show_meetings,
-            commands::show_identify_speakers,
-            commands::open_pipe_window,
-            update_global_shortcuts,
-        ])
-        .setup(|app| {
+        .invoke_handler({
+            let handler = specta_builder.invoke_handler();
+
+            move |invoke| handler(invoke)
+        })
+        .setup(move |app| {
+            specta_builder.mount_events(app.handle());
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =

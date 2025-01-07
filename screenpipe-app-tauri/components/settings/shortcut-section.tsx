@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Pencil } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import hotkeys from "hotkeys-js";
+import { commands } from "@/types/tauri";
 
 interface ShortcutRowProps {
   shortcut: string;
@@ -58,12 +59,12 @@ const ShortcutSection = () => {
 
       // wait 2 seconds to make sure store has synced to disk
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      await invoke("update_global_shortcuts", {
-        showShortcut: updatedSettings.showScreenpipeShortcut,
-        startShortcut: updatedSettings.startRecordingShortcut,
-        stopShortcut: updatedSettings.stopRecordingShortcut,
-        profileShortcuts: shortcuts,
-      });
+      await commands.updateGlobalShortcuts(
+        updatedSettings.showScreenpipeShortcut,
+        updatedSettings.startRecordingShortcut,
+        updatedSettings.stopRecordingShortcut,
+        shortcuts
+      );
 
       return true;
     } catch (error) {

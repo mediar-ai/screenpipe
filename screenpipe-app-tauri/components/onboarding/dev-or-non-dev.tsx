@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/types/tauri";
 
 interface OnboardingDevOrNonDevProps {
   className?: string;
@@ -90,7 +91,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           variant: "default",
         });
         // TODO: should give better user feedback
-        await invoke("spawn_screenpipe");
+        await commands.spawnScreenpipe();
       }
     } catch (error: any) {
       toast({

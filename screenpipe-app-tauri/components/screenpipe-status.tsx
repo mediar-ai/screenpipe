@@ -28,6 +28,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { commands } from "@/types/tauri";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -182,13 +183,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
           ? "microphone"
           : "accessibility";
 
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
+      await commands.requestPermission(permissionType);
 
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
+      const perms = await commands.doPermissionsCheck(false);
 
       setPermissions({
         screenRecording: perms.screenRecording,

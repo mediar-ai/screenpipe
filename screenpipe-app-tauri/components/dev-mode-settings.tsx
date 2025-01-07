@@ -6,7 +6,6 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { invoke } from "@tauri-apps/api/core";
 import { useToast } from "./ui/use-toast";
 import {
   Tooltip,
@@ -19,6 +18,7 @@ import { Separator } from "./ui/separator";
 import { Card, CardContent, CardFooter } from "./ui/card";
 
 import { CliCommandDialog } from "./cli-command-dialog";
+import { commands } from "@/types/tauri";
 
 const getDebuggingCommands = (os: string | null, dataDir: string) => {
   let cliInstructions = "";
@@ -121,7 +121,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
       duration: Infinity,
     });
     try {
-      await invoke("spawn_screenpipe");
+      await commands.spawnScreenpipe();
       await new Promise((resolve) => setTimeout(resolve, 2000));
       toastId.update({
         id: toastId.id,
@@ -152,7 +152,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
       duration: Infinity,
     });
     try {
-      await invoke("kill_all_sreenpipes");
+      await commands.killAllSreenpipes();
       await new Promise((resolve) => setTimeout(resolve, 2000));
       toastId.update({
         id: toastId.id,
