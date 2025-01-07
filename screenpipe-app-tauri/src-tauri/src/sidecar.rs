@@ -363,7 +363,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(data_dir.as_str());
     }
 
-    args.push("--debug");
+    // args.push("--debug");
 
 
 
