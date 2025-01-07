@@ -563,9 +563,9 @@ async fn main() {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
 
                 let start_recording =
-                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                    MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
                 let stop_recording =
-                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+                    MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
 
                 let version = MenuItemBuilder::with_id(
                     "version",
