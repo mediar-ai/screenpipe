@@ -472,6 +472,7 @@ jobs:
         shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          CN_VERBOSE: "2"
           USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
           MAX_RETRIES: 5
           RETRY_DELAY: 30
@@ -499,7 +500,7 @@ jobs:
           while (-not $success -and $attempt -le $env:MAX_RETRIES) {
             Write-Host "Attempt $attempt of $env:MAX_RETRIES"
             try {
-              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
               if ($LASTEXITCODE -eq 0) {
                 $success = $true
                 Write-Host "Upload successful!"
@@ -524,8 +525,10 @@ jobs:
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         uses: crabnebula-dev/cloud-release@v0.2.6
+        env:
+          CN_VERBOSE: "2"
         with:
-          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
 
