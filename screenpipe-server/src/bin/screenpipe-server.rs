@@ -505,9 +505,6 @@ async fn main() -> anyhow::Result<()> {
                     error!("continuous recording error: {:?}", e);
                 }
             }
-
-            drop(vision_runtime);
-            drop(audio_runtime);
         })
     };
 
@@ -851,7 +848,7 @@ async fn main() -> anyhow::Result<()> {
             // sleep for 5 seconds
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
-                info!("watched pid {} has stopped, initiating shutdown", pid);
+                info!("Watched pid ({}) has stopped, initiating shutdown", pid);
                 let _ = shutdown_tx_clone.send(());
             }
         });
@@ -927,6 +924,11 @@ async fn main() -> anyhow::Result<()> {
             let _ = shutdown_tx.send(());
         }
     }
+
+    tokio::task::block_in_place(|| {
+        drop(vision_runtime);
+        drop(audio_runtime);
+    });
 
     h.shutdown();
     info!("shutdown complete");
