@@ -25,7 +25,7 @@ use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
+    start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -500,7 +500,7 @@ async fn main() -> anyhow::Result<()> {
             // Track search requests
         }
     };
-    let server = Server::new(
+    let server = SCServer::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
