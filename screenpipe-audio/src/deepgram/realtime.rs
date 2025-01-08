@@ -1,3 +1,4 @@
+use crate::DeviceType;
 use crate::{
     deepgram::CUSTOM_DEEPGRAM_API_TOKEN, realtime::RealtimeTranscriptionEvent, AudioStream,
 };
@@ -74,8 +75,14 @@ async fn start_deepgram_stream(
     while let Some(result) = results.next().await {
         match result {
             Ok(result) => {
-                if let StreamResponse::TranscriptResponse { channel, .. } = result {
-                    let text = channel.alternatives.first().unwrap().transcript.clone();
+                if let StreamResponse::TranscriptResponse {
+                    channel, is_final, ..
+                } = result
+                {
+                    let res = channel.alternatives.first().unwrap();
+                    let text = res.transcript.clone();
+                    let is_input = stream.device.device_type == DeviceType::Input;
+
                     match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
                         timestamp: chrono::Utc::now(),
                         device: stream.device.to_string(),
@@ -83,6 +90,8 @@ async fn start_deepgram_stream(
                           "transcript": text
                         })
                         .to_string(),
+                        is_final,
+                        is_input,
                     }) {
                         Ok(_) => {}
                         Err(e) => {

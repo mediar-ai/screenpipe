@@ -26,7 +26,7 @@ pub struct Segment {
 }
 
 pub struct Decoder<'a> {
-    model: &'a mut Model,
+    pub model: &'a mut Model,
     rng: rand::rngs::StdRng,
     timestamps: bool,
     verbose: bool,
@@ -215,6 +215,17 @@ impl<'a> Decoder<'a> {
             }
         }
         unreachable!()
+    }
+
+    pub fn reset_kv_cache(&mut self) {
+        match &mut self.model {
+            Model::Normal(m) => m.reset_kv_cache(),
+            Model::Quantized(m) => m.reset_kv_cache(),
+        }
+    }
+
+    pub fn set_language_token(&mut self, language_token: Option<u32>) {
+        self.language_token = language_token;
     }
 
     pub fn run(&mut self, mel: &Tensor) -> Result<Vec<Segment>> {

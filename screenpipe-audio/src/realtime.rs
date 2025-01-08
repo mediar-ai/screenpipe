@@ -1,4 +1,7 @@
-use crate::{deepgram::stream_transcription_deepgram, AudioStream, AudioTranscriptionEngine};
+use crate::{
+    deepgram::stream_transcription_deepgram, whisper::stream_transcription_whisper, AudioStream,
+    AudioTranscriptionEngine,
+};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use screenpipe_core::Language;
@@ -33,7 +36,14 @@ pub async fn realtime_stt(
             .await?;
         }
         _ => {
-            return Err(anyhow::anyhow!("Unsupported audio transcription engine"));
+            stream_transcription_whisper(
+                stream,
+                realtime_transcription_sender,
+                languages,
+                is_running,
+                audio_transcription_engine,
+            )
+            .await?;
         }
     }
     Ok(())
@@ -44,4 +54,6 @@ pub struct RealtimeTranscriptionEvent {
     pub timestamp: DateTime<Utc>,
     pub device: String,
     pub transcription: String,
+    pub is_final: bool,
+    pub is_input: bool,
 }
