@@ -3,7 +3,7 @@ use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;
 use candle_transformers::models::whisper as m;
-use log::{error, info};
+use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
 
@@ -241,7 +241,7 @@ impl<'a> Decoder<'a> {
             let dr = self.decode_with_fallback(&mel_segment)?;
             seek += segment_size;
             if dr.no_speech_prob > m::NO_SPEECH_THRESHOLD && dr.avg_logprob < m::LOGPROB_THRESHOLD {
-                info!("no speech detected, skipping {seek} {dr:?}");
+                debug!("no speech detected, skipping {seek} {dr:?}");
                 continue;
             }
             let segment = Segment {
