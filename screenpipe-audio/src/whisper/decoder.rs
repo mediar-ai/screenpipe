@@ -1,117 +1,11 @@
+use crate::whisper::Model;
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
-use candle_nn::{ops::softmax, VarBuilder};
-use candle_transformers::models::whisper::{self as m, Config};
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use candle_nn::ops::softmax;
+use candle_transformers::models::whisper as m;
 use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
-
-#[derive(Clone)]
-pub struct WhisperModel {
-    pub model: Model,
-    pub tokenizer: Tokenizer,
-    pub device: Device,
-}
-
-impl WhisperModel {
-    pub fn new(engine: &crate::AudioTranscriptionEngine) -> Result<Self> {
-        debug!("Initializing WhisperModel");
-        let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-        info!("device = {:?}", device);
-
-        debug!("Fetching model files");
-        let (config_filename, tokenizer_filename, weights_filename) = {
-            let api = Api::new()?;
-            let repo = match engine {
-                crate::AudioTranscriptionEngine::WhisperTiny => Repo::with_revision(
-                    "openai/whisper-tiny".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                crate::AudioTranscriptionEngine::WhisperDistilLargeV3 => Repo::with_revision(
-                    "distil-whisper/distil-large-v3".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                crate::AudioTranscriptionEngine::WhisperLargeV3Turbo => Repo::with_revision(
-                    "openai/whisper-large-v3-turbo".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                _ => Repo::with_revision(
-                    "openai/whisper-large-v3-turbo".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-            };
-            let api_repo = api.repo(repo);
-            let config = api_repo.get("config.json")?;
-            let tokenizer = api_repo.get("tokenizer.json")?;
-            let model = api_repo.get("model.safetensors")?;
-            (config, tokenizer, model)
-        };
-
-        debug!("Parsing config and tokenizer");
-        let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
-        let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        // tokenizer.with_pre_tokenizer(PreT)
-        debug!("Loading model weights");
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], m::DTYPE, &device)? };
-        let whisper = m::model::Whisper::load(&vb, config.clone())?;
-
-        let model = Model::Normal(whisper);
-
-        debug!("WhisperModel initialization complete");
-        Ok(Self {
-            model,
-            tokenizer,
-            device,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Model {
-    Normal(m::model::Whisper),
-    Quantized(m::quantized_model::Whisper),
-}
-
-impl Model {
-    pub fn config(&self) -> &Config {
-        match self {
-            Self::Normal(m) => &m.config,
-            Self::Quantized(m) => &m.config,
-        }
-    }
-
-    pub fn encoder_forward(&mut self, x: &Tensor, flush: bool) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.encoder.forward(x, flush),
-            Self::Quantized(m) => m.encoder.forward(x, flush),
-        }
-    }
-
-    pub fn decoder_forward(
-        &mut self,
-        x: &Tensor,
-        xa: &Tensor,
-        flush: bool,
-    ) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.decoder.forward(x, xa, flush),
-            Self::Quantized(m) => m.decoder.forward(x, xa, flush),
-        }
-    }
-
-    pub fn decoder_final_linear(&self, x: &Tensor) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.decoder.final_linear(x),
-            Self::Quantized(m) => m.decoder.final_linear(x),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct DecodingResult {
@@ -132,7 +26,7 @@ pub struct Segment {
 }
 
 pub struct Decoder<'a> {
-    model: &'a mut Model,
+    pub model: &'a mut Model,
     rng: rand::rngs::StdRng,
     timestamps: bool,
     verbose: bool,
@@ -157,7 +51,7 @@ impl<'a> Decoder<'a> {
         timestamps: bool,
         verbose: bool,
     ) -> Result<Self> {
-        let no_timestamps_token = token_id(&tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
+        let no_timestamps_token = token_id(tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
         let suppress_tokens: Vec<f32> = (0..model.config().vocab_size as u32)
             .map(|i| {
                 if model.config().suppress_tokens.contains(&i)
@@ -170,12 +64,12 @@ impl<'a> Decoder<'a> {
             })
             .collect();
         let suppress_tokens = Tensor::new(suppress_tokens.as_slice(), device)?;
-        let sot_token = token_id(&tokenizer, m::SOT_TOKEN)?;
-        let transcribe_token = token_id(&tokenizer, m::TRANSCRIBE_TOKEN)?;
-        let eot_token = token_id(&tokenizer, m::EOT_TOKEN)?;
+        let sot_token = token_id(tokenizer, m::SOT_TOKEN)?;
+        let transcribe_token = token_id(tokenizer, m::TRANSCRIBE_TOKEN)?;
+        let eot_token = token_id(tokenizer, m::EOT_TOKEN)?;
         let no_speech_token = m::NO_SPEECH_TOKENS
             .iter()
-            .find_map(|token| token_id(&tokenizer, token).ok());
+            .find_map(|token| token_id(tokenizer, token).ok());
         let no_speech_token = match no_speech_token {
             None => anyhow::bail!("unable to find any non-speech token"),
             Some(n) => n,
@@ -323,6 +217,17 @@ impl<'a> Decoder<'a> {
         unreachable!()
     }
 
+    pub fn reset_kv_cache(&mut self) {
+        match &mut self.model {
+            Model::Normal(m) => m.reset_kv_cache(),
+            Model::Quantized(m) => m.reset_kv_cache(),
+        }
+    }
+
+    pub fn set_language_token(&mut self, language_token: Option<u32>) {
+        self.language_token = language_token;
+    }
+
     pub fn run(&mut self, mel: &Tensor) -> Result<Vec<Segment>> {
         let (_, _, content_frames) = mel.dims3()?;
         let mut seek = 0;
@@ -336,7 +241,7 @@ impl<'a> Decoder<'a> {
             let dr = self.decode_with_fallback(&mel_segment)?;
             seek += segment_size;
             if dr.no_speech_prob > m::NO_SPEECH_THRESHOLD && dr.avg_logprob < m::LOGPROB_THRESHOLD {
-                info!("no speech detected, skipping {seek} {dr:?}");
+                debug!("no speech detected, skipping {seek} {dr:?}");
                 continue;
             }
             let segment = Segment {
@@ -345,11 +250,6 @@ impl<'a> Decoder<'a> {
                 dr,
             };
             if self.timestamps {
-                // info!(
-                //     "{:.1}s -- {:.1}s",
-                //     segment.start,
-                //     segment.start + segment.duration,
-                // );
                 let mut tokens_to_decode = vec![];
                 let mut prev_timestamp_s = 0f32;
                 for &token in segment.dr.tokens.iter() {
@@ -363,7 +263,7 @@ impl<'a> Decoder<'a> {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            info!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
@@ -372,23 +272,10 @@ impl<'a> Decoder<'a> {
                     }
                 }
                 if !tokens_to_decode.is_empty() {
-                    let text = self
-                        .tokenizer
-                        .decode(&tokens_to_decode, true)
-                        .map_err(E::msg)?;
-                    if !text.is_empty() {
-                        // info!("  {:.1}s-...: {}", prev_timestamp_s, text);
-                    }
                     tokens_to_decode.clear()
                 }
-            } else {
-                // info!(
-                //     "{:.1}s -- {:.1}s: {}",
-                //     segment.start,
-                //     segment.start + segment.duration,
-                //     segment.dr.text,
-                // )
             }
+
             if self.verbose {
                 info!("{seek}: {segment:?}, in {:?}", start.elapsed());
             }
@@ -418,5 +305,3 @@ fn apply_repetition_penalty(logits: &mut [f32], token_history: &[u32], penalty: 
         }
     }
 }
-
-// ... (keep any other helper functions or structs that are specific to Whisper)

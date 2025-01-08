@@ -106,7 +106,7 @@ pub async fn kill_all_sreenpipes(
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
-                .args(&["/F", "/IM", "screenpipe.exe"])
+                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
