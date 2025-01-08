@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { ContentItem } from "@screenpipe/js";
-import { pipe } from "@screenpipe/js/node";
+import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -85,11 +85,11 @@ async function syncLogToObsidian(
 export async function GET() {
   try {
     const settings = await pipe.settings.getNamespaceSettings("obsidian");
-    const interval = settings.interval || 3600000;
-    const obsidianPath = settings.path;
-    const customPrompt = settings.prompt;
-    const pageSize = settings.pageSize || 100;
-    const model = settings.aiModel;
+    const interval = settings?.interval || 3600000;
+    const obsidianPath = settings?.path;
+    const customPrompt = settings?.prompt;
+    const pageSize = settings?.pageSize || 100;
+    const model = settings?.aiModel;
 
     if (!obsidianPath) {
       return NextResponse.json(

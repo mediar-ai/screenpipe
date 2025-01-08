@@ -1,5 +1,5 @@
-const { setupBrowser } = require('../browser_setup');
-const { clickFirstConnectButton } = require('./click_first_connect_button');
+import { setupBrowser } from '../browser_setup';
+import { clickFirstConnectButton } from './click_first_connect_button';
 
 async function testClickConnect() {
     try {

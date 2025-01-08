@@ -297,3 +297,18 @@ echo "│                                          │"
 echo "│  check the docs:                         │"
 echo "│  --> https://docs.screenpi.pe            │"
 echo "╰──────────────────────────────────────────╯"
+
+curl -sL -X POST https://eu.i.posthog.com/capture/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
+    "event": "cli_install",
+    "properties": {
+      "distinct_id": "'$(hostname)'",
+      "version": "'$VERSION'",
+      "os": "'$os'",
+      "arch": "'$arch'"
+    }
+  }' >/dev/null 2>&1 || true
+
+

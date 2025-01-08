@@ -73,6 +73,23 @@ try {
     Write-Host "│  check the docs:                         │"
     Write-Host "│  --> https://docs.screenpi.pe            │"
     Write-Host "╰──────────────────────────────────────────╯"
+
+    try {
+        $postHogData = @{
+            api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce"
+            event = "cli_install"
+            properties = @{
+                distinct_id = $env:COMPUTERNAME
+                version = $latestRelease.tag_name
+                os = "windows"
+                arch = "x86_64"
+        }
+    } | ConvertTo-Json
+        Invoke-RestMethod -Uri "https://eu.i.posthog.com/capture/" -Method Post -Body $postHogData -ContentType "application/json"
+    } catch {
+        # Silently continue if tracking fails
+    }
+
 } catch {
     Write-Host "installation failed: $($_.Exception.Message)" -ForegroundColor Red
     exit 1

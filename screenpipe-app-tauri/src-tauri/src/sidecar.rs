@@ -1,5 +1,5 @@
-use crate::{get_base_dir, SidecarState};
 use crate::get_store;
+use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
@@ -107,7 +106,7 @@ pub async fn kill_all_sreenpipes(
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
-                .args(&["/F", "/IM", "screenpipe.exe"])
+                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
@@ -363,15 +362,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(data_dir.as_str());
     }
 
-    args.push("--debug");
-
-
+    // args.push("--debug");
 
     if cfg!(windows) {
-        let mut c = app
-            .shell()
-            .sidecar("screenpipe")
-            .unwrap();
+        let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }

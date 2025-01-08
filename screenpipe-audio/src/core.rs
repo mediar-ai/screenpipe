@@ -1,10 +1,12 @@
 use crate::audio_processing::audio_to_mono;
+use crate::realtime::{realtime_stt, RealtimeTranscriptionEvent};
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
+use screenpipe_core::Language;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
@@ -192,6 +194,44 @@ pub async fn record_and_transcribe(
                 }
 
                 error!("record_and_transcribe error, restarting: {}", e);
+                // Add a small delay before restarting to prevent rapid restart loops
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn start_realtime_recording(
+    audio_stream: Arc<AudioStream>,
+    realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
+    languages: Vec<Language>,
+    is_running: Arc<AtomicBool>,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    deepgram_api_key: Option<String>,
+) -> Result<()> {
+    while is_running.load(Ordering::Relaxed) {
+        match realtime_stt(
+            audio_stream.clone(),
+            realtime_transcription_engine.clone(),
+            languages.clone(),
+            realtime_transcription_sender.clone(),
+            is_running.clone(),
+            deepgram_api_key.clone(),
+        )
+        .await
+        {
+            Ok(_) => {
+                // Normal shutdown
+                break;
+            }
+            Err(e) => {
+                if !is_running.load(Ordering::Relaxed) {
+                    // Normal shutdown
+                    break;
+                }
+
+                error!("realtime_stt error, restarting: {}", e);
                 // Add a small delay before restarting to prevent rapid restart loops
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }

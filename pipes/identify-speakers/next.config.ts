@@ -2,13 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@screenpipe/js"],
-  webpack: (config, { isServer }) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@screenpipe/js": isServer
-        ? "@screenpipe/js/dist/node.js"
-        : "@screenpipe/js/dist/browser.js",
-    };
+  webpack: (config, { }) => {
     return config;
   },
   devIndicators: {

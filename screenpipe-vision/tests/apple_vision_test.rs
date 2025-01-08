@@ -1,8 +1,10 @@
 #[cfg(target_os = "macos")]
 #[cfg(test)]
 mod tests {
+    use cidre::ns;
     use image::GenericImageView;
-    use screenpipe_vision::perform_ocr_apple;
+    use screenpipe_core::Language;
+    use screenpipe_vision::{core::get_apple_languages, perform_ocr_apple};
     use std::path::PathBuf;
 
     #[tokio::test]
@@ -25,13 +27,14 @@ mod tests {
         let rgb_image = image.to_rgb8();
         println!("RGB image dimensions: {:?}", rgb_image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let (ocr_text, _, _) =
+            perform_ocr_apple(&image, &ns::ArrayMut::<ns::String>::with_capacity(0));
 
-        println!("OCR text: {:?}", result);
+        println!("OCR text: {:?}", ocr_text);
         assert!(
-            result.contains("receiver_count"),
+            ocr_text.contains("receiver_count"),
             "OCR failed: {:?}",
-            result
+            ocr_text
         );
     }
     // # 中文测试
@@ -45,13 +48,22 @@ mod tests {
         let image = image::open(&path).expect("Failed to open Chinese test image");
         println!("Image dimensions: {:?}", image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let languages_slice = {
+            use ns;
+            let apple_languages = get_apple_languages(vec![Language::Chinese]);
+            let mut slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
+            apple_languages.iter().for_each(|language| {
+                slice.push(&ns::String::with_str(language.as_str()));
+            });
+            slice
+        };
+        let (ocr_text, _, _) = perform_ocr_apple(&image, &languages_slice);
 
-        println!("OCR text: {:?}", result);
+        println!("OCR text: {:?}", ocr_text);
         assert!(
-            result.contains("管理分支"), // 替换为您的测试图像中的实际中文文本
+            ocr_text.contains("管理分支"),
             "OCR failed to recognize Chinese text: {:?}",
-            result
+            ocr_text
         );
     }
 }

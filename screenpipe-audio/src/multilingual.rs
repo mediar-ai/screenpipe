@@ -2,7 +2,7 @@ use crate::whisper::{token_id, Model};
 use candle::IndexOp;
 use candle::{Result, Tensor, D};
 use candle_transformers::models::whisper::SOT_TOKEN;
-use log::info;
+use log::debug;
 use screenpipe_core::Language;
 use tokenizers::Tokenizer;
 
@@ -158,6 +158,6 @@ pub fn detect_language(
     probabilities.sort_by(|(_, p1), (_, p2)| p2.total_cmp(p1));
 
     let language = token_id(tokenizer, &format!("<|{}|>", probabilities[0].0))?;
-    info!("detected language: {:?}", probabilities[0].0);
+    debug!("detected language: {:?}", probabilities[0].0);
     Ok(language)
 }
