@@ -130,6 +130,7 @@ async fn main() -> Result<()> {
                         }
                     }
                 })
+                .await
             }
         })
         .collect();

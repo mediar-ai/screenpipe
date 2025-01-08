@@ -95,7 +95,7 @@ async fn main() {
                 &segmentation_model_path,
                 embedding_manager,
                 embedding_extractor,
-                "default",
+                &audio_input.device.to_string(),
             )
             .await
             .unwrap();

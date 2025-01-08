@@ -24,14 +24,12 @@ mod tests {
 
     fn setup() {
         // Initialize the logger with an info level filter
-        match env_logger::builder()
+        if env_logger::builder()
             .filter_level(log::LevelFilter::Debug)
             .filter_module("tokenizers", LevelFilter::Error)
             .try_init()
-        {
-            Ok(_) => (),
-            Err(_) => (),
-        };
+            .is_ok()
+        {};
     }
 
     // ! what happen in github action?
@@ -176,7 +174,7 @@ mod tests {
     // Helper function to get audio duration (you'll need to implement this)
     fn get_audio_duration(path: &PathBuf) -> Result<Duration, Box<dyn std::error::Error>> {
         let output = Command::new("ffprobe")
-            .args(&[
+            .args([
                 "-v",
                 "error",
                 "-show_entries",
@@ -282,7 +280,7 @@ mod tests {
         }
 
         // Clean up
-        let _ = recording_thread.abort();
+        recording_thread.abort();
         std::fs::remove_file(output_path_2).unwrap_or_default();
     }
 
@@ -337,7 +335,7 @@ mod tests {
             &segmentation_model_path,
             embedding_manager,
             embedding_extractor,
-            "default",
+            &audio_input.device.to_string(),
         )
         .await
         .unwrap();
@@ -352,12 +350,13 @@ mod tests {
                 &mut whisper_model_guard,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
-                vec![Language::English],
+                vec![Language::Arabic],
             )
             .await
             .unwrap();
 
             transcription_result.push_str(&transcript);
+            transcription_result.push('\n');
         }
         drop(whisper_model_guard);
 
@@ -368,13 +367,10 @@ mod tests {
         println!("Received transcription: {}", transcription_result);
 
         assert!(
-            transcription_result.contains("موسیقی")
+            transcription_result.contains("موسيقى")
                 || transcription_result.contains("تعال")
                 || transcription_result.contains("الحيوانات")
         );
-
-        // Clean up
-        std::fs::remove_file("test_output").unwrap_or_default();
     }
 
     #[tokio::test]
@@ -387,9 +383,6 @@ mod tests {
             .join("test_data")
             .join("selah.mp4");
         let audio_data = pcm_decode(&audio_path).expect("Failed to decode audio file");
-        // Create a temporary output path
-        let output_path =
-            PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
 
         // Create AudioInput from the audio data
         let audio_input = AudioInput {
@@ -438,7 +431,7 @@ mod tests {
             &segmentation_model_path,
             embedding_manager,
             embedding_extractor,
-            "default",
+            &audio_input.device.to_string(),
         )
         .await
         .unwrap();
@@ -463,8 +456,5 @@ mod tests {
         let elapsed_time = start_time.elapsed();
 
         debug!("Transcription completed in {:?}", elapsed_time);
-
-        // Clean up
-        std::fs::remove_file(output_path).unwrap_or_default();
     }
 }

@@ -1,6 +1,5 @@
 use crate::type_and_animate::{delete_characters, type_slowly, EnigoCommand};
 use crate::{call_ai, run_keystroke_monitor, KeystrokeCommand};
-use reqwest;
 use std::path::Path;
 use std::string::ToString;
 use std::sync::atomic::{AtomicBool, Ordering};

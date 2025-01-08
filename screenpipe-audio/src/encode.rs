@@ -16,7 +16,7 @@ pub fn encode_single_audio(
 
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     command
-        .args(&[
+        .args([
             "-f",
             "f32le",
             "-ar",
@@ -43,6 +43,7 @@ pub fn encode_single_audio(
 
     debug!("FFmpeg command: {:?}", command);
 
+    #[allow(clippy::zombie_processes)]
     let mut ffmpeg = command.spawn().expect("Failed to spawn FFmpeg process");
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
