@@ -263,7 +263,7 @@ impl<'a> Decoder<'a> {
                                 .tokenizer
                                 .decode(&tokens_to_decode, true)
                                 .map_err(E::msg)?;
-                            info!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
+                            debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
                             tokens_to_decode.clear()
                         }
                         prev_timestamp_s = timestamp_s;
