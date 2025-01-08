@@ -250,7 +250,7 @@ export const screenpipeOnboardingFlow = setup({
                                 }
                             }
                         },{delay:500}),
-                        sendTo('convoBoxMachine', {type:'LOADING'}, {delay: 300}),
+                        sendTo('convoBoxMachine', {type:'LOADING'}),
                         assign({
                             localModels: {
                                 silero: 'pending',
@@ -271,12 +271,22 @@ export const screenpipeOnboardingFlow = setup({
                             actions: [
                                 sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
                                 assign({
-                                    ai: ({context,event}) => {
-                                        return {
-                                            ...context.ai,
-                                            llama: 'healthy' 
-                                        }
-                                    },
+                                    localModels: {
+                                        silero: 'healthy',
+                                        whisper: 'healthy'
+                                    }
+                                }),
+                            ],
+                        },
+                        onError: {
+                            target: 'error',
+                            actions: [
+                                sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                assign({
+                                    localModels: {
+                                        silero: 'denied',
+                                        whisper: 'denied'
+                                    }
                                 }),
                             ],
                         },
@@ -290,6 +300,49 @@ export const screenpipeOnboardingFlow = setup({
                                             ...context.localModels,
                                             ...event.payload
                                         }
+                                    }
+                                })
+                            ]
+                        }
+                    }
+                },
+                error: {
+                    entry: [
+                        sendTo('convoBoxMachine', { type: 'IDLE' }),
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 70,
+                                    text: "there was an issue while downloading the local models. would you like to try again?",
+                                },
+                                button: [
+                                    {
+                                        variant: 'secondary',
+                                        size: 'default',
+                                        label: 'yes',
+                                        event: {type: 'NEXT'}
+                                    }
+                                ],
+                                process: {
+                                    skippable: true 
+                                }
+                            }
+                        },{delay:500}),
+                    ],
+                    on: {
+                        NEXT: {
+                            target: "chineseMirrorToggle",
+                            actions: sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                        },
+                        SKIP: {
+                            target: '#appstore',
+                            actions: [
+                                sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                assign({
+                                    localModels: {
+                                        silero: 'skipped',
+                                        whisper: 'skipped'
                                     }
                                 })
                             ]
@@ -451,6 +504,7 @@ export const screenpipeOnboardingFlow = setup({
                 }
             },
         },
+        ai: {},
         appstore: {
             id: 'appstore',
             initial: 'intro',
