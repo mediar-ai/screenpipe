@@ -22,8 +22,8 @@ export async function getMessages(page: Page): Promise<Message[]> {
             const messageElements = document.querySelectorAll('.msg-s-message-list__event');
             console.log(`found ${messageElements.length} message events`);
 
-            let lastSender = null;
-            let lastTimestamp = null;
+            let lastSender: string | null = null;
+            let lastTimestamp: string | null = null;
             return Array.from(messageElements).map(el => {
                 // Try multiple selectors for sender
                 const senderSelectors = [
@@ -71,7 +71,7 @@ export async function getMessages(page: Page): Promise<Message[]> {
         });
 
         // Standardize timestamps before returning
-        const messages = standardizeTimestamps(rawMessages);
+        const messages = standardizeTimestamps(rawMessages as Message[]);
         console.log('standardized messages:', JSON.stringify(messages, null, 2));
         return messages;
 

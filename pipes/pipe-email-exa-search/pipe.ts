@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import nodemailer from "nodemailer";
-import { ContentItem, pipe } from "@screenpipe/js";
+import { type ContentItem, pipe } from "@screenpipe/js";
 import process from "node:process";
 import Exa from "exa-js"
 import { z } from "zod";

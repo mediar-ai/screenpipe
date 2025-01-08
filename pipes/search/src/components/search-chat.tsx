@@ -4,7 +4,7 @@ import React, { JSX, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { pipe, ContentItem } from "@screenpipe/js";
+import { pipe, type ContentItem } from "@screenpipe/browser";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -90,7 +90,7 @@ import {
   CommandItem,
   Command,
 } from "./ui/command";
-import { Speaker } from "@screenpipe/js";
+import { type Speaker } from "@screenpipe/browser";
 import {
   Popover,
   PopoverContent,
@@ -1049,7 +1049,7 @@ export function SearchChat() {
               )}
               {"tags" in item.content &&
                 item.content.tags &&
-                item.content.tags.map((tag, index) => (
+                item.content.tags.map((tag: string, index: number) => (
                   <Badge key={index} className="text-xs">
                     {tag}
                   </Badge>

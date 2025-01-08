@@ -1,5 +1,5 @@
-const { setupBrowser } = require('../browser_setup');
-const { getMessages } = require('./extract_messages');
+import { setupBrowser } from '../browser_setup';
+import { getMessages } from './extract_messages';
 
 async function testExtractMessages() {
     try {

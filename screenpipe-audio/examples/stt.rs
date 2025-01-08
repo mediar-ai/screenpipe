@@ -51,7 +51,6 @@ async fn main() {
     ));
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));
-    let output_path = Arc::new(PathBuf::from("test_output"));
 
     let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let segmentation_model_path = project_dir
@@ -74,7 +73,6 @@ async fn main() {
     for (audio_file, expected_transcription) in test_cases {
         let whisper_model = Arc::clone(&whisper_model);
         let vad_engine = Arc::clone(&vad_engine);
-        let output_path = Arc::clone(&output_path);
         let segmentation_model_path = segmentation_model_path.clone();
         let embedding_extractor = Arc::clone(&embedding_extractor);
         let embedding_manager = embedding_manager.clone();
@@ -92,11 +90,12 @@ async fn main() {
             };
 
             let mut segments = prepare_segments(
-                &audio_input,
+                &audio_input.data,
                 vad_engine.clone(),
                 &segmentation_model_path,
                 embedding_manager,
                 embedding_extractor,
+                "default",
             )
             .await
             .unwrap();
@@ -104,15 +103,13 @@ async fn main() {
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
-                let (transcript, _) = stt(
+                let transcript = stt(
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
                     &mut whisper_model_guard,
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
-                    &output_path,
-                    true,
                     vec![Language::English],
                 )
                 .await

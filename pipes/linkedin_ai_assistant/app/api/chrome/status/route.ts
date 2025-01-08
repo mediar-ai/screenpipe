@@ -7,7 +7,7 @@ export async function GET() {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const data = await response.json();
+    const data = await response.json() as { webSocketDebuggerUrl: string };
 
     return NextResponse.json({
       wsUrl: data.webSocketDebuggerUrl,

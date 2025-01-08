@@ -1,5 +1,5 @@
-const { setupBrowser } = require('../browser_setup');
-const { clickFirstMessageButton } = require('./click_message');
+import { setupBrowser } from '../browser_setup';
+import { clickFirstMessageButton } from './click_message';
 
 async function testClickMessage() {
     try {

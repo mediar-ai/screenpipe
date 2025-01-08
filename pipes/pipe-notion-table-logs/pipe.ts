@@ -2,7 +2,7 @@ import { Client } from "@notionhq/client";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { createOllama } from "ollama-ai-provider";
-import { pipe, ContentItem } from "@screenpipe/js";
+import { pipe, type ContentItem } from "@screenpipe/js";
 
 const engineeringLog = z.object({
   title: z.string(),
