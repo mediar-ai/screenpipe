@@ -2,21 +2,33 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use tracing::info;
+use tracing::{debug, info};
 #[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, STILL_ACTIVE};
 #[cfg(target_os = "windows")]
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, GetExitCodeProcess};
 
 #[cfg(target_os = "windows")]
 fn is_process_alive(pid: u32) -> bool {
     unsafe {
-        let process: HANDLE = OpenProcess(PROCESS_QUERY_INFORMATION, false, pid).unwrap();
+        let process: HANDLE = match OpenProcess(PROCESS_QUERY_INFORMATION, false, pid) {
+            Ok(handle) => handle,
+            Err(e) => {
+                debug!("Failed to open process with PID ({}): {:?}", pid, e);
+                return false;
+            }
+        };
         if process.is_invalid() {
             return false;
         }
-        CloseHandle(process);
-        true
+        let mut exit_code: u32 = 0;
+        let result = GetExitCodeProcess(process, &mut exit_code);
+        CloseHandle(process).expect("Failed to close process handle");
+        if result.is_err() {
+            debug!("Failed to get exit code for process with PID ({})", pid);
+            return false;
+        }
+        exit_code == STILL_ACTIVE.0 as u32
     }
 }
 
@@ -28,7 +40,7 @@ pub async fn watch_pid(pid: u32) -> bool {
         {
             // Try Windows API first
             if !is_process_alive(pid) {
-                println!("process {} not found via windows api", pid);
+                debug!("Process ({}) not found via windows api", pid);
                 return true;
             }
 
@@ -52,7 +64,7 @@ pub async fn watch_pid(pid: u32) -> bool {
             let pid_alive = String::from_utf8_lossy(&pid_output.stdout).contains(&pid.to_string());
             let app_alive = !String::from_utf8_lossy(&app_output.stdout).is_empty();
 
-            println!("pid alive: {}, app alive: {}", pid_alive, app_alive);
+            info!("pid alive: {}, app alive: {}", pid_alive, app_alive);
 
             if !pid_alive || !app_alive {
                 return true;
