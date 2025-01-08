@@ -398,8 +398,8 @@ export function AccountSection() {
                   size="sm"
                   onClick={handleConnectStripe}
                   className="h-9"
-                  disabled={true} // for now
-                  // disabled={isConnectingStripe || user?.stripe_connected}
+                  // disabled={true} // for now
+                  disabled={isConnectingStripe || user?.stripe_connected}
                 >
                   {isConnectingStripe ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
