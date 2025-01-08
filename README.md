@@ -13,7 +13,7 @@
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">library & platform to build, distribute, monetize ai apps (like rewind, granola, etc.) that have the full context</p>
+   <p align="center">library & platform to build, distribute, monetize ai apps that have the full context (like rewind, granola, etc.)</p>
    <p align="center">open source | 100% local | dev friendly | 10% CPU, 4 GB ram, 30gb/m | 24/7 screen, mic, keyboard recording and control</p>
 </p>
 
