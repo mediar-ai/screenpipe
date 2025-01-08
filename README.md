@@ -14,7 +14,7 @@
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
    <p align="center">library & platform to build, distribute, monetize ai apps that have the full context (like rewind, granola, etc.)</p>
-   <p align="center">open source | 100% local | dev friendly | 10% CPU, 4 GB ram, 30gb/m | 24/7 screen, mic, keyboard recording and control</p>
+   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic, keyboard recording and control</p>
 </p>
 
 <!-- Slogan -->
@@ -76,7 +76,7 @@
 
 # how it works?
 
-- we record everything 24/7, 100% locally
+- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
@@ -88,7 +88,7 @@
 
 # why?
 
-1. data is the biggest bottleneck in AI right now
+1. context is the dark matter of intelligence
 2. every second you are not recording is a missing context for AGI
 
 ## get started
