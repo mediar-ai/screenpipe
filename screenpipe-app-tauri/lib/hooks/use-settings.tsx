@@ -44,6 +44,7 @@ export type User = {
   credits?: {
     amount: number;
   };
+  stripe_connected?: boolean;
 }
 
 export type Settings = {

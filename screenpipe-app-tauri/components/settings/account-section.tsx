@@ -88,11 +88,11 @@ export function AccountSection() {
   const { settings, updateSettings } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [isConnectingStripe, setIsConnectingStripe] = useState(false);
 
   useEffect(() => {
-    // Listen for deep link URL opens
     const setupDeepLink = async () => {
-      const unsubscribeDeepLink = await onOpenUrl((urls) => {
+      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
           if (url.includes("api_key=")) {
@@ -102,6 +102,24 @@ export function AccountSection() {
               toast({
                 title: "logged in!",
                 description: "your api key has been set",
+              });
+            }
+          }
+          if (url.includes("return") || url.includes("refresh")) {
+            console.log("stripe connect url:", url);
+            if (url.includes("/return")) {
+              if (user) {
+                const updatedUser = { ...user, stripe_connected: true };
+                updateSettings({ user: updatedUser });
+              }
+              toast({
+                title: "stripe connected!",
+                description: "your account is now set up for payments",
+              });
+            } else if (url.includes("/refresh")) {
+              toast({
+                title: "stripe setup incomplete",
+                description: "please complete the stripe onboarding process",
               });
             }
           }
@@ -118,7 +136,7 @@ export function AccountSection() {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, []);
+  }, [settings.user?.token, loadUser, updateSettings]);
 
   const handleRefreshCredits = async () => {
     if (!settings.user?.token) return;
@@ -174,6 +192,33 @@ export function AccountSection() {
       url: "https://cal.com/louis030195/screenpipe-for-businesses",
     },
   ];
+
+  const handleConnectStripe = async () => {
+    setIsConnectingStripe(true);
+    try {
+      const host = "https://screenpi.pe/api/dev-stripe";
+      const response = await fetch(host, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: user?.id,
+        }),
+      });
+
+      const { url } = await response.json();
+      await openUrl(url);
+    } catch (error) {
+      toast({
+        title: "failed to connect stripe",
+        description: "please try again later",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnectingStripe(false);
+    }
+  };
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -314,12 +359,6 @@ export function AccountSection() {
               build and sell custom pipes
             </p>
           </div>
-          <Badge
-            variant={"secondary"}
-            className="uppercase text-[10px] font-medium"
-          >
-            COMING SOON
-          </Badge>
         </div>
 
         <div className="space-y-6">
@@ -338,32 +377,70 @@ export function AccountSection() {
                   <div className="space-y-1">
                     <div className="text-sm font-medium">stripe connect</div>
                     <p className="text-xs text-muted-foreground">
-                      set up payments to receive earnings from your pipes
+                      receive earnings from your pipes (
+                      <a
+                        href={`mailto:louis@screenpi.pe?subject=${encodeURIComponent(
+                          "i want to create and monetize a pipe"
+                        )}&body=${encodeURIComponent(
+                          "hi louis,\n\nI'm interested in creating a pipe for screenpipe.\n\n- what I want to build:\n- I'm a programmer: [yes/no]\n- my github: "
+                        )}`}
+                        className="underline hover:text-primary"
+                        target="_blank"
+                      >
+                        email louis@screenpi.pe
+                      </a>{" "}
+                      for private beta access)
                     </p>
                   </div>
                 </div>
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() =>
-                    openUrl(
-                      "https://connect.stripe.com/oauth/authorize?client_id=YOUR_CLIENT_ID"
-                    )
-                  }
+                  onClick={handleConnectStripe}
                   className="h-9"
-                  disabled
+                  disabled={true} // for now
+                  // disabled={isConnectingStripe || user?.stripe_connected}
                 >
-                  connect
+                  {isConnectingStripe ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : user?.stripe_connected ? (
+                    "connected ✓"
+                  ) : (
+                    "connect"
+                  )}
                 </Button>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                publish your pipe with cli
-              </Label>
-              <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
-                $ screenpipe publish my-awesome-pipe
+            <div className="space-y-4">
+              <div className="p-4 border border-border/50 rounded-lg bg-secondary/5">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm text-muted-foreground">
+                    estimated earnings
+                  </span>
+                  <span className="text-lg font-mono">$1,385.00</span>
+                </div>
+                <div className="h-[60px] w-full flex items-end gap-1">
+                  {[40, 35, 55, 45, 60, 75, 65].map((height, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 bg-gray-900/20"
+                      style={{ height: `${height}%` }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-center text-muted-foreground">
+                  pending payout - coming soon
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">
+                  publish your pipe with cli
+                </Label>
+                <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
+                  $ screenpipe publish my-awesome-pipe
+                </div>
               </div>
             </div>
           </div>

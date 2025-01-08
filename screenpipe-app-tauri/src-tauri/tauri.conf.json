@@ -81,6 +81,10 @@
         {
           "host": "screenpi.pe",
           "pathPrefix": ["/auth"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/stripe-connect"]
         }
       ]
     }
