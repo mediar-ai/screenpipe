@@ -154,19 +154,6 @@
       "identifier": "shell:allow-spawn",
       "allow": [
         {
-          "name": "screenpipe",
-          "cmd": "screenpipe",
-          "args": [
-            "migrate"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
           "name": "ollama",
           "cmd": "ollama",
           "args": [
