@@ -4,6 +4,7 @@ import { ScreenpipeCliService } from "../interfaces/cli.service.interface";
 import { EventEmitter } from "@/modules/event-management/emitter/interfaces/event-emitter.service.interface";
 import { invoke } from "@tauri-apps/api/core";
 import { getSetupParams, timeout } from "../utils/cli.service.utils";
+import { CliError } from "../errors/cli-error";
 
 class TauriCliService implements ScreenpipeCliService {
     constructor(
@@ -20,7 +21,9 @@ class TauriCliService implements ScreenpipeCliService {
             reject(new Error(`command failed with code ${data.code}`));
           }
         });
-        command.on("error", (error) => reject(new Error(error)));
+        command.on("error", (error) => {
+          reject(new Error(error))
+        });
         
         command.stdout.on("data", (line) => {
           this.eventEmitterService.emit('model-download-update', line)
@@ -29,12 +32,13 @@ class TauriCliService implements ScreenpipeCliService {
           }
         });
       });
-      
+
       try {
         await command.spawn();
         await Promise.race([outputPromise, timeoutPromise]);
       } catch (error) {
         console.error("error or timeout:", error);
+        throw new CliError(error as string);
       }
     };
 
@@ -44,6 +48,7 @@ class TauriCliService implements ScreenpipeCliService {
         console.log("Command executed successfully");
       } catch (error) {
         console.error("Command failed:", error);
+        throw new CliError(error as string);
       }
     }
 }
