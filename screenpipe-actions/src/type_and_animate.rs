@@ -22,7 +22,7 @@ pub struct EnigoResponse {
 }
 
 thread_local! {
-    static ENIGO: RefCell<Option<Enigo>> = RefCell::new(None);
+    static ENIGO: RefCell<Option<Enigo>> = const { RefCell::new(None) };
 }
 
 fn with_enigo<F, R>(f: F) -> R
