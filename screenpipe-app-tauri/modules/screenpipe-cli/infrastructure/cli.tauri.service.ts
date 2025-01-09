@@ -51,6 +51,18 @@ class TauriCliService implements ScreenpipeCliService {
         throw new CliError(error as string);
       }
     }
+
+    async update(): Promise<void> {
+      try {
+        const result = await invoke("update_screenpipe", {
+          intervalMinutes: 60,
+          showDialog: true,
+        });
+        console.log("Update check result:", result);
+      } catch (error) {
+        console.log("Error checking for updates:", error);
+      }
+    }
 }
 
 export default TauriCliService
