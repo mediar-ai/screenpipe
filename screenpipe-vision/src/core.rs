@@ -23,7 +23,6 @@ use serde::Serialize;
 use serde::Serializer;
 use serde_json;
 use std::sync::Arc;
-use std::time::SystemTime;
 use std::{
     collections::HashMap,
     sync::OnceLock,
@@ -33,6 +32,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
+
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
 
@@ -42,63 +42,63 @@ use xcap::Monitor;
 #[cfg(target_os = "macos")]
 static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 
-// fn serialize_image<S>(image: &DynamicImage, serializer: S) -> Result<S::Ok, S::Error>
-// where
-//     S: serde::Serializer,
-// {
-//     let mut webp_buffer = Vec::new();
-//     let mut cursor = std::io::Cursor::new(&mut webp_buffer);
+fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if let Some(image) = image {
+        let mut webp_buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut webp_buffer);
 
-//     let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 80);
+        let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 80);
 
-//     // Encode the image as WebP
-//     encoder
-//         .encode_image(image)
-//         .map_err(serde::ser::Error::custom)?;
+        // Encode the image as WebP
+        encoder
+            .encode_image(image)
+            .map_err(serde::ser::Error::custom)?;
 
-//     // Base64 encode the WebP data
-//     let base64_string = general_purpose::STANDARD.encode(webp_buffer);
+        // Base64 encode the WebP data
+        let base64_string = general_purpose::STANDARD.encode(webp_buffer);
 
-//     // Serialize the base64 string
-//     serializer.serialize_str(&base64_string)
-// }
+        // Serialize the base64 string
+        serializer.serialize_str(&base64_string)
+    } else {
+        serializer.serialize_none()
+    }
+}
 
-// fn deserialize_image<'de, D>(deserializer: D) -> Result<DynamicImage, D::Error>
-// where
-//     D: serde::Deserializer<'de>,
-// {
-//     // Deserialize the base64 string
-//     let base64_string: String = serde::Deserialize::deserialize(deserializer)?;
+fn deserialize_image<'de, D>(deserializer: D) -> Result<Option<DynamicImage>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Deserialize the base64 string
+    let base64_string: String = serde::Deserialize::deserialize(deserializer)?;
 
-//     // Decode base64 to bytes
-//     let image_bytes = general_purpose::STANDARD
-//         .decode(&base64_string)
-//         .map_err(serde::de::Error::custom)?;
+    // Check if the base64 string is empty or invalid
+    if base64_string.trim().is_empty() {
+        return Ok(None);
+    }
 
-//     // Create a cursor to read from the bytes
-//     let cursor = std::io::Cursor::new(image_bytes);
+    // Decode base64 to bytes
+    let image_bytes = general_purpose::STANDARD
+        .decode(&base64_string)
+        .map_err(serde::de::Error::custom)?;
 
-//     // Decode the PNG data back into an image
-//     image::load(cursor, image::ImageFormat::Jpeg).map_err(serde::de::Error::custom)
-// }
+    // Create a cursor to read from the bytes
+    let cursor = std::io::Cursor::new(image_bytes);
+
+    // Decode the JPEG data back into an image
+    let image = image::load(cursor, image::ImageFormat::Jpeg).map_err(serde::de::Error::custom)?;
+    Ok(Some(image))
+}
 
 fn serialize_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    // Calculate the duration since the instant was created
-    let duration_since_instant = instant.elapsed();
-
-    // Get the current system time and subtract the duration to get the original time
-    let original_time = SystemTime::now() - duration_since_instant;
-
-    // Convert the original time to a duration since the UNIX epoch
-    let duration_since_epoch = original_time
-        .duration_since(UNIX_EPOCH)
-        .map_err(serde::ser::Error::custom)?;
-
-    // Serialize the duration as milliseconds
-    let millis = duration_since_epoch.as_millis();
+    let duration_since_epoch = UNIX_EPOCH.elapsed().map_err(serde::ser::Error::custom)?;
+    let instant_duration = duration_since_epoch - instant.elapsed();
+    let millis = instant_duration.as_millis();
     serializer.serialize_u128(millis)
 }
 
@@ -426,11 +426,11 @@ pub enum RealtimeVisionEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowOcr {
-    // #[serde(
-    //     serialize_with = "serialize_image",
-    //     deserialize_with = "deserialize_image"
-    // )]
-    // pub image: DynamicImage,
+    #[serde(
+        serialize_with = "serialize_image",
+        deserialize_with = "deserialize_image"
+    )]
+    pub image: Option<DynamicImage>,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
@@ -445,7 +445,6 @@ pub struct WindowOcr {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[repr(C)]
 pub struct UIFrame {
     pub window: String,
     pub app: String,
@@ -454,33 +453,6 @@ pub struct UIFrame {
 }
 
 impl UIFrame {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let mut parts = bytes.split(|&b| b == 0); // Split by null terminator
-
-        let window = parts.next().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing window")
-        })?;
-        let app = parts
-            .next()
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing app"))?;
-        let text_output = parts.next().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing text_output")
-        })?;
-        let initial_traversal_at = parts.next().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Missing initial_traversal_at",
-            )
-        })?;
-
-        Ok(UIFrame {
-            window: String::from_utf8_lossy(window).to_string(),
-            app: String::from_utf8_lossy(app).to_string(),
-            text_output: String::from_utf8_lossy(text_output).to_string(),
-            initial_traversal_at: String::from_utf8_lossy(initial_traversal_at).to_string(),
-        })
-    }
-
     pub async fn read_from_pipe(reader: &mut BufReader<File>) -> Result<Self> {
         let window = UIFrame::read_string(reader).await?;
         let app = UIFrame::read_string(reader).await?;
@@ -498,8 +470,8 @@ impl UIFrame {
     async fn read_string(reader: &mut BufReader<File>) -> Result<String> {
         let mut buffer = Vec::new();
         loop {
-            let bytes = reader.read_until(b'\0', &mut buffer).await?;
-            if bytes > 0 {
+            let result = reader.read_until(b'\0', &mut buffer).await?;
+            if result > 0 {
                 buffer.pop(); // Remove the null terminator
                 return Ok(String::from_utf8_lossy(&buffer).to_string());
             }

@@ -627,7 +627,7 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
                 text_output: "",
                 initial_traversal_at: ISO8601DateFormatter().string(from: Date())
             )
-            writeToPipe(uiFrame: uiFrame)
+            try! writeToPipe(uiFrame: uiFrame)
 
             // Update timestamp after traversal
             globalElementValues[appName]?[windowName]?.timestamp = Date()
@@ -889,7 +889,7 @@ func processPendingNotifications() {
                 initial_traversal_at: ISO8601DateFormatter().string(from: Date())
             )
 
-            writeToPipe(uiFrame: uiFrame)
+            try! writeToPipe(uiFrame: uiFrame)
         }
     }
 
@@ -1188,7 +1188,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         initial_traversal_at: timestamp
     )
 
-    writeToPipe(uiFrame: uiFrame)
+    try! writeToPipe(uiFrame: uiFrame)
 
     // First, get existing text_output and check if record exists
     var existingText = ""
@@ -1592,13 +1592,29 @@ class ScreenPipeDB {
     }
 }
 
-func writeToPipe(uiFrame: UIFrame) {
+func writeToPipe(uiFrame: UIFrame) throws {
     let message = uiFrame.toBytes()
-    let bytesWritten = message.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
-        write(handle, buffer.baseAddress, message.count)
-    }
-    if bytesWritten == -1 {
-        perror("error writing to pipe")
+    // let bytesWritten = message.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+    //     write(handle, buffer.baseAddress, message.count)
+    // }
+    // if bytesWritten == -1 {
+    //     perror("error writing to pipe")
+    // }
+
+    var totalWritten = 0
+    while totalWritten < message.count {
+        let bytesWritten = message.withUnsafeBytes { buffer in
+            write(
+                handle,
+                buffer.baseAddress?.advanced(by: totalWritten),
+                message.count - totalWritten)
+        }
+        guard bytesWritten != -1 else {
+            throw NSError(
+                domain: "pipe error", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: String(cString: strerror(errno))])
+        }
+        totalWritten += bytesWritten
     }
 }
 
