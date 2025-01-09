@@ -7,10 +7,6 @@ use std::fmt;
 use std::time::Duration;
 use tokio::time;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::{Monitor, Window, XCapError};
-
-#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window, XCapError};
 
 #[derive(Debug)]
@@ -39,102 +35,102 @@ impl From<XCapError> for CaptureError {
 
 // Platform specific skip lists
 #[cfg(target_os = "macos")]
-static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_APPS: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Window Server",
-        "SystemUIServer",
-        "ControlCenter",
-        "Dock",
-        "NotificationCenter",
-        "loginwindow",
-        "WindowManager",
-        "Contexts",
-        "Screenshot",
+        String::from("window server"),
+        String::from("systemuiserver"),
+        String::from("controlcenter"),
+        String::from("dock"),
+        String::from("notificationcenter"),
+        String::from("loginwindow"),
+        String::from("windowmanager"),
+        String::from("contexts"),
+        String::from("screenshot"),
     ])
 });
 
 #[cfg(target_os = "windows")]
-static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_APPS: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Windows Shell Experience Host",
-        "Microsoft Text Input Application",
-        "Windows Explorer",
-        "Program Manager",
-        "Microsoft Store",
-        "Search",
-        "TaskBar",
+        String::from("windows shell experience host"),
+        String::from("microsoft text input application"),
+        String::from("windows explorer"),
+        String::from("program manager"),
+        String::from("microsoft store"),
+        String::from("search"),
+        String::from("taskbar"),
     ])
 });
 
 #[cfg(target_os = "linux")]
-static SKIP_APPS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_APPS: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Gnome-shell",
-        "Plasma",
-        "Xfdesktop",
-        "Polybar",
-        "i3bar",
-        "Plank",
-        "Dock",
+        String::from("gnome-shell"),
+        String::from("plasma"),
+        String::from("xfdesktop"),
+        String::from("polybar"),
+        String::from("i3bar"),
+        String::from("plank"),
+        String::from("dock"),
     ])
 });
 
 #[cfg(target_os = "macos")]
-static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_TITLES: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Item-0",
-        "App Icon Window",
-        "Dock",
-        "NowPlaying",
-        "FocusModes",
-        "Shortcuts",
-        "AudioVideoModule",
-        "Clock",
-        "WiFi",
-        "Battery",
-        "BentoBox",
-        "Menu Bar",
-        "Notification Center",
-        "Control Center",
-        "Spotlight",
-        "Mission Control",
-        "Desktop",
-        "Screen Sharing",
-        "Touch Bar",
-        "Status Bar",
-        "Menu Extra",
-        "System Settings",
+        String::from("item-0"),
+        String::from("app icon window"),
+        String::from("dock"),
+        String::from("nowplaying"),
+        String::from("focusmodes"),
+        String::from("shortcuts"),
+        String::from("audiovideomodule"),
+        String::from("clock"),
+        String::from("wifi"),
+        String::from("battery"),
+        String::from("bentobox"),
+        String::from("menubar"),
+        String::from("notification center"),
+        String::from("control center"),
+        String::from("spotlight"),
+        String::from("mission control"),
+        String::from("desktop"),
+        String::from("screen sharing"),
+        String::from("touch bar"),
+        String::from("status bar"),
+        String::from("menu extra"),
+        String::from("system settings"),
     ])
 });
 
 #[cfg(target_os = "windows")]
-static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_TITLES: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Program Manager",
-        "Windows Input Experience",
-        "Microsoft Text Input Application",
-        "Task View",
-        "Start",
-        "System Tray",
-        "Notification Area",
-        "Action Center",
-        "Task Bar",
-        "Desktop",
+        String::from("program manager"),
+        String::from("windows input experience"),
+        String::from("microsoft text input application"),
+        String::from("task view"),
+        String::from("start"),
+        String::from("system tray"),
+        String::from("notification area"),
+        String::from("action center"),
+        String::from("task bar"),
+        String::from("desktop"),
     ])
 });
 
 #[cfg(target_os = "linux")]
-static SKIP_TITLES: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+static SKIP_TITLES: Lazy<HashSet<String>> = Lazy::new(|| {
     HashSet::from([
-        "Desktop",
-        "Panel",
-        "Top Bar",
-        "Status Bar",
-        "Dock",
-        "Dashboard",
-        "Activities",
-        "System Tray",
-        "Notification Area",
+        String::from("desktop"),
+        String::from("panel"),
+        String::from("top bar"),
+        String::from("status bar"),
+        String::from("dock"),
+        String::from("dashboard"),
+        String::from("activities"),
+        String::from("system tray"),
+        String::from("notification area"),
     ])
 });
 
@@ -161,19 +157,11 @@ impl WindowFilters {
 
     // O(n) - we could figure out a better way to do this
     pub fn is_valid(&self, app_name: &str, title: &str) -> bool {
-        let app_name_lower = app_name.to_lowercase();
-        let title_lower = title.to_lowercase();
-
-        // If include list is empty, we're done
-        if self.include_set.is_empty() {
-            return true;
-        }
-
         // Check include list
         if self
             .include_set
             .iter()
-            .any(|include| app_name_lower.contains(include) || title_lower.contains(include))
+            .any(|include| app_name.contains(include) || title == include)
         {
             return true;
         }
@@ -183,7 +171,7 @@ impl WindowFilters {
             && self
                 .ignore_set
                 .iter()
-                .any(|ignore| app_name_lower.contains(ignore) || title_lower.contains(ignore))
+                .any(|ignore| app_name.contains(ignore) || title == ignore)
         {
             return false;
         }
@@ -261,11 +249,8 @@ pub fn is_valid_window(
 ) -> bool {
     if !capture_unfocused_windows {
         // Early returns for simple checks
-        #[cfg(target_os = "macos")]
-        let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
 
-        #[cfg(not(target_os = "macos"))]
-        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
+        let is_focused = window.current_monitor().id() == monitor.id() && window.z() == 0;
 
         if !is_focused {
             return false;
@@ -273,14 +258,14 @@ pub fn is_valid_window(
     }
 
     // Fast O(1) lookups using HashSet
-    let app_name = window.app_name();
-    let title = window.title();
+    let app_name = window.app_name().to_lowercase();
+    let title = window.title().to_lowercase();
 
-    if SKIP_APPS.contains(app_name) || SKIP_TITLES.contains(title) {
+    if SKIP_APPS.contains(&app_name) || SKIP_TITLES.contains(&title) {
         return false;
     }
 
-    filters.is_valid(app_name, title)
+    filters.is_valid(&app_name, &title)
 }
 
 async fn retry_with_backoff<F, T, E>(
