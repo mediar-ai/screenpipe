@@ -75,13 +75,17 @@ export function HarvestClosestConnections() {
                 setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
               }
             }
+            // Update isRunning based on server state
             if (!data.isHarvesting && isRunning) {
               setIsRunning(false);
               setStatus("harvest process stopped");
             }
           })
-          .catch(console.error);
-      }, 2000);
+          .catch(error => {
+            console.error('failed to fetch status:', error);
+            // Don't stop on temporary errors
+          });
+      }, 1000); // Poll every second while running
 
       return () => clearInterval(interval);
     }
@@ -93,11 +97,37 @@ export function HarvestClosestConnections() {
         const now = new Date();
         const harvestTime = new Date(nextHarvestTime);
         
+        console.log('frontend cooldown check:', {
+          now: now.toISOString(),
+          harvestTime: harvestTime.toISOString(),
+          shouldRestart: now >= harvestTime
+        });
+
         if (now >= harvestTime) {
+          console.log('cooldown period ended, initiating restart');
           // Clear the nextHarvestTime before restarting
           setNextHarvestTime(null);
-          setStatus("cooldown period ended, restarting...");
-          await startHarvesting();
+          setStatus('cooldown period ended, restarting...');
+          
+          try {
+            // Force a status refresh to trigger the backend restart
+            const response = await fetch('/api/harvest/status?refresh=true');
+            const data = await response.json();
+            console.log('restart status response:', data);
+            
+            // Small delay to allow backend to start
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Update UI state
+            setIsRunning(true);
+            
+            // Verify the restart
+            const verifyResponse = await fetch('/api/harvest/status');
+            const verifyData = await verifyResponse.json();
+            console.log('verify restart status:', verifyData);
+          } catch (error) {
+            console.error('failed to restart harvesting:', error);
+            setStatus('failed to restart after cooldown');
+          }
         }
       };
 
