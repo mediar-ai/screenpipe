@@ -51,6 +51,7 @@ mod updates;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
+pub use commands::update_screenpipe;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
@@ -539,7 +540,8 @@ async fn main() {
             commands::show_meetings,
             commands::show_identify_speakers,
             commands::open_pipe_window,
-            update_global_shortcuts,
+            commands::update_screenpipe,
+            update_global_shortcuts
         ])
         .setup(|app| {
             // Logging setup

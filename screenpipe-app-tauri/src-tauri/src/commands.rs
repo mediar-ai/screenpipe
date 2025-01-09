@@ -3,6 +3,16 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
 use tracing::{error, info};
+use crate::updates::update_screenpipe_on_demand;
+
+#[tauri::command]
+pub async fn update_screenpipe(
+    app: tauri::AppHandle,
+    interval_minutes: u64,
+    show_dialog: bool,
+) -> Result<bool, String> {
+    return update_screenpipe_on_demand(app, interval_minutes).await;
+}
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {

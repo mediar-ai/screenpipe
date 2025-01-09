@@ -147,6 +147,41 @@ impl UpdatesManager {
         Result::Ok(false)
     }
 
+    async fn handle_update(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Check for updates
+        let update = self
+            .app
+            .updater()?
+            .check()
+            .await?
+            .ok_or_else(|| "No update available".to_string())?;
+    
+        // Update handling for Windows
+        #[cfg(target_os = "windows")]
+        {
+            use crate::llm_sidecar::stop_ollama_sidecar;
+    
+            // Kill all Screenpipe instances
+            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
+                .await
+                .map_err(|err| format!("Failed to kill sidecar: {}", err))?;
+    
+            // Stop LLM sidecar
+            stop_ollama_sidecar(self.app.clone())
+                .await
+                .map_err(|err| format!("Failed to stop ollama: {}", err))?;
+            
+            // Download and install the update
+            update.download_and_install(|_, _| {}, || {}).await?;
+        }
+    
+
+        // Restart application
+        self.update_screenpipe();
+    
+        Ok(())
+    }
+    
     pub fn update_now_menu_item_ref(&self) -> &MenuItem<Wry> {
         &self.update_menu_item
     }
@@ -195,4 +230,20 @@ pub fn start_update_check(
     });
 
     Ok(updates_manager)
+}
+
+pub async fn update_screenpipe_on_demand(
+    app: tauri::AppHandle,
+    interval_minutes: u64,
+) -> Result<bool, String> {
+    let updates_manager = Arc::new(
+        UpdatesManager::new(&app, interval_minutes).map_err(|e| e.to_string())?,
+    );
+
+    updates_manager
+        .handle_update()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(true)
 }
