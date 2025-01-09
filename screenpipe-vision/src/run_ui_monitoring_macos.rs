@@ -257,32 +257,3 @@ impl NamedPipe {
         Ok(file)
     }
 }
-
-// impl Drop for NamedPipe {
-//     fn drop(&mut self) {
-//         // Remove the pipe if it exists
-//         if fs::metadata(&self.path).is_ok() {
-//             if let Err(e) = fs::remove_file(&self.path) {
-//                 eprintln!("Failed to remove named pipe: {:?}", e);
-//             }
-//         }
-//     }
-// }
-
-// async fn read_ui_frame_from_pipe(reader: &mut BufReader<File>) -> Result<UIFrame> {
-//     let mut buffer = Vec::new();
-
-//     loop {
-//         buffer.clear();
-//         let bytes_read = reader.read_until(b'\0', &mut buffer).await?;
-
-//         if bytes_read == 0 {
-//             // No data was read, handle the empty read
-//             tokio::time::sleep(Duration::from_millis(100)).await;
-//             continue;
-//         }
-
-//         // Process the buffer if data was read
-//         return UIFrame::from_bytes(&buffer);
-//     }
-// }
