@@ -211,6 +211,8 @@ interface ConnectionsStore {
     connections: Record<string, Connection>;
     isHarvesting?: boolean;
     connectionsSent: number;
+    lastRefreshDuration?: number;  // in milliseconds
+    averageProfileCheckDuration?: number;  // in milliseconds
 }
 
 export async function loadConnections(): Promise<ConnectionsStore> {
@@ -283,4 +285,20 @@ export async function updateConnectionsSent(connectionsSent: number) {
         JSON.stringify(connectionsStore, null, 2)
     );
     console.log(`Updated connections sent count to ${connectionsSent}`);
+}
+
+export async function saveRefreshStats(totalDuration: number, profileCount: number) {
+    const connectionsStore = await loadConnections();
+    
+    // Calculate average duration per profile
+    const averageDuration = profileCount > 0 ? totalDuration / profileCount : 0;
+    
+    connectionsStore.lastRefreshDuration = totalDuration;
+    connectionsStore.averageProfileCheckDuration = averageDuration;
+    
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+    );
+    console.log(`saved refresh stats: ${totalDuration}ms total, ${averageDuration}ms per profile`);
 } 
