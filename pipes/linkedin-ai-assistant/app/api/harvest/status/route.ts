@@ -7,7 +7,19 @@ import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
-async function checkConnectionStatus(page: any, profileUrl: string, connection: any) {
+// Add types for page and connection
+type LinkedInPage = {
+  goto: (url: string, options: { waitUntil: string }) => Promise<void>;
+  evaluate: <T>(fn: () => T) => Promise<T>;
+  waitForSelector: (selector: string, options: { timeout: number }) => Promise<void>;
+};
+
+type Connection = {
+  status: string;
+  timestamp?: string;
+};
+
+async function checkConnectionStatus(page: LinkedInPage, profileUrl: string, connection: Connection) {
   // check if pending for more than 14 days
   if (connection.status === 'pending' && connection.timestamp) {
     const daysAsPending = (new Date().getTime() - new Date(connection.timestamp).getTime()) / (1000 * 60 * 60 * 24);
@@ -64,9 +76,6 @@ async function checkConnectionStatus(page: any, profileUrl: string, connection: 
 
   return 'pending';
 }
-
-// Add a type for harvesting status
-type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
 
 // Add cache at module level
 let lastStatus = {
@@ -163,7 +172,7 @@ export async function GET(request: Request) {
         const startTime = Date.now();
         
         const pendingConnections = Object.entries(connectionsStore.connections)
-          .filter(([_, connection]) => connection.status === 'pending');
+          .filter(([, connection]) => connection.status === 'pending');
         
         refreshProgress = {
           current: 0,
@@ -223,7 +232,7 @@ export async function GET(request: Request) {
       // Add refresh progress to response
       refreshProgress
     });
-  } catch (error: any) {
-    return NextResponse.json({ message: error.message?.toLowerCase() }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });
   }
 } 

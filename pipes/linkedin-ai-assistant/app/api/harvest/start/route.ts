@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   try {
     const result = await startHarvesting(35);
 
@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('error starting harvesting:', error);
     return NextResponse.json(
-      { message: error.message.toLowerCase() },
+      { message: (error as Error).message.toLowerCase() },
       { status: 500 }
     );
   }

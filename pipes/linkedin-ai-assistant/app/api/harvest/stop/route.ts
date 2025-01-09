@@ -13,7 +13,7 @@ export async function POST() {
       message: 'stopping harvest process',
       isHarvesting: false 
     });
-  } catch (error: any) {
-    return NextResponse.json({ message: error.message.toLowerCase() }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ message: (error as Error).message.toLowerCase() }, { status: 500 });
   }
 } 
