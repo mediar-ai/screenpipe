@@ -1,6 +1,6 @@
 import { setRunningState, currentSteps, queueStats } from './state';
 
-let isRunning = false;
+const isRunning = false;
 
 export async function GET() {
   return new Response(JSON.stringify({ 

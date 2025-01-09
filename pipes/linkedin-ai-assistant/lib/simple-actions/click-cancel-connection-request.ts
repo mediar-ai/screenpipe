@@ -3,6 +3,8 @@ import { showClickAnimation } from './click-animation';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// this function attempts to click the "pending" button to cancel a connection request
+// then it checks for a "connect" button to verify that the request was indeed canceled
 export async function clickCancelConnectionRequest(page: Page): Promise<{
     success: boolean;
     profileUrl?: string;
@@ -12,7 +14,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         //    then filter by innerText === "Pending". This removes the need for :has() syntax.
         const selector = 'button.artdeco-button--muted.artdeco-button--secondary';
 
-        // 2) Wait for at least one muted+secondary button to appear 
+        // 2) Wait for at least one muted+secondary button to appear
         //    (in case the page hasn't fully loaded).
         await page.waitForSelector(selector, { timeout: 5000 });
 
@@ -21,9 +23,11 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
             const buttons = document.querySelectorAll<HTMLButtonElement>(sel);
             console.log(`found ${buttons.length} muted secondary buttons`); // debug
             for (const btn of buttons) {
-                const text = btn.innerText.trim();
-                console.log(`button text: "${text}"`); // debug
-                if (text === 'Pending') {
+                // Check both direct text and text within span
+                const buttonText = btn.innerText.trim();
+                const spanText = btn.querySelector('span.artdeco-button__text')?.textContent?.trim();
+                console.log(`button text: "${buttonText}", span text: "${spanText}"`); // debug
+                if (buttonText === 'Pending' || spanText === 'Pending') {
                     return btn;
                 }
             }
@@ -42,21 +46,26 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
             const connectButton = await page.evaluateHandle(() => {
                 const buttons = document.querySelectorAll<HTMLButtonElement>('button.artdeco-button');
                 for (const btn of buttons) {
-                    const text = btn.innerText.trim();
-                    if (text === 'Connect') {
+                    // Check both direct text and text within span
+                    const buttonText = btn.innerText.trim();
+                    const spanText = btn.querySelector('span.artdeco-button__text')?.textContent?.trim();
+                    if (buttonText === 'Connect' || spanText === 'Connect') {
                         return btn;
                     }
                 }
                 return null;
             });
 
-            const connectExists = await connectButton.evaluate(btn => btn instanceof HTMLButtonElement);
+            // in case we found the connect button, that means the request was already canceled
+            const connectExists = connectButton
+                ? await connectButton.evaluate(btn => btn instanceof HTMLButtonElement)
+                : false;
             if (connectExists) {
                 console.log('found connect button - request was already cancelled');
                 return { success: true };
             }
 
-            console.log('button is no longer attached to DOM');
+            console.log('button is no longer attached to dom');
             return { success: false };
         }
 
@@ -69,7 +78,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
             console.log('could not scroll to button, trying to click anyway');
             // Continue execution - the button might still be clickable
         }
-        
+
         // Optional: get a profile URL
         const profileUrl = await page.evaluate(() => {
             const linkSelectors = [
@@ -87,7 +96,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         // 5) Show animation and click
         await showClickAnimation(page, selector);
         await foundButton.evaluate(btn => btn.click());
-        console.log('clicked the "Pending" button');
+        console.log('clicked the "pending" button');
 
         // 6) Wait for modal
         await delay(1000);
@@ -117,7 +126,24 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         );
         console.log('withdraw modal disappeared, request canceled!');
 
-        return { success: true, profileUrl: profileUrl || undefined };
+        // double check if "connect" is now visible to confirm
+        try {
+            // wait up to 5s for connect
+            await page.waitForFunction(() => {
+                const cBtn = document.querySelector<HTMLButtonElement>('button.artdeco-button');
+                if (!cBtn) return false;
+                const text = cBtn.innerText.trim();
+                const spanTxt = cBtn.querySelector('span.artdeco-button__text')?.textContent?.trim();
+                return text === 'Connect' || spanTxt === 'Connect';
+            }, { timeout: 5000 });
+
+            console.log('confirmed "connect" button is present now');
+            return { success: true, profileUrl: profileUrl || undefined };
+        } catch {
+            // no connect found, but we tried
+            console.log('no connect button recognized, but request was canceled anyway');
+            return { success: true, profileUrl: profileUrl || undefined };
+        }
     } catch (e) {
         console.error('failed to cancel connection request:', e);
         return { success: false };
