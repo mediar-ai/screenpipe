@@ -62,3 +62,4 @@ History*
 
 # storage files
 lib/storage/*.json
+!lib/storage/templates.json
