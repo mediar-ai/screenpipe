@@ -8,6 +8,7 @@ import downloadModelsUseCase from '@/modules/screenpipe-cli/use-cases/download-l
 import spawnScreenpipeUseCase from '@/modules/screenpipe-cli/use-cases/spawn-screenpipe.use-case';
 import listenToEventUseCase from '@/modules/event-management/listener/use-cases/listen-to-event.use-case';
 import { ScreenpipeAppEvent } from '@/modules/event-management/emitter/interfaces/event-emitter.service.interface';
+import { check } from '@tauri-apps/plugin-updater';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     function callback(event: ScreenpipeAppEvent) {
@@ -27,6 +28,11 @@ const screenpipeEngineStartup = fromPromise(async () => {
     await spawnScreenpipeUseCase()
 })
 
+const updateChecker = fromPromise<boolean | undefined>(async ({}) => {
+    const response =  await check()
+    return response?.available
+})
+
 export const screenpipeOnboardingFlow = setup({
     types:{
         events: {} as {type:'NEXT'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
@@ -36,7 +42,8 @@ export const screenpipeOnboardingFlow = setup({
         peripheralDevicesMachine,
         screenpipeLogoMachine,
         modelDownload,
-        screenpipeEngineStartup
+        screenpipeEngineStartup,
+        updateChecker
     }
 }).createMachine({
     initial:'core_models',
@@ -46,6 +53,7 @@ export const screenpipeOnboardingFlow = setup({
         spawnChild('peripheralDevicesMachine', { id:'peripheralDevicesMachine', systemId: 'peripheralDevicesMachine' }),
     ],
     context: {
+        updateAvailable: false,
         ai: {
             llama: 'asleep',
             openai: 'asleep',
@@ -134,10 +142,21 @@ export const screenpipeOnboardingFlow = setup({
         core_models: {
             tags: ['showTerminalLogs'],
             id: 'core_models',
-            initial: 'chineseMirrorToggle',
+            initial: 'introduction',
             on: {
                 NEXT: 'backend',
                 SKIP: 'backend'
+            },
+            invoke: {
+                id: 'updateChecker',
+                src: 'updateChecker',
+                onDone: {
+                    actions: [
+                        assign({
+                            updateAvailable: ({event}) => event.output
+                        })
+                    ]
+                }
             },
             states: {
                 introduction: {
@@ -162,7 +181,7 @@ export const screenpipeOnboardingFlow = setup({
                             }
                         },{delay:500}),
                         assign({
-                            ai: ({context,event}) => {
+                            ai: ({ context }) => {
                                 return {
                                     ...context.ai,
                                     llama: 'pending' 
@@ -171,12 +190,65 @@ export const screenpipeOnboardingFlow = setup({
                         }),
                     ],
                     on: {
-                        'NEXT': {
-                            target: 'chineseMirrorToggle',
-                            actions: [
-                                sendTo('convoBoxMachine',{type:'NEXT_STEP'})
-                            ]
-                        }
+                        'NEXT': [
+                            {
+                                guard: ({ context }) => !context.updateAvailable,
+                                target: ['chineseMirrorToggle'],
+                                actions: [
+                                    sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                                ]
+                            },
+                            {
+                                target: ['update'],
+                                actions: [
+                                    sendTo('convoBoxMachine',{type:'NEXT_STEP'})
+                                ]
+                            }
+                        ]
+                    }
+                },
+                update: {
+                    initial: 'intro',
+                    states: {
+                        intro :{
+                            description: 'objective of this step is to update screenpipe before setting up models. failing to do so results in unexpected behaviour when attempting to run screenpipe setup command.',
+                            entry: [   
+                                sendTo('convoBoxMachine', {  type:'UPDATE',
+                                    payload: {
+                                        textBox: {
+                                            id: 61,
+                                            text: 'looks like you\'re running an outdated version of screenpipe. to download and configure screenpipe\'s core models properly you first need to update the app.',
+                                        },
+                                        button: [
+                                            {
+                                                variant: 'default',
+                                                size: 'default',
+                                                label: 'update app',
+                                                event: {type: 'UPDATE'}
+                                            },
+                                        ],
+                                        process: {
+                                            skippable: true
+                                        }
+                                    }
+                                },{delay:500}),
+                            ],
+                            on: {
+                                'UPDATE': {
+                                    actions: [
+                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                    ],
+                                    target: 'updateScreenpipe'
+                                },
+                                'skip': {
+                                    actions: [
+                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                    ],
+                                    target: '#backend'
+                                },
+                            } 
+                        },
+                        updateScreenpipe: {}
                     }
                 },
                 chineseMirrorToggle: {
