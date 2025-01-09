@@ -1,6 +1,0 @@
-{
-  "paste_here_url_from_linkedin_with_2nd_grade_connections": "",
-  "request_for_intro_prompt_to_AI": "I noticed that you are connected with ${fullName}. I'm currently working on this cool software https://screenpi.pe/#business that capture knowledge from employee computers and processes it with on-premise LLMs. Can you make an intro?",
-  "llm_appraisal_prompt": "give a one sentence summary that i can send back to this person with appraisal, make it sound like a message to a friend, make it less grandiose and more factual, make it even shorter. E.g. it can start with personal greeting",
-  "llm_user_reply_needs_response_prompt": "I'm asking my connections introductions, right now I received some new messages, do these messages require response or I can proceed with request for introduction, answer yes, no with percentage of confidence:\nfor example\nyes [80%]\nno [20%]\n\nmessage:\n${message}"
-}

@@ -1,0 +1,281 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { RefreshCw, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+interface ConnectionStats {
+  pending: number;
+  accepted: number;
+  declined: number;
+  email_required: number;
+  cooldown: number;
+  total: number;
+}
+
+export function HarvestClosestConnections() {
+  const [isRunning, setIsRunning] = useState(false);
+  const [status, setStatus] = useState("");
+  const [nextHarvestTime, setNextHarvestTime] = useState<string | null>(null);
+  const [connectionsSent, setConnectionsSent] = useState(0);
+  const [dailyLimitReached, setDailyLimitReached] = useState(false);
+  const [weeklyLimitReached, setWeeklyLimitReached] = useState(false);
+  const [stats, setStats] = useState<ConnectionStats>({
+    pending: 0,
+    accepted: 0,
+    declined: 0,
+    email_required: 0,
+    cooldown: 0,
+    total: 0
+  });
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    // Update initial state
+    fetch("/api/harvest/status")
+      .then(res => res.json())
+      .then(data => {
+        setConnectionsSent(data.connectionsSent || 0);
+        setDailyLimitReached(data.dailyLimitReached || false);
+        setWeeklyLimitReached(data.weeklyLimitReached || false);
+        if (data.nextHarvestTime) {
+          setNextHarvestTime(data.nextHarvestTime);
+          if (new Date(data.nextHarvestTime) > new Date()) {
+            setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
+          }
+        }
+        setIsRunning(data.isHarvesting || false);
+        if (data.stats) {
+          setStats(data.stats);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (isRunning) {
+      const interval = setInterval(() => {
+        fetch("/api/harvest/status")
+          .then(res => res.json())
+          .then(data => {
+            setConnectionsSent(data.connectionsSent || 0);
+            setDailyLimitReached(data.dailyLimitReached || false);
+            setWeeklyLimitReached(data.weeklyLimitReached || false);
+            if (data.stats) {
+              setStats(data.stats);
+            }
+            if (data.nextHarvestTime) {
+              setNextHarvestTime(data.nextHarvestTime);
+              if (new Date(data.nextHarvestTime) > new Date()) {
+                setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
+              }
+            }
+            if (!data.isHarvesting && isRunning) {
+              setIsRunning(false);
+              setStatus("harvest process stopped");
+            }
+          })
+          .catch(console.error);
+      }, 2000);
+
+      return () => clearInterval(interval);
+    }
+  }, [isRunning]);
+
+  useEffect(() => {
+    if (!isRunning && nextHarvestTime) {
+      const checkCooldown = async () => {
+        const now = new Date();
+        const harvestTime = new Date(nextHarvestTime);
+        
+        if (now >= harvestTime) {
+          // Clear the nextHarvestTime before restarting
+          setNextHarvestTime(null);
+          setStatus("cooldown period ended, restarting...");
+          await startHarvesting();
+        }
+      };
+
+      const timer = setInterval(checkCooldown, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [nextHarvestTime, isRunning]);
+
+  const startHarvesting = async () => {
+    try {
+      setIsRunning(true);
+      setStatus("starting harvesting process...");
+
+      const response = await fetch("/api/harvest/start", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+      console.log('harvest start response:', data);
+
+      if (response.ok) {
+        setStatus(data.message?.toLowerCase() || 'unknown status');
+        setConnectionsSent(data.connectionsSent || 0);
+        setDailyLimitReached(data.dailyLimitReached || false);
+        setWeeklyLimitReached(data.weeklyLimitReached || false);
+        if (data.nextHarvestTime) {
+          setNextHarvestTime(data.nextHarvestTime);
+        }
+      } else {
+        // Handle 429 without stopping the workflow
+        if (response.status === 429) {
+          setNextHarvestTime(data.nextHarvestTime);
+          setStatus(data.message?.toLowerCase() || 'rate limit reached');
+        } else {
+          setStatus(`error: ${data.message?.toLowerCase() || 'unknown error'}`);
+          setIsRunning(false);
+        }
+      }
+    } catch (error: any) {
+      console.error("failed to start harvesting:", error);
+      setStatus(`error: ${error.message?.toLowerCase() || error.toString().toLowerCase()}`);
+      setIsRunning(false);
+    }
+  };
+
+  const stopHarvesting = async () => {
+    try {
+      const response = await fetch("/api/harvest/stop", {
+        method: "POST",
+      });
+      
+      if (response.ok) {
+        setStatus("stopping harvest process...");
+      } else {
+        const data = await response.json();
+        setStatus(`error stopping: ${data.message?.toLowerCase() || 'unknown error'}`);
+      }
+    } catch (error: any) {
+      console.error("failed to stop harvesting:", error);
+      setStatus(`${error.message?.toLowerCase() || error.toString().toLowerCase()}`);
+    }
+  };
+
+  const refreshStats = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await fetch("/api/harvest/status?refresh=true");
+      const data = await response.json();
+      
+      setConnectionsSent(data.connectionsSent || 0);
+      setDailyLimitReached(data.dailyLimitReached || false);
+      setWeeklyLimitReached(data.weeklyLimitReached || false);
+      if (data.stats) {
+        setStats(data.stats);
+      }
+    } catch (error) {
+      console.error("failed to refresh stats:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-row items-center gap-4">
+        <div className="flex items-center gap-4">
+          <span className="text-lg font-medium">
+            harvest connections {connectionsSent > 0 && `(${connectionsSent})`}
+          </span>
+          <div className="flex gap-2">
+            {!isRunning && (
+              <button
+                onClick={startHarvesting}
+                className="bg-black text-white px-4 py-2 rounded-md text-base"
+              >
+                start
+              </button>
+            )}
+            {isRunning && (
+              <button
+                onClick={stopHarvesting}
+                className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
+              >
+                stop
+              </button>
+            )}
+          </div>
+        </div>
+        {isRunning && status && (
+          <span className="text-sm text-gray-500">
+            {status}
+          </span>
+        )}
+        {(dailyLimitReached || weeklyLimitReached) && nextHarvestTime && (
+          <span className="text-sm text-gray-500">
+            {dailyLimitReached && `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`}
+            {weeklyLimitReached && `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`}
+          </span>
+        )}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        automatically send connection requests to your closest linkedin connections
+      </p>
+
+      <div className="flex items-center mt-4 mb-2">
+        <span className="text-sm font-medium">stats</span>
+        <button
+          onClick={refreshStats}
+          disabled={isRefreshing}
+          className={`p-2 rounded-md transition-all ${
+            isRefreshing ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-100'
+          }`}
+          aria-label="refresh stats"
+        >
+          <RefreshCw 
+            className={`h-5 w-5 transition-all ${
+              isRefreshing ? 'animate-spin text-gray-400' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="flex flex-col items-center p-3 bg-gray-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.total}</span>
+          <span className="text-sm text-muted-foreground">total</span>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-blue-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.pending}</span>
+          <span className="text-sm text-muted-foreground">pending</span>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-green-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.accepted}</span>
+          <span className="text-sm text-muted-foreground">accepted</span>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-red-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.declined}</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">declined</span>
+                <Info className="h-3 w-3 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-sm">profiles that didn&apos;t accept your connection request within 14 days are marked as declined and the request is withdrawn</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-yellow-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.email_required}</span>
+          <span className="text-sm text-muted-foreground">email required</span>
+        </div>
+        <div className="flex flex-col items-center p-3 bg-orange-50 rounded-lg">
+          <span className="text-lg font-medium">{stats.cooldown}</span>
+          <span className="text-sm text-muted-foreground">cooldown</span>
+        </div>
+      </div>
+    </div>
+  );
+}
