@@ -1,7 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
 use tokio::time::{interval, Duration};
-use tracing::info;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]

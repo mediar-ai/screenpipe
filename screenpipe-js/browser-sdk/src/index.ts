@@ -4,6 +4,8 @@ import type {
   NotificationOptions,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
+  TranscriptionChunk,
+  TranscriptionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 
@@ -37,6 +39,11 @@ export interface BrowserPipe {
     moveMouse: (x: number, y: number) => Promise<boolean>;
     click: (button: "left" | "right" | "middle") => Promise<boolean>;
   };
+  streamTranscriptions(): AsyncGenerator<
+    TranscriptionStreamResponse,
+    void,
+    unknown
+  >;
 }
 
 // Browser-only implementations
@@ -111,6 +118,47 @@ export const pipe: BrowserPipe = {
     click: (button: "left" | "right" | "middle") =>
       sendInputControl({ type: "MouseClick", data: button }),
   },
+
+  async *streamTranscriptions(): AsyncGenerator<
+    TranscriptionStreamResponse,
+    void,
+    unknown
+  > {
+    const eventSource = new EventSource(
+      "http://localhost:3030/sse/transcriptions"
+    );
+
+    try {
+      while (true) {
+        const chunk: TranscriptionChunk = await new Promise(
+          (resolve, reject) => {
+            eventSource.onmessage = (event) => {
+              resolve(JSON.parse(event.data));
+            };
+            eventSource.onerror = (error) => {
+              reject(error);
+            };
+          }
+        );
+
+        yield {
+          id: crypto.randomUUID(),
+          object: "text_completion_chunk",
+          created: Date.now(),
+          model: "screenpipe-realtime",
+          choices: [
+            {
+              text: chunk.text,
+              index: 0,
+              finish_reason: chunk.is_final ? "stop" : null,
+            },
+          ],
+        };
+      }
+    } finally {
+      eventSource.close();
+    }
+  },
 };
 
 const sendDesktopNotification = pipe.sendDesktopNotification;
@@ -118,5 +166,9 @@ const queryScreenpipe = pipe.queryScreenpipe;
 const input = pipe.input;
 
 export { sendDesktopNotification, queryScreenpipe, input };
-export { toCamelCase, toSnakeCase, convertToCamelCase } from "../../common/utils";
+export {
+  toCamelCase,
+  toSnakeCase,
+  convertToCamelCase,
+} from "../../common/utils";
 export * from "../../common/types";

@@ -7,17 +7,25 @@ import type {
   InputControlResponse,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
+  TranscriptionStreamResponse,
+  TranscriptionChunk,
 } from "../../common/types";
-import { toSnakeCase, convertToCamelCase, toCamelCase } from "../../common/utils";
+import {
+  toSnakeCase,
+  convertToCamelCase,
+  toCamelCase,
+} from "../../common/utils";
 import { SettingsManager } from "./SettingsManger";
 import { Scheduler } from "./Scheduler";
 import { InboxManager } from "./InboxManager";
-
+import { EventSource } from "eventsource";
 
 class NodePipe {
   public input = {
-    type: (text: string) => this.sendInputControl({ type: "WriteText", data: text }),
-    press: (key: string) => this.sendInputControl({ type: "KeyPress", data: key }),
+    type: (text: string) =>
+      this.sendInputControl({ type: "WriteText", data: text }),
+    press: (key: string) =>
+      this.sendInputControl({ type: "KeyPress", data: key }),
     moveMouse: (x: number, y: number) =>
       this.sendInputControl({ type: "MouseMove", data: { x, y } }),
     click: (button: "left" | "right" | "middle") =>
@@ -126,6 +134,46 @@ class NodePipe {
     } catch (error) {
       console.error("error loading pipe.json:", error);
       return {};
+    }
+  }
+
+  public async *streamTranscriptions(): AsyncGenerator<
+    TranscriptionStreamResponse,
+    void,
+    unknown
+  > {
+    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+    const eventSource = new EventSource(`${apiUrl}/sse/transcriptions`);
+
+    try {
+      while (true) {
+        const chunk: TranscriptionChunk = await new Promise(
+          (resolve, reject) => {
+            eventSource.onmessage = (event) => {
+              resolve(JSON.parse(event.data));
+            };
+            eventSource.onerror = (error) => {
+              reject(error);
+            };
+          }
+        );
+
+        yield {
+          id: crypto.randomUUID(),
+          object: "text_completion_chunk",
+          created: Date.now(),
+          model: "screenpipe-realtime",
+          choices: [
+            {
+              text: chunk.text,
+              index: 0,
+              finish_reason: chunk.is_final ? "stop" : null,
+            },
+          ],
+        };
+      }
+    } finally {
+      eventSource.close();
     }
   }
 }

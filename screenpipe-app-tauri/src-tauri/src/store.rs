@@ -64,19 +64,3 @@ pub fn get_store(
         .map_err(|e| anyhow::anyhow!(e))?)
 }
 
-pub async fn get_profiles_config(app: &AppHandle) -> anyhow::Result<ProfilesConfig> {
-    let base_dir = get_base_dir(app, None)?;
-    let profiles_path = base_dir.join("profiles.bin");
-    let profiles_store = StoreBuilder::new(app, profiles_path).build()?;
-
-    Ok(ProfilesConfig {
-        active_profile: profiles_store
-            .get("activeProfile")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_else(|| "default".to_string()),
-        profiles: profiles_store
-            .get("profiles")
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_else(|| vec!["default".to_string()]),
-    })
-}
