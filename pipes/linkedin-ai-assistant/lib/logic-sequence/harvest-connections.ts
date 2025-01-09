@@ -57,7 +57,7 @@ export async function startHarvesting(
   stopRequested = false;
 
   const connections = await loadConnections();
-  console.log('initial connections state:', connections);
+  // console.log('initial connections state:', connections);
 
   // Set harvesting state to true immediately
   await saveHarvestingState(true);
