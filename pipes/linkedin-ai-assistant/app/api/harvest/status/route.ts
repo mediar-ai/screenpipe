@@ -4,6 +4,9 @@ import { getActiveBrowser } from '@/lib/browser-setup';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 async function checkConnectionStatus(page: any, profileUrl: string, connection: any) {
   // check if pending for more than 14 days
   if (connection.status === 'pending' && connection.timestamp) {
@@ -62,17 +65,39 @@ async function checkConnectionStatus(page: any, profileUrl: string, connection: 
   return 'pending';
 }
 
+// Add a type for harvesting status
+type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
+
+// Add cache at module level
+let lastStatus = {
+  nextHarvestTime: '',
+  isHarvesting: '',
+  connectionsSent: 0
+};
+
+// Add cache for cooldown check
+let lastCooldownCheck = {
+  nextTime: '',
+  shouldRestart: false
+};
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const shouldRefresh = url.searchParams.get('refresh') === 'true';
     let connectionsStore = await loadConnections();
 
-    console.log('checking harvest status:', {
+    // Only log if values changed
+    const currentStatus = {
       nextHarvestTime: connectionsStore.nextHarvestTime,
       isHarvesting: connectionsStore.isHarvesting,
       connectionsSent: connectionsStore.connectionsSent
-    });
+    };
+
+    if (JSON.stringify(lastStatus) !== JSON.stringify(currentStatus)) {
+      console.log('harvest status changed:', currentStatus);
+      lastStatus = currentStatus;
+    }
 
     // If isHarvesting is true but no active harvesting is happening, restart it
     if (connectionsStore.isHarvesting && !connectionsStore.nextHarvestTime) {
@@ -92,13 +117,23 @@ export async function GET(request: Request) {
     if (connectionsStore.nextHarvestTime) {
       const nextTime = new Date(connectionsStore.nextHarvestTime);
       const now = new Date();
-      console.log('cooldown check:', {
-        nextTime: nextTime.toISOString(),
-        now: now.toISOString(),
-        shouldRestart: nextTime <= now
-      });
+      const shouldRestart = nextTime <= now;
 
-      if (nextTime <= now) {
+      // Only track nextTime and shouldRestart state changes
+      const currentCooldownCheck = {
+        nextTime: nextTime.toISOString(),
+        shouldRestart
+      };
+
+      if (JSON.stringify(lastCooldownCheck) !== JSON.stringify(currentCooldownCheck)) {
+        console.log('cooldown check:', {
+          ...currentCooldownCheck,
+          now: now.toISOString() // Include now only in the log
+        });
+        lastCooldownCheck = currentCooldownCheck;
+      }
+
+      if (shouldRestart) {
         console.log('cooldown period ended, restarting harvest process');
         await saveNextHarvestTime('');
         await saveHarvestingState(true);
@@ -143,7 +178,12 @@ export async function GET(request: Request) {
     }, {} as Record<string, number>);
 
     return NextResponse.json({
-      isHarvesting: connectionsStore.isHarvesting || false,
+      // Convert boolean isHarvesting to three-state status
+      isHarvesting: connectionsStore.nextHarvestTime && new Date(connectionsStore.nextHarvestTime) > new Date()
+        ? 'cooldown'
+        : connectionsStore.isHarvesting
+          ? 'running'
+          : 'stopped',
       nextHarvestTime: connectionsStore.nextHarvestTime,
       connectionsSent: connectionsStore.connectionsSent || 0,
       stats: {
