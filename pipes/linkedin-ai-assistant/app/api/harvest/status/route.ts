@@ -68,17 +68,48 @@ export async function GET(request: Request) {
     const shouldRefresh = url.searchParams.get('refresh') === 'true';
     let connectionsStore = await loadConnections();
 
-    // Check if we need to clear cooldown and restart harvesting
+    console.log('checking harvest status:', {
+      nextHarvestTime: connectionsStore.nextHarvestTime,
+      isHarvesting: connectionsStore.isHarvesting,
+      connectionsSent: connectionsStore.connectionsSent
+    });
+
+    // If isHarvesting is true but no active harvesting is happening, restart it
+    if (connectionsStore.isHarvesting && !connectionsStore.nextHarvestTime) {
+      console.log('detected stale harvesting state, restarting process');
+      
+      // Start harvesting in the background
+      startHarvesting().then(result => {
+        console.log('harvest restart result:', result);
+      }).catch(error => {
+        console.error('failed to restart harvesting:', error);
+        // Reset harvesting state if start fails
+        saveHarvestingState(false).catch(console.error);
+      });
+    }
+
+    // Original cooldown check
     if (connectionsStore.nextHarvestTime) {
       const nextTime = new Date(connectionsStore.nextHarvestTime);
-      if (nextTime <= new Date()) {
-        // Clear cooldown and reset harvesting state
+      const now = new Date();
+      console.log('cooldown check:', {
+        nextTime: nextTime.toISOString(),
+        now: now.toISOString(),
+        shouldRestart: nextTime <= now
+      });
+
+      if (nextTime <= now) {
+        console.log('cooldown period ended, restarting harvest process');
         await saveNextHarvestTime('');
-        await saveHarvestingState(false);
+        await saveHarvestingState(true);
         connectionsStore = await loadConnections();
         
-        // Force restart harvesting
-        startHarvesting().catch(console.error);
+        startHarvesting().then(result => {
+          console.log('harvest restart result:', result);
+        }).catch(error => {
+          console.error('failed to restart harvesting:', error);
+          saveHarvestingState(false).catch(console.error);
+        });
       }
     }
 
