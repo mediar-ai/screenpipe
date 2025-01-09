@@ -16,10 +16,19 @@ interface ConnectionStats {
   email_required: number;
   cooldown: number;
   total: number;
+  averageProfileCheckDuration?: number;
 }
 
 // Add type for harvesting status
 type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
+
+// Add helper function for formatting time
+function formatTimeRemaining(milliseconds: number): string {
+  const seconds = Math.ceil(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}m ${remainingSeconds}s`;
+}
 
 export function HarvestClosestConnections() {
   const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
@@ -37,6 +46,7 @@ export function HarvestClosestConnections() {
     total: 0
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
     // Update initial state
@@ -189,8 +199,23 @@ export function HarvestClosestConnections() {
   const refreshStats = async () => {
     try {
       setIsRefreshing(true);
+      
+      // Start polling for progress
+      const pollInterval = setInterval(async () => {
+        const response = await fetch("/api/harvest/status");
+        const data = await response.json();
+        if (data.refreshProgress) {
+          setRefreshProgress(data.refreshProgress);
+        }
+      }, 1000);
+
+      // Trigger the actual refresh
       const response = await fetch("/api/harvest/status?refresh=true");
       const data = await response.json();
+      
+      // Clear polling and progress
+      clearInterval(pollInterval);
+      setRefreshProgress(null);
       
       setConnectionsSent(data.connectionsSent || 0);
       setDailyLimitReached(data.dailyLimitReached || false);
@@ -202,6 +227,7 @@ export function HarvestClosestConnections() {
       console.error("failed to refresh stats:", error);
     } finally {
       setIsRefreshing(false);
+      setRefreshProgress(null);
     }
   };
 
@@ -263,6 +289,16 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
+        {refreshProgress && (
+          <span className="ml-2 text-sm text-gray-500">
+            checking {refreshProgress.current}/{refreshProgress.total} profiles
+            {stats.averageProfileCheckDuration && (
+              <span className="ml-2">
+                (~{formatTimeRemaining((refreshProgress.total - refreshProgress.current) * stats.averageProfileCheckDuration)} remaining)
+              </span>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">

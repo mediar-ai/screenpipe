@@ -38,6 +38,24 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         // Validate that the button exists before trying to interact
         const isButtonAttached = await foundButton.evaluate(btn => btn instanceof HTMLButtonElement);
         if (!isButtonAttached) {
+            // check if there's a "Connect" button first before failing
+            const connectButton = await page.evaluateHandle(() => {
+                const buttons = document.querySelectorAll<HTMLButtonElement>('button.artdeco-button');
+                for (const btn of buttons) {
+                    const text = btn.innerText.trim();
+                    if (text === 'Connect') {
+                        return btn;
+                    }
+                }
+                return null;
+            });
+
+            const connectExists = await connectButton.evaluate(btn => btn instanceof HTMLButtonElement);
+            if (connectExists) {
+                console.log('found connect button - request was already cancelled');
+                return { success: true };
+            }
+
             console.log('button is no longer attached to DOM');
             return { success: false };
         }
