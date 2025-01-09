@@ -30,6 +30,12 @@ function formatTimeRemaining(milliseconds: number): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+// Add error type
+type ApiError = {
+  message?: string;
+  toString: () => string;
+};
+
 export function HarvestClosestConnections() {
   const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
   const [status, setStatus] = useState("");
@@ -171,9 +177,10 @@ export function HarvestClosestConnections() {
           setHarvestingStatus('stopped');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("failed to start harvesting:", error);
-      setStatus(`error: ${error.message?.toLowerCase() || error.toString().toLowerCase()}`);
+      const err = error as ApiError;
+      setStatus(`error: ${err.message?.toLowerCase() || err.toString().toLowerCase()}`);
       setHarvestingStatus('stopped');
     }
   };
@@ -190,9 +197,10 @@ export function HarvestClosestConnections() {
         const data = await response.json();
         setStatus(`error stopping: ${data.message?.toLowerCase() || 'unknown error'}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("failed to stop harvesting:", error);
-      setStatus(`${error.message?.toLowerCase() || error.toString().toLowerCase()}`);
+      const err = error as ApiError;
+      setStatus(`${err.message?.toLowerCase() || err.toString().toLowerCase()}`);
     }
   };
 
