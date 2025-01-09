@@ -252,6 +252,14 @@ const normalizeId = (id: string): string => {
   return id.replace(/^pipe-/, "").toLowerCase();
 };
 
+const DEFAULT_PIPES = [
+  "memories",
+  "data-table",
+  "search",
+  "timeline",
+  "identify-speakers",
+];
+
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -297,11 +305,60 @@ const PipeStore: React.FC = () => {
     loadReadmes();
   }, []); // Run once on component mount
 
+  // Add this new effect to install default pipes
+  useEffect(() => {
+    const installDefaultPipes = async () => {
+      if (!health || health?.status === "error") return;
+
+      // Get currently installed pipes
+      const response = await fetch("http://localhost:3030/pipes/list");
+      const data = await response.json();
+      const installedPipeIds = data.data.map((p: Pipe) => p.id);
+
+      // Find which default pipes need to be installed
+      const pipesToInstall = DEFAULT_PIPES.filter(
+        (id) => !installedPipeIds.includes(id)
+      );
+
+      if (pipesToInstall.length === 0) return;
+
+      // Create initial toast
+      const t = toast({
+        title: "installing core pipes",
+        description: "setting up your workspace...",
+        duration: 100000,
+      });
+
+      // Install each missing pipe
+      for (const pipeId of pipesToInstall) {
+        const pipe = corePipes.find((p) => p.id === pipeId);
+        if (pipe?.url) {
+          try {
+            await handleDownloadPipe(pipe.url);
+          } catch (error) {
+            console.error(`Failed to install ${pipeId}:`, error);
+          }
+        }
+      }
+
+      t.update({
+        id: t.id,
+        title: "core pipes installed",
+        description: "your workspace is ready!",
+        duration: 2000,
+      });
+
+      await fetchInstalledPipes();
+    };
+
+    installDefaultPipes();
+  }, [health?.status]);
+
   const handleResetAllPipes = async () => {
     try {
       toast({
         title: "resetting pipes",
-        description: "this will delete all your pipes and reinstall them.",
+        description: "this will delete all your pipes.",
       });
       const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
@@ -430,6 +487,7 @@ const PipeStore: React.FC = () => {
       if (freshPipe) {
         setSelectedPipe(freshPipe);
       }
+      t.dismiss();
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
@@ -667,6 +725,7 @@ const PipeStore: React.FC = () => {
 
         await fetchInstalledPipes();
         setNewRepoUrl("");
+        t.dismiss();
       } catch (error) {
         console.error("failed to add custom pipe:", error);
         toast({
@@ -851,6 +910,8 @@ const PipeStore: React.FC = () => {
 
       // Refresh the pipe list
       await fetchInstalledPipes();
+
+      t.dismiss();
     } catch (error) {
       console.error("failed to update pipe:", error);
       toast({
@@ -1244,7 +1305,7 @@ const PipeStore: React.FC = () => {
   const handleCardClick = async (pipe: Pipe) => {
     // Special handling for LinkedIn pipe
     if (pipe.id === "pipe-linkedin-ai-assistant") {
-      openUrl("https://cal.com/louis030195/screenpipe-linkedin-onboarding");
+      openUrl("https://screenpi.pe/linkedin");
       return;
     }
 
