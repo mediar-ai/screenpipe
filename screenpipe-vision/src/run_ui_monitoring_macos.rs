@@ -1,13 +1,22 @@
 use anyhow::Result;
 use log::{debug, error, info, warn};
+use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
-use tokio::time::{sleep, Duration};
+use tokio::signal;
+use tokio::time::{sleep, timeout, Duration};
 use which::which;
 
-pub async fn run_ui() -> Result<()> {
+use crate::core::RealtimeVisionEvent;
+
+pub async fn run_ui(
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
+) -> Result<()> {
     info!("starting ui monitoring service...");
 
     let binary_name = "ui_monitor";
@@ -49,9 +58,104 @@ pub async fn run_ui() -> Result<()> {
 
     info!("ui_monitor path: {}", ui_monitor_path.display());
 
-    loop {
+    let named_pipe = setup_ipc_queue().await?;
+
+    let named_pipe_clone = named_pipe.clone();
+    let is_running = Arc::new(AtomicBool::new(true));
+    let is_running_clone = is_running.clone();
+    let (is_running_sender, mut is_running_receiver) = tokio::sync::broadcast::channel(1);
+    tokio::spawn(async move {
+        let mut terminate_signal =
+            signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
+        tokio::select! {
+            _ = signal::ctrl_c() => {
+                debug!("ctrl-c received");
+            }
+            _ = terminate_signal.recv() => {
+                debug!("terminate signal received");
+            }
+        }
+
+        if fs::metadata(&named_pipe_clone.path).is_ok() {
+            if let Err(e) = fs::remove_file(&named_pipe_clone.path) {
+                eprintln!("Failed to remove named pipe: {:?}", e);
+            }
+        }
+        is_running_clone.store(false, std::sync::atomic::Ordering::Relaxed);
+        is_running_sender.send(false).unwrap();
+    });
+
+    let named_pipe_clone = named_pipe.clone();
+    tokio::spawn(async move {
+        // add loop and timeout for opening the file
+        let mut file: Option<File> = None;
+        let mut attempts = 0;
+
+        while attempts < 10 {
+            match timeout(Duration::from_secs(5), named_pipe_clone.open()).await {
+                Ok(Ok(opened_file)) => {
+                    // Successfully opened the file
+                    file = Some(opened_file);
+                    break;
+                }
+                Ok(Err(e)) => {
+                    error!("failed to open named pipe: {}", e);
+                    attempts += 1;
+                    sleep(Duration::from_secs(1)).await;
+                }
+                Err(_) => {
+                    error!("timeout while trying to open named pipe");
+                    attempts += 1;
+                    sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+
+        let file = match file {
+            Some(f) => f,
+            None => {
+                return Err(anyhow::anyhow!(
+                    "failed to open named pipe after multiple attempts"
+                ))
+            }
+        };
+
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+
+        loop {
+            tokio::select! {
+                _ = is_running_receiver.recv() => {
+                    info!("ui_monitor is shutting down");
+                    return Ok(());
+                }
+                line = lines.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            if let Ok(event) = serde_json::from_str(&line) {
+                                let _ = realtime_vision_sender.send(RealtimeVisionEvent::UIFrame(event));
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            // Resource temporarily unavailable, retry after a short delay
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
+                        Err(e) => {
+                            error!("failed to read line from ui_monitor: {}", e);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    });
+
+    let named_pipe_clone = named_pipe.clone();
+
+    while is_running.load(std::sync::atomic::Ordering::Relaxed) {
         // Clone the PathBuf for each iteration
         let mut child = Command::new(&ui_monitor_path)
+            .arg(named_pipe_clone.path.clone())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -102,4 +206,62 @@ pub async fn run_ui() -> Result<()> {
             }
         }
     }
+
+    Ok(())
 }
+
+async fn setup_ipc_queue() -> Result<NamedPipe> {
+    // create random /dev/shm/screenpipe-ipc-queue-<random-string>
+    // read 16 bytes from /dev/urandom
+    let mut random_bytes = [0u8; 16];
+    let mut file = File::open("/dev/urandom").await?;
+    file.read_exact(&mut random_bytes).await?;
+    let mut path: String = String::from("/tmp/screenpipe-ui-ipc-queue-");
+    for byte in random_bytes {
+        path.push_str(&format!("{:02x}", byte));
+    }
+
+    NamedPipe::new(path).await
+}
+
+#[derive(Debug, Clone)]
+struct NamedPipe {
+    pub path: String,
+}
+
+impl NamedPipe {
+    async fn new(path: String) -> Result<Self> {
+        // Create the named pipe
+        let c_path = std::ffi::CString::new(path.clone()).expect("CString::new failed");
+        let result = unsafe { libc::mkfifo(c_path.as_ptr(), libc::S_IRUSR | libc::S_IWUSR) };
+        if result != 0 {
+            panic!(
+                "Failed to create named pipe: {:?}",
+                std::io::Error::last_os_error()
+            );
+        }
+
+        Ok(NamedPipe { path })
+    }
+
+    async fn open(&self) -> Result<File> {
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NONBLOCK) // Open in non-blocking mode
+            .open(self.path.clone())
+            .await?;
+
+        Ok(file)
+    }
+}
+
+// impl Drop for NamedPipe {
+//     fn drop(&mut self) {
+//         // Remove the pipe if it exists
+//         if fs::metadata(&self.path).is_ok() {
+//             if let Err(e) = fs::remove_file(&self.path) {
+//                 eprintln!("Failed to remove named pipe: {:?}", e);
+//             }
+//         }
+//     }
+// }

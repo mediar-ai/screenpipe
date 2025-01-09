@@ -8,19 +8,28 @@ use crate::monitor::get_monitor_by_id;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
+// use crate::CaptureResult;
 use anyhow::{anyhow, Result};
 #[cfg(target_os = "macos")]
 use cidre::ns;
 use image::DynamicImage;
+use image::ImageBuffer;
+use image::Rgba;
 use log::{debug, error};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
+use serde::ser::SerializeTuple;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::Serialize;
+use serde::Serializer;
 use serde_json;
 use std::sync::Arc;
+use std::time::SystemTime;
 use std::{
     collections::HashMap,
-    time::{Duration, Instant},
     sync::OnceLock,
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
@@ -34,14 +43,80 @@ use xcap::Monitor;
 #[cfg(target_os = "macos")]
 static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 
+fn serialize_image<S>(image: &DynamicImage, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let buffer = image.to_rgba8();
+    let (width, height) = buffer.dimensions();
+    let bytes = buffer.into_raw();
+    let mut state = serializer.serialize_tuple(3)?;
+    state.serialize_element(&width)?;
+    state.serialize_element(&height)?;
+    state.serialize_element(&bytes)?;
+    state.end()
+}
+
+fn deserialize_image<'de, D>(deserializer: D) -> Result<DynamicImage, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let (width, height, bytes): (u32, u32, Vec<u8>) =
+        serde::Deserialize::deserialize(deserializer)?;
+    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, bytes)
+        .ok_or_else(|| serde::de::Error::custom("Failed to create image from raw bytes"))?;
+    Ok(DynamicImage::ImageRgba8(image))
+}
+
+fn serialize_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Calculate the duration since the instant was created
+    let duration_since_instant = instant.elapsed();
+
+    // Get the current system time and subtract the duration to get the original time
+    let original_time = SystemTime::now() - duration_since_instant;
+
+    // Convert the original time to a duration since the UNIX epoch
+    let duration_since_epoch = original_time
+        .duration_since(UNIX_EPOCH)
+        .map_err(serde::ser::Error::custom)?;
+
+    // Serialize the duration as milliseconds
+    let millis = duration_since_epoch.as_millis();
+    serializer.serialize_u128(millis)
+}
+
+fn deserialize_instant<'de, D>(deserializer: D) -> Result<Instant, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let millis: u128 = Deserialize::deserialize(deserializer)?;
+    Ok(Instant::now() - Duration::from_millis(millis as u64))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaptureResult {
+    #[serde(
+        serialize_with = "serialize_image",
+        deserialize_with = "deserialize_image"
+    )]
     pub image: DynamicImage,
     pub frame_number: u64,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
     pub timestamp: Instant,
     pub window_ocr_results: Vec<WindowOcrResult>,
 }
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowOcrResult {
+    #[serde(
+        serialize_with = "serialize_image",
+        deserialize_with = "deserialize_image"
+    )]
     pub image: DynamicImage,
     pub window_name: String,
     pub app_name: String,
@@ -266,6 +341,13 @@ pub async fn process_ocr_task(
     };
 
     if let Err(e) = result_tx.send(capture_result).await {
+        if e.to_string().contains("channel closed") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Channel closed",
+            ));
+        }
+
         error!("Failed to send OCR result: {}", e);
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -333,4 +415,19 @@ pub fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<Str
         .iter()
         .filter_map(|lang| map.get(lang).map(|&s| s.to_string()))
         .collect()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RealtimeVisionEvent {
+    Capture(CaptureResult),
+    UIFrame(UIFrame),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(C)]
+pub struct UIFrame {
+    pub window: String,
+    pub app: String,
+    pub text_output: String,
+    pub initial_traversal_at: String,
 }

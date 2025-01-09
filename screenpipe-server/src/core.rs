@@ -14,6 +14,7 @@ use screenpipe_audio::{
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
+use screenpipe_vision::core::RealtimeVisionEvent;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ pub async fn start_continuous_recording(
     realtime_audio_enabled: bool,
     realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -63,6 +65,7 @@ pub async fn start_continuous_recording(
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
+                let realtime_vision_sender_clone = realtime_vision_sender.clone();
 
                 let languages = languages.clone();
 
@@ -81,6 +84,7 @@ pub async fn start_continuous_recording(
                         video_chunk_duration,
                         languages.clone(),
                         capture_unfocused_windows,
+                        realtime_vision_sender_clone,
                     )
                     .await
                 })
@@ -186,6 +190,7 @@ async fn record_video(
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -224,6 +229,7 @@ async fn record_video(
         capture_unfocused_windows,
     );
 
+    // TODO: send realtime vision event
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
