@@ -117,6 +117,7 @@ pub async fn start_continuous_recording(
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
             languages.clone(),
+            Some(audio_devices_control.clone()),
         )
         .await?
     };
