@@ -22,7 +22,7 @@ fn main() {
         println!("cargo:rerun-if-changed=src/ui_monitoring_macos.swift");
 
         let status = Command::new("swiftc")
-            .args(&[
+            .args([
                 "-O",
                 "-whole-module-optimization",
                 "-enforce-exclusivity=unchecked",
