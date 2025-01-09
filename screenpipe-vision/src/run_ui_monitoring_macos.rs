@@ -82,7 +82,7 @@ pub async fn run_ui(
             }
         }
         is_running_clone.store(false, std::sync::atomic::Ordering::Relaxed);
-        is_running_sender.send(false).unwrap();
+        let _ = is_running_sender.send(false);
     });
 
     let named_pipe_clone = named_pipe.clone();

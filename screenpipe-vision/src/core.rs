@@ -8,17 +8,15 @@ use crate::monitor::get_monitor_by_id;
 use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
-// use crate::CaptureResult;
 use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
 #[cfg(target_os = "macos")]
 use cidre::ns;
+use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
-use image::ImageBuffer;
-use image::Rgba;
 use log::{debug, error};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
-use serde::ser::SerializeTuple;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
@@ -43,30 +41,45 @@ use xcap::Monitor;
 #[cfg(target_os = "macos")]
 static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
 
-fn serialize_image<S>(image: &DynamicImage, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    let buffer = image.to_rgba8();
-    let (width, height) = buffer.dimensions();
-    let bytes = buffer.into_raw();
-    let mut state = serializer.serialize_tuple(3)?;
-    state.serialize_element(&width)?;
-    state.serialize_element(&height)?;
-    state.serialize_element(&bytes)?;
-    state.end()
-}
+// fn serialize_image<S>(image: &DynamicImage, serializer: S) -> Result<S::Ok, S::Error>
+// where
+//     S: serde::Serializer,
+// {
+//     let mut webp_buffer = Vec::new();
+//     let mut cursor = std::io::Cursor::new(&mut webp_buffer);
 
-fn deserialize_image<'de, D>(deserializer: D) -> Result<DynamicImage, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let (width, height, bytes): (u32, u32, Vec<u8>) =
-        serde::Deserialize::deserialize(deserializer)?;
-    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(width, height, bytes)
-        .ok_or_else(|| serde::de::Error::custom("Failed to create image from raw bytes"))?;
-    Ok(DynamicImage::ImageRgba8(image))
-}
+//     let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 80);
+
+//     // Encode the image as WebP
+//     encoder
+//         .encode_image(image)
+//         .map_err(serde::ser::Error::custom)?;
+
+//     // Base64 encode the WebP data
+//     let base64_string = general_purpose::STANDARD.encode(webp_buffer);
+
+//     // Serialize the base64 string
+//     serializer.serialize_str(&base64_string)
+// }
+
+// fn deserialize_image<'de, D>(deserializer: D) -> Result<DynamicImage, D::Error>
+// where
+//     D: serde::Deserializer<'de>,
+// {
+//     // Deserialize the base64 string
+//     let base64_string: String = serde::Deserialize::deserialize(deserializer)?;
+
+//     // Decode base64 to bytes
+//     let image_bytes = general_purpose::STANDARD
+//         .decode(&base64_string)
+//         .map_err(serde::de::Error::custom)?;
+
+//     // Create a cursor to read from the bytes
+//     let cursor = std::io::Cursor::new(image_bytes);
+
+//     // Decode the PNG data back into an image
+//     image::load(cursor, image::ImageFormat::Jpeg).map_err(serde::de::Error::custom)
+// }
 
 fn serialize_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -96,27 +109,14 @@ where
     Ok(Instant::now() - Duration::from_millis(millis as u64))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CaptureResult {
-    #[serde(
-        serialize_with = "serialize_image",
-        deserialize_with = "deserialize_image"
-    )]
     pub image: DynamicImage,
     pub frame_number: u64,
-    #[serde(
-        serialize_with = "serialize_instant",
-        deserialize_with = "deserialize_instant"
-    )]
     pub timestamp: Instant,
     pub window_ocr_results: Vec<WindowOcrResult>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
 pub struct WindowOcrResult {
-    #[serde(
-        serialize_with = "serialize_image",
-        deserialize_with = "deserialize_image"
-    )]
     pub image: DynamicImage,
     pub window_name: String,
     pub app_name: String,
@@ -419,12 +419,31 @@ pub fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<Str
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RealtimeVisionEvent {
-    Capture(CaptureResult),
+    WindowOcr(WindowOcr),
     UIFrame(UIFrame),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[repr(C)]
+pub struct WindowOcr {
+    // #[serde(
+    //     serialize_with = "serialize_image",
+    //     deserialize_with = "deserialize_image"
+    // )]
+    // pub image: DynamicImage,
+    pub window_name: String,
+    pub app_name: String,
+    pub text: String,
+    pub text_json: Vec<HashMap<String, String>>, // Change this line
+    pub focused: bool,
+    pub confidence: f64,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
+    pub timestamp: Instant,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UIFrame {
     pub window: String,
     pub app: String,
