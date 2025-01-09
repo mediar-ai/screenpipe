@@ -229,7 +229,6 @@ async fn record_video(
         capture_unfocused_windows,
     );
 
-    // TODO: send realtime vision event
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
