@@ -555,14 +555,6 @@ async fn main() -> anyhow::Result<()> {
         while let Ok((device, control)) = rx.recv().await {
             match list_audio_devices().await {
                 Ok(available_devices) => {
-                    // Print current audio device controls
-                    info!("current audio device controls: {}", audio_devices_control_for_spawn.len());
-                    
-                    // Print all current entries
-                    for entry in audio_devices_control_for_spawn.iter() {
-                        info!("device: {} - running: {}", entry.key().name, entry.value().is_running);
-                    }
-
                     if !available_devices.contains(&device) {
                         error!("attempted to control non-existent device: {}", device.name);
                         continue;
@@ -571,11 +563,6 @@ async fn main() -> anyhow::Result<()> {
                     // Update the device state
                     audio_devices_control_for_spawn.insert(device.clone(), control.clone());
                     info!("Device state changed: {} - running: {}", device.name, control.is_running);
-                    
-                    // Print updated state
-                    for entry in audio_devices_control_for_spawn.iter() {
-                        info!("after update - device: {} - running: {}", entry.key().name, entry.value().is_running);
-                    }
                 }
                 Err(e) => {
                     error!("failed to list audio devices: {}", e);

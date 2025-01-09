@@ -206,7 +206,6 @@ pub async fn create_whisper_channel(
                         Ok(mut audio) => {
                             // Check if device should be recording
                             if let Some(control) = audio_devices_control.as_ref().unwrap().get(&audio.device) {
-                                info!("control: {:?}", control);
                                 if !control.is_running {
                                     debug!("Skipping audio processing for stopped device: {}", audio.device);
                                     continue;
