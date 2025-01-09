@@ -1,5 +1,15 @@
 {
+  "name": "Social Media Content Generator",
+  "description": "Generate content for Reddit or Twitter based on screen activity",
+  "version": "1.0.0", 
   "fields": [
+    {
+      "name": "platform",
+      "type": "string", 
+      "default": "reddit",
+      "description": "Choose platform (reddit or twitter)",
+      "options": ["reddit", "twitter"]
+    },
     {
       "name": "interval",
       "type": "number",
