@@ -40,6 +40,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
 import supabase from "@/lib/supabase/client";
 import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
+import localforage from "localforage";
 
 export interface Pipe {
   enabled: boolean;
@@ -58,6 +59,18 @@ interface CorePipe {
   url: string;
   credits: number;
   paid: boolean;
+}
+
+interface RunningPipe {
+  id: string;
+  port: number;
+  isRunning: boolean;
+}
+
+const BROKEN_PIPES_KEY = "broken_pipes";
+interface BrokenPipe {
+  id: string;
+  lastAttempt: number;
 }
 
 const corePipes: CorePipe[] = [
@@ -233,10 +246,22 @@ const PipeStore: React.FC = () => {
   const { user, refreshUser } = useUser();
   const [showCreditDialog, setShowCreditDialog] = useState(false);
   const [isEnabling, setIsEnabling] = useState(false);
+  const [runningPipes, setRunningPipes] = useState<Record<string, boolean>>({});
+  const [startupAttempts, setStartupAttempts] = useState<
+    Record<string, number>
+  >({});
+  const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
+  const MAX_STARTUP_ATTEMPTS = 10; // Will give up after ~20 seconds (10 attempts * 2 second interval)
 
   useEffect(() => {
     fetchInstalledPipes();
   }, [health?.status]);
+
+  useEffect(() => {
+    localforage.getItem<BrokenPipe[]>(BROKEN_PIPES_KEY).then((stored) => {
+      if (stored) setBrokenPipes(stored);
+    });
+  }, []);
 
   const handleResetAllPipes = async () => {
     try {
@@ -400,6 +425,14 @@ const PipeStore: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
+      // Reset broken state when manually toggling
+      await updateBrokenPipes(pipe.id, false);
+      setStartupAttempts((prev) => {
+        const next = { ...prev };
+        delete next[pipe.id];
+        return next;
+      });
+
       // Set loading state when enabling
       if (!pipe.enabled) {
         setIsEnabling(true);
@@ -667,6 +700,7 @@ const PipeStore: React.FC = () => {
   };
   const handleDeletePipe = async (pipe: Pipe) => {
     try {
+      await updateBrokenPipes(pipe.id, false);
       posthog.capture("delete_pipe", {
         pipe_id: pipe.id,
       });
@@ -793,8 +827,109 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const checkPipeRunning = async (port: number): Promise<boolean> => {
+    try {
+      // Use Tauri's http client instead of fetch to avoid CORS
+      const response = await fetch(`http://localhost:${port}`, {
+        mode: "no-cors", // Add no-cors mode to avoid CORS errors
+      });
+      return true; // If we get here, the port is responding
+    } catch {
+      return false;
+    }
+  };
+
+  const checkRunningPipes = async () => {
+    const runningStates: Record<string, boolean> = {};
+
+    // First check all pipes
+    for (const pipe of pipes) {
+      if (pipe.enabled && pipe.config?.port) {
+        runningStates[pipe.id] = await checkPipeRunning(pipe.config.port);
+      }
+    }
+
+    // Then update states based on results
+    setRunningPipes((prevRunning) => {
+      setStartupAttempts((prevAttempts) => {
+        const updatedAttempts = { ...prevAttempts };
+
+        for (const pipe of pipes) {
+          if (pipe.enabled && pipe.config?.port) {
+            const isRunning = runningStates[pipe.id];
+
+            if (!isRunning) {
+              updatedAttempts[pipe.id] = (prevAttempts[pipe.id] || 0) + 1;
+              console.log(
+                `Attempt ${updatedAttempts[pipe.id]} for pipe ${pipe.id}`
+              );
+
+              if (updatedAttempts[pipe.id] >= MAX_STARTUP_ATTEMPTS) {
+                handleDisablePipe(pipe.id);
+                delete updatedAttempts[pipe.id];
+                updateBrokenPipes(pipe.id, true);
+              }
+            } else {
+              delete updatedAttempts[pipe.id];
+              updateBrokenPipes(pipe.id, false);
+            }
+          }
+        }
+        return updatedAttempts;
+      });
+      return runningStates;
+    });
+  };
+
+  // Separate function to handle pipe disabling
+  const handleDisablePipe = async (pipeId: string) => {
+    try {
+      await fetch(`http://localhost:3030/pipes/disable`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipeId }),
+      });
+
+      toast({
+        title: "pipe startup failed",
+        description:
+          "the pipe has been disabled. please check the logs for more information.",
+        variant: "destructive",
+      });
+
+      // unselect the pipe
+      setSelectedPipe(null);
+
+      await fetchInstalledPipes();
+    } catch (error) {
+      console.error("failed to disable pipe:", error);
+    }
+  };
+
+  // Add this effect to periodically check running pipes
+  useEffect(() => {
+    const interval = setInterval(checkRunningPipes, 2000);
+    return () => clearInterval(interval);
+  }, [pipes]);
+
+  const updateBrokenPipes = async (pipeId: string, isBroken: boolean) => {
+    const updated = isBroken
+      ? [...brokenPipes, { id: pipeId, lastAttempt: Date.now() }]
+      : brokenPipes.filter((p) => p.id !== pipeId);
+
+    setBrokenPipes(updated);
+    await localforage.setItem(BROKEN_PIPES_KEY, updated);
+  };
+
   const renderPipeDetails = () => {
     if (!selectedPipe) return null;
+
+    const isPipeRunning = runningPipes[selectedPipe.id];
+    const startupAttempt = startupAttempts[selectedPipe.id] || 0;
+    const brokenPipe = brokenPipes.find((p) => p.id === selectedPipe.id);
+    const isStartupFailing = startupAttempt > 0;
 
     return (
       <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
@@ -970,7 +1105,6 @@ const PipeStore: React.FC = () => {
               {selectedPipe.enabled && selectedPipe?.config?.port && (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">pipe ui</h3>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -979,10 +1113,14 @@ const PipeStore: React.FC = () => {
                             `http://localhost:${selectedPipe.config!.port}`
                           )
                         }
-                        disabled={isEnabling}
+                        disabled={!isPipeRunning || isEnabling}
                       >
                         <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        {isEnabling ? "initializing..." : "open in browser"}
+                        {isEnabling
+                          ? "initializing..."
+                          : isPipeRunning
+                          ? "open in browser"
+                          : "initializing..."}
                       </Button>
                       <Button
                         variant="default"
@@ -1001,10 +1139,14 @@ const PipeStore: React.FC = () => {
                             });
                           }
                         }}
-                        disabled={isEnabling}
+                        disabled={!isPipeRunning || isEnabling}
                       >
                         <Puzzle className="mr-2 h-3.5 w-3.5" />
-                        {isEnabling ? "initializing..." : "open as app"}
+                        {isEnabling
+                          ? "initializing..."
+                          : isPipeRunning
+                          ? "open as app"
+                          : "initializing..."}
                       </Button>
                     </div>
                   </div>
@@ -1284,6 +1426,7 @@ const PipeStore: React.FC = () => {
                                         });
                                       }
                                     }}
+                                    disabled={!runningPipes[pipe.id]}
                                     className="hover:bg-muted"
                                   >
                                     <Puzzle className="h-3.5 w-3.5" />
