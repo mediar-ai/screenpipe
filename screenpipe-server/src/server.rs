@@ -18,11 +18,7 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{FrameCache, TimeSeriesFrame},
     video_utils::{
-        merge_videos,
-        validate_media,
-        MergeVideosRequest,
-        MergeVideosResponse,
-        ValidateMediaParams
+        merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
@@ -31,8 +27,8 @@ use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
-    DeviceType,
+    default_input_device, default_output_device, list_audio_devices,
+    realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
 };
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
@@ -74,6 +70,9 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
+    pub realtime_transcription_enabled: bool,
+    pub realtime_transcription_sender:
+        Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
 }
 
 // Update the SearchQuery struct
@@ -806,6 +805,8 @@ pub struct Server {
     vision_disabled: bool,
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
+    realtime_transcription_enabled: bool,
+    realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
 }
 
 impl Server {
@@ -820,6 +821,8 @@ impl Server {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
+        realtime_transcription_enabled: bool,
+        realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
     ) -> Self {
         Server {
             db,
@@ -831,6 +834,8 @@ impl Server {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
+            realtime_transcription_enabled,
+            realtime_transcription_sender,
         }
     }
 
@@ -863,6 +868,8 @@ impl Server {
             } else {
                 None
             },
+            realtime_transcription_enabled: self.realtime_transcription_enabled,
+            realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
         });
 
         let app = create_router()
@@ -920,15 +927,12 @@ async fn validate_media_handler(
     State(_state): State<Arc<AppState>>,
     Query(params): Query<ValidateMediaParams>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-
     match validate_media(&params.file_path).await {
         Ok(_) => Ok(Json(json!({"status": "valid media file"}))),
-        Err(e) => {
-            Err((
-                StatusCode::EXPECTATION_FAILED,
-                Json(json!({"status": e.to_string()})),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::EXPECTATION_FAILED,
+            Json(json!({"status": e.to_string()})),
+        )),
     }
 }
 
@@ -1010,7 +1014,7 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(&device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -1018,9 +1022,9 @@ async fn add_frame_to_db(
             db.insert_ocr_text(
                 frame_id,
                 &ocr.text,
-                &ocr.text_json.as_deref().unwrap_or(""),
-                &frame.app_name.as_deref().unwrap_or(""),
-                &frame.window_name.as_deref().unwrap_or(""),
+                ocr.text_json.as_deref().unwrap_or(""),
+                frame.app_name.as_deref().unwrap_or(""),
+                frame.window_name.as_deref().unwrap_or(""),
                 Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
                 false,
             )
@@ -1571,6 +1575,37 @@ async fn get_similar_speakers_handler(
     Ok(JsonResponse(similar_speakers))
 }
 
+async fn sse_transcription_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<
+    Sse<impl Stream<Item = Result<Event, Infallible>>>,
+    (StatusCode, JsonResponse<serde_json::Value>),
+> {
+    if !state.realtime_transcription_enabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({"error": "Real-time transcription is not enabled"})),
+        ));
+    }
+
+    // Get a new subscription - this won't affect the sender
+    let rx = state.realtime_transcription_sender.subscribe();
+
+    let stream = async_stream::stream! {
+        let mut rx = rx; // Create a new mutable reference to the receiver
+        while let Ok(event) = rx.recv().await {
+            yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
+        }
+        // Even if this stream ends, the sender remains active
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1612,6 +1647,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
+        .route("/sse/transcriptions", get(sse_transcription_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1787,7 +1823,7 @@ curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_fra
 curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
 
 # Search for content from the last 30 minutes
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
 
 # Search for content up to 1 hour ago
 curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq

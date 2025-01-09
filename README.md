@@ -13,8 +13,8 @@
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">build ai agents that have the full context</p>
-   <p align="center">open source | runs locally | developer friendly | 24/7 screen, mic, keyboard recording and control</p>
+   <p align="center">library & platform to build, distribute, monetize ai apps that have the full context (like rewind, granola, etc.)</p>
+   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic, keyboard recording and control</p>
 </p>
 
 <!-- Slogan -->
@@ -50,7 +50,7 @@
 
 <p align="center">
    
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/26b2986d-01aa-43de-acf0-375a72752894" />
 <img width="1312" alt="Screenshot 2024-12-16 at 2 39 32 PM" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
 
 <img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
@@ -59,11 +59,10 @@
 
 
 
-
 ---
 
 *news* 🔥
-- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Loom pipe, LinkedIn agent ...)
+- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, LinkedIn agent, Timeline ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
@@ -77,7 +76,7 @@
 
 # how it works?
 
-- we record everything 24/7, 100% locally
+- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
@@ -89,7 +88,7 @@
 
 # why?
 
-1. data is the biggest bottleneck in AI right now
+1. context is the dark matter of intelligence
 2. every second you are not recording is a missing context for AGI
 
 ## get started
