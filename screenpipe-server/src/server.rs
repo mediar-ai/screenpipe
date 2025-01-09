@@ -1611,19 +1611,43 @@ async fn sse_transcription_handler(
     ))
 }
 
+#[derive(Deserialize)]
+struct VisionSSEQuery {
+    images: Option<bool>,
+}
+
 async fn sse_vision_handler(
+    Query(query): Query<VisionSSEQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<
     Sse<impl Stream<Item = Result<Event, Infallible>>>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
+    if state.vision_disabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({"error": "Vision streaming is disabled"})),
+        ));
+    }
     // Get a new subscription - this won't affect the sender
     let rx = state.realtime_vision_sender.subscribe();
+
+    let include_images = query.images.unwrap_or(false);
 
     let stream = async_stream::stream! {
         let mut rx = rx; // Create a new mutable reference to the receiver
         while let Ok(event) = rx.recv().await {
-            yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
+            match event {
+                RealtimeVisionEvent::WindowOcr(mut frame) => {
+                    if !include_images {
+                        frame.image = None; // Remove the image data if not enabled
+                    }
+                    yield Ok(Event::default().data(serde_json::to_string(&frame).unwrap_or_default()));
+                }
+                _ => {
+                    yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
+                }
+            }
         }
         // Even if this stream ends, the sender remains active
     };

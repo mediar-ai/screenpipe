@@ -245,7 +245,7 @@ async fn record_video(
 
                         let _ = realtime_vision_sender.send(RealtimeVisionEvent::WindowOcr(
                             WindowOcr {
-                                // image: frame.image.clone(),
+                                image: Some(frame.image.clone()),
                                 text: text.clone(),
                                 text_json: window_result.text_json.clone(),
                                 app_name: window_result.app_name.clone(),
