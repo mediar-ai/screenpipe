@@ -46,7 +46,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::broadcast};
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -62,6 +62,7 @@ pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub vision_control: Arc<AtomicBool>,
     pub audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    pub audio_devices_tx: Arc<broadcast::Sender<(AudioDevice, DeviceControl)>>,
     pub devices_status: HashMap<AudioDevice, DeviceControl>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
@@ -800,6 +801,7 @@ pub struct Server {
     addr: SocketAddr,
     vision_control: Arc<AtomicBool>,
     audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -816,6 +818,7 @@ impl Server {
         addr: SocketAddr,
         vision_control: Arc<AtomicBool>,
         audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+        audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -829,6 +832,7 @@ impl Server {
             addr,
             vision_control,
             audio_devices_control,
+            audio_devices_tx,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -852,6 +856,7 @@ impl Server {
             db: self.db.clone(),
             vision_control: self.vision_control,
             audio_devices_control: self.audio_devices_control,
+            audio_devices_tx: self.audio_devices_tx,
             devices_status: device_status,
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
@@ -1606,6 +1611,97 @@ async fn sse_transcription_handler(
     ))
 }
 
+
+#[derive(Deserialize)]
+pub struct AudioDeviceControlRequest {
+    device_name: String,
+    #[serde(default)]
+    device_type: Option<DeviceType>,
+}
+
+#[derive(Serialize)]
+pub struct AudioDeviceControlResponse {
+    success: bool,
+    message: String,
+}
+
+// Add these new handler functions before create_router()
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device = AudioDevice {
+        name: payload.device_name.clone(),
+        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+    };
+
+    // Validate device exists
+    let available_devices = list_audio_devices().await.map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, 
+         JsonResponse(json!({
+             "error": format!("failed to list audio devices: {}", e),
+             "success": false
+         })))
+    })?;
+
+    if !available_devices.contains(&device) {
+        return Err((StatusCode::BAD_REQUEST, 
+            JsonResponse(json!({
+                "error": format!("device not found: {}", device.name),
+                "success": false
+            }))));
+    }
+
+    let control = DeviceControl { 
+        is_running: true, 
+        is_paused: false 
+    };
+    
+    let _ = state.audio_devices_tx.send((device.clone(), control));
+
+    Ok(JsonResponse(AudioDeviceControlResponse {
+        success: true,
+        message: format!("started audio device: {}", device.name),
+    }))
+}
+
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device = AudioDevice {
+        name: payload.device_name.clone(),
+        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+    };
+
+    // Validate device exists
+    let available_devices = list_audio_devices().await.map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, 
+         JsonResponse(json!({
+             "error": format!("failed to list audio devices: {}", e),
+             "success": false
+         })))
+    })?;
+
+    if !available_devices.contains(&device) {
+        return Err((StatusCode::BAD_REQUEST, 
+            JsonResponse(json!({
+                "error": format!("device not found: {}", device.name),
+                "success": false
+            }))));
+    }
+    
+    let _ = state.audio_devices_tx.send((device.clone(), DeviceControl {
+        is_running: false,
+        is_paused: false,
+    }));
+
+    Ok(JsonResponse(AudioDeviceControlResponse {
+        success: true,
+        message: format!("stopped audio device: {}", device.name),
+    }))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1648,6 +1744,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
         .route("/sse/transcriptions", get(sse_transcription_handler))
+        .route("/audio/start", post(start_audio_device))
+        .route("/audio/stop", post(stop_audio_device))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1862,6 +1960,13 @@ curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A
 
 
 
+
+
+
+
+
+
+
 # First, search for Rust-related content
 curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
 
@@ -1869,6 +1974,8 @@ curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
 curl -X POST "http://localhost:3030/tags/vision/626" \
      -H "Content-Type: application/json" \
      -d '{"tags": ["debug"]}'
+
+
 
 
 # List all pipes
@@ -1898,6 +2005,7 @@ curl -X POST "http://localhost:3030/pipes/enable" \
      -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
 
 
+
      curl -X POST "http://localhost:3030/pipes/enable" \
      -H "Content-Type: application/json" \
      -d '{"pipe_id": "pipe-security-check"}' | jq
@@ -1917,6 +2025,8 @@ curl -X POST "http://localhost:3030/pipes/update" \
          "another_key": "another_value"
        }
      }' | jq
+
+
 
 
 

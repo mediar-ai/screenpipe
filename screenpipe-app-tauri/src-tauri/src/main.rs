@@ -76,6 +76,8 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    start_audio: String,
+    stop_audio: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
@@ -138,6 +140,14 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            start_audio: store
+                .get("startAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
+            stop_audio: store
+                .get("stopAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
             profile_shortcuts,
             pipe_shortcuts,
             disabled: store
@@ -183,6 +193,8 @@ async fn update_global_shortcuts(
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    start_audio_shortcut: String,
+    stop_audio_shortcut: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
@@ -190,6 +202,8 @@ async fn update_global_shortcuts(
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        start_audio: start_audio_shortcut,
+        stop_audio: stop_audio_shortcut,
         profile_shortcuts,
         pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
@@ -261,6 +275,36 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
             .await?;
         }
     }
+
+    // Register start audio shortcut
+    register_shortcut(
+        app,
+        &config.start_audio,
+        config.is_disabled("start_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", false);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-start-audio", ());
+            info!("start audio shortcut triggered");
+        },
+    )
+    .await?;
+    
+    // Register stop audio shortcut
+    register_shortcut(
+        app,
+        &config.stop_audio,
+        config.is_disabled("stop_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", true);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-stop-audio", ());
+            info!("stop audio shortcut triggered");
+        },
+    )
+    .await?;
 
     info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
 

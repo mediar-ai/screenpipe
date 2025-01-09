@@ -304,7 +304,7 @@ async fn main() -> anyhow::Result<()> {
     let mut audio_devices = Vec::new();
 
     let audio_devices_control = Arc::new(SegQueue::new());
-
+    let audio_devices_control_recording = audio_devices_control.clone();
     let audio_devices_control_server = audio_devices_control.clone();
 
     let mut realtime_audio_devices = Vec::new();
@@ -461,17 +461,17 @@ async fn main() -> anyhow::Result<()> {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
+                let vad_engine_clone = vad_engine.clone();
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone(); // Clone inside the loop
+                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
                     fps,
-                    audio_chunk_duration, // use the new setting
+                    audio_chunk_duration,
                     Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
-                    audio_devices_control.clone(),
+                    audio_devices_control_recording.clone(),
                     cli.disable_audio,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
@@ -490,7 +490,7 @@ async fn main() -> anyhow::Result<()> {
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
                     Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
-                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
+                    Arc::new(realtime_transcription_sender_clone),
                 );
 
                 let result = tokio::select! {
@@ -530,12 +530,17 @@ async fn main() -> anyhow::Result<()> {
             // Track search requests
         }
     };
+
+    let (audio_devices_tx, _) = broadcast::channel(100);
+    let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
+
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
         audio_devices_control_server,
+        audio_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -544,6 +549,53 @@ async fn main() -> anyhow::Result<()> {
         cli.enable_realtime_audio_transcription,
         realtime_transcription_sender_clone,
     );
+
+    let mut rx = audio_devices_tx.subscribe();
+    let audio_devices_control_for_spawn = audio_devices_control.clone();
+    tokio::spawn(async move {
+        while let Ok((device, control)) = rx.recv().await {
+            // First validate if this is a real device
+            match list_audio_devices().await {
+                Ok(available_devices) => {
+                    if !available_devices.contains(&device) {
+                        error!("attempted to control non-existent device: {}", device.name);
+                        continue;
+                    }
+
+                    info!("Device state changed: {} - running: {}", device.name, control.is_running);
+                    
+                    // Clear existing entries for this device
+                    let mut temp_vec = Vec::new();
+                    while let Some(entry) = audio_devices_control_for_spawn.pop() {
+                        if entry.0 != device {
+                            temp_vec.push(entry);
+                        }
+                    }
+                    
+                    // Push back other devices
+                    for entry in temp_vec {
+                        audio_devices_control_for_spawn.push(entry);
+                    }
+
+                    // If device should be running, add it to the queue
+                    if control.is_running {
+                        audio_devices_control_for_spawn.push((device.clone(), control.clone()));
+                    }
+                }
+                Err(e) => {
+                    error!("failed to list audio devices: {}", e);
+                    // Push back the original state since we couldn't validate
+                    let mut temp_vec = Vec::new();
+                    while let Some(entry) = audio_devices_control_for_spawn.pop() {
+                        temp_vec.push(entry);
+                    }
+                    for entry in temp_vec {
+                        audio_devices_control_for_spawn.push(entry);
+                    }
+                }
+            }
+        }
+    });
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());

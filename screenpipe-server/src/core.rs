@@ -291,7 +291,7 @@ async fn record_audio(
     let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     loop {
         while let Some((audio_device, device_control)) = audio_devices_control.pop() {
-            debug!("Received audio device: {}", &audio_device);
+            info!("Received audio device: {}", &audio_device);
             let device_id = audio_device.to_string();
 
             if !device_control.is_running {
