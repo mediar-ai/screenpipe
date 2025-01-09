@@ -18,8 +18,11 @@ interface ConnectionStats {
   total: number;
 }
 
+// Add type for harvesting status
+type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
+
 export function HarvestClosestConnections() {
-  const [isRunning, setIsRunning] = useState(false);
+  const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
   const [status, setStatus] = useState("");
   const [nextHarvestTime, setNextHarvestTime] = useState<string | null>(null);
   const [connectionsSent, setConnectionsSent] = useState(0);
@@ -40,6 +43,7 @@ export function HarvestClosestConnections() {
     fetch("/api/harvest/status")
       .then(res => res.json())
       .then(data => {
+        setHarvestingStatus(data.isHarvesting);
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
@@ -49,20 +53,17 @@ export function HarvestClosestConnections() {
             setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
           }
         }
-        setIsRunning(data.isHarvesting || false);
-        if (data.stats) {
-          setStats(data.stats);
-        }
       })
       .catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (isRunning) {
+    if (harvestingStatus !== 'stopped') {
       const interval = setInterval(() => {
         fetch("/api/harvest/status")
           .then(res => res.json())
           .then(data => {
+            setHarvestingStatus(data.isHarvesting);
             setConnectionsSent(data.connectionsSent || 0);
             setDailyLimitReached(data.dailyLimitReached || false);
             setWeeklyLimitReached(data.weeklyLimitReached || false);
@@ -75,24 +76,18 @@ export function HarvestClosestConnections() {
                 setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
               }
             }
-            // Update isRunning based on server state
-            if (!data.isHarvesting && isRunning) {
-              setIsRunning(false);
-              setStatus("harvest process stopped");
-            }
           })
           .catch(error => {
             console.error('failed to fetch status:', error);
-            // Don't stop on temporary errors
           });
-      }, 1000); // Poll every second while running
+      }, 1000);
 
       return () => clearInterval(interval);
     }
-  }, [isRunning]);
+  }, [harvestingStatus]);
 
   useEffect(() => {
-    if (!isRunning && nextHarvestTime) {
+    if (!harvestingStatus && nextHarvestTime) {
       const checkCooldown = async () => {
         const now = new Date();
         const harvestTime = new Date(nextHarvestTime);
@@ -118,7 +113,7 @@ export function HarvestClosestConnections() {
             // Small delay to allow backend to start
             await new Promise(resolve => setTimeout(resolve, 1000));
             // Update UI state
-            setIsRunning(true);
+            setHarvestingStatus('running');
             
             // Verify the restart
             const verifyResponse = await fetch('/api/harvest/status');
@@ -134,11 +129,11 @@ export function HarvestClosestConnections() {
       const timer = setInterval(checkCooldown, 1000);
       return () => clearInterval(timer);
     }
-  }, [nextHarvestTime, isRunning]);
+  }, [nextHarvestTime, harvestingStatus]);
 
   const startHarvesting = async () => {
     try {
-      setIsRunning(true);
+      setHarvestingStatus('running');
       setStatus("starting harvesting process...");
 
       const response = await fetch("/api/harvest/start", {
@@ -163,13 +158,13 @@ export function HarvestClosestConnections() {
           setStatus(data.message?.toLowerCase() || 'rate limit reached');
         } else {
           setStatus(`error: ${data.message?.toLowerCase() || 'unknown error'}`);
-          setIsRunning(false);
+          setHarvestingStatus('stopped');
         }
       }
     } catch (error: any) {
       console.error("failed to start harvesting:", error);
       setStatus(`error: ${error.message?.toLowerCase() || error.toString().toLowerCase()}`);
-      setIsRunning(false);
+      setHarvestingStatus('stopped');
     }
   };
 
@@ -218,7 +213,7 @@ export function HarvestClosestConnections() {
             harvest connections {connectionsSent > 0 && `(${connectionsSent})`}
           </span>
           <div className="flex gap-2">
-            {!isRunning && (
+            {harvestingStatus === 'stopped' && (
               <button
                 onClick={startHarvesting}
                 className="bg-black text-white px-4 py-2 rounded-md text-base"
@@ -226,7 +221,7 @@ export function HarvestClosestConnections() {
                 start
               </button>
             )}
-            {isRunning && (
+            {(harvestingStatus === 'running' || harvestingStatus === 'cooldown') && (
               <button
                 onClick={stopHarvesting}
                 className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
@@ -236,7 +231,7 @@ export function HarvestClosestConnections() {
             )}
           </div>
         </div>
-        {isRunning && status && (
+        {harvestingStatus && status && (
           <span className="text-sm text-gray-500">
             {status}
           </span>
