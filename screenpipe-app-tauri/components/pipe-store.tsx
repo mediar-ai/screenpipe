@@ -1579,16 +1579,21 @@ const PipeStore: React.FC = () => {
                 <div className="flex-1 relative">
                   <Input
                     type="url"
-                    placeholder="enter github url or local path"
+                    placeholder={
+                      health?.status === "error"
+                        ? "screenpipe not running..."
+                        : "enter github url or local path"
+                    }
                     value={newRepoUrl}
                     onChange={(e) => setNewRepoUrl(e.target.value)}
                     autoCorrect="off"
                     autoComplete="off"
+                    disabled={health?.status === "error"}
                   />
                 </div>
                 <Button
                   onClick={handleAddOwnPipe}
-                  disabled={!newRepoUrl}
+                  disabled={!newRepoUrl || health?.status === "error"}
                   size="icon"
                   className="h-10 w-10"
                 >
@@ -1599,6 +1604,7 @@ const PipeStore: React.FC = () => {
                   variant="outline"
                   size="icon"
                   className="h-10 w-10"
+                  disabled={health?.status === "error"}
                 >
                   <FolderOpen className="h-4 w-4" />
                 </Button>
