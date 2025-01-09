@@ -9,6 +9,7 @@ import spawnScreenpipeUseCase from '@/modules/screenpipe-cli/use-cases/spawn-scr
 import listenToEventUseCase from '@/modules/event-management/listener/use-cases/listen-to-event.use-case';
 import { ScreenpipeAppEvent } from '@/modules/event-management/emitter/interfaces/event-emitter.service.interface';
 import { check } from '@tauri-apps/plugin-updater';
+import updateScreenpipeUseCase from '@/modules/screenpipe-cli/use-cases/update-screenpipe.use-case';
 
 const modelDownload = fromPromise(async ({ input }: { input: { fileName: string, parent: any }, system: any }) => {
     function callback(event: ScreenpipeAppEvent) {
@@ -33,9 +34,13 @@ const updateChecker = fromPromise<boolean | undefined>(async ({}) => {
     return response?.available
 })
 
+const triggerUpdate = fromPromise(async() => {
+    await updateScreenpipeUseCase()
+})
+
 export const screenpipeOnboardingFlow = setup({
     types:{
-        events: {} as {type:'NEXT'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
+        events: {} as {type:'NEXT'|'UPDATE_SCREENPIPE'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
     },
     actors: {
         conversationBoxMachine,
@@ -43,7 +48,8 @@ export const screenpipeOnboardingFlow = setup({
         screenpipeLogoMachine,
         modelDownload,
         screenpipeEngineStartup,
-        updateChecker
+        updateChecker,
+        triggerUpdate
     }
 }).createMachine({
     initial:'core_models',
@@ -199,7 +205,7 @@ export const screenpipeOnboardingFlow = setup({
                                 ]
                             },
                             {
-                                target: ['update'],
+                                target: 'update',
                                 actions: [
                                     sendTo('convoBoxMachine',{type:'NEXT_STEP'})
                                 ]
@@ -212,12 +218,50 @@ export const screenpipeOnboardingFlow = setup({
                     states: {
                         intro :{
                             description: 'objective of this step is to update screenpipe before setting up models. failing to do so results in unexpected behaviour when attempting to run screenpipe setup command.',
-                            entry: [   
+                            entry: [
                                 sendTo('convoBoxMachine', {  type:'UPDATE',
                                     payload: {
                                         textBox: {
-                                            id: 61,
+                                            id: 622,
                                             text: 'looks like you\'re running an outdated version of screenpipe. to download and configure screenpipe\'s core models properly you first need to update the app.',
+                                        },
+                                        button: [
+                                            {
+                                                variant: 'default',
+                                                size: 'default',
+                                                label: 'update app',
+                                                event: {type: 'UPDATE_SCREENPIPE'}
+                                            },
+                                        ],
+                                        process: {
+                                            skippable: true
+                                        }
+                                    }
+                                },{delay:500}),
+                            ],
+                            on: {
+                                'UPDATE_SCREENPIPE': {
+                                    actions: [
+                                        () => console.log("E"),
+                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                    ],
+                                    target: 'updateScreenpipe'
+                                },
+                                'SKIP': {
+                                    actions: [
+                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
+                                    ],
+                                    target: '#backend'
+                                },
+                            } 
+                        },
+                        updateScreenpipe: {
+                            entry: [
+                                sendTo('convoBoxMachine', {  type:'UPDATE_SCREENPIPE',
+                                    payload: {
+                                        textBox: {
+                                            id: 61,
+                                            text: 'one moment please.',
                                         },
                                         button: [
                                             {
@@ -233,22 +277,10 @@ export const screenpipeOnboardingFlow = setup({
                                     }
                                 },{delay:500}),
                             ],
-                            on: {
-                                'UPDATE': {
-                                    actions: [
-                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                    ],
-                                    target: 'updateScreenpipe'
-                                },
-                                'skip': {
-                                    actions: [
-                                        sendTo('convoBoxMachine',{type:'NEXT_STEP'}),
-                                    ],
-                                    target: '#backend'
-                                },
-                            } 
-                        },
-                        updateScreenpipe: {}
+                            invoke: {
+                                src: 'triggerUpdate',
+                            }
+                        }
                     }
                 },
                 chineseMirrorToggle: {
