@@ -1,7 +1,6 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
-use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
@@ -37,6 +36,7 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+use dashmap::DashMap;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -303,7 +303,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut audio_devices = Vec::new();
 
-    let audio_devices_control = Arc::new(SegQueue::new());
+    let audio_devices_control = Arc::new(DashMap::new());
     let audio_devices_control_recording = audio_devices_control.clone();
     let audio_devices_control_server = audio_devices_control.clone();
 
@@ -365,7 +365,7 @@ async fn main() -> anyhow::Result<()> {
                 // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    sender_clone.push((device_clone, device_control));
+                    sender_clone.insert(device_clone, device_control);
                 });
             }
         }
@@ -539,7 +539,6 @@ async fn main() -> anyhow::Result<()> {
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
-        audio_devices_control_server,
         audio_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
@@ -554,44 +553,32 @@ async fn main() -> anyhow::Result<()> {
     let audio_devices_control_for_spawn = audio_devices_control.clone();
     tokio::spawn(async move {
         while let Ok((device, control)) = rx.recv().await {
-            // First validate if this is a real device
             match list_audio_devices().await {
                 Ok(available_devices) => {
+                    // Print current audio device controls
+                    info!("current audio device controls: {}", audio_devices_control_for_spawn.len());
+                    
+                    // Print all current entries
+                    for entry in audio_devices_control_for_spawn.iter() {
+                        info!("device: {} - running: {}", entry.key().name, entry.value().is_running);
+                    }
+
                     if !available_devices.contains(&device) {
                         error!("attempted to control non-existent device: {}", device.name);
                         continue;
                     }
 
+                    // Update the device state
+                    audio_devices_control_for_spawn.insert(device.clone(), control.clone());
                     info!("Device state changed: {} - running: {}", device.name, control.is_running);
                     
-                    // Clear existing entries for this device
-                    let mut temp_vec = Vec::new();
-                    while let Some(entry) = audio_devices_control_for_spawn.pop() {
-                        if entry.0 != device {
-                            temp_vec.push(entry);
-                        }
-                    }
-                    
-                    // Push back other devices
-                    for entry in temp_vec {
-                        audio_devices_control_for_spawn.push(entry);
-                    }
-
-                    // If device should be running, add it to the queue
-                    if control.is_running {
-                        audio_devices_control_for_spawn.push((device.clone(), control.clone()));
+                    // Print updated state
+                    for entry in audio_devices_control_for_spawn.iter() {
+                        info!("after update - device: {} - running: {}", entry.key().name, entry.value().is_running);
                     }
                 }
                 Err(e) => {
                     error!("failed to list audio devices: {}", e);
-                    // Push back the original state since we couldn't validate
-                    let mut temp_vec = Vec::new();
-                    while let Some(entry) = audio_devices_control_for_spawn.pop() {
-                        temp_vec.push(entry);
-                    }
-                    for entry in temp_vec {
-                        audio_devices_control_for_spawn.push(entry);
-                    }
                 }
             }
         }
