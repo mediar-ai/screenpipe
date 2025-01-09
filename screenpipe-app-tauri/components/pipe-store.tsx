@@ -73,7 +73,24 @@ interface BrokenPipe {
   lastAttempt: number;
 }
 
-const corePipes: CorePipe[] = [
+const fetchReadmeFromGithub = async (url: string): Promise<string> => {
+  try {
+    // Convert github.com URL to raw.githubusercontent.com
+    const rawUrl = url
+      .replace("github.com", "raw.githubusercontent.com")
+      .replace("/tree/main", "/main");
+
+    const response = await fetch(`${rawUrl}/README.md`);
+    if (!response.ok) return "No description available.";
+    const text = await response.text();
+    return convertHtmlToMarkdown(text);
+  } catch (error) {
+    console.error("failed to fetch readme:", error);
+    return "No description available.";
+  }
+};
+
+const corePipes: (CorePipe & { fullDescription?: string })[] = [
   {
     id: "memories",
     name: "memories gallery",
@@ -252,6 +269,7 @@ const PipeStore: React.FC = () => {
   >({});
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const MAX_STARTUP_ATTEMPTS = 10; // Will give up after ~20 seconds (10 attempts * 2 second interval)
+  const [coreReadmes, setCoreReadmes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -262,6 +280,22 @@ const PipeStore: React.FC = () => {
       if (stored) setBrokenPipes(stored);
     });
   }, []);
+
+  useEffect(() => {
+    const loadReadmes = async () => {
+      const readmes: Record<string, string> = {};
+
+      await Promise.all(
+        corePipes.map(async (pipe) => {
+          readmes[pipe.id] = await fetchReadmeFromGithub(pipe.url);
+        })
+      );
+
+      setCoreReadmes(readmes);
+    };
+
+    loadReadmes();
+  }, []); // Run once on component mount
 
   const handleResetAllPipes = async () => {
     try {
@@ -748,7 +782,7 @@ const PipeStore: React.FC = () => {
       )
       .map((cp) => ({
         id: cp.id,
-        fullDescription: cp.description,
+        fullDescription: coreReadmes[cp.id] || cp.description, // Fallback to short description
         source: cp.url,
         enabled: false,
       })),
