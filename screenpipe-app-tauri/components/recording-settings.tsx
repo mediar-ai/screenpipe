@@ -43,7 +43,6 @@ import {
 } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { invoke } from "@tauri-apps/api/core";
 import { Badge } from "./ui/badge";
 import {
   Tooltip,
@@ -70,6 +69,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { commands } from "@/types/tauri";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -297,11 +297,11 @@ export function RecordingSettings() {
         }
       }
 
-      await invoke("kill_all_sreenpipes");
+      await commands.killAllSreenpipes();
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
       // Start a new instance with updated settings
-      await invoke("spawn_screenpipe");
+      await commands.spawnScreenpipe();
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
       // await relaunch();
@@ -626,9 +626,7 @@ export function RecordingSettings() {
     try {
       if (checked) {
         // Check accessibility permissions first
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: false,
-        });
+        const perms = await commands.doPermissionsCheck(false);
         if (!perms.accessibility) {
           toast({
             title: "accessibility permission required",
@@ -637,7 +635,11 @@ export function RecordingSettings() {
             action: (
               <ToastAction
                 altText="open preferences"
-                onClick={() => invoke("open_accessibility_preferences")}
+                onClick={() => {
+                  // TODO: fix this unimplemented function
+                  // invoke("open_accessibility_preferences")
+                }
+                }
               >
                 open preferences
               </ToastAction>

@@ -75,6 +75,7 @@ impl User {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn kill_all_sreenpipes(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
@@ -127,6 +128,7 @@ pub async fn kill_all_sreenpipes(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn spawn_screenpipe(
     state: tauri::State<'_, SidecarState>,
     app: tauri::AppHandle,

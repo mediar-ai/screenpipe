@@ -26,11 +26,12 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { platform } from "@tauri-apps/plugin-os";
 import PipeStore from "@/components/pipe-store";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { commands } from "@/types/tauri";
 import { PipeApi } from "@/lib/api";
+
 
 export default function Home() {
   const { settings } = useSettings();
@@ -42,7 +43,7 @@ export default function Home() {
   useEffect(() => {
     const unlisten = Promise.all([
       listen("shortcut-start-recording", async () => {
-        await invoke("spawn_screenpipe");
+        await commands.spawnScreenpipe();
 
         toast({
           title: "recording started",
@@ -51,7 +52,7 @@ export default function Home() {
       }),
 
       listen("shortcut-stop-recording", async () => {
-        await invoke("kill_all_sreenpipes");
+        await commands.killAllSreenpipes();
 
         toast({
           title: "recording stopped",
@@ -68,11 +69,11 @@ export default function Home() {
           description: `switched to ${profile} profile, restarting screenpipe now`,
         });
 
-        await invoke("kill_all_sreenpipes");
+        await commands.killAllSreenpipes();
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        await invoke("spawn_screenpipe");
+        await commands.spawnScreenpipe();
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
         relaunch();
@@ -84,11 +85,8 @@ export default function Home() {
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
         const pipe = pipeList.find(p => p.id === pipeId);
-        if (pipe) {
-          await invoke("open_pipe_window", {
-            port: pipe.port,
-            title: pipe.id,
-          });
+        if (pipe && pipe.port) {
+          await commands.openPipeWindow(pipe.port, pipe.id);
         }
       })
 

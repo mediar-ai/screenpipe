@@ -48,6 +48,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { commands } from "@/types/tauri";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -218,7 +219,7 @@ const AISection = () => {
 
   const handleStopLLM = async () => {
     try {
-      await invoke("stop_ollama_sidecar");
+      await commands.stopOllamaSidecar();
       setOllamaStatus("idle");
       setEmbeddedAIStatus("idle");
       toast({

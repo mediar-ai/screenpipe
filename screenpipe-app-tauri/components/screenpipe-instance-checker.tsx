@@ -6,7 +6,7 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import { invoke } from "@tauri-apps/api/core";
+import { commands } from "@/types/tauri";
 
 const ScreenpipeInstanceChecker: React.FC = () => {
   useEffect(() => {
@@ -24,10 +24,10 @@ const ScreenpipeInstanceChecker: React.FC = () => {
           if (event.actionTypeId === "is_running_multiple_instances") {
             console.log("Action received:", event);
 
-            await invoke("kill_all_screenpipes");
+            await commands.killAllSreenpipes();
             // sleep 2s
             await new Promise((resolve) => setTimeout(resolve, 2000));
-            await invoke("spawn_screenpipe");
+            await commands.spawnScreenpipe();
             sendNotification({
               title: "Screenpipe Restarted",
               body: "All instances have been stopped and Screenpipe has been restarted.",
@@ -52,9 +52,12 @@ const ScreenpipeInstanceChecker: React.FC = () => {
           return;
         }
 
-        const multipleInstances = await invoke<boolean>(
-          "is_running_multiple_instances"
-        );
+        // TODO: fix this unimplemented function
+        // const multipleInstances = await invoke<boolean>(
+        //   "is_running_multiple_instances"
+        // );
+
+        const multipleInstances = false;
 
         if (multipleInstances) {
           sendNotification({

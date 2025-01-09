@@ -34,7 +34,9 @@ tauri-plugin-autostart = "=2.0.0"
 tauri-plugin-shell = "=2.0.0"
 tauri-plugin-store = "=2.2.0"
 tauri-plugin-http = "2"
-
+specta = { version = "=2.0.0-rc.20" }
+tauri-specta = { version = "=2.0.0-rc.20", features = ["derive", "typescript"] }
+specta-typescript = "0.0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 serde_json = "1.0"

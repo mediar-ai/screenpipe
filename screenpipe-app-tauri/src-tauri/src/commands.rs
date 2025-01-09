@@ -1,10 +1,10 @@
 use crate::get_data_dir;
 use serde::Serialize;
-use serde_json::Value;
 use tauri::Manager;
 use tracing::{error, info};
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         let _ = main_tray.set_icon(Some(
@@ -14,6 +14,7 @@ pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(main_tray) = app_handle.tray_by_id("screenpipe_main") {
         let _ = main_tray.set_icon(Some(
@@ -23,30 +24,11 @@ pub fn set_tray_health_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
-pub async fn load_pipe_config(
-    app_handle: tauri::AppHandle<tauri::Wry>,
-    pipe_name: String,
-) -> Result<Value, String> {
-    info!("Loading pipe config for {}", pipe_name);
-    let default_path = get_data_dir(&app_handle)
-        .map(|path| path.join("pipes"))
-        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe").join("pipes"));
-
-    let config_path = default_path.join(pipe_name).join("pipe.json");
-    info!("Config path: {}", config_path.to_string_lossy());
-    let config_content = tokio::fs::read_to_string(config_path)
-        .await
-        .map_err(|e| format!("Failed to read pipe config: {}", e))?;
-    let config: Value = serde_json::from_str(&config_content)
-        .map_err(|e| format!("Failed to parse pipe config: {}", e))?;
-    Ok(config)
-}
-
-#[tauri::command]
+#[specta::specta]
 pub async fn save_pipe_config(
     app_handle: tauri::AppHandle<tauri::Wry>,
     pipe_name: String,
-    config: Value,
+    config: String,
 ) -> Result<(), String> {
     info!("Saving pipe config for {}", pipe_name);
     let default_path = get_data_dir(&app_handle)
@@ -63,6 +45,7 @@ pub async fn save_pipe_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn reset_all_pipes(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
     info!("Resetting all pipes");
     let pipes_path = get_data_dir(&app_handle)
@@ -109,6 +92,7 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
     if let Some(window) = app_handle.get_webview_window("main") {
         let _ = window.close();
@@ -116,6 +100,7 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(window) = app_handle.get_webview_window("meetings") {
         #[cfg(target_os = "macos")]
@@ -144,6 +129,7 @@ pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn show_identify_speakers(app_handle: tauri::AppHandle<tauri::Wry>) {
     if let Some(window) = app_handle.get_webview_window("identify-speakers") {
         #[cfg(target_os = "macos")]
@@ -174,6 +160,7 @@ pub fn show_identify_speakers(app_handle: tauri::AppHandle<tauri::Wry>) {
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
 #[tauri::command(rename_all = "snake_case")]
+#[specta::specta]
 pub fn update_show_screenpipe_shortcut(
     app_handle: tauri::AppHandle<tauri::Wry>,
     new_shortcut: String,
@@ -248,8 +235,8 @@ pub struct AuthStatus {
 }
 
 
-
 #[tauri::command]
+#[specta::specta]
 pub async fn open_pipe_window(
     app_handle: tauri::AppHandle<tauri::Wry>,
     port: u16,

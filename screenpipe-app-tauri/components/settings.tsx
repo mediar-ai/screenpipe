@@ -31,6 +31,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { toast } from "./ui/use-toast";
+import { commands } from "@/types/tauri";
 
 type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
 
@@ -54,11 +55,11 @@ export function Settings() {
       title: "Restarting Screenpipe",
       description: "Please wait while we restart Screenpipe",
     });
-    await invoke("kill_all_sreenpipes");
+    await commands.killAllSreenpipes();
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    await invoke("spawn_screenpipe");
+    await commands.spawnScreenpipe();
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
     relaunch();
