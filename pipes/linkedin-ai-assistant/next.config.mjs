@@ -4,6 +4,11 @@ const nextConfig = {
     domains: ['screenpi.pe'],
   },
   experimental: {},
+  logging: {
+    fetches: {
+      fullUrl: false,
+    },
+  },
 };
 
 export default nextConfig;
