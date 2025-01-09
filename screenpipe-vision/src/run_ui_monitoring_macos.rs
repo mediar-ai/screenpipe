@@ -1,6 +1,7 @@
-use anyhow::Result;
+use anyhow::{Error, Result};
 use log::{debug, error, info, warn};
 use std::fs;
+use std::io;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::AtomicBool;
@@ -13,6 +14,7 @@ use tokio::time::{sleep, timeout, Duration};
 use which::which;
 
 use crate::core::RealtimeVisionEvent;
+use crate::UIFrame;
 
 pub async fn run_ui(
     realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
@@ -120,8 +122,7 @@ pub async fn run_ui(
             }
         };
 
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
+        let mut reader = BufReader::new(file);
 
         loop {
             tokio::select! {
@@ -129,21 +130,23 @@ pub async fn run_ui(
                     info!("ui_monitor is shutting down");
                     return Ok(());
                 }
-                line = lines.next_line() => {
-                    match line {
-                        Ok(Some(line)) => {
-                            if let Ok(event) = serde_json::from_str(&line) {
-                                let _ = realtime_vision_sender.send(RealtimeVisionEvent::UIFrame(event));
-                            }
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            // Resource temporarily unavailable, retry after a short delay
-                            tokio::time::sleep(Duration::from_millis(100)).await;
+                frame = UIFrame::read_from_pipe(&mut reader) => {
+                    match frame {
+                        Ok(frame) => {
+                            let _ = realtime_vision_sender.send(RealtimeVisionEvent::UIFrame(frame));
                         }
                         Err(e) => {
-                            error!("failed to read line from ui_monitor: {}", e);
+                            if let Some(io_err) = e.downcast_ref::<io::Error>() {
+                                if io_err.kind() == io::ErrorKind::WouldBlock {
+                                    // Resource temporarily unavailable, retry after a short delay
+                                    tokio::time::sleep(Duration::from_millis(100)).await;
+                                } else {
+                                    error!("failed to read line from ui_monitor: {}", e);
+                                }
+                            } else {
+                                error!("failed to read line from ui_monitor: {}", e);
+                            }
                         }
-                        _ => {}
                     }
                 }
             }
@@ -263,5 +266,23 @@ impl NamedPipe {
 //                 eprintln!("Failed to remove named pipe: {:?}", e);
 //             }
 //         }
+//     }
+// }
+
+// async fn read_ui_frame_from_pipe(reader: &mut BufReader<File>) -> Result<UIFrame> {
+//     let mut buffer = Vec::new();
+
+//     loop {
+//         buffer.clear();
+//         let bytes_read = reader.read_until(b'\0', &mut buffer).await?;
+
+//         if bytes_read == 0 {
+//             // No data was read, handle the empty read
+//             tokio::time::sleep(Duration::from_millis(100)).await;
+//             continue;
+//         }
+
+//         // Process the buffer if data was read
+//         return UIFrame::from_bytes(&buffer);
 //     }
 // }

@@ -29,9 +29,10 @@ use std::{
     sync::OnceLock,
     time::{Duration, Instant, UNIX_EPOCH},
 };
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
-
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
 
@@ -444,9 +445,64 @@ pub struct WindowOcr {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(C)]
 pub struct UIFrame {
     pub window: String,
     pub app: String,
     pub text_output: String,
     pub initial_traversal_at: String,
+}
+
+impl UIFrame {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut parts = bytes.split(|&b| b == 0); // Split by null terminator
+
+        let window = parts.next().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing window")
+        })?;
+        let app = parts
+            .next()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing app"))?;
+        let text_output = parts.next().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Missing text_output")
+        })?;
+        let initial_traversal_at = parts.next().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Missing initial_traversal_at",
+            )
+        })?;
+
+        Ok(UIFrame {
+            window: String::from_utf8_lossy(window).to_string(),
+            app: String::from_utf8_lossy(app).to_string(),
+            text_output: String::from_utf8_lossy(text_output).to_string(),
+            initial_traversal_at: String::from_utf8_lossy(initial_traversal_at).to_string(),
+        })
+    }
+
+    pub async fn read_from_pipe(reader: &mut BufReader<File>) -> Result<Self> {
+        let window = UIFrame::read_string(reader).await?;
+        let app = UIFrame::read_string(reader).await?;
+        let text_output = UIFrame::read_string(reader).await?;
+        let initial_traversal_at = UIFrame::read_string(reader).await?;
+
+        Ok(UIFrame {
+            window,
+            app,
+            text_output,
+            initial_traversal_at,
+        })
+    }
+
+    async fn read_string(reader: &mut BufReader<File>) -> Result<String> {
+        let mut buffer = Vec::new();
+        loop {
+            let bytes = reader.read_until(b'\0', &mut buffer).await?;
+            if bytes > 0 {
+                buffer.pop(); // Remove the null terminator
+                return Ok(String::from_utf8_lossy(&buffer).to_string());
+            }
+        }
+    }
 }

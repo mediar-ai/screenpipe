@@ -29,18 +29,32 @@ struct WindowState {
     }
 }
 
-struct UIFrame: Encodable {
+struct UIFrame {
     let window: String
     let app: String
     let text_output: String
     let initial_traversal_at: String
 }
 
-func uiFrameToJson(uiFrame: UIFrame) -> String {
-    let jsonEncoder = JSONEncoder()
-    let jsonData = try! jsonEncoder.encode(uiFrame)
-    let jsonString = String(data: jsonData, encoding: .utf8)!
-    return jsonString
+extension UIFrame {
+    func toBytes() -> [UInt8] {
+        var bytes = [UInt8]()
+
+        // Convert each string to bytes and append to the array
+        bytes.append(contentsOf: window.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: app.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: text_output.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: initial_traversal_at.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        return bytes
+    }
 }
 
 // Global state
@@ -613,7 +627,7 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
                 text_output: "",
                 initial_traversal_at: ISO8601DateFormatter().string(from: Date())
             )
-            writeToPipe(data: uiFrameToJson(uiFrame: uiFrame))
+            writeToPipe(uiFrame: uiFrame)
 
             // Update timestamp after traversal
             globalElementValues[appName]?[windowName]?.timestamp = Date()
@@ -875,7 +889,7 @@ func processPendingNotifications() {
                 initial_traversal_at: ISO8601DateFormatter().string(from: Date())
             )
 
-            writeToPipe(data: uiFrameToJson(uiFrame: uiFrame))
+            writeToPipe(uiFrame: uiFrame)
         }
     }
 
@@ -1174,7 +1188,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         initial_traversal_at: timestamp
     )
 
-    writeToPipe(data: uiFrameToJson(uiFrame: uiFrame))
+    writeToPipe(uiFrame: uiFrame)
 
     // First, get existing text_output and check if record exists
     var existingText = ""
@@ -1578,20 +1592,13 @@ class ScreenPipeDB {
     }
 }
 
-func writeToPipe(data: String) {
-    print("writing to pipe")
-    var data = data
-    if !data.hasSuffix("\n") {
-        data.append("\n")
-    }
-    let message = data.data(using: .utf8)!
+func writeToPipe(uiFrame: UIFrame) {
+    let message = uiFrame.toBytes()
     let bytesWritten = message.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
         write(handle, buffer.baseAddress, message.count)
     }
     if bytesWritten == -1 {
         perror("error writing to pipe")
-    } else {
-        print("successfully wrote \(bytesWritten) bytes to pipe")
     }
 }
 
