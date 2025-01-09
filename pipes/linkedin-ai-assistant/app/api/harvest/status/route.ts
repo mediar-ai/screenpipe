@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadConnections, saveConnection, saveNextHarvestTime, saveHarvestingState } from '@/lib/storage/storage';
+import { loadConnections, saveConnection, saveNextHarvestTime, saveHarvestingState, saveRefreshStats } from '@/lib/storage/storage';
 import { getActiveBrowser } from '@/lib/browser-setup';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
@@ -81,6 +81,15 @@ let lastCooldownCheck = {
   shouldRestart: false
 };
 
+// Add type for progress updates
+interface RefreshProgress {
+  current: number;
+  total: number;
+}
+
+// Add progress tracking at module level
+let refreshProgress: RefreshProgress | null = null;
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -151,20 +160,35 @@ export async function GET(request: Request) {
     if (shouldRefresh) {
       const { page } = getActiveBrowser();
       if (page) {
+        const startTime = Date.now();
+        
+        const pendingConnections = Object.entries(connectionsStore.connections)
+          .filter(([_, connection]) => connection.status === 'pending');
+        
+        refreshProgress = {
+          current: 0,
+          total: pendingConnections.length
+        };
+
         // Check pending connections
-        for (const [url, connection] of Object.entries(connectionsStore.connections)) {
-          if (connection.status === 'pending') {
-            // pass connection object to checkConnectionStatus
-            const newStatus = await checkConnectionStatus(page, url, connection);
-            if (newStatus !== connection.status) {
-              await saveConnection({
-                ...connection,
-                status: newStatus,
-                timestamp: new Date().toISOString()
-              });
-            }
+        for (const [url, connection] of pendingConnections) {
+          refreshProgress.current++;
+          
+          const newStatus = await checkConnectionStatus(page, url, connection);
+          if (newStatus !== connection.status) {
+            await saveConnection({
+              ...connection,
+              status: newStatus,
+              timestamp: new Date().toISOString()
+            });
           }
         }
+        
+        // Calculate and save duration stats
+        const totalDuration = Date.now() - startTime;
+        await saveRefreshStats(totalDuration, pendingConnections.length);
+        
+        refreshProgress = null;
       }
       // Reload after updates
       connectionsStore = await loadConnections();
@@ -192,8 +216,12 @@ export async function GET(request: Request) {
         declined: stats.declined || 0,
         email_required: stats.email_required || 0,
         cooldown: stats.cooldown || 0,
-        total: Object.keys(connectionsStore.connections).length
-      }
+        total: Object.keys(connectionsStore.connections).length,
+        lastRefreshDuration: connectionsStore.lastRefreshDuration,
+        averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
+      },
+      // Add refresh progress to response
+      refreshProgress
     });
   } catch (error: any) {
     return NextResponse.json({ message: error.message?.toLowerCase() }, { status: 500 });
