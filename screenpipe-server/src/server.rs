@@ -1638,7 +1638,7 @@ async fn sse_vision_handler(
         let mut rx = rx; // Create a new mutable reference to the receiver
         while let Ok(event) = rx.recv().await {
             match event {
-                RealtimeVisionEvent::WindowOcr(mut frame) => {
+                RealtimeVisionEvent::Ocr(mut frame) => {
                     if !include_images {
                         frame.image = None; // Remove the image data if not enabled
                     }

@@ -1,4 +1,4 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 use log::{debug, error, info, warn};
 use std::fs;
 use std::io;
@@ -133,7 +133,7 @@ pub async fn run_ui(
                 frame = UIFrame::read_from_pipe(&mut reader) => {
                     match frame {
                         Ok(frame) => {
-                            let _ = realtime_vision_sender.send(RealtimeVisionEvent::UIFrame(frame));
+                            let _ = realtime_vision_sender.send(RealtimeVisionEvent::Ui(frame));
                         }
                         Err(e) => {
                             if let Some(io_err) = e.downcast_ref::<io::Error>() {

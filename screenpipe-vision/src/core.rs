@@ -420,8 +420,8 @@ pub fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<Str
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RealtimeVisionEvent {
-    WindowOcr(WindowOcr),
-    UIFrame(UIFrame),
+    Ocr(WindowOcr),
+    Ui(UIFrame),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

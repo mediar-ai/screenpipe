@@ -243,18 +243,16 @@ async fn record_video(
                             &window_result.text
                         };
 
-                        let _ = realtime_vision_sender.send(RealtimeVisionEvent::WindowOcr(
-                            WindowOcr {
-                                image: Some(frame.image.clone()),
-                                text: text.clone(),
-                                text_json: window_result.text_json.clone(),
-                                app_name: window_result.app_name.clone(),
-                                window_name: window_result.window_name.clone(),
-                                focused: window_result.focused,
-                                confidence: window_result.confidence,
-                                timestamp: frame.timestamp,
-                            },
-                        ));
+                        let _ = realtime_vision_sender.send(RealtimeVisionEvent::Ocr(WindowOcr {
+                            image: Some(frame.image.clone()),
+                            text: text.clone(),
+                            text_json: window_result.text_json.clone(),
+                            app_name: window_result.app_name.clone(),
+                            window_name: window_result.window_name.clone(),
+                            focused: window_result.focused,
+                            confidence: window_result.confidence,
+                            timestamp: frame.timestamp,
+                        }));
                         if let Err(e) = db
                             .insert_ocr_text(
                                 frame_id,
