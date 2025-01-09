@@ -244,3 +244,16 @@ export interface TranscriptionStreamResponse {
     finish_reason: null | "stop";
   }[];
 }
+
+export interface VisionEvent {
+  image?: string; // base64 encoded image
+  text: string;
+  timestamp: string;
+  app_name?: string;
+  window_name?: string;
+}
+
+export interface VisionStreamResponse {
+  type: string;
+  data: VisionEvent;
+}

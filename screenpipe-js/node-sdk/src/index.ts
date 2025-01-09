@@ -9,6 +9,8 @@ import type {
   ScreenpipeResponse,
   TranscriptionStreamResponse,
   TranscriptionChunk,
+  VisionEvent,
+  VisionStreamResponse,
 } from "../../common/types";
 import {
   toSnakeCase,
@@ -170,6 +172,35 @@ class NodePipe {
               finish_reason: chunk.is_final ? "stop" : null,
             },
           ],
+        };
+      }
+    } finally {
+      eventSource.close();
+    }
+  }
+
+  public async *streamVision(
+    includeImages: boolean = false
+  ): AsyncGenerator<VisionStreamResponse, void, unknown> {
+    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+    const eventSource = new EventSource(
+      `${apiUrl}/sse/vision?images=${includeImages}`
+    );
+
+    try {
+      while (true) {
+        const event: VisionEvent = await new Promise((resolve, reject) => {
+          eventSource.onmessage = (event) => {
+            resolve(JSON.parse(event.data));
+          };
+          eventSource.onerror = (error) => {
+            reject(error);
+          };
+        });
+
+        yield {
+          type: "vision_stream",
+          data: event,
         };
       }
     } finally {

@@ -6,6 +6,8 @@ import type {
   ScreenpipeResponse,
   TranscriptionChunk,
   TranscriptionStreamResponse,
+  VisionEvent,
+  VisionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 
@@ -44,6 +46,9 @@ export interface BrowserPipe {
     void,
     unknown
   >;
+  streamVision(
+    includeImages?: boolean
+  ): AsyncGenerator<VisionStreamResponse, void, unknown>;
 }
 
 // Browser-only implementations
@@ -153,6 +158,34 @@ export const pipe: BrowserPipe = {
               finish_reason: chunk.is_final ? "stop" : null,
             },
           ],
+        };
+      }
+    } finally {
+      eventSource.close();
+    }
+  },
+
+  async *streamVision(
+    includeImages: boolean = false
+  ): AsyncGenerator<VisionStreamResponse, void, unknown> {
+    const eventSource = new EventSource(
+      `http://localhost:3030/sse/vision?images=${includeImages}`
+    );
+
+    try {
+      while (true) {
+        const event: VisionEvent = await new Promise((resolve, reject) => {
+          eventSource.onmessage = (event) => {
+            resolve(JSON.parse(event.data));
+          };
+          eventSource.onerror = (error) => {
+            reject(error);
+          };
+        });
+
+        yield {
+          type: "vision_stream",
+          data: event,
         };
       }
     } finally {
