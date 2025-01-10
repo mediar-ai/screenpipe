@@ -53,14 +53,16 @@ export class PipeApi {
 
   async startAudio(deviceName: string): Promise<void> {
     try {
+      const type = deviceName.includes("(input)") ? "Input" : "Output";
+      const name = deviceName.replaceAll("(input)", "").replaceAll("(output)", "").trim();
       const response = await fetch(`${this.baseUrl}/audio/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          device_name: deviceName,
-          device_type: "Input",
+          device_name: name,
+          device_type: type,
         }),
       });
 
