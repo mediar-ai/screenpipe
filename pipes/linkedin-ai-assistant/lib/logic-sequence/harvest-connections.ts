@@ -41,49 +41,75 @@ export interface HarvestStatus {
   dailyLimitReached: boolean;
   nextHarvestTime?: string;
   stopped?: boolean;
+  isHarvesting?: boolean;
 }
 
 export function emitProgress(connectionsSent: number) {
   harvestingState.emit('progress', connectionsSent);
 }
 
+export async function isHarvesting(): Promise<boolean> {
+  const store = await loadConnections();
+  return !!store.isHarvesting;
+}
+
 export async function startHarvesting(
   maxDailyConnections: number = 35
 ): Promise<HarvestStatus> {
-  console.log(
-    'starting harvest process with max daily connections:',
-    maxDailyConnections
-  );
+  // Initialize status variables at the start
+  let connectionsSent = 0;
+  let weeklyLimitReached = false;
+  let dailyLimitReached = false;
 
-  // Reset the stop request flag at the beginning of the process
-  stopRequested = false;
-
-  const connections = await loadConnections();
-  // console.log('initial connections state:', connections);
+  // Add mutex-like check at the start
+  if (await isHarvesting()) {
+    const store = await loadConnections();
+    if (store.connectionsSent >= maxDailyConnections) {
+      const nextTime = new Date(Date.now() + 86400000).toISOString();
+      await saveNextHarvestTime(nextTime);
+      await saveHarvestingState(false);
+      return {
+        connectionsSent: store.connectionsSent,
+        weeklyLimitReached: false,
+        dailyLimitReached: true,
+        nextHarvestTime: nextTime,
+        isHarvesting: false
+      };
+    }
+    const connections = await loadConnections();
+    return {
+      connectionsSent: connections.connectionsSent || 0,
+      weeklyLimitReached,
+      dailyLimitReached,
+      isHarvesting: true
+    };
+  }
 
   // Set harvesting state to true immediately
   await saveHarvestingState(true);
-  await saveNextHarvestTime('');
-
-  if (connections.nextHarvestTime) {
-    const nextTime = new Date(connections.nextHarvestTime);
-    console.log('checking next harvest time:', nextTime);
-    if (nextTime > new Date()) {
-      return {
-        connectionsSent: 0,
-        weeklyLimitReached: false,
-        dailyLimitReached: false,
-        nextHarvestTime: connections.nextHarvestTime,
-      };
-    }
-  }
-
-  let connectionsSent = 0;
-  await updateConnectionsSent(connectionsSent);
-  let weeklyLimitReached = false;
+  await updateConnectionsSent(0);
 
   try {
-    console.log('Starting harvesting process');
+    // Reset the stop request flag
+    stopRequested = false;
+    const connections = await loadConnections();
+
+    // Check cooldown period
+    if (connections.nextHarvestTime) {
+      const nextTime = new Date(connections.nextHarvestTime);
+      if (nextTime > new Date()) {
+        return {
+          connectionsSent: 0,
+          weeklyLimitReached,
+          dailyLimitReached,
+          nextHarvestTime: connections.nextHarvestTime,
+        };
+      }
+    }
+
+    console.log('starting harvest process with max daily connections:', maxDailyConnections);
+    
+    await saveNextHarvestTime('');
 
     // Load existing connections
     updateWorkflowStep('setup', 'done', 'connections loaded');
@@ -270,16 +296,18 @@ export async function startHarvesting(
   }
 
   if (connectionsSent >= maxDailyConnections) {
-    // Daily limit reached, set next time and keep harvesting state
+    // Daily limit reached, set next time but keep harvesting true
     const nextTime = new Date(
       Date.now() + 24 * 60 * 60 * 1000
     ).toISOString();
     await saveNextHarvestTime(nextTime);
+    // Don't set harvesting to false here
     return {
       connectionsSent,
       weeklyLimitReached: false,
       dailyLimitReached: true,
       nextHarvestTime: nextTime,
+      isHarvesting: true  // Keep harvesting true during cooldown
     };
   }
 

@@ -73,6 +73,7 @@ export function HarvestClosestConnections() {
       .catch(console.error);
   }, []);
 
+  // Combine both status polling effects into one
   useEffect(() => {
     if (harvestingStatus !== 'stopped') {
       const interval = setInterval(() => {
@@ -81,7 +82,7 @@ export function HarvestClosestConnections() {
           .then(data => {
             setHarvestingStatus(data.isHarvesting);
             setConnectionsSent(data.connectionsSent || 0);
-            setDailyLimitReached(data.dailyLimitReached || false);
+            setDailyLimitReached(data.connectionsSent >= 35);
             setWeeklyLimitReached(data.weeklyLimitReached || false);
             if (data.stats) {
               setStats(data.stats);
@@ -89,7 +90,31 @@ export function HarvestClosestConnections() {
             if (data.nextHarvestTime) {
               setNextHarvestTime(data.nextHarvestTime);
               if (new Date(data.nextHarvestTime) > new Date()) {
-                setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
+                const message = data.connectionsSent >= 35
+                  ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
+                  : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
+                setStatus(message);
+              }
+            }
+
+            // Check for cooldown restart if needed
+            if (!data.isHarvesting && data.nextHarvestTime) {
+              const now = new Date();
+              const harvestTime = new Date(data.nextHarvestTime);
+              
+              if (now >= harvestTime) {
+                console.log('cooldown period ended, initiating restart');
+                setNextHarvestTime(null);
+                setStatus('cooldown period ended, restarting...');
+                
+                // Force a status refresh to trigger the backend restart
+                fetch('/api/harvest/status?refresh=true')
+                  .then(() => new Promise(resolve => setTimeout(resolve, 1000)))
+                  .then(() => setHarvestingStatus('running'))
+                  .catch(error => {
+                    console.error('failed to restart harvesting:', error);
+                    setStatus('failed to restart after cooldown');
+                  });
               }
             }
           })
@@ -101,51 +126,6 @@ export function HarvestClosestConnections() {
       return () => clearInterval(interval);
     }
   }, [harvestingStatus]);
-
-  useEffect(() => {
-    if (!harvestingStatus && nextHarvestTime) {
-      const checkCooldown = async () => {
-        const now = new Date();
-        const harvestTime = new Date(nextHarvestTime);
-        
-        console.log('frontend cooldown check:', {
-          now: now.toISOString(),
-          harvestTime: harvestTime.toISOString(),
-          shouldRestart: now >= harvestTime
-        });
-
-        if (now >= harvestTime) {
-          console.log('cooldown period ended, initiating restart');
-          // Clear the nextHarvestTime before restarting
-          setNextHarvestTime(null);
-          setStatus('cooldown period ended, restarting...');
-          
-          try {
-            // Force a status refresh to trigger the backend restart
-            const response = await fetch('/api/harvest/status?refresh=true');
-            const data = await response.json();
-            console.log('restart status response:', data);
-            
-            // Small delay to allow backend to start
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            // Update UI state
-            setHarvestingStatus('running');
-            
-            // Verify the restart
-            const verifyResponse = await fetch('/api/harvest/status');
-            const verifyData = await verifyResponse.json();
-            console.log('verify restart status:', verifyData);
-          } catch (error) {
-            console.error('failed to restart harvesting:', error);
-            setStatus('failed to restart after cooldown');
-          }
-        }
-      };
-
-      const timer = setInterval(checkCooldown, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [nextHarvestTime, harvestingStatus]);
 
   const startHarvesting = async () => {
     try {
@@ -244,7 +224,7 @@ export function HarvestClosestConnections() {
       <div className="flex flex-row items-center gap-4">
         <div className="flex items-center gap-4">
           <span className="text-lg font-medium">
-            harvest connections {connectionsSent > 0 && `(${connectionsSent})`}
+            farming connections {connectionsSent > 0 && `(${connectionsSent})`}
           </span>
           <div className="flex gap-2">
             {harvestingStatus === 'stopped' && (
@@ -265,15 +245,13 @@ export function HarvestClosestConnections() {
             )}
           </div>
         </div>
-        {harvestingStatus && status && (
+        {harvestingStatus && (
           <span className="text-sm text-gray-500">
-            {status}
-          </span>
-        )}
-        {(dailyLimitReached || weeklyLimitReached) && nextHarvestTime && (
-          <span className="text-sm text-gray-500">
-            {dailyLimitReached && `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`}
-            {weeklyLimitReached && `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`}
+            {dailyLimitReached && nextHarvestTime 
+              ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+              : weeklyLimitReached && nextHarvestTime 
+                ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                : status}
           </span>
         )}
       </div>

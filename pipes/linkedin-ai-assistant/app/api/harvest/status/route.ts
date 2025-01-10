@@ -125,7 +125,7 @@ export async function GET(request: Request) {
       
       // Start harvesting in the background
       startHarvesting().then(result => {
-        console.log('harvest restart result:', result);
+        // console.log('harvest restart result:', result);
       }).catch(error => {
         console.error('failed to restart harvesting:', error);
         // Reset harvesting state if start fails
@@ -160,7 +160,7 @@ export async function GET(request: Request) {
         connectionsStore = await loadConnections();
         
         startHarvesting().then(result => {
-          console.log('harvest restart result:', result);
+          // console.log('harvest restart result:', result);
         }).catch(error => {
           console.error('failed to restart harvesting:', error);
           saveHarvestingState(false).catch(console.error);
@@ -221,6 +221,8 @@ export async function GET(request: Request) {
           : 'stopped',
       nextHarvestTime: connectionsStore.nextHarvestTime,
       connectionsSent: connectionsStore.connectionsSent || 0,
+      dailyLimitReached: connectionsStore.connectionsSent >= 35,
+      weeklyLimitReached: false,
       stats: {
         pending: stats.pending || 0,
         accepted: stats.accepted || 0,

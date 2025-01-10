@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server';
-import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
+import { startHarvesting, isHarvesting } from '@/lib/logic-sequence/harvest-connections';
+import { saveHarvestingState } from '@/lib/storage/storage';
 
 export async function POST() {
   try {
+    // Check if already harvesting
+    if (await isHarvesting()) {
+      return NextResponse.json(
+        { 
+          message: 'harvesting already in progress',
+          isHarvesting: true,
+          weeklyLimitReached: false,
+          dailyLimitReached: false,
+          connectionsSent: 0
+        },
+        { status: 409 }  // Conflict status code
+      );
+    }
+
     const result = await startHarvesting(35);
 
     // If in cooldown, return 429 but include all status info
@@ -12,9 +27,9 @@ export async function POST() {
           message: `harvesting cooldown active until ${new Date(result.nextHarvestTime).toLocaleString()}`,
           nextHarvestTime: result.nextHarvestTime,
           connectionsSent: 0,
-          weeklyLimitReached: result.weeklyLimitReached,
-          dailyLimitReached: result.dailyLimitReached,
-          isHarvesting: false // add this to explicitly indicate harvesting state
+          weeklyLimitReached: result.weeklyLimitReached || false,
+          dailyLimitReached: result.dailyLimitReached || false,
+          isHarvesting: false
         },
         { status: 429 }
       );
@@ -44,8 +59,15 @@ export async function POST() {
     );
   } catch (error: unknown) {
     console.error('error starting harvesting:', error);
+    await saveHarvestingState(false);
     return NextResponse.json(
-      { message: (error as Error).message.toLowerCase() },
+      { 
+        message: (error as Error).message.toLowerCase(),
+        weeklyLimitReached: false,
+        dailyLimitReached: false,
+        connectionsSent: 0,
+        isHarvesting: false
+      },
       { status: 500 }
     );
   }
