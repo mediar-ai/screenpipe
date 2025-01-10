@@ -18,7 +18,8 @@ const conversationBoxMachine = setup({
                 },
                 layout?: 'horizontal' | 'veritcal',
                 process?: {
-                    skippable: boolean
+                    skippable: boolean,
+                    disabled: boolean
                 }
             }
         } | {type: "LOADING" | "IDLE" | "NEXT_STEP" | "HIDDEN" | "TYPING_ANIMATION_DONE" | "SKIP" },
@@ -36,7 +37,8 @@ const conversationBoxMachine = setup({
             }>,
             layout: 'horizontal' | 'veritcal',
             process: {
-                skippable: boolean
+                skippable: boolean,
+                disabled: boolean
             }
         }
     }
@@ -55,7 +57,8 @@ const conversationBoxMachine = setup({
         }],
         layout: 'horizontal',
         process: {
-            skippable: true
+            skippable: true,
+            disabled: false
         }
     },
     type: 'parallel',
@@ -82,7 +85,8 @@ const conversationBoxMachine = setup({
                         }),
                         assign({
                             process: ({ event }) => event.payload.process ? event.payload.process : {
-                                skippable: true
+                                skippable: true,
+                                disabled: false
                             }
                         })
                     ],
@@ -109,11 +113,29 @@ const conversationBoxMachine = setup({
                     initial: 'hidden',
                     states: {
                         hidden: {},
-                        visible: {}
+                        visible: {},
+                        disabled: {}
                     },
                     on: {
+                        DISABLE_BUTTON: {
+                            actions: assign({
+                                process: ({context}) => {
+                                    return { ...context.process,  disabled: true }
+                                }
+                            })
+                        },
+                        ENABLE_BUTTON: {
+                            actions: assign({
+                                process: ({context}) => {
+                                    return { ...context.process, disabled: false }
+                                }
+                            })
+                        },
                         NEXT_STEP: '.hidden',
-                        TYPING_ANIMATION_DONE: '.visible'
+                        TYPING_ANIMATION_DONE: {
+                            guard: ({context}) => !context.process.disabled,
+                            target: '.visible'
+                        }
                     }
                 }
             },
