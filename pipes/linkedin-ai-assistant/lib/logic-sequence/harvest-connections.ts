@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import { Page } from 'puppeteer-core';
 import {
   loadConnections,
@@ -353,34 +355,24 @@ async function clickNextConnectButton(
         return { success: false };
       }
 
-      const profileUrl = await page.evaluate((button) => {
-        // Start from the button and walk up to find the container with profile link
-        let current = button;
-        let container = null;
-        
-        // Walk up max 5 levels looking for a container with a profile link
+      const profileUrl = await page.evaluate((button: HTMLElement) => {
+        let current: HTMLElement = button;
+        let container: HTMLElement | null = null;
+
         for (let i = 0; i < 5 && current.parentElement; i++) {
-            current = current.parentElement;
-            if (current.querySelector('a[href*="/in/"]')) {
-                container = current;
-                break;
-            }
+          current = current.parentElement as HTMLElement;
+          if (current.querySelector('a[href*="/in/"]')) {
+            container = current;
+            break;
+          }
         }
-        
+
         if (!container) {
-            console.log('no container with profile link found');
-            return null;
+          console.log('no container with profile link found');
+          return null;
         }
-        
-        // Get all profile links in this container
+
         const profileLinks = container.querySelectorAll('a[href*="/in/"]');
-        const links = Array.from(profileLinks).map(a => ({
-            href: a.getAttribute('href'),
-            text: a.textContent?.trim()
-        }));
-        console.log('found profile links:', links);
-        
-        // Return the first profile link's href
         return profileLinks[0]?.getAttribute('href') || null;
       }, connectButton);
 
@@ -390,10 +382,10 @@ async function clickNextConnectButton(
             buttonHtml: await connectButton.evaluate(el => el.outerHTML),
             // Log the structure for debugging
             structure: await connectButton.evaluate(el => {
-                let current = el;
+                let current = el as HTMLElement;
                 const path = [];
                 for (let i = 0; i < 5 && current.parentElement; i++) {
-                    current = current.parentElement;
+                    current = current.parentElement as HTMLElement;
                     path.push({
                         tag: current.tagName,
                         hasProfileLink: !!current.querySelector('a[href*="/in/"]'),
@@ -472,7 +464,7 @@ async function clickNextConnectButton(
             continue;
           }
         }
-      } catch (e) {
+      } catch (_) {
         // No error toast appeared; proceed
       }
 
@@ -504,7 +496,7 @@ async function clickNextConnectButton(
             emailRequired: true,
           };
         }
-      } catch (e) {
+      } catch (_) {
         // No email verification modal appeared
       }
 
@@ -558,7 +550,7 @@ async function clickNextConnectButton(
               continue;
             }
           }
-        } catch (e) {
+        } catch (_) {
           // No error toast; connection was successful
         }
 
@@ -583,7 +575,7 @@ async function clickNextConnectButton(
             console.log('clicked got it button');
             return { success: false, weeklyLimitReached: true };
           }
-        } catch {
+        } catch (_) {
           // No weekly limit modal; proceed
         }
 
@@ -733,8 +725,7 @@ export async function navigateToSearch(
         );
         console.log('page loaded despite navigation abort');
         return;
-      } catch (waitError) {
-        // If we can't find the elements, then rethrow the original error
+      } catch (_) {
         throw error;
       }
     }

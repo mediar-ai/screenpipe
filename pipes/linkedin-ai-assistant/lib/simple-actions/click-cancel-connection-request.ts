@@ -1,4 +1,6 @@
-import { Page } from 'puppeteer-core';
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+import { Page, ElementHandle } from 'puppeteer-core';
 import { showClickAnimation } from './click-animation';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -32,7 +34,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
                 }
             }
             return null;
-        }, selector);
+        }, selector) as ElementHandle<HTMLButtonElement>;
 
         if (!foundButton) {
             console.log('no pending connection request found after filtering by text');
@@ -40,7 +42,10 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         }
 
         // Validate that the button exists before trying to interact
-        const isButtonAttached = await foundButton.evaluate(btn => btn instanceof HTMLButtonElement);
+        const isButtonAttached = await foundButton.evaluate(btn => {
+            return btn instanceof HTMLButtonElement;
+        });
+
         if (!isButtonAttached) {
             // check if there's a "Connect" button first before failing
             const connectButton = await page.evaluateHandle(() => {
@@ -58,7 +63,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
 
             // in case we found the connect button, that means the request was already canceled
             const connectExists = connectButton
-                ? await connectButton.evaluate(btn => btn instanceof HTMLButtonElement)
+                ? await (connectButton as ElementHandle<HTMLButtonElement>).evaluate(btn => btn instanceof HTMLButtonElement)
                 : false;
             if (connectExists) {
                 console.log('found connect button - request was already cancelled');
@@ -74,7 +79,7 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
             await foundButton.evaluate((btn) => {
                 btn.scrollIntoView({ block: 'center', behavior: 'instant' });
             });
-        } catch (e) {
+        } catch (_) {
             console.log('could not scroll to button, trying to click anyway');
             // Continue execution - the button might still be clickable
         }

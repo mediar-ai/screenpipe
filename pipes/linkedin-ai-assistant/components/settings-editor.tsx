@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { debounce } from "lodash";
+import Image from 'next/image';
 
 interface TemplateEditorProps {
   initialTemplate: unknown;
@@ -154,7 +155,14 @@ export default function TemplateEditor({ initialTemplate, defaultOpen = true }: 
                 <li>When finished copy the url</li>
                 <li>Insert it in the field below</li>
               </ol>
-              <img src="/guide_bigger.gif" alt="LinkedIn search guide" className="rounded-lg mt-4 w-full max-w-3xl" />
+              <Image 
+                src="/guide_bigger.gif" 
+                alt="LinkedIn search guide" 
+                width={896}
+                height={504}
+                className="rounded-lg mt-4 w-full max-w-3xl" 
+                priority
+              />
             </div>
             {Object.entries(template).map(([key, value]) => (
               <div key={key} className="flex flex-col gap-2">

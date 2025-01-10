@@ -16,6 +16,19 @@ interface Profile {
   headline: string;
 }
 
+interface ProfileData {
+  profileUrl: string;
+  timestamp: string;
+  status: 'visited' | 'to visit';
+  actions: Record<string, string>;
+  originalIndex: number;
+}
+
+interface StateData {
+  visitedProfiles: ProfileData[];
+  toVisitProfiles: ProfileData[];
+}
+
 type SortField = 'index' | 'name' | 'timestamp' | 'status' | 'actions' | 'messages';
 type SortDirection = 'asc' | 'desc';
 
@@ -23,13 +36,23 @@ interface StateViewerProps {
   defaultOpen?: boolean;
 }
 
+interface Message {
+  content: string;
+  timestamp: string;
+}
+
+interface MessageData {
+  messages: Message[];
+  timestamp: string;
+}
+
 export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<StateData | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-  const [messages, setMessages] = useState<Record<string, any>>({});
+  const [messages, setMessages] = useState<Record<string, MessageData>>({});
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const previousProfilesRef = useRef<any[]>([]);
+  const previousProfilesRef = useRef<ProfileData[]>([]);
   const [isCheckingMessages, setIsCheckingMessages] = useState(false);
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
@@ -60,18 +83,18 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
 
         if (data) {
           const currentProfiles = [
-            ...data.visitedProfiles.map((p: any, i: number) => ({ ...p, status: 'visited', originalIndex: i })),
-            ...data.toVisitProfiles.map((p: any, i: number) => ({ ...p, status: 'to visit', originalIndex: i + data.visitedProfiles.length }))
+            ...data.visitedProfiles.map((p: ProfileData, i: number) => ({ ...p, status: 'visited' as const, originalIndex: i })),
+            ...data.toVisitProfiles.map((p: ProfileData, i: number) => ({ ...p, status: 'to visit' as const, originalIndex: i + data.visitedProfiles.length }))
           ];
           previousProfilesRef.current = currentProfiles;
         }
 
-        setData(newState);
-        setProfiles(newProfiles.profiles || {});
-        setMessages(newMessages.messages || {});
-      } catch (error) {
-        console.error('failed to fetch data:', error);
-      }
+          setData(newState);
+          setProfiles(newProfiles.profiles || {});
+          setMessages(newMessages.messages || {});
+        } catch (error) {
+          console.error('failed to fetch data:', error);
+        }
     };
 
     fetchData();
@@ -79,10 +102,8 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
     return () => {
       clearInterval(interval);
     };
-  }, [isOpen]);
+  }, [isOpen, data]);
 
-  // Always render the dashboard, even if data is null
-  // The dashboard will update once data is loaded
   const getUsername = (url: string) => {
     try {
       const cleanUrl = url.replace(/\/$/, '');
@@ -96,7 +117,7 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
         .replace(/^\s+|\s+$/g, '')
         .replace(/\s*\([^)]*\)/g, '')
         .replace(/\s+$/, '');
-    } catch (e) {
+    } catch {
       return url;
     }
   };
@@ -137,7 +158,7 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
     });
   };
 
-  const sortProfiles = (profiles: any[]) => {
+  const sortProfiles = (profiles: ProfileData[]) => {
     return [...profiles].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
@@ -174,20 +195,9 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
     });
   };
 
-  const hasUpdates = (profile: any) => {
-    return previousProfilesRef.current.find(p => {
-      if (p.profileUrl !== profile.profileUrl) return false;
-      return (
-        p.timestamp !== profile.timestamp ||
-        JSON.stringify(p.actions) !== JSON.stringify(profile.actions) ||
-        getMessageInfo(p.profileUrl)?.count !== getMessageInfo(profile.profileUrl)?.count
-      );
-    });
-  };
-
   const allProfiles = data ? [
-    ...data.visitedProfiles.map((p: any, i: number) => ({ ...p, status: 'visited', originalIndex: i })),
-    ...data.toVisitProfiles.map((p: any, i: number) => ({ ...p, status: 'to visit', originalIndex: i + data.visitedProfiles.length }))
+    ...data.visitedProfiles.map((p: ProfileData, i: number) => ({ ...p, status: 'visited' as const, originalIndex: i })),
+    ...data.toVisitProfiles.map((p: ProfileData, i: number) => ({ ...p, status: 'to visit' as const, originalIndex: i + data.visitedProfiles.length }))
   ] : [];
 
   const sortedProfiles = sortProfiles(allProfiles);
@@ -205,7 +215,7 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
     }
   };
 
-  const hasFieldUpdated = (profile: any, field: string) => {
+  const hasFieldUpdated = (profile: ProfileData, field: string) => {
     const previous = previousProfilesRef.current.find(p => p.profileUrl === profile.profileUrl);
     if (!previous) return false;
 
@@ -323,7 +333,7 @@ export default function StateViewer({ defaultOpen = true }: StateViewerProps) {
             </thead>
             <tbody>
               <AnimatePresence mode="popLayout">
-                {sortedProfiles.map((profile: any) => {
+                {sortedProfiles.map((profile: ProfileData) => {
                   const messageInfo = getMessageInfo(profile.profileUrl);
                   const isNew = !previousProfilesRef.current.find(p => p.profileUrl === profile.profileUrl);
 

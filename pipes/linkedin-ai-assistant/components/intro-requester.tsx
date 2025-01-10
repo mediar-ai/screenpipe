@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import { Play, Loader2, Check } from "lucide-react";
 import TemplateEditor from "@/components/template-editor";
 import StateViewer from "@/components/state-viewer";
-import type { Templates } from '@/lib/storage/templates';
 import template from '@/lib/storage/templates.json';
 
 type WorkflowStep = {

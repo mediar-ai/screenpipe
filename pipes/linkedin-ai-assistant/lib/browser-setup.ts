@@ -1,37 +1,41 @@
 import puppeteer, { Browser, Page } from 'puppeteer-core';
 
-let activeBrowser: Browser | null = null;
-let activePage: Page | null = null;
+let activeBrowser: { browser: Browser; page: Page } | null = null;
 
 export async function setupBrowser(wsUrl: string): Promise<{ browser: Browser; page: Page }> {
-    if (!activeBrowser) {
-        activeBrowser = await puppeteer.connect({
+    try {
+        const browser = await puppeteer.connect({
             browserWSEndpoint: wsUrl,
             defaultViewport: null,
         });
         console.log('browser connected');
 
-        const pages = await activeBrowser.pages();
-        activePage = pages[0];
+        const pages = await browser.pages();
+        const page = pages[0];
+        if (!page) {
+            throw new Error('no active page found');
+        }
         console.log('got active page');
-    }
 
-    if (!activeBrowser || !activePage) {
-        throw new Error('browser or page not initialized');
+        activeBrowser = { browser, page };
+        return activeBrowser;
+    } catch (error) {
+        console.error('failed to connect to chrome:', error);
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('failed to connect to chrome in production');
+        }
+        throw error;
     }
-
-    return { browser: activeBrowser, page: activePage };
 }
 
-export function getActiveBrowser() {
-    return { browser: activeBrowser, page: activePage };
+export function getActiveBrowser(): { browser: Browser | null; page: Page | null } {
+    return activeBrowser || { browser: null, page: null };
 }
 
 export async function quitBrowser() {
     if (activeBrowser) {
-        await activeBrowser.disconnect();
+        await activeBrowser.browser.disconnect();
         activeBrowser = null;
-        activePage = null;
         console.log('browser session cleared');
     }
 }
