@@ -1,6 +1,7 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
+use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
@@ -36,7 +37,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-use dashmap::DashMap;
 
 fn print_devices(devices: &[AudioDevice]) {
     println!("available audio devices:");
@@ -560,23 +560,41 @@ async fn main() -> anyhow::Result<()> {
     let audio_devices_control_for_spawn = audio_devices_control.clone();
     tokio::spawn(async move {
         while let Ok((device, control)) = rx.recv().await {
-            match list_audio_devices().await {
-                Ok(available_devices) => {
-                    if !available_devices.contains(&device) {
-                        error!("attempted to control non-existent device: {}", device.name);
-                        continue;
-                    }
-
-                    // Update the device state
-                    audio_devices_control_for_spawn.insert(device.clone(), control.clone());
-                    info!("Device state changed: {} - running: {}", device.name, control.is_running);
-                }
-                Err(e) => {
-                    error!("failed to list audio devices: {}", e);
-                }
+            if let Err(e) =
+                handle_device_update(&device, control, &audio_devices_control_for_spawn).await
+            {
+                error!("Device update failed: {}", e);
+                continue;
             }
         }
+        info!("Device monitoring task completed");
     });
+
+    async fn handle_device_update(
+        device: &AudioDevice,
+        control: DeviceControl,
+        devices_control: &DashMap<AudioDevice, DeviceControl>,
+    ) -> anyhow::Result<()> {
+        match list_audio_devices().await {
+            Ok(available_devices) => {
+                if !available_devices.contains(&device) {
+                    return Err(anyhow::anyhow!(
+                        "attempted to control non-existent device: {}",
+                        device.name
+                    ));
+                }
+
+                // Update the device state
+                devices_control.insert(device.clone(), control.clone());
+                info!(
+                    "Device state changed: {} - running: {}",
+                    device.name, control.is_running
+                );
+                Ok(())
+            }
+            Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
+        }
+    }
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
