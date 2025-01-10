@@ -21,6 +21,7 @@ import { SettingsManager } from "./SettingsManger";
 import { Scheduler } from "./Scheduler";
 import { InboxManager } from "./InboxManager";
 import { EventSource } from "eventsource";
+import { trackEvent, setTelemetryEnabled } from "../../common/analytics";
 
 class NodePipe {
   public input = {
@@ -48,8 +49,21 @@ class NodePipe {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
+      await trackEvent({
+        name: "notification_sent",
+        properties: {
+          success: true,
+        },
+      });
       return true;
     } catch (error) {
+      await trackEvent({
+        name: "error_occurred",
+        properties: {
+          feature: "notification",
+          error: "send_failed",
+        },
+      });
       console.error("failed to send notification:", error);
       return false;
     }
@@ -112,8 +126,22 @@ class NodePipe {
         throw new Error(`http error! status: ${response.status}`);
       }
       const data = await response.json();
+      await trackEvent({
+        name: "search_performed",
+        properties: {
+          content_type: params.contentType,
+          result_count: data.pagination.total,
+        },
+      });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
+      await trackEvent({
+        name: "error_occurred",
+        properties: {
+          feature: "search",
+          error: "query_failed",
+        },
+      });
       console.error("error querying screenpipe:", error);
       return null;
     }
@@ -148,6 +176,13 @@ class NodePipe {
     const eventSource = new EventSource(`${apiUrl}/sse/transcriptions`);
 
     try {
+      await trackEvent({
+        name: "stream_started",
+        properties: {
+          feature: "transcription",
+        },
+      });
+
       while (true) {
         const chunk: TranscriptionChunk = await new Promise(
           (resolve, reject) => {
@@ -183,6 +218,12 @@ class NodePipe {
         };
       }
     } finally {
+      await trackEvent({
+        name: "stream_ended",
+        properties: {
+          feature: "transcription",
+        },
+      });
       eventSource.close();
     }
   }
