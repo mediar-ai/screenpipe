@@ -66,6 +66,7 @@ export interface BrowserPipe {
 
 class BrowserPipeImpl implements BrowserPipe {
   private analyticsInitialized = false;
+  private analyticsEnabled = false;
   private userId?: string;
   private userProperties?: Record<string, any>;
 
@@ -73,13 +74,11 @@ class BrowserPipeImpl implements BrowserPipe {
     if (this.analyticsInitialized || !this.userId) return;
 
     try {
-      const response = await fetch("http://localhost:3030/settings");
-      if (response.ok) {
-        const settings = await response.json();
-        if (settings.analyticsEnabled) {
-          await identifyUser(this.userId, this.userProperties);
-          this.analyticsInitialized = true;
-        }
+      const settings = { analyticsEnabled: false }; // TODO: impl settings browser side somehow ...
+      this.analyticsEnabled = settings.analyticsEnabled;
+      if (settings.analyticsEnabled) {
+        await identifyUser(this.userId, this.userProperties);
+        this.analyticsInitialized = true;
       }
     } catch (error) {
       console.error("failed to fetch settings:", error);
@@ -270,6 +269,7 @@ class BrowserPipeImpl implements BrowserPipe {
     eventName: string,
     properties?: Record<string, any>
   ) {
+    if (!this.analyticsEnabled) return;
     await this.initAnalyticsIfNeeded();
     return captureEvent(eventName, properties);
   }
@@ -278,6 +278,7 @@ class BrowserPipeImpl implements BrowserPipe {
     featureName: string,
     properties?: Record<string, any>
   ) {
+    if (!this.analyticsEnabled) return;
     await this.initAnalyticsIfNeeded();
     return captureMainFeatureEvent(featureName, properties);
   }

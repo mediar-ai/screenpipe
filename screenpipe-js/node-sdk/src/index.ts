@@ -7,7 +7,7 @@ import type {
   TranscriptionChunk,
   VisionEvent,
   VisionStreamResponse,
-  NotificationOptions,  
+  NotificationOptions,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
@@ -21,6 +21,7 @@ import {
 
 class NodePipe {
   private analyticsInitialized = false;
+  private analyticsEnabled = true;
   private userId?: string;
   private userProperties?: Record<string, any>;
 
@@ -225,6 +226,7 @@ class NodePipe {
     if (this.analyticsInitialized || !this.userId) return;
 
     const settings = await this.settings.getAll();
+    this.analyticsEnabled = settings.analyticsEnabled;
     if (settings.analyticsEnabled) {
       await identifyUser(this.userId, this.userProperties);
       this.analyticsInitialized = true;
@@ -235,6 +237,7 @@ class NodePipe {
     eventName: string,
     properties?: Record<string, any>
   ) {
+    if (!this.analyticsEnabled) return;
     await this.initAnalyticsIfNeeded();
     return captureEvent(eventName, properties);
   }
@@ -243,6 +246,7 @@ class NodePipe {
     featureName: string,
     properties?: Record<string, any>
   ) {
+    if (!this.analyticsEnabled) return;
     await this.initAnalyticsIfNeeded();
     return captureMainFeatureEvent(featureName, properties);
   }
