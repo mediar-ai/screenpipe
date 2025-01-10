@@ -38,6 +38,7 @@ export default function Home() {
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const isProcessingRef = React.useRef(false);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -98,7 +99,6 @@ export default function Home() {
         }
       }),
 
-      const isProcessingRef = React.useRef(false);
       listen("shortcut-start-audio", async () => {
         if (isProcessingRef.current) return;
         isProcessingRef.current = true;
