@@ -9,6 +9,7 @@ const nextConfig = {
       fullUrl: false,
     },
   },
+  output: 'standalone',
 };
 
 export default nextConfig;
