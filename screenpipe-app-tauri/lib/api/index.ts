@@ -50,4 +50,58 @@ export class PipeApi {
       throw error;
     }
   }
+  
+  async startAudio(deviceName: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/audio/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          device_name: deviceName,
+          device_type: 'Input'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`failed to start audio: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(`failed to start audio: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('error starting audio:', error);
+      throw error;
+    }
+  }
+
+  async stopAudio(deviceName: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseUrl}/audio/stop`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          device_name: deviceName,
+          device_type: 'Input'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`failed to stop audio: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(`failed to stop audio: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('error stopping audio:', error);
+      throw error;
+    }
+  }
 }

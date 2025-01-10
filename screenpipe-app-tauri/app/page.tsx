@@ -40,6 +40,20 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
+    const getAudioDevices = () => {
+      const audioDevices = settings.audioDevices as unknown as {
+        name: string;
+        is_default: boolean;
+      }[];
+
+      const devices = audioDevices.map((device) => ({
+        name: device.name.replaceAll("(input)", "").replaceAll("(output)", ""),
+        is_default: device.is_default,
+      }));
+
+      return devices;
+    };
+
     const unlisten = Promise.all([
       listen("shortcut-start-recording", async () => {
         await invoke("spawn_screenpipe");
@@ -78,20 +92,36 @@ export default function Home() {
         relaunch();
       }),
 
-      listen<string>('open-pipe', async (event) => {
+      listen<string>("open-pipe", async (event) => {
         const pipeId = event.payload;
 
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
-        const pipe = pipeList.find(p => p.id === pipeId);
+        const pipe = pipeList.find((p) => p.id === pipeId);
         if (pipe) {
           await invoke("open_pipe_window", {
             port: pipe.port,
             title: pipe.id,
           });
         }
-      })
+      }),
 
+      listen("shortcut-start-recording", async () => {
+        const devices = getAudioDevices();
+        const pipeApi = new PipeApi();
+        console.log("audio-devices", devices);
+        devices.forEach((device) => {
+          pipeApi.startAudio(device.name);
+        });
+      }),
+
+      listen("shortcut-stop-recording", async (event) => {
+        const devices = getAudioDevices();
+        const pipeApi = new PipeApi();
+        devices.forEach((device) => {
+          pipeApi.stopAudio(device.name);
+        });
+      }),
     ]);
 
     return () => {
