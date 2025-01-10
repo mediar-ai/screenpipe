@@ -215,24 +215,24 @@ interface ConnectionsStore {
     averageProfileCheckDuration?: number;  // in milliseconds
 }
 
+type FileError = Error & { code?: string };
+
 export async function loadConnections(): Promise<ConnectionsStore> {
     await ensureStorageDir();
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
         return JSON.parse(data);
-    } catch (error: any) {
-        if (error.code === 'ENOENT') {
-            // File does not exist, safe to return default empty object
+    } catch (error: unknown) {
+        const err = error as FileError;
+        if (err.code === 'ENOENT') {
             return {
                 connections: {},
                 connectionsSent: 0,
                 isHarvesting: false,
             };
-        } else {
-            // Parsing error or other read error, do not overwrite existing data
-            console.error('Failed to read or parse connections.json:', error);
-            throw new Error('Could not load connections data.');
         }
+        console.error('Failed to read or parse connections.json:', err);
+        throw new Error('Could not load connections data.');
     }
 }
 
@@ -289,16 +289,12 @@ export async function updateConnectionsSent(connectionsSent: number) {
 
 export async function saveRefreshStats(totalDuration: number, profileCount: number) {
     const connectionsStore = await loadConnections();
-    
-    // Calculate average duration per profile
-    const averageDuration = profileCount > 0 ? totalDuration / profileCount : 0;
-    
     connectionsStore.lastRefreshDuration = totalDuration;
-    connectionsStore.averageProfileCheckDuration = averageDuration;
-    
+    connectionsStore.averageProfileCheckDuration = profileCount > 0 ? totalDuration / profileCount : undefined;
+
     await fs.writeFile(
         path.join(STORAGE_DIR, 'connections.json'),
         JSON.stringify(connectionsStore, null, 2)
     );
-    console.log(`saved refresh stats: ${totalDuration}ms total, ${averageDuration}ms per profile`);
+    console.log(`saved refresh stats: ${totalDuration}ms for ${profileCount} profiles`);
 } 

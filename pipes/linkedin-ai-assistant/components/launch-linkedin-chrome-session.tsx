@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Chrome, ArrowRight, CheckCircle, LogIn, Loader2 } from "lucide-react";
+import { Chrome, CheckCircle, LogIn, Loader2 } from "lucide-react";
 
 interface Props {
   loginStatus: 'checking' | 'logged_in' | 'logged_out' | null;

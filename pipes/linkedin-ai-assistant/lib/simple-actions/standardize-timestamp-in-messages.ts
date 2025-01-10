@@ -1,5 +1,5 @@
 import { Message } from '../storage/types';
-import { addDays, format, parse, startOfToday } from 'date-fns';
+import { addDays, format, startOfToday } from 'date-fns';
 
 export function standardizeTimestamps(messages: Message[]): Message[] {
     const today = startOfToday();

@@ -83,19 +83,22 @@ export async function getMessages(page: Page): Promise<Message[]> {
 
 // test the functions
 if (require.main === module) {
-    async function test() {
+    const test = async () => {
         try {
-            const { setupBrowser } = require('./browser_setup');
-            const { browser, page } = await setupBrowser();
+            const { setupBrowser, getActiveBrowser } = await import('../browser-setup');
+            await setupBrowser('ws://localhost:9222');
+            const { browser, page } = getActiveBrowser();
+            if (!page) throw new Error('no active page');
+            if (!browser) throw new Error('no active browser');
             console.log('connected to browser');
 
-            const messages = await getMessages(page);
+            await getMessages(page);
 
             await browser.disconnect();
-        } catch (e) {
-            console.error('test failed:', e);
+        } catch (error) {
+            console.error('test failed:', error);
         }
-    }
+    };
 
     test();
 }

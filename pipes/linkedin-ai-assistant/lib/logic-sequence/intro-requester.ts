@@ -1,9 +1,8 @@
-import fs from 'fs/promises';
 import { extractProfileElements } from '../simple-actions/extract-profiles-from-search-results';
 import { navigateToSearch } from '../simple-actions/go-to-search-results';
 import templates from '../storage/templates.json';
 import { setupBrowser } from '../browser-setup';
-import { ProfileDetails, ProfileVisit, State, ProfileElement } from '../storage/types';
+import type { ProfileVisit, ProfileElement } from '../storage/types';
 import { extractProfileText } from '../simple-actions/extract-profile-details-from-page';
 import { clickMutualConnections } from '../simple-actions/click-mutual-connection';
 import { clickFirstMessageButton } from '../simple-actions/click-message';
@@ -46,12 +45,12 @@ export async function startAutomation(maxProfiles: number = Infinity) {
         }
         
         // Use the shared browser setup
-        const { browser, page } = await setupBrowser(statusData.wsUrl);
+        const { page } = await setupBrowser(statusData.wsUrl);
         updateWorkflowStep('browser', 'done', 'browser connected');
         
         // Navigation
         updateWorkflowStep('navigation', 'running', 'navigating to linkedin search');
-        await navigateToSearch(page, templates.paste_here_url_from_linkedin_with_2nd_grade_connections, { allowTruncate: true });
+        await navigateToSearch(page, templates['paste-here-url-from-linkedin-with-2nd-grade-connections'], { allowTruncate: true });
         updateWorkflowStep('navigation', 'done');
         
         // Close any open dialogues before proceeding
@@ -162,7 +161,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
                     // Call LLM even when recent messages exist
                     const llmResponse = await callGPT4(
                         `Profile details: ${JSON.stringify(newProfileDetails)}
-                        ${templates.llm_appraisal_prompt}`
+                        ${templates['llm-appraisal-prompt']}`
                     );
                     console.log('llm response:', JSON.stringify(llmResponse.content).slice(0, 100) + '...');
                     
@@ -193,7 +192,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
                 // Call LLM 
                 const llmResponse = await callGPT4(
                     `Profile details: ${JSON.stringify(newProfileDetails)}
-                    ${templates.llm_appraisal_prompt}`
+                    ${templates['llm-appraisal-prompt']}`
                 );
                 console.log('llm response:', JSON.stringify(llmResponse.content).slice(0, 100) + '...');
                 
@@ -220,7 +219,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
                 await scheduleMessage(
                     state,
                     newProfileUrl,
-                    templates.request_for_intro_prompt_to_AI.replace('${fullName}', profileDetails.name || 'your connection'),
+                    templates['request-for-intro-prompt-to-ai'].replace('${fullName}', profileDetails.name || 'your connection'),
                     'replied to previous message'
                 );    
                             

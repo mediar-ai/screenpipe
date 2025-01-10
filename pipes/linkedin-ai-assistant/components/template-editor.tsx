@@ -2,14 +2,22 @@
 
 import { useState } from "react";
 
-interface TemplateEditorProps {
-  initialTemplate: Record<string, any>;
+interface Template {
+  'paste-here-url-from-linkedin-with-2nd-grade-connections': string;
+  'request-for-intro-prompt-to-ai': string;
+  'llm-appraisal-prompt': string;
+  'llm-user-reply-needs-response-prompt': string;
 }
 
-export default function TemplateEditor({ initialTemplate }: TemplateEditorProps) {
+interface TemplateEditorProps {
+  initialTemplate: Template;
+  defaultOpen?: boolean;
+}
+
+export default function TemplateEditor({ initialTemplate, defaultOpen = true }: TemplateEditorProps) {
   const [template, setTemplate] = useState(initialTemplate);
 
-  const handleChange = (key: string, value: string) => {
+  const handleChange = (key: keyof Template, value: string) => {
     setTemplate(prev => ({
       ...prev,
       [key]: value
@@ -26,7 +34,7 @@ export default function TemplateEditor({ initialTemplate }: TemplateEditorProps)
   };
 
   return (
-    <div className="w-full max-w-7xl flex flex-col gap-6">
+    <div className={`w-full max-w-7xl flex flex-col gap-6 ${defaultOpen ? '' : 'hidden'}`}>
       <h2 className="text-xl font-semibold">edit template</h2>
       <div className="flex flex-col gap-6">
         {Object.entries(template).map(([key, value]) => (
@@ -36,7 +44,7 @@ export default function TemplateEditor({ initialTemplate }: TemplateEditorProps)
               className="w-full min-h-[100px] p-4 border rounded-lg font-mono text-sm 
                 bg-white dark:bg-black text-black dark:text-white resize-vertical"
               value={value}
-              onChange={(e) => handleChange(key, e.target.value)}
+              onChange={(e) => handleChange(key as keyof Template, e.target.value)}
               placeholder={`Enter ${key}...`}
             />
           </div>

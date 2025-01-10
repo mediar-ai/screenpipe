@@ -1,5 +1,4 @@
 import { Page } from 'puppeteer-core';
-import { setupBrowser } from './browser-setup';
 import { showClickAnimation } from './click-animation';
 
 export async function clickFirstMessageButton(page: Page) {

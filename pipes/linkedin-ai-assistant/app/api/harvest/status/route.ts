@@ -3,23 +3,18 @@ import { loadConnections, saveConnection, saveNextHarvestTime, saveHarvestingSta
 import { getActiveBrowser } from '@/lib/browser-setup';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
+import { Page } from 'puppeteer-core';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 // Add types for page and connection
-type LinkedInPage = {
-  goto: (url: string, options: { waitUntil: string }) => Promise<void>;
-  evaluate: <T>(fn: () => T) => Promise<T>;
-  waitForSelector: (selector: string, options: { timeout: number }) => Promise<void>;
-};
-
 type Connection = {
   status: string;
   timestamp?: string;
 };
 
-async function checkConnectionStatus(page: LinkedInPage, profileUrl: string, connection: Connection) {
+async function checkConnectionStatus(page: Page, profileUrl: string, connection: Connection) {
   // check if pending for more than 14 days
   if (connection.status === 'pending' && connection.timestamp) {
     const daysAsPending = (new Date().getTime() - new Date(connection.timestamp).getTime()) / (1000 * 60 * 60 * 24);
@@ -77,8 +72,15 @@ async function checkConnectionStatus(page: LinkedInPage, profileUrl: string, con
   return 'pending';
 }
 
-// Add cache at module level
-let lastStatus = {
+// Add type for status
+interface HarvestStatus {
+  nextHarvestTime: string;
+  isHarvesting: string;
+  connectionsSent: number;
+}
+
+// Initialize with empty strings instead of undefined
+let lastStatus: HarvestStatus = {
   nextHarvestTime: '',
   isHarvesting: '',
   connectionsSent: 0
@@ -107,8 +109,8 @@ export async function GET(request: Request) {
 
     // Only log if values changed
     const currentStatus = {
-      nextHarvestTime: connectionsStore.nextHarvestTime,
-      isHarvesting: connectionsStore.isHarvesting,
+      nextHarvestTime: connectionsStore.nextHarvestTime || '',
+      isHarvesting: String(connectionsStore.isHarvesting || ''),
       connectionsSent: connectionsStore.connectionsSent
     };
 
