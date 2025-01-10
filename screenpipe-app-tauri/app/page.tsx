@@ -98,14 +98,15 @@ export default function Home() {
         }
       }),
 
+      const isProcessingRef = React.useRef(false);
       listen("shortcut-start-audio", async () => {
+        if (isProcessingRef.current) return;
+        isProcessingRef.current = true;
         try {
           const devices = await getAudioDevices();
           const pipeApi = new PipeApi();
           console.log("audio-devices", devices);
-          devices.forEach((device) => {
-            pipeApi.startAudio(device);
-          });
+          await Promise.all(devices.map(device => pipeApi.startAudio(device)));
           toast({
             title: "audio started",
             description: "audio has been started",
@@ -117,6 +118,8 @@ export default function Home() {
             description: error instanceof Error ? error.message : "unknown error occurred",
             variant: "destructive",
           });
+        } finally {
+          isProcessingRef.current = false;
         }
       }),
 
