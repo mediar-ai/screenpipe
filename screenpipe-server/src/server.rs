@@ -30,7 +30,6 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices,
     realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
 };
-use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
 use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};

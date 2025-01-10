@@ -545,6 +545,7 @@ async fn main() -> anyhow::Result<()> {
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
+        audio_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
