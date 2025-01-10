@@ -196,7 +196,8 @@ export function AccountSection() {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const host = "https://screenpi.pe/api/dev-stripe";
+      const BASE_URL = await invoke("get_env", { name: "BASE_URL_PRIVATE" }) ?? "https://screenpi.pe";
+      const host = `${BASE_URL}/api/dev-stripe`;
       const response = await fetch(host, {
         method: "POST",
         headers: {

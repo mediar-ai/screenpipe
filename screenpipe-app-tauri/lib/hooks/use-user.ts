@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { User, useSettings } from "./use-settings";
 import { useInterval } from "./use-interval";
 import { fetch } from "@tauri-apps/plugin-http";
+import { invoke } from "@tauri-apps/api/core";
 
 async function verifyUserToken(token: string): Promise<User> {
-  const response = await fetch("https://screenpi.pe/api/tauri", {
+  const BASE_URL = await invoke("get_env", { name: "BASE_URL_PRIVATE" }) ?? "https://screenpi.pe";
+
+  const response = await fetch(`${BASE_URL}/api/tauri`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
