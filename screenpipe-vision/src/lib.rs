@@ -4,6 +4,7 @@ pub mod core;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;
+#[cfg(target_os = "macos")]
 pub mod run_ui_monitoring_macos;
 pub mod tesseract;
 pub mod utils;
@@ -15,5 +16,6 @@ pub use utils::OcrEngine;
 pub mod capture_screenshot_by_window;
 #[cfg(target_os = "windows")]
 pub use microsoft::perform_ocr_windows;
+#[cfg(target_os = "macos")]
 pub use run_ui_monitoring_macos::run_ui;
 pub use tesseract::perform_ocr_tesseract;
