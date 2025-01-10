@@ -188,7 +188,7 @@ export async function GET() {
         );
         console.log("reddit questions:", redditQuestions);
 
-        if (emailEnabled) {
+        if (emailEnabled && redditQuestions) {
           try {
             await sendEmail(
               emailAddress!,
@@ -202,19 +202,25 @@ export async function GET() {
               { status: 500 }
             );
           }
+        } else {
+          console.log("Failed to get reddit questions!!")
         }
-
-        try {
-          console.log("Sending screenpipe inbox notification");
-          await pipe.inbox.send({
-            title: "reddit questions",
-            body: redditQuestions,
-          });
-        } catch(error) {
-          return NextResponse.json(
-            { error: `error in sending inbox notification ${error}` },
-            { status: 500 }
-          );
+        
+        if (redditQuestions) {
+          try {
+            console.log("Sending screenpipe inbox notification");
+            await pipe.inbox.send({
+              title: "reddit questions",
+              body: redditQuestions,
+            });
+          } catch(error) {
+            return NextResponse.json(
+              { error: `error in sending inbox notification ${error}` },
+              { status: 500 }
+            );
+          }
+        } else {
+          console.log("Failed to get reddit questions!!")
         }
 
         try {
