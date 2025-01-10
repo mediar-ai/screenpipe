@@ -16,7 +16,7 @@ export default function ButtonProxy(props: {
                         disabled={props.isDisabled}
                         isLoading={props.isLoading}
                         variant={props.button.variant as any}
-                        className="min-w-[80px]"
+                        className="min-w-[80px] w-[100%]"
                         onClick={() => props.sendEvent(props.button.event)}
                     >
                         {
