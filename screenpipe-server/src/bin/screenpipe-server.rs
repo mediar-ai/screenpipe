@@ -147,6 +147,9 @@ async fn main() -> anyhow::Result<()> {
                 } | PipeCommand::Download {
                     output: OutputFormat::Text,
                     ..
+                } | PipeCommand::Install {
+                    output: OutputFormat::Text,
+                    ..
                 } | PipeCommand::Info {
                     output: OutputFormat::Text,
                     ..
@@ -997,7 +1000,9 @@ async fn handle_pipe_command(
             }
         }
 
-        PipeCommand::Download { url, output, port } => {
+        #[allow(deprecated)]
+        PipeCommand::Download { url, output, port }
+        | PipeCommand::Install { url, output, port } => {
             match client
                 .post(&format!("{}:{}/pipes/download", server_url, port))
                 .json(&json!({ "url": url }))
