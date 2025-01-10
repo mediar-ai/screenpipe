@@ -4,5 +4,5 @@
       "path": "/api/pipeline",
       "schedule": "0 */1 * * * *"
     }
-  ],
+  ]
 }
