@@ -45,7 +45,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
         }
         
         // Use the shared browser setup
-        const { page } = await setupBrowser(statusData.wsUrl);
+        const { page } = await setupBrowser();
         updateWorkflowStep('browser', 'done', 'browser connected');
         
         // Navigation

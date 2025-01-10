@@ -59,7 +59,7 @@ export async function startHarvesting(
   // Initialize status variables at the start
   let connectionsSent = 0;
   let weeklyLimitReached = false;
-  let dailyLimitReached = false;
+  const dailyLimitReached = false;
 
   // Add mutex-like check at the start
   if (await isHarvesting()) {
@@ -123,7 +123,7 @@ export async function startHarvesting(
       throw new Error('chrome not connected');
     }
 
-    const { page } = await setupBrowser(statusData.wsUrl);
+    const { page } = await setupBrowser();
     updateWorkflowStep('browser', 'done', 'browser connected');
 
     // Navigate to LinkedIn search results

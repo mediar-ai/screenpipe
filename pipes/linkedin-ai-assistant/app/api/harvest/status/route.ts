@@ -124,7 +124,7 @@ export async function GET(request: Request) {
       console.log('detected stale harvesting state, restarting process');
       
       // Start harvesting in the background
-      startHarvesting().then(result => {
+      startHarvesting().then(() => {
         // console.log('harvest restart result:', result);
       }).catch(error => {
         console.error('failed to restart harvesting:', error);
@@ -159,7 +159,7 @@ export async function GET(request: Request) {
         await saveHarvestingState(true);
         connectionsStore = await loadConnections();
         
-        startHarvesting().then(result => {
+        startHarvesting().then(() => {
           // console.log('harvest restart result:', result);
         }).catch(error => {
           console.error('failed to restart harvesting:', error);

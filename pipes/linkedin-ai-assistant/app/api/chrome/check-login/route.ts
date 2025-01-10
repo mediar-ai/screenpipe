@@ -3,10 +3,10 @@ import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 
 export async function POST(request: Request) {
     try {
-        const { wsUrl } = await request.json();
+        await request.json(); // keep reading the request to avoid hanging
         console.log('checking linkedin login status');
 
-        await setupBrowser(wsUrl);
+        await setupBrowser();
         const { page } = getActiveBrowser();
         
         if (!page) {

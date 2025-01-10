@@ -31,11 +31,11 @@ async function navigateToPage(page: Page, url: string) {
 
 export async function POST(request: Request) {
     try {
-        const { url, wsUrl } = await request.json();
+        const { url } = await request.json();
         console.log('attempting to navigate to:', url);
         
-        // Setup the browser connection using the provided WebSocket URL
-        await setupBrowser(wsUrl);
+        // Setup the browser connection
+        await setupBrowser();
         
         const { page } = getActiveBrowser();
         if (!page) {

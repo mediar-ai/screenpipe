@@ -4,7 +4,7 @@ import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 
 export async function POST(request: Request) {
     try {
-        const { url, wsUrl, allowTruncate } = await request.json();
+        const { url, allowTruncate } = await request.json();
         
         if (!url || !url.includes('linkedin.com/search')) {
             return NextResponse.json(
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
         }
 
         // Setup browser with the provided WebSocket URL
-        await setupBrowser(wsUrl);
+        await setupBrowser();
         const { page } = getActiveBrowser();
         
         if (!page) {

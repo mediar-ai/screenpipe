@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import fetch from 'node-fetch';
 
 export const runtime = 'nodejs';
 
@@ -11,8 +10,10 @@ export async function GET() {
     }
     const data = await response.json() as { webSocketDebuggerUrl: string };
 
+    const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+
     return NextResponse.json({
-      wsUrl: data.webSocketDebuggerUrl,
+      wsUrl,
       status: 'connected'
     });
   } catch {

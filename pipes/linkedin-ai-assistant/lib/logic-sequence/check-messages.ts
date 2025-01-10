@@ -20,7 +20,7 @@ export async function checkAllMessages() {
     }
     
     // Setup browser
-    const { browser, page } = await setupBrowser(statusData.wsUrl);
+    const { browser, page } = await setupBrowser();
     
     try {
         // Get all profiles (both visited and to visit)
