@@ -40,7 +40,7 @@ const triggerUpdate = fromPromise(async() => {
 
 export const screenpipeOnboardingFlow = setup({
     types:{
-        events: {} as {type:'NEXT'|'UPDATE_SCREENPIPE'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
+        events: {} as {type:'NEXT'|'UPDATE_SCREENPIPE'|'CONFIGURE_NOW'|'CONFIGURE_LATER'|'ANIMATION_DONE'|'CHECK'|'SKIP'|'REQUEST'|'YES'|'NO'}|{type:'PROGRESS_UPDATE',payload:any}|{type:'ACTIVATE'}|{type:'UPDATE',payload:any}
     },
     actors: {
         conversationBoxMachine,
@@ -52,7 +52,7 @@ export const screenpipeOnboardingFlow = setup({
         triggerUpdate
     }
 }).createMachine({
-    initial:'core_models',
+    initial:'ai',
     entry: [
         spawnChild('conversationBoxMachine', { id:'convoBoxMachine', systemId: 'convoBoxMachine' }),
         spawnChild('screenpipeLogoMachine', { id:'screenpipeLogoMachine', systemId: 'screenpipeLogoMachine' }),
@@ -598,7 +598,7 @@ export const screenpipeOnboardingFlow = setup({
                     ],
                     on: {
                         NEXT: {
-                            target: '#appstore',
+                            target: '#ai',
                             actions: [
                                 sendTo('screenpipeLogoMachine', {type: 'RUNNING'}),
                                 sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
@@ -608,7 +608,167 @@ export const screenpipeOnboardingFlow = setup({
                 }
             },
         },
-        ai: {},
+        ai: {
+            description: 'objective of this step is to configure ai model used to process stored information for arbitrary purposes.',
+            id: 'ai',
+            initial: 'intro',
+            states: {
+                intro: {
+                    entry: [
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 8,
+                                    text: 'screenpipe uses your prefered ai models to process stored data. these models help in supercharging your data by summarizing recordings and meetings, extracting insights and much more!',
+                                },
+                                button:  [
+                                    {
+                                        variant: 'default',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'okay',
+                                        event: {type: 'NEXT'}
+                                    },
+                                ],
+                                process: {
+                                    skippable: false
+                                }
+                            }
+                        },{delay:500}),
+                    ],
+                    on: {
+                        NEXT: {
+                            target: 'shouldSetup',
+                            actions: [
+                                sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
+                            ]
+                        },
+                    }
+                },
+                shouldSetup: {
+                    entry: [
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 8,
+                                    text: 'would you like to configure your ai model now?',
+                                },
+                                button:  [
+                                    {
+                                        variant: 'default',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'yes, lets go',
+                                        event: {type: 'CONFIGURE_NOW'}
+                                    },
+                                    {
+                                        variant: 'secondary',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'i\'ll do it later',
+                                        event: {type: 'CONFIGURE_LATER'}
+                                    }
+                                ],
+                                process: {
+                                    skippable: false
+                                }
+                            }
+                        },{delay:500}),
+                    ],
+                    on: {
+                        CONFIGURE_NOW: {
+                            target: 'configureNow',
+                            actions: [
+                                sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
+                            ]
+                        },
+                        CONFIGURE_LATER: {
+                            target: 'configureLater',
+                            actions: [
+                                sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
+                            ]
+                        },
+                    }
+                },
+                configureNow: {
+                    entry: [
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 8,
+                                    text: 'please fill in the details requested by the form that is about to open.',
+                                },
+                                button:  [
+                                    {
+                                        variant: 'default',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'okay',
+                                        event: {type: 'CONFIGURE_NOW'}
+                                    },
+                                ],
+                                process: {
+                                    skippable: false,
+                                    disabled: true
+                                }
+                            }
+                        },{delay:500}),
+                        sendTo('convoBoxMachine', { type: 'DISABLE_BUTTON' })
+                    ],
+                    on: {
+                    }
+                },
+                configureLater: {
+                    entry: [
+                        sendTo('convoBoxMachine', { 
+                            type:'UPDATE',
+                            payload: {
+                                textBox: {
+                                    id: 8,
+                                    text: 'please consider that not having an ai provider severly restricts screenpipe\'s abilities. you can always set up your provider later by visiting your settings.',
+                                },
+                                button:  [
+                                    {
+                                        variant: 'default',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'okay',
+                                        event: {type: 'NEXT'}
+                                    },
+                                    {
+                                        variant: 'secondary',
+                                        size: 'default',
+                                        skip: true,
+                                        label: 'configure ai now',
+                                        event: {type: 'CONFIGURE_NOW'}
+                                    },
+                                ],
+                                process: {
+                                    skippable: false
+                                }
+                            }
+                        },{delay:500}),
+                    ],
+                    on: {
+                        NEXT: {
+                            target: '#appstore',
+                            actions: [
+                                sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
+                            ]
+                        },
+                        CONFIGURE_NOW: {
+                            target: 'configureNow',
+                            actions: [
+                                sendTo('convoBoxMachine', {  type: 'NEXT_STEP' })
+                            ]
+                        },
+                    }
+                }
+            }
+        },
         appstore: {
             id: 'appstore',
             initial: 'intro',
