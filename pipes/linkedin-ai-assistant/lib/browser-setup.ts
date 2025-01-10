@@ -3,17 +3,45 @@ import puppeteer, { Browser, Page } from 'puppeteer-core';
 let activeBrowser: Browser | null = null;
 let activePage: Page | null = null;
 
-export async function setupBrowser(wsUrl: string): Promise<{ browser: Browser; page: Page }> {
+export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> {
     if (!activeBrowser) {
-        activeBrowser = await puppeteer.connect({
-            browserWSEndpoint: wsUrl,
-            defaultViewport: null,
-        });
-        console.log('browser connected');
+        let retries = 3;
+        let lastError;
+        
+        while (retries > 0) {
+            try {
+                const response = await fetch('http://127.0.0.1:9222/json/version');
+                if (!response.ok) {
+                    throw new Error('failed to get fresh websocket url');
+                }
+                const data = await response.json() as { webSocketDebuggerUrl: string };
+                const freshWsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+                
+                console.log('attempting connection with fresh ws url:', freshWsUrl);
+                
+                activeBrowser = await puppeteer.connect({
+                    browserWSEndpoint: freshWsUrl,
+                    defaultViewport: null,
+                });
+                console.log('browser connected to:', freshWsUrl);
 
-        const pages = await activeBrowser.pages();
-        activePage = pages[0];
-        console.log('got active page');
+                const pages = await activeBrowser.pages();
+                activePage = pages[0];
+                console.log('got active page');
+                break;
+            } catch (error) {
+                lastError = error;
+                console.error(`connection attempt ${4 - retries} failed:`, error);
+                retries--;
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        if (!activeBrowser) {
+            throw new Error(`failed to connect to browser after 3 attempts: ${lastError}`);
+        }
     }
 
     if (!activeBrowser || !activePage) {
@@ -29,7 +57,11 @@ export function getActiveBrowser() {
 
 export async function quitBrowser() {
     if (activeBrowser) {
-        await activeBrowser.disconnect();
+        try {
+            await activeBrowser.disconnect();
+        } catch (error) {
+            console.error('error disconnecting browser:', error);
+        }
         activeBrowser = null;
         activePage = null;
         console.log('browser session cleared');

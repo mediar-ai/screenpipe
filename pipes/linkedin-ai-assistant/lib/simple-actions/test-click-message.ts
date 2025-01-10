@@ -4,9 +4,9 @@ import { clickFirstMessageButton } from './click-message';
 async function testClickMessage() {
     try {
         // Replace with your actual WebSocket URL
-        const wsUrl = 'ws://127.0.0.1:9222/devtools/browser/1f237598-603c-4e61-8fc1-f8a91a3340a7';
+        // const wsUrl = 'ws://127.0.0.1:9222/devtools/browser/1f237598-603c-4e61-8fc1-f8a91a3340a7';
         
-        const { browser, page } = await setupBrowser(wsUrl);
+        const { browser, page } = await setupBrowser();
         console.log('connected to browser');
 
         // Test the click message functionality

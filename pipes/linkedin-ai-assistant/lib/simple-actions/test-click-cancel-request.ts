@@ -4,9 +4,9 @@ import { clickCancelConnectionRequest } from './click-cancel-connection-request'
 async function testCancelRequest() {
     try {
         // Replace with your actual WebSocket URL
-        const wsUrl = 'ws://127.0.0.1:9222/devtools/browser/eb8cd29f-cf02-43c1-a4f7-6368bd6c25de';
+        // const wsUrl = 'ws://127.0.0.1:9222/devtools/browser/eb8cd29f-cf02-43c1-a4f7-6368bd6c25de';
         
-        const { browser, page } = await setupBrowser(wsUrl);
+        const { browser, page } = await setupBrowser();
         console.log('connected to browser');
 
         // Test the cancel request functionality

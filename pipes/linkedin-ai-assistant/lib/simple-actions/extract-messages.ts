@@ -86,7 +86,7 @@ if (require.main === module) {
     const test = async () => {
         try {
             const { setupBrowser, getActiveBrowser } = await import('../browser-setup');
-            await setupBrowser('ws://localhost:9222');
+            await setupBrowser();
             const { browser, page } = getActiveBrowser();
             if (!page) throw new Error('no active page');
             if (!browser) throw new Error('no active browser');

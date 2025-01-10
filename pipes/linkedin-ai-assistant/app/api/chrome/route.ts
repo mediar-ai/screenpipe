@@ -24,7 +24,7 @@ function getChromePath() {
 
 export async function POST() {
   try {
-    console.log('attempting to launch chrome');
+    console.log('attempting to launch chrome in', process.env.NODE_ENV);
 
     await quitChrome();
     await quitBrowser();
@@ -33,8 +33,11 @@ export async function POST() {
     const chromeProcess = spawn(chromePath, [
       '--remote-debugging-port=9222',
       '--restore-last-session',
-      '--no-first-run', // add these flags for better stability
-      '--no-default-browser-check'
+      '--no-first-run',
+      '--no-default-browser-check',
+      // add these flags for production
+      '--no-sandbox',
+      '--disable-setuid-sandbox'
     ], { 
       detached: true, 
       stdio: 'ignore' 
@@ -76,7 +79,11 @@ export async function DELETE() {
 }
 
 async function quitChrome() {
-  const killCommand = `pkill -f -- "Google Chrome"`;
+  const platform = os.platform();
+  const killCommand = platform === 'win32' 
+    ? `taskkill /F /IM chrome.exe`
+    : `pkill -f -- "Google Chrome"`;
+    
   try {
     await execPromise(killCommand);
     console.log('chrome killed');
