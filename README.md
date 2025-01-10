@@ -124,10 +124,6 @@ bunx @screenpipe/create-pipe@latest
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
-## other examples
-
-[check examples](https://docs.screenpi.pe/docs/examples)
-
 ## star history
 
 ![Star History Nov 24 2024](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)
