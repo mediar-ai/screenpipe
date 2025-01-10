@@ -457,11 +457,15 @@ async fn main() -> anyhow::Result<()> {
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
+    let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
+    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
+    let realtime_vision_sender_clone = realtime_vision_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let vad_engine_clone = vad_engine.clone();
+                let realtime_vision_sender_clone = realtime_vision_sender.clone();
+                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
@@ -490,7 +494,8 @@ async fn main() -> anyhow::Result<()> {
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
                     Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
-                    Arc::new(realtime_transcription_sender_clone),
+                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
+                    realtime_vision_sender_clone,
                 );
 
                 let result = tokio::select! {
@@ -534,12 +539,12 @@ async fn main() -> anyhow::Result<()> {
     let (audio_devices_tx, _) = broadcast::channel(100);
     let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
 
+    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
-        audio_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -547,6 +552,7 @@ async fn main() -> anyhow::Result<()> {
         cli.enable_ui_monitoring,
         cli.enable_realtime_audio_transcription,
         realtime_transcription_sender_clone,
+        realtime_vision_sender_clone.clone(),
     );
 
     let mut rx = audio_devices_tx.subscribe();
@@ -918,7 +924,7 @@ async fn main() -> anyhow::Result<()> {
 
             loop {
                 tokio::select! {
-                    result = run_ui() => {
+                    result = run_ui(realtime_vision_sender_clone.clone()) => {
                         match result {
                             Ok(_) => break,
                             Err(e) => {

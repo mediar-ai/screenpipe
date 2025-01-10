@@ -32,6 +32,7 @@ use screenpipe_audio::{
 };
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
+use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -73,6 +74,7 @@ pub struct AppState {
     pub realtime_transcription_enabled: bool,
     pub realtime_transcription_sender:
         Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    pub realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
 // Update the SearchQuery struct
@@ -807,6 +809,7 @@ pub struct Server {
     ui_monitoring_enabled: bool,
     realtime_transcription_enabled: bool,
     realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
 impl Server {
@@ -823,6 +826,7 @@ impl Server {
         ui_monitoring_enabled: bool,
         realtime_transcription_enabled: bool,
         realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
+        realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
     ) -> Self {
         Server {
             db,
@@ -836,6 +840,7 @@ impl Server {
             ui_monitoring_enabled,
             realtime_transcription_enabled,
             realtime_transcription_sender,
+            realtime_vision_sender,
         }
     }
 
@@ -870,6 +875,7 @@ impl Server {
             },
             realtime_transcription_enabled: self.realtime_transcription_enabled,
             realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
+            realtime_vision_sender: self.realtime_vision_sender,
         });
 
         let app = create_router()
@@ -1697,6 +1703,56 @@ async fn stop_audio_device(
     }))
 }
 
+
+#[derive(Deserialize)]
+struct VisionSSEQuery {
+    images: Option<bool>,
+}
+
+async fn sse_vision_handler(
+    Query(query): Query<VisionSSEQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<
+    Sse<impl Stream<Item = Result<Event, Infallible>>>,
+    (StatusCode, JsonResponse<serde_json::Value>),
+> {
+    if state.vision_disabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            JsonResponse(json!({"error": "Vision streaming is disabled"})),
+        ));
+    }
+    // Get a new subscription - this won't affect the sender
+    let rx = state.realtime_vision_sender.subscribe();
+
+    let include_images = query.images.unwrap_or(false);
+
+    let stream = async_stream::stream! {
+        let mut rx = rx; // Create a new mutable reference to the receiver
+        while let Ok(event) = rx.recv().await {
+            match event {
+                RealtimeVisionEvent::Ocr(mut frame) => {
+                    if !include_images {
+                        frame.image = None; // Remove the image data if not enabled
+                    }
+                    yield Ok(Event::default().data(serde_json::to_string(&frame).unwrap_or_default()));
+                }
+                _ => {
+                    yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
+                }
+            }
+        }
+        // Even if this stream ends, the sender remains active
+    };
+
+    Ok(Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(1))
+            .text("keep-alive-text"),
+    ))
+
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1741,6 +1797,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/sse/transcriptions", get(sse_transcription_handler))
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
+        .route("/sse/vision", get(sse_vision_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]

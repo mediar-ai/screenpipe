@@ -224,3 +224,36 @@ export interface ParsedConfig<T = unknown> {
     default?: T;
   }[];
 }
+
+export interface TranscriptionChunk {
+  text: string;
+  timestamp: string; // ISO string
+  device_name: string;
+  device_type: "input" | "output";
+  is_final: boolean;
+}
+
+export interface TranscriptionStreamResponse {
+  id: string;
+  object: "text_completion_chunk";
+  created: number;
+  model: "screenpipe-realtime";
+  choices: {
+    text: string;
+    index: number;
+    finish_reason: null | "stop";
+  }[];
+}
+
+export interface VisionEvent {
+  image?: string; // base64 encoded image
+  text: string;
+  timestamp: string;
+  app_name?: string;
+  window_name?: string;
+}
+
+export interface VisionStreamResponse {
+  type: string;
+  data: VisionEvent;
+}
