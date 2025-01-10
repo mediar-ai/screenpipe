@@ -103,10 +103,6 @@ bunx @screenpipe/create-pipe@latest
 
 screenpipe有一个名为"pipe"的插件系统，允许你在Rust代码的沙盒环境中运行代码，[了解更多](https://docs.screenpi.pe/docs/plugins)
 
-## 其他示例
-
-[查看示例](https://docs.screenpi.pe/docs/examples)
-
 ## Star历史
 
 ![Star History Nov 24 2024](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)
