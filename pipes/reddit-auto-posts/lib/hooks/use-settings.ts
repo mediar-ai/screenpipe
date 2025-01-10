@@ -56,8 +56,8 @@ export function useSettings() {
     const onFocus = () => loadSettings();
     window.addEventListener("focus", onFocus);
 
-    // Optional: periodic refresh every 30s
-    const interval = setInterval(loadSettings, 30000);
+    // Optional: periodic refresh every 5s
+    const interval = setInterval(loadSettings, 5000);
 
     return () => {
       window.removeEventListener("focus", onFocus);

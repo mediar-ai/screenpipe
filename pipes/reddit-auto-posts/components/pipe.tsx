@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
+import ReactMarkdown from 'react-markdown';
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
 import {
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { CodeBlock } from "./ui/codeblock";
 
 const Pipe: React.FC = () => {
 
@@ -60,7 +62,11 @@ const Pipe: React.FC = () => {
         }) 
       }
       const data = await res.json();
-      setLastLog(data);
+      if (data.logEntry) {
+        setLastLog(JSON.stringify(JSON.parse(data.logEntry), null, 2));
+      } else {
+        setLastLog(JSON.stringify(data, null, 2));
+      }
     } catch (err) {
       console.error("error testing log:", err);
     } finally {
@@ -282,12 +288,27 @@ const Pipe: React.FC = () => {
         </Button>
 
         {lastLog && (
-          <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
-            <h4>last generated log:</h4>
-            <pre className="bg-muted p-2 rounded overflow-auto">
-              {JSON.stringify(lastLog, null, 2)}
-            </pre>
-          </div>
+        <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
+          <ReactMarkdown
+            children={`\`\`\`json\n${lastLog}\n\`\`\``}
+            components={{
+              code({ node, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || '');
+                return match ? (
+                  <CodeBlock 
+                    language={match[1]} 
+                    value={String(children).replace(/\n$/, '')} 
+                    {...props}
+                  />
+                ) : (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                );
+              },
+            }}
+          />
+        </div>
         )}
       </div>
     </div>

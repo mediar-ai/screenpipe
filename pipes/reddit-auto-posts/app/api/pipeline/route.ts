@@ -63,6 +63,7 @@ export async function GET() {
     const emailEnabled = !!(emailAddress && emailPassword);
     const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
     const logsDir = path.join(screenpipeDir, "pipes", "reddit-auto-posts", "logs");
+    const pipeConfigPath = path.join(screenpipeDir, "pipes", "reddit-auto-posts", "pipe.json");
 
     try {
       fs.mkdirSync(logsDir);
@@ -70,7 +71,9 @@ export async function GET() {
       console.warn("failed to create logs directory, probably already exists:", logsDir);
     }
 
-    if (emailEnabled) {
+    const fileContent = fs.readFileSync(pipeConfigPath, 'utf-8');
+    const configData = JSON.parse(fileContent);
+    if (emailEnabled && !configData?.welcomeEmailSent) {
       const welcomeEmail = `
         Welcome to the daily reddit questions pipeline!
 
@@ -89,7 +92,11 @@ export async function GET() {
           "daily reddit questions",
           welcomeEmail
         );
+          configData.welcomeEmailSent = true;
+          fs.writeFileSync(pipeConfigPath, JSON.stringify(configData, null, 2));
       } catch (error) {
+          configData.welcomeEmailSent = false;
+          fs.writeFileSync(pipeConfigPath, JSON.stringify(configData, null, 2));
         return NextResponse.json(
           { error: `Error in sending welcome email: ${error}` },
           { status: 500 }
@@ -198,6 +205,7 @@ export async function GET() {
         }
 
         try {
+          console.log("Sending screenpipe inbox notification");
           await pipe.inbox.send({
             title: "reddit questions",
             body: redditQuestions,
@@ -210,6 +218,7 @@ export async function GET() {
         }
 
         try {
+          console.log("Sending desktop notification");
           await pipe.sendDesktopNotification({
             badge: "reddit questions",
             body: "just sent you some reddit questions",
