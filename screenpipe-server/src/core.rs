@@ -2,7 +2,6 @@ use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
-use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
