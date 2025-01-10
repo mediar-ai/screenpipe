@@ -252,9 +252,9 @@ pub async fn create_whisper_channel(
                             while let Some(segment) = segments.recv().await {
                                 let path = path.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
-                                    let timestamp = timestamp + segment.start.round() as u64;
                                     #[cfg(target_os = "macos")]
                                     {
+                                        let timestamp = timestamp + segment.start.round() as u64;
                                         autoreleasepool(|| {
                                             run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
                                         })

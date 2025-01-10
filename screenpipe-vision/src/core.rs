@@ -25,7 +25,6 @@ use serde_json;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
-    sync::OnceLock,
     time::{Duration, Instant, UNIX_EPOCH},
 };
 use tokio::fs::File;
@@ -35,6 +34,9 @@ use tokio::time::sleep;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
+
+#[cfg(target_os = "macos")]
+use std::sync::OnceLock;
 
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
