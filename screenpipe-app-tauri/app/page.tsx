@@ -1,7 +1,7 @@
 "use client";
 
 import { Settings } from "@/components/settings";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { getStore, useSettings } from "@/lib/hooks/use-settings";
 import {
   Card,
   CardContent,
@@ -40,17 +40,9 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
 
   useEffect(() => {
-    const getAudioDevices = () => {
-      const audioDevices = settings.audioDevices as unknown as {
-        name: string;
-        is_default: boolean;
-      }[];
-
-      const devices = audioDevices.map((device) => ({
-        name: device.name.replaceAll("(input)", "").replaceAll("(output)", ""),
-        is_default: device.is_default,
-      }));
-
+    const getAudioDevices = async () => {
+      const store = await getStore();
+      const devices = (await store.get("audioDevices")) as string[];
       return devices;
     };
 
@@ -106,20 +98,28 @@ export default function Home() {
         }
       }),
 
-      listen("shortcut-start-recording", async () => {
-        const devices = getAudioDevices();
+      listen("shortcut-start-audio", async () => {
+        const devices = await getAudioDevices();
         const pipeApi = new PipeApi();
         console.log("audio-devices", devices);
         devices.forEach((device) => {
-          pipeApi.startAudio(device.name);
+          pipeApi.startAudio(device);
+        });
+        toast({
+          title: "audio started",
+          description: "audio has been started",
         });
       }),
 
-      listen("shortcut-stop-recording", async (event) => {
-        const devices = getAudioDevices();
+      listen("shortcut-stop-audio", async (event) => {
+        const devices = await getAudioDevices();
         const pipeApi = new PipeApi();
         devices.forEach((device) => {
-          pipeApi.stopAudio(device.name);
+          pipeApi.stopAudio(device);
+        });
+        toast({
+          title: "audio stopped",
+          description: "audio has been stopped",
         });
       }),
     ]);

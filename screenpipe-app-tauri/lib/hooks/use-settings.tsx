@@ -224,7 +224,7 @@ let storePromise: Promise<LazyStore> | null = null;
 /** 
  * @warning Do not change autoSave to true, it causes race conditions
  */
-const getStore = async () => {
+export const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
