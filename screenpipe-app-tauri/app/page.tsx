@@ -99,28 +99,46 @@ export default function Home() {
       }),
 
       listen("shortcut-start-audio", async () => {
-        const devices = await getAudioDevices();
-        const pipeApi = new PipeApi();
-        console.log("audio-devices", devices);
-        devices.forEach((device) => {
-          pipeApi.startAudio(device);
-        });
-        toast({
-          title: "audio started",
-          description: "audio has been started",
-        });
+        try {
+          const devices = await getAudioDevices();
+          const pipeApi = new PipeApi();
+          console.log("audio-devices", devices);
+          devices.forEach((device) => {
+            pipeApi.startAudio(device);
+          });
+          toast({
+            title: "audio started",
+            description: "audio has been started",
+          });
+        } catch (error) {
+          console.error("error starting audio:", error);
+          toast({
+            title: "error starting audio",
+            description: error instanceof Error ? error.message : "unknown error occurred",
+            variant: "destructive",
+          });
+        }
       }),
 
       listen("shortcut-stop-audio", async (event) => {
-        const devices = await getAudioDevices();
-        const pipeApi = new PipeApi();
-        devices.forEach((device) => {
-          pipeApi.stopAudio(device);
-        });
-        toast({
-          title: "audio stopped",
-          description: "audio has been stopped",
-        });
+        try {
+          const devices = await getAudioDevices();
+          const pipeApi = new PipeApi();
+          devices.forEach((device) => {
+            pipeApi.stopAudio(device);
+          });
+          toast({
+            title: "audio stopped",
+            description: "audio has been stopped",
+          });
+        } catch (error) {
+          console.error("error stopping audio:", error);
+          toast({
+            title: "error stopping audio", 
+            description: error instanceof Error ? error.message : "unknown error occurred",
+            variant: "destructive",
+          });
+        }
       }),
     ]);
 
