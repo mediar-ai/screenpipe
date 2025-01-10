@@ -39,12 +39,12 @@ then stream the OCR data (requires `jq`):
   </Tab>
   <Tab>
     ```bash copy
-    curl -N "http://localhost:3030/sse/audio" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
+    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
     ```
   </Tab>
   <Tab>
     ```powershell copy
-    curl -N "http://localhost:3030/sse/audio" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
+    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
     ```
   </Tab>
 </Tabs>
