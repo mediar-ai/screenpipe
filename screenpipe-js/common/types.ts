@@ -226,23 +226,28 @@ export interface ParsedConfig<T = unknown> {
 }
 
 export interface TranscriptionChunk {
-  text: string;
+  transcription: string;
   timestamp: string; // ISO string
-  device_name: string;
-  device_type: "input" | "output";
+  device: string;
+  is_input: boolean;
   is_final: boolean;
 }
 
 export interface TranscriptionStreamResponse {
   id: string;
-  object: "text_completion_chunk";
+  object: string;
   created: number;
-  model: "screenpipe-realtime";
-  choices: {
+  model: string;
+  choices: Array<{
     text: string;
     index: number;
-    finish_reason: null | "stop";
-  }[];
+    finish_reason: string | null;
+  }>;
+  metadata?: {
+    timestamp: string;
+    device: string;
+    isInput: boolean;
+  };
 }
 
 export interface VisionEvent {

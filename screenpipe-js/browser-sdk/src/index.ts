@@ -138,6 +138,9 @@ export const pipe: BrowserPipe = {
         const chunk: TranscriptionChunk = await new Promise(
           (resolve, reject) => {
             eventSource.onmessage = (event) => {
+              if (event.data.trim() === "keep-alive-text") {
+                return;
+              }
               resolve(JSON.parse(event.data));
             };
             eventSource.onerror = (error) => {
@@ -153,11 +156,16 @@ export const pipe: BrowserPipe = {
           model: "screenpipe-realtime",
           choices: [
             {
-              text: chunk.text,
+              text: chunk.transcription,
               index: 0,
               finish_reason: chunk.is_final ? "stop" : null,
             },
           ],
+          metadata: {
+            timestamp: chunk.timestamp,
+            device: chunk.device,
+            isInput: chunk.is_input,
+          },
         };
       }
     } finally {
