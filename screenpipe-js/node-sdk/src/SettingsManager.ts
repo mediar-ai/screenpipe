@@ -27,8 +27,9 @@ const DEFAULT_SETTINGS: Settings = {
   },
   enableFrameCache: true,
   enableUiMonitoring: false,
-  aiMaxContextChars: 128000,
+  aiMaxContextChars: 512000,
   user: {},
+  analyticsEnabled: true,
 };
 
 export class SettingsManager {

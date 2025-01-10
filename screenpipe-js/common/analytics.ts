@@ -1,34 +1,40 @@
-export interface TrackEventOptions {
-  name: EventName;
-  properties?: AnalyticsProperties;
+import posthog from "posthog-js";
+
+const POSTHOG_KEY = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce";
+const POSTHOG_HOST = "https://eu.i.posthog.com";
+
+let initialized = false;
+
+function initPosthog() {
+  if (!initialized) {
+    posthog.init(POSTHOG_KEY, { api_host: POSTHOG_HOST });
+    initialized = true;
+  }
 }
 
-export const trackEvent = async (options: TrackEventOptions): Promise<void> => {
-  try {
-    const payload = {
-      event: options.name,
-      properties: {
-        ...options.properties,
-        timestamp: new Date().toISOString(),
-      },
-    };
+export async function identifyUser(
+  userId: string,
+  properties?: Record<string, any>
+): Promise<void> {
+  initPosthog();
+  posthog.identify(userId, properties);
+}
 
-    await fetch("https://eu.i.posthog.com/capture/", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        api_key: "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
-        event: options.name,
-        properties: {
-          ...options.properties,
-          timestamp: new Date().toISOString(),
-          distinct_id: "anonymous", // or get from settings if you want
-        },
-      }),
-    });
-  } catch (error) {
-    console.error("failed to track event:", error);
-  }
-};
+export async function captureEvent(
+  name: string,
+  properties?: Record<string, any>
+): Promise<void> {
+  initPosthog();
+  posthog.capture(name, properties);
+}
+
+export async function captureMainFeatureEvent(
+  name: string,
+  properties?: Record<string, any>
+): Promise<void> {
+  initPosthog();
+  posthog.capture(name, {
+    feature: "main",
+    ...properties,
+  });
+}
