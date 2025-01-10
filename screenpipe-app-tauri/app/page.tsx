@@ -30,6 +30,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { PipeApi } from "@/lib/api";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -76,6 +77,21 @@ export default function Home() {
         await new Promise((resolve) => setTimeout(resolve, 1000));
         relaunch();
       }),
+
+      listen<string>('open-pipe', async (event) => {
+        const pipeId = event.payload;
+
+        const pipeApi = new PipeApi();
+        const pipeList = await pipeApi.listPipes();
+        const pipe = pipeList.find(p => p.id === pipeId);
+        if (pipe) {
+          await invoke("open_pipe_window", {
+            port: pipe.port,
+            title: pipe.id,
+          });
+        }
+      })
+
     ]);
 
     return () => {

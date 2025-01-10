@@ -10,6 +10,9 @@ pub async fn update_tray_menu(
     app: &AppHandle,
     update_item: &tauri::menu::MenuItem<Wry>,
 ) -> Result<()> {
+    // Cache the current menu state to compare
+    let mut current_menu_state = String::new();
+
     // Fetch enabled pipes from API
     let client = reqwest::Client::new();
     let response = client
@@ -18,6 +21,36 @@ pub async fn update_tray_menu(
         .await?
         .json::<Value>()
         .await?;
+
+    // Create menu state string for comparison
+    if let Some(pipes) = response["data"].as_array() {
+        current_menu_state = pipes
+            .iter()
+            .filter(|p| p["enabled"].as_bool().unwrap_or(false))
+            .map(|p| p["id"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(",");
+    }
+
+    // Store last menu state in static/thread-safe way
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+    static LAST_MENU_STATE: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+    // Only update if menu state changed
+    let should_update = {
+        let mut last_state = LAST_MENU_STATE.lock().unwrap();
+        if *last_state != current_menu_state {
+            *last_state = current_menu_state.clone();
+            true
+        } else {
+            false
+        }
+    };
+
+    if !should_update {
+        return Ok(());
+    }
 
     // Create all owned menu items first
     let mut menu_pipes = Vec::new();

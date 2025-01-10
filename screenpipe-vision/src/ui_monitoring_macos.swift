@@ -1,5 +1,5 @@
-import Cocoa
 import ApplicationServices
+import Cocoa
 import Foundation
 import SQLite3
 
@@ -26,6 +26,34 @@ struct WindowState {
         self.elements = [:]
         self.textOutput = ""
         self.timestamp = Date()
+    }
+}
+
+struct UIFrame {
+    let window: String
+    let app: String
+    let text_output: String
+    let initial_traversal_at: String
+}
+
+extension UIFrame {
+    func toBytes() -> [UInt8] {
+        var bytes = [UInt8]()
+
+        // Convert each string to bytes and append to the array
+        bytes.append(contentsOf: window.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: app.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: text_output.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        bytes.append(contentsOf: initial_traversal_at.utf8)
+        bytes.append(0)  // Null-terminate the string
+
+        return bytes
     }
 }
 
@@ -83,7 +111,7 @@ let notificationsToObserve: [(String, String)] = [
     ("AXSelectedCellsChanged", kAXSelectedCellsChangedNotification as String),
     ("AXWindowResized", kAXWindowResizedNotification as String),
     ("AXWindowMoved", kAXWindowMovedNotification as String),
-    ("AXCreated", kAXCreatedNotification as String)
+    ("AXCreated", kAXCreatedNotification as String),
 ]
 
 // Struct to hold element attributes including hierarchy and position
@@ -98,7 +126,7 @@ struct ElementAttributes {
     var height: CGFloat
     var children: [ElementAttributes]
     var timestamp: Date
-    
+
     // Add computed property for unique identifier
     var identifier: String {
         // Combine path with sorted attributes to create a stable identifier
@@ -108,9 +136,11 @@ struct ElementAttributes {
         return "\(path)#\(attributesString)"
     }
 
-    init(element: String, path: String, attributes: [String: String], depth: Int,
-         x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, children: [ElementAttributes],
-         timestamp: Date = Date()) {
+    init(
+        element: String, path: String, attributes: [String: String], depth: Int,
+        x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, children: [ElementAttributes],
+        timestamp: Date = Date()
+    ) {
         self.element = element
         self.path = path
         self.attributes = attributes
@@ -148,7 +178,7 @@ var isCleaningUp = false
 // JSON state structure
 struct UIMonitoringState: Codable {
     var ignoredApps: [String]
-    
+
     init(ignoredApps: [String] = []) {
         self.ignoredApps = ignoredApps
     }
@@ -158,45 +188,43 @@ struct UIMonitoringState: Codable {
 func getStateFilePath() -> String {
     let paths = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
     let appSupportDir = paths[0].appendingPathComponent("screenpipe")
-    
+
     // Create directory if it doesn't exist
     try? FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
-    
+
     return appSupportDir.appendingPathComponent("uiMonitoringLogs.json").path
 }
 
 // Function to load or create state
 func loadOrCreateState() -> UIMonitoringState {
     let path = getStateFilePath()
-    
+
     if let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-       let state = try? JSONDecoder().decode(UIMonitoringState.self, from: data) {
+        let state = try? JSONDecoder().decode(UIMonitoringState.self, from: data)
+    {
         return state
     }
-    
+
     // Create default state with TablePlus ignored
     let defaultState = UIMonitoringState(ignoredApps: ["tableplus"])
-    
+
     // Save default state
     if let encoded = try? JSONEncoder().encode(defaultState) {
         try? encoded.write(to: URL(fileURLWithPath: path))
     }
-    
+
     return defaultState
 }
 
-// Start monitoring
-startMonitoring()
-
 func startMonitoring() {
     print("entering startMonitoring()")
-    
+
     // Check permissions first
     if !checkAccessibilityPermissions() {
         print("error: accessibility permissions not granted")
         exit(1)
     }
-    
+
     // Set up signal handling
     signal(SIGINT) { _ in
         print("received SIGINT, cleaning up...")
@@ -204,12 +232,28 @@ func startMonitoring() {
         exit(0)
     }
 
+    // get args
+    let args = CommandLine.arguments
+    let namedPipePath = args[1]
+
+    if namedPipePath.isEmpty {
+        print("error: named pipe path is empty")
+        exit(1)
+    }
+
+    // create handle
+    let handle = open(namedPipePath, O_WRONLY)
+    if handle == -1 {
+        print("error: failed to open named pipe")
+        exit(1)
+    }
+
     setupDatabase()
     print("loaded ui_monitoring logs state")
-    
+
     print("setting up application observer...")
     setupApplicationChangeObserver()
-    
+
     print("monitoring current application...")
     monitorCurrentFrontmostApplication()
 
@@ -228,54 +272,54 @@ func setupDatabase() {
     do {
         screenPipeDb = try ScreenPipeDB()
         print("database connected successfully")
-        
+
         // Create table if not exists (original schema)
         let createTableSQL = """
-            CREATE TABLE IF NOT EXISTS ui_monitoring (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT,
-                app TEXT,
-                window TEXT,
-                text_output TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_timestamp ON ui_monitoring(timestamp);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_app_window ON ui_monitoring(app, window);
-        """
-        
+                CREATE TABLE IF NOT EXISTS ui_monitoring (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT,
+                    app TEXT,
+                    window TEXT,
+                    text_output TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_timestamp ON ui_monitoring(timestamp);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_app_window ON ui_monitoring(app, window);
+            """
+
         if sqlite3_exec(screenPipeDb?.db, createTableSQL, nil, nil, nil) != SQLITE_OK {
             let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
             print("error creating table: \(error)")
             return
         }
-        
+
         // Add initial_traversal_at column if it doesn't exist
         let addColumnSQL = """
-            SELECT COUNT(*) FROM pragma_table_info('ui_monitoring') 
-            WHERE name='initial_traversal_at';
-        """
-        
+                SELECT COUNT(*) FROM pragma_table_info('ui_monitoring') 
+                WHERE name='initial_traversal_at';
+            """
+
         var stmt: OpaquePointer?
         var columnExists = false
-        
+
         if sqlite3_prepare_v2(screenPipeDb?.db, addColumnSQL, -1, &stmt, nil) == SQLITE_OK {
             if sqlite3_step(stmt) == SQLITE_ROW {
                 columnExists = sqlite3_column_int(stmt, 0) > 0
             }
         }
         sqlite3_finalize(stmt)
-        
+
         if !columnExists {
             print("adding initial_traversal_at column...")
             let alterTableSQL = """
-                ALTER TABLE ui_monitoring 
-                ADD COLUMN initial_traversal_at TEXT;
-                
-                -- Set initial_traversal_at to timestamp for existing records
-                UPDATE ui_monitoring 
-                SET initial_traversal_at = timestamp 
-                WHERE initial_traversal_at IS NULL;
-            """
-            
+                    ALTER TABLE ui_monitoring 
+                    ADD COLUMN initial_traversal_at TEXT;
+                    
+                    -- Set initial_traversal_at to timestamp for existing records
+                    UPDATE ui_monitoring 
+                    SET initial_traversal_at = timestamp 
+                    WHERE initial_traversal_at IS NULL;
+                """
+
             if sqlite3_exec(screenPipeDb?.db, alterTableSQL, nil, nil, nil) != SQLITE_OK {
                 let error = String(cString: sqlite3_errmsg(screenPipeDb?.db))
                 print("error adding column: \(error)")
@@ -283,7 +327,7 @@ func setupDatabase() {
                 print("added initial_traversal_at column successfully")
             }
         }
-        
+
         print("database setup completed")
     } catch {
         print("error setting up database: \(error)")
@@ -335,7 +379,8 @@ func monitorCurrentFrontmostApplication() {
     // Get window name BEFORE initializing structures
     var windowName = "unknown window"
     var windowValue: AnyObject?
-    let result = AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &windowValue)
+    let result = AXUIElementCopyAttributeValue(
+        axApp, kAXFocusedWindowAttribute as CFString, &windowValue)
     if result == .success, let window = windowValue as! AXUIElement? {
         if let titleValue = getAttributeValue(window, forAttribute: kAXTitleAttribute) as? String {
             // Sanitize window name immediately when we get it
@@ -347,7 +392,9 @@ func monitorCurrentFrontmostApplication() {
 
     // Check if we already have recent data for this window
     let windowExists = globalElementValues[appName]?[windowName] != nil
-    let isWindowRecent = globalElementValues[appName]?[windowName]?.timestamp.timeIntervalSinceNow ?? -Double.infinity > -300 // 5 minutes
+    let isWindowRecent =
+        globalElementValues[appName]?[windowName]?.timestamp.timeIntervalSinceNow ?? -Double
+        .infinity > -300  // 5 minutes
 
     // Initialize app and window in the structure if needed
     if globalElementValues[appName] == nil {
@@ -367,7 +414,8 @@ func monitorCurrentFrontmostApplication() {
     }
 
     // Always set up notifications
-    setupAccessibilityNotifications(pid: pid, axApp: axApp, appName: appName, windowName: windowName)
+    setupAccessibilityNotifications(
+        pid: pid, axApp: axApp, appName: appName, windowName: windowName)
 
     print("monitoring changes for \(appName), window: \(windowName)...")
 }
@@ -421,9 +469,11 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
         let unwantedLabels = [
             "window", "application", "group", "button", "image", "text",
             "pop up button", "region", "notifications", "table", "column",
-            "html content"
+            "html content",
         ]
-        let attributesToCheck = ["AXDescription", "AXValue", "AXLabel", "AXRoleDescription", "AXHelp"]
+        let attributesToCheck = [
+            "AXDescription", "AXValue", "AXLabel", "AXRoleDescription", "AXHelp",
+        ]
 
         // Add character count tracking
         var totalCharacterCount = 0
@@ -431,7 +481,8 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
         func traverse(_ element: AXUIElement, depth: Int) -> ElementAttributes? {
             // Add check for AXMenuBar at the start
             if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
-               role == "AXMenuBar" {
+                role == "AXMenuBar"
+            {
                 return nil
             }
 
@@ -457,25 +508,32 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
             var attributeNames: CFArray?
             let result = AXUIElementCopyAttributeNames(element, &attributeNames)
 
-            guard result == .success, let attributes = attributeNames as? [String] else { return nil }
+            guard result == .success, let attributes = attributeNames as? [String] else {
+                return nil
+            }
 
             var position: CGPoint = .zero
             var size: CGSize = .zero
 
             // Get position
-            if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute) as! AXValue?,
-               AXValueGetType(positionValue) == .cgPoint {
+            if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute)
+                as! AXValue?,
+                AXValueGetType(positionValue) == .cgPoint
+            {
                 AXValueGetValue(positionValue, .cgPoint, &position)
             }
 
             // Get size
-            if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute) as! AXValue?,
-               AXValueGetType(sizeValue) == .cgSize {
+            if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute)
+                as! AXValue?,
+                AXValueGetType(sizeValue) == .cgSize
+            {
                 AXValueGetValue(sizeValue, .cgSize, &size)
             }
 
             // Get element description
-            let elementDesc = (getAttributeValue(element, forAttribute: "AXRole") as? String) ?? "Unknown"
+            let elementDesc =
+                (getAttributeValue(element, forAttribute: "AXRole") as? String) ?? "Unknown"
 
             // Get path
             let (path, depth) = getElementPath(element)
@@ -500,10 +558,9 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
                 if attributesToCheck.contains(attr) {
                     if let value = getAttributeValue(element, forAttribute: attr) {
                         let valueStr = describeValue(value)
-                        if !valueStr.isEmpty &&
-                           !unwantedValues.contains(valueStr) &&
-                           valueStr.count > 1 &&
-                           !unwantedLabels.contains(valueStr.lowercased()) {
+                        if !valueStr.isEmpty && !unwantedValues.contains(valueStr)
+                            && valueStr.count > 1 && !unwantedLabels.contains(valueStr.lowercased())
+                        {
                             // Store attribute and its value
                             elementAttributes.attributes[attr] = valueStr
                             hasRelevantValue = true
@@ -542,9 +599,10 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
                         totalCharacterCount += value.count
                     }
                 }
-                
+
                 // Store the element with its attributes using identifier as key
-                globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] = elementAttributes
+                globalElementValues[appName]?[windowName]?.elements[elementAttributes.identifier] =
+                    elementAttributes
                 return elementAttributes
             } else {
                 return nil
@@ -562,6 +620,14 @@ func traverseAndStoreUIElements(_ element: AXUIElement, appName: String, windowN
             // Mark window as changed to ensure first scan gets saved
             hasChanges = true
             changedWindows.insert(WindowIdentifier(app: appName, window: windowName))
+
+            let uiFrame = UIFrame(
+                window: windowName,
+                app: appName,
+                text_output: "",
+                initial_traversal_at: ISO8601DateFormatter().string(from: Date())
+            )
+            try! writeToPipe(uiFrame: uiFrame)
 
             // Update timestamp after traversal
             globalElementValues[appName]?[windowName]?.timestamp = Date()
@@ -582,16 +648,15 @@ func getRelevantValue(_ element: AXUIElement) -> String? {
     let unwantedLabels = [
         "window", "application", "group", "button", "image", "text",
         "pop up button", "region", "notifications", "table", "column",
-        "html content"
+        "html content",
     ]
 
     for attr in attributesToCheck {
         if let value = getAttributeValue(element, forAttribute: attr) {
             let valueStr = describeValue(value)
-            if !valueStr.isEmpty &&
-               !unwantedValues.contains(valueStr) &&
-               valueStr.count > 1 &&
-               !unwantedLabels.contains(valueStr.lowercased()) {
+            if !valueStr.isEmpty && !unwantedValues.contains(valueStr) && valueStr.count > 1
+                && !unwantedLabels.contains(valueStr.lowercased())
+            {
                 return valueStr
             }
         }
@@ -602,40 +667,44 @@ func getRelevantValue(_ element: AXUIElement) -> String? {
 
 func updateElementAndChildren(
     _ element: AXUIElement,
-    appName: String, 
+    appName: String,
     windowName: String,
     visitedElements: inout Set<AXUIElementWrapper>
 ) -> Bool {
     // Add check for AXMenuBar at the start
     if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
-       role == "AXMenuBar" {
+        role == "AXMenuBar"
+    {
         return false
     }
 
     let elementWrapper = AXUIElementWrapper(element: element)
     if visitedElements.contains(elementWrapper) { return false }
     visitedElements.insert(elementWrapper)
-    
+
     var hasUpdates = false
-    
+
     // Get position and size
     var position: CGPoint = .zero
     var size: CGSize = .zero
-    
-    if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute) as! AXValue?,
-       AXValueGetType(positionValue) == .cgPoint {
+
+    if let positionValue = getAttributeValue(element, forAttribute: kAXPositionAttribute)
+        as! AXValue?,
+        AXValueGetType(positionValue) == .cgPoint
+    {
         AXValueGetValue(positionValue, .cgPoint, &position)
     }
-    
+
     if let sizeValue = getAttributeValue(element, forAttribute: kAXSizeAttribute) as! AXValue?,
-       AXValueGetType(sizeValue) == .cgSize {
+        AXValueGetType(sizeValue) == .cgSize
+    {
         AXValueGetValue(sizeValue, .cgSize, &size)
     }
-    
+
     // Get element description and full path with depth
     let elementDesc = (getAttributeValue(element, forAttribute: "AXRole") as? String) ?? "unknown"
     let (path, depth) = getElementPath(element)
-    
+
     // Check if element has relevant value
     if let newValue = getRelevantValue(element) {
         let tempAttributes = ElementAttributes(
@@ -651,31 +720,38 @@ func updateElementAndChildren(
             timestamp: Date()
         )
         let identifier = tempAttributes.identifier
-        
+
         if globalElementValues[appName]?[windowName]?.elements[identifier] == nil {
             // New element - create and store it directly
             globalElementValues[appName]?[windowName]?.elements[identifier] = tempAttributes
             hasUpdates = true
-        } else if globalElementValues[appName]?[windowName]?.elements[identifier]?.attributes["Value"] != newValue {
+        } else if globalElementValues[appName]?[windowName]?.elements[identifier]?.attributes[
+            "Value"] != newValue
+        {
             // Existing element with changed value
-            globalElementValues[appName]?[windowName]?.elements[identifier]?.attributes["Value"] = newValue
+            globalElementValues[appName]?[windowName]?.elements[identifier]?.attributes["Value"] =
+                newValue
             hasUpdates = true
         }
     }
-    
+
     // Traverse children
-    if let children = getAttributeValue(element, forAttribute: kAXChildrenAttribute) as? [AXUIElement] {
+    if let children = getAttributeValue(element, forAttribute: kAXChildrenAttribute)
+        as? [AXUIElement]
+    {
         if children.count > 1000 {
             let (path, _) = getElementPath(element)
             print("element at path \(path) has \(children.count) children")
         }
         for child in children {
-            if updateElementAndChildren(child, appName: appName, windowName: windowName, visitedElements: &visitedElements) {
+            if updateElementAndChildren(
+                child, appName: appName, windowName: windowName, visitedElements: &visitedElements)
+            {
                 hasUpdates = true
             }
         }
     }
-    
+
     return hasUpdates
 }
 
@@ -693,7 +769,7 @@ func handleFocusedWindowChange(element: AXUIElement) {
 
     // Check if this is actually a new window
     let isNewWindow = currentContext?.windowName != windowName
-    
+
     // Update the context
     currentContext = MonitoringContext(appName: appName, windowName: windowName)
 
@@ -701,7 +777,7 @@ func handleFocusedWindowChange(element: AXUIElement) {
     if globalElementValues[appName] == nil {
         globalElementValues[appName] = [:]
     }
-    
+
     // If it's a new window, create fresh state
     if isNewWindow {
         globalElementValues[appName]?[windowName] = WindowState()
@@ -713,23 +789,27 @@ func handleFocusedWindowChange(element: AXUIElement) {
     hasChanges = true
 }
 
-
-func axObserverCallback(observer: AXObserver, element: AXUIElement, notification: CFString, refcon: UnsafeMutableRawPointer?) {
+func axObserverCallback(
+    observer: AXObserver, element: AXUIElement, notification: CFString,
+    refcon: UnsafeMutableRawPointer?
+) {
     autoreleasepool {
         guard !isCleaningUp else { return }
         guard CFGetTypeID(element) == AXUIElementGetTypeID() else { return }
-        
+
         synchronizationQueue.async {
             // Check for window-related notifications
             let notificationStr = notification as String
-            if notificationStr == kAXFocusedWindowChangedNotification as String ||
-               notificationStr == kAXMainWindowChangedNotification as String ||
-               notificationStr == kAXTitleChangedNotification as String {
-                
+            if notificationStr == kAXFocusedWindowChangedNotification as String
+                || notificationStr == kAXMainWindowChangedNotification as String
+                || notificationStr == kAXTitleChangedNotification as String
+            {
+
                 // For title changes, we need to check if it's a window
                 if notificationStr == kAXTitleChangedNotification as String {
                     if let role = getAttributeValue(element, forAttribute: "AXRole") as? String,
-                       role == "AXWindow" {
+                        role == "AXWindow"
+                    {
                         handleFocusedWindowChange(element: element)
                         return
                     }
@@ -748,20 +828,20 @@ func axObserverCallback(observer: AXObserver, element: AXUIElement, notification
             if let parent = parent {
                 grandparent = getAttributeValue(parent, forAttribute: "AXParent") as! AXUIElement?
             }
-            
+
             // Start from highest available ancestor
             let startElement = grandparent ?? parent ?? element
-            
+
             // Get the depth of the startElement
             let (_, depth) = getElementPath(startElement)
-            
+
             // Add to pending notifications
             pendingNotifications.append((startElement: startElement, depth: depth))
-            
+
             // Reset debounce timer
             debounceTimer?.cancel()
             debounceTimer = nil
-            
+
             // Start a new debounce timer
             debounceTimer = DispatchSource.makeTimerSource(queue: synchronizationQueue)
             debounceTimer?.schedule(deadline: .now() + .milliseconds(200))
@@ -773,44 +853,58 @@ func axObserverCallback(observer: AXObserver, element: AXUIElement, notification
     }
 }
 
-
 func processPendingNotifications() {
     if isCleaningUp || isTraversing { return }
     guard let context = currentContext else { return }
-    
+
     let startTime = DispatchTime.now()
-    
+
     autoreleasepool {
         // Find the notification with the startElement of least depth
-        guard let selectedNotification = pendingNotifications.min(by: { $0.depth < $1.depth }) else {
+        guard let selectedNotification = pendingNotifications.min(by: { $0.depth < $1.depth })
+        else {
             pendingNotifications.removeAll()
             return
         }
-        
+
         let startElement = selectedNotification.startElement
         var visitedElements = Set<AXUIElementWrapper>()
-        
+
         // Always add to timestamp update set
-        windowsNeedingTimestampUpdate.insert(WindowIdentifier(app: context.appName, window: context.windowName))
-        
-        if updateElementAndChildren(startElement, appName: context.appName, windowName: context.windowName, visitedElements: &visitedElements) {
+        windowsNeedingTimestampUpdate.insert(
+            WindowIdentifier(app: context.appName, window: context.windowName))
+
+        if updateElementAndChildren(
+            startElement, appName: context.appName, windowName: context.windowName,
+            visitedElements: &visitedElements)
+        {
             hasChanges = true
-            changedWindows.insert(WindowIdentifier(app: context.appName, window: context.windowName))
+            changedWindows.insert(
+                WindowIdentifier(app: context.appName, window: context.windowName))
+
+            let uiFrame = UIFrame(
+                window: context.windowName,
+                app: context.appName,
+                text_output: "",
+                initial_traversal_at: ISO8601DateFormatter().string(from: Date())
+            )
+
+            try! writeToPipe(uiFrame: uiFrame)
         }
     }
-    
+
     let endTime = DispatchTime.now()
     let timeInterval = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
     print("\(String(format: "%.2f", timeInterval))ms - processed pending notifications")
-    
+
     // Clear pending notifications and reset debounceTimer
     pendingNotifications.removeAll()
     debounceTimer = nil
 }
 
-
-
-func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: String, windowName: String) {
+func setupAccessibilityNotifications(
+    pid: pid_t, axApp: AXUIElement, appName: String, windowName: String
+) {
     // Add safety check for invalid pid
     if pid <= 0 {
         print("invalid pid: \(pid)")
@@ -864,7 +958,9 @@ func setupAccessibilityNotifications(pid: pid_t, axApp: AXUIElement, appName: St
         }
     } else {
         // If we can't get windows, try to register with the main window
-        if let mainWindow = getAttributeValue(axApp, forAttribute: kAXMainWindowAttribute) as! AXUIElement? {
+        if let mainWindow = getAttributeValue(axApp, forAttribute: kAXMainWindowAttribute)
+            as! AXUIElement?
+        {
             registerNotificationsRecursively(element: mainWindow, observer: axObserver)
         }
     }
@@ -883,7 +979,9 @@ func registerNotificationsRecursively(element: AXUIElement, observer: AXObserver
     }
 
     // Get children and recursively register notifications
-    if let children = getAttributeValue(element, forAttribute: kAXChildrenAttribute) as? [AXUIElement] {
+    if let children = getAttributeValue(element, forAttribute: kAXChildrenAttribute)
+        as? [AXUIElement]
+    {
         for child in children {
             registerNotificationsRecursively(element: child, observer: observer, depth: depth + 1)
         }
@@ -951,7 +1049,9 @@ func getElementPath(_ element: AXUIElement) -> (path: String, depth: Int) {
     while current != nil {
         if let role = getAttributeValue(current!, forAttribute: "AXRole") as? String {
             var elementDesc = role
-            if let title = getAttributeValue(current!, forAttribute: "AXTitle") as? String, !title.isEmpty {
+            if let title = getAttributeValue(current!, forAttribute: "AXTitle") as? String,
+                !title.isEmpty
+            {
                 elementDesc += "[\(title)]"
             }
             path.append(elementDesc)
@@ -969,38 +1069,38 @@ func getElementPath(_ element: AXUIElement) -> (path: String, depth: Int) {
 func buildTextOutput(from windowState: WindowState) -> String {
     var textOutput = ""
     var processedElements = Set<String>()
-    var seenTexts = Set<String>() // Track unique text values
-    
+    var seenTexts = Set<String>()  // Track unique text values
+
     // Helper function to process text values
     func processText(_ text: String) -> String {
         if seenTexts.contains(text) {
-            return "" // Return empty string for duplicate text
+            return ""  // Return empty string for duplicate text
         }
         seenTexts.insert(text)
         return "[\(text)]"
     }
-    
+
     // Process hierarchical elements
     func processElement(_ elementAttributes: ElementAttributes, indentLevel: Int) {
         // One space per level
         let indentStr = String(repeating: " ", count: indentLevel)
-        
+
         // Process each attribute value and join with spaces
         let text = elementAttributes.attributes.values
             .filter { !seenTexts.contains($0) }
-            .map { 
+            .map {
                 seenTexts.insert($0)
                 return "[\($0)]"
             }
             .joined(separator: " ")
-        
+
         if !text.isEmpty {
             textOutput += "\(indentStr)\(text)\n"
         }
-        
+
         // Mark as processed using identifier
         processedElements.insert(elementAttributes.identifier)
-        
+
         // Recursively process children
         let sortedChildren = elementAttributes.children.sorted { (e1, e2) -> Bool in
             if abs(e1.y - e2.y) < 10 {
@@ -1008,12 +1108,12 @@ func buildTextOutput(from windowState: WindowState) -> String {
             }
             return e1.y < e2.y
         }
-        
+
         for child in sortedChildren {
             processElement(child, indentLevel: indentLevel + 1)
         }
     }
-    
+
     // Process root elements first (hierarchical)
     let rootElements = windowState.elements.values.filter { $0.depth == 0 }
     let sortedRootElements = rootElements.sorted { (e1, e2) -> Bool in
@@ -1022,16 +1122,16 @@ func buildTextOutput(from windowState: WindowState) -> String {
         }
         return e1.y < e2.y
     }
-    
+
     for rootElement in sortedRootElements {
         processElement(rootElement, indentLevel: 0)
     }
-    
+
     // Then process any orphaned elements
     let orphanElements = windowState.elements.filter { !processedElements.contains($0.key) }
     if !orphanElements.isEmpty {
         textOutput += "\n---\n"
-        
+
         // Sort orphans by timestamp first (oldest first), then position if timestamps are equal
         let sortedOrphans = orphanElements.values.sorted { (e1, e2) -> Bool in
             if e1.timestamp == e2.timestamp {
@@ -1042,24 +1142,24 @@ func buildTextOutput(from windowState: WindowState) -> String {
             }
             return e1.timestamp < e2.timestamp
         }
-        
+
         for element in sortedOrphans {
             // One space per depth level
             let indentStr = String(repeating: " ", count: element.depth)
             let text = element.attributes.values
                 .filter { !seenTexts.contains($0) }
-                .map { 
+                .map {
                     seenTexts.insert($0)
                     return "[\($0)]"
                 }
                 .joined(separator: " ")
-            
+
             if !text.isEmpty {
                 textOutput += "\(indentStr)\(text)\n"
             }
         }
     }
-    
+
     return textOutput
 }
 
@@ -1068,11 +1168,11 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         print("database not initialized")
         return
     }
-    
+
     let startTime = DispatchTime.now()
     let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     let MAX_CHARS = 300_000
-    
+
     // Sanitize window name by removing invisible characters
     let sanitizedWindow = windowId.window
         .components(separatedBy: CharacterSet.controlCharacters).joined()
@@ -1080,17 +1180,26 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
     let sanitizedApp = windowId.app
         .components(separatedBy: CharacterSet.controlCharacters).joined()
         .trimmingCharacters(in: .whitespacesAndNewlines)
-    
+
+    let uiFrame = UIFrame(
+        window: windowId.window,
+        app: windowId.app,
+        text_output: newTextOutput,
+        initial_traversal_at: timestamp
+    )
+
+    try! writeToPipe(uiFrame: uiFrame)
+
     // First, get existing text_output and check if record exists
     var existingText = ""
     var recordExists = false
     let selectSQL = "SELECT text_output FROM ui_monitoring WHERE app = ? AND window = ?;"
     var selectStmt: OpaquePointer?
-    
+
     if sqlite3_prepare_v2(db, selectSQL, -1, &selectStmt, nil) == SQLITE_OK {
         sqlite3_bind_text(selectStmt, 1, sanitizedApp, -1, SQLITE_TRANSIENT)
         sqlite3_bind_text(selectStmt, 2, sanitizedWindow, -1, SQLITE_TRANSIENT)
-        
+
         if sqlite3_step(selectStmt) == SQLITE_ROW {
             recordExists = true
             if let text = sqlite3_column_text(selectStmt, 0) {
@@ -1099,7 +1208,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         }
         sqlite3_finalize(selectStmt)
     }
-    
+
     // Split and clean lines - only trim trailing whitespace, preserve leading
     let existingLines = existingText.components(separatedBy: "\n")
         .map { $0.trimmingCharacters(in: .whitespaces.subtracting(.init(charactersIn: " "))) }
@@ -1107,35 +1216,38 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
     let newLines = newTextOutput.components(separatedBy: "\n")
         .map { $0.trimmingCharacters(in: .whitespaces.subtracting(.init(charactersIn: " "))) }
         .filter { !$0.isEmpty }
-    
+
     var extensionsFound = 0
     var exactMatchesFound = 0
     var newCharsCount = 0
-    
+
     let uniqueNewLines = newLines.filter { newLine in
         let strippedNewLine = newLine.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             .trimmingCharacters(in: .whitespaces)
         return !existingLines.contains { existingLine in
-            let strippedExistingLine = existingLine.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-                .trimmingCharacters(in: .whitespaces)
-            
+            let strippedExistingLine = existingLine.trimmingCharacters(
+                in: CharacterSet(charactersIn: "[]")
+            )
+            .trimmingCharacters(in: .whitespaces)
+
             if strippedExistingLine == strippedNewLine {
                 exactMatchesFound += 1
                 return true
             }
-            
-            if strippedExistingLine.count < strippedNewLine.count && 
-               strippedNewLine.contains(strippedExistingLine) {
+
+            if strippedExistingLine.count < strippedNewLine.count
+                && strippedNewLine.contains(strippedExistingLine)
+            {
                 extensionsFound += 1
                 // Count additional characters in the extension
                 newCharsCount += (strippedNewLine.count - strippedExistingLine.count)
                 return true
             }
-            
+
             return false
         }
     }
-    
+
     // Skip if no unique lines or extensions found
     if uniqueNewLines.isEmpty && extensionsFound == 0 {
         // Update timestamp only
@@ -1145,7 +1257,7 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
             sqlite3_bind_text(updateStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 2, sanitizedApp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 3, sanitizedWindow, -1, SQLITE_TRANSIENT)
-            
+
             if sqlite3_step(updateStmt) != SQLITE_DONE {
                 print("error updating timestamp")
             }
@@ -1157,39 +1269,39 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
 
     // Add characters from unique new lines
     newCharsCount += uniqueNewLines.reduce(0) { $0 + $1.count }
-    
+
     // Process only if we have unique lines
     let allLines = existingLines + uniqueNewLines
-    
+
     // Trim older lines if total length exceeds limit
     var totalChars = 0
     var startIndex = 0
-    
+
     for (index, line) in allLines.enumerated().reversed() {
-        totalChars += line.count + 1 // +1 for newline
+        totalChars += line.count + 1  // +1 for newline
         if totalChars > MAX_CHARS {
             startIndex = index + 1
             break
         }
     }
-    
+
     let finalText = allLines[startIndex...].joined(separator: "\n")
-    
+
     // Update database with different SQL based on whether record exists
     if recordExists {
         let updateSQL = """
-            UPDATE ui_monitoring 
-            SET timestamp = ?, text_output = ? 
-            WHERE app = ? AND window = ?;
-        """
-        
+                UPDATE ui_monitoring 
+                SET timestamp = ?, text_output = ? 
+                WHERE app = ? AND window = ?;
+            """
+
         var updateStmt: OpaquePointer?
         if sqlite3_prepare_v2(db, updateSQL, -1, &updateStmt, nil) == SQLITE_OK {
             sqlite3_bind_text(updateStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 2, finalText, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 3, sanitizedApp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
-            
+
             if sqlite3_step(updateStmt) != SQLITE_DONE {
                 print("error updating row")
             }
@@ -1197,19 +1309,19 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
         }
     } else {
         let insertSQL = """
-            INSERT INTO ui_monitoring (
-                timestamp, initial_traversal_at, app, window, text_output
-            ) VALUES (?, ?, ?, ?, ?);
-        """
-        
+                INSERT INTO ui_monitoring (
+                    timestamp, initial_traversal_at, app, window, text_output
+                ) VALUES (?, ?, ?, ?, ?);
+            """
+
         var insertStmt: OpaquePointer?
         if sqlite3_prepare_v2(db, insertSQL, -1, &insertStmt, nil) == SQLITE_OK {
             sqlite3_bind_text(insertStmt, 1, timestamp, -1, SQLITE_TRANSIENT)
-            sqlite3_bind_text(insertStmt, 2, timestamp, -1, SQLITE_TRANSIENT) // Set initial_traversal_at same as timestamp for new records
+            sqlite3_bind_text(insertStmt, 2, timestamp, -1, SQLITE_TRANSIENT)  // Set initial_traversal_at same as timestamp for new records
             sqlite3_bind_text(insertStmt, 3, sanitizedApp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(insertStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(insertStmt, 5, finalText, -1, SQLITE_TRANSIENT)
-            
+
             if sqlite3_step(insertStmt) != SQLITE_DONE {
                 print("error inserting row")
             }
@@ -1219,40 +1331,44 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
 
     let endTime = DispatchTime.now()
     let timeInterval = Double(endTime.uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000
-    print("\(String(format: "%.2f", timeInterval))ms - saved to db for \(windowId.app)/\(String(windowId.window.prefix(30)))... (\(uniqueNewLines.count) new lines, \(extensionsFound) extensions, \(newCharsCount) new chars), skipped \(exactMatchesFound) exact matches")
+    print(
+        "\(String(format: "%.2f", timeInterval))ms - saved to db for \(windowId.app)/\(String(windowId.window.prefix(30)))... (\(uniqueNewLines.count) new lines, \(extensionsFound) extensions, \(newCharsCount) new chars), skipped \(exactMatchesFound) exact matches"
+    )
 }
 
 func saveElementValues() {
     // Check both sets
-    if (changedWindows.isEmpty && windowsNeedingTimestampUpdate.isEmpty) { return }
-    
+    if changedWindows.isEmpty && windowsNeedingTimestampUpdate.isEmpty { return }
+
     let timestamp = ISO8601DateFormatter().string(from: Date())
     var totalChars = 0
-    
+
     sqlite3_exec(screenPipeDb?.db, "BEGIN TRANSACTION", nil, nil, nil)
-    
+
     // Process windows with content changes
     for windowId in changedWindows {
-        guard let windowState = globalElementValues[windowId.app]?[windowId.window] else { continue }
-        
+        guard let windowState = globalElementValues[windowId.app]?[windowId.window] else {
+            continue
+        }
+
         // Build text output
         let textOutput = buildTextOutput(from: windowState)
         totalChars += textOutput.count
-        
+
         // Store the formatted text output in the window state
         globalElementValues[windowId.app]?[windowId.window]?.textOutput = textOutput
-        
+
         // Save to database
         saveToDatabase(windowId: windowId, newTextOutput: textOutput, timestamp: timestamp)
     }
-    
+
     // Process windows that only need timestamp updates
     for windowId in windowsNeedingTimestampUpdate where !changedWindows.contains(windowId) {
         saveToDatabase(windowId: windowId, newTextOutput: "", timestamp: timestamp)
     }
-    
+
     sqlite3_exec(screenPipeDb?.db, "COMMIT", nil, nil, nil)
-    
+
     // Clear the changed windows set
     changedWindows.removeAll()
     windowsNeedingTimestampUpdate.removeAll()
@@ -1265,6 +1381,8 @@ func cleanup() {
     synchronizationQueue.sync {
         isCleaningUp = true
     }
+
+    close(handle)
 
     // Remove observer from run loop
     if let observer = currentObserver {
@@ -1287,10 +1405,10 @@ func cleanup() {
 func pruneGlobalState() {
     let MAX_SIZE_MB = 10.0
     let MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024 / 2  // Divide by 2 since String uses 2 bytes per char
-    
+
     var totalSize = 0
     var elementsByTimestamp: [(app: String, window: String, timestamp: Date, size: Int)] = []
-    
+
     // Calculate sizes and collect timestamps
     for (app, windows) in globalElementValues {
         for (window, windowState) in windows {
@@ -1302,34 +1420,40 @@ func pruneGlobalState() {
             elementsByTimestamp.append((app, window, windowState.timestamp, windowSize))
         }
     }
-    
+
     // If we're under the limit, no need to prune
     if Double(totalSize) <= MAX_SIZE_BYTES {
         return
     }
-    
-    print("pruning global state: current size \(String(format: "%.2f", Double(totalSize) * 2 / 1024 / 1024))mb")
-    
+
+    print(
+        "pruning global state: current size \(String(format: "%.2f", Double(totalSize) * 2 / 1024 / 1024))mb"
+    )
+
     // Sort by timestamp (oldest first)
     elementsByTimestamp.sort { $0.timestamp < $1.timestamp }
-    
+
     // Remove oldest entries until we're under the limit
     var removedSize = 0
     for entry in elementsByTimestamp {
         if Double(totalSize - removedSize) <= MAX_SIZE_BYTES {
             break
         }
-        
+
         globalElementValues[entry.app]?[entry.window] = nil
         if globalElementValues[entry.app]?.isEmpty == true {
             globalElementValues.removeValue(forKey: entry.app)
         }
-        
+
         removedSize += entry.size
-        print("pruned \(entry.app)/\(entry.window): \(String(format: "%.2f", Double(entry.size) * 2 / 1024))kb")
+        print(
+            "pruned \(entry.app)/\(entry.window): \(String(format: "%.2f", Double(entry.size) * 2 / 1024))kb"
+        )
     }
-    
-    print("pruned global state to \(String(format: "%.2f", Double(totalSize - removedSize) * 2 / 1024 / 1024))mb")
+
+    print(
+        "pruned global state to \(String(format: "%.2f", Double(totalSize - removedSize) * 2 / 1024 / 1024))mb"
+    )
 }
 
 func measureGlobalElementValuesSize() {
@@ -1341,13 +1465,15 @@ func measureGlobalElementValuesSize() {
         for (_, windowState) in windows {
             totalElements += windowState.elements.count
             totalAttributes += windowState.elements.values.reduce(0) { $0 + $1.attributes.count }
-            totalStringLength += windowState.elements.values.reduce(0) { $0 + $1.attributes.values.reduce(0) { $0 + $1.count } }
+            totalStringLength += windowState.elements.values.reduce(0) {
+                $0 + $1.attributes.values.reduce(0) { $0 + $1.count }
+            }
         }
     }
 
     let mbSize = Double(totalStringLength) * 2 / 1024.0 / 1024.0
     print("global state size: \(String(format: "%.3f", mbSize))mb")
-    
+
     // Add pruning check
     if mbSize > 10.0 {
         pruneGlobalState()
@@ -1357,42 +1483,42 @@ func measureGlobalElementValuesSize() {
 public class UIMonitor {
     private static var shared: UIMonitor?
     private var isRunning = false
-    
+
     public static func getInstance() -> UIMonitor {
         if shared == nil {
             shared = UIMonitor()
         }
         return shared!
     }
-    
+
     // Start monitoring in background
     public func start() {
         if isRunning { return }
         isRunning = true
-        
+
         DispatchQueue.global(qos: .background).async {
             startMonitoring()
         }
     }
-    
+
     // Stop monitoring
     public func stop() {
         if !isRunning { return }
         cleanup()
         isRunning = false
     }
-    
+
     // Get current text output for specific app/window
     public func getCurrentOutput(app: String, window: String? = nil) -> String? {
         let appName = app.lowercased()
-        
+
         if let windowName = window?.lowercased() {
             if let windowState = globalElementValues[appName]?[windowName] {
                 return buildTextOutput(from: windowState)
             }
             return nil
         }
-        
+
         // If no window specified, return all windows' output concatenated
         var outputs: [String] = []
         if let windows = globalElementValues[appName] {
@@ -1403,12 +1529,12 @@ public class UIMonitor {
         }
         return outputs.isEmpty ? nil : outputs.joined(separator: "\n---\n")
     }
-    
+
     // Get all current apps being monitored
     public func getMonitoredApps() -> [String] {
         return Array(globalElementValues.keys)
     }
-    
+
     // Get all windows for a specific app
     public func getWindowsForApp(_ app: String) -> [String] {
         return globalElementValues[app.lowercased()]?.keys.map { $0 } ?? []
@@ -1437,29 +1563,79 @@ func getScreenPipeDbPath() -> String {
 // Database connection helper
 class ScreenPipeDB {
     let db: OpaquePointer
-    
+
     init() throws {
         var dbPointer: OpaquePointer?
         let dbPath = getScreenPipeDbPath()
-        
+
         // Create directory if it doesn't exist
         let dbDir = (dbPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dbDir, withIntermediateDirectories: true)
-        
+
         if sqlite3_open(dbPath, &dbPointer) != SQLITE_OK {
-            throw NSError(domain: "db error", code: 1, 
-                         userInfo: [NSLocalizedDescriptionKey: "failed to open database"])
+            throw NSError(
+                domain: "db error", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "failed to open database"])
         }
-        
+
         guard let db = dbPointer else {
-            throw NSError(domain: "db error", code: 2,
-                         userInfo: [NSLocalizedDescriptionKey: "database pointer is nil"])
+            throw NSError(
+                domain: "db error", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "database pointer is nil"])
         }
-        
+
         self.db = db
     }
-    
+
     deinit {
         sqlite3_close(db)
     }
 }
+
+func writeToPipe(uiFrame: UIFrame) throws {
+    let message = uiFrame.toBytes()
+    // let bytesWritten = message.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+    //     write(handle, buffer.baseAddress, message.count)
+    // }
+    // if bytesWritten == -1 {
+    //     perror("error writing to pipe")
+    // }
+
+    var totalWritten = 0
+    while totalWritten < message.count {
+        let bytesWritten = message.withUnsafeBytes { buffer in
+            write(
+                handle,
+                buffer.baseAddress?.advanced(by: totalWritten),
+                message.count - totalWritten)
+        }
+        guard bytesWritten != -1 else {
+            throw NSError(
+                domain: "pipe error", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: String(cString: strerror(errno))])
+        }
+        totalWritten += bytesWritten
+    }
+}
+
+guard CommandLine.arguments.count > 1 else {
+    print("error: named pipe path not provided")
+    exit(1)
+}
+
+let namedPipePath = CommandLine.arguments[1]
+
+// Check if the path is valid and is a named pipe
+var statInfo = stat()
+if stat(namedPipePath, &statInfo) != 0 || (statInfo.st_mode & S_IFMT) != S_IFIFO {
+    print("error: invalid named pipe path or not a named pipe")
+    exit(1)
+}
+
+let handle = open(namedPipePath, O_WRONLY)
+if handle == -1 {
+    perror("error: failed to open named pipe")
+    exit(1)
+}
+
+startMonitoring()

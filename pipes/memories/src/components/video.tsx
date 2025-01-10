@@ -8,12 +8,14 @@ export const VideoComponent = memo(function VideoComponent({
   className,
   startTime,
   endTime,
+  onLoadStart,
 }: {
   filePath: string;
   customDescription?: string;
   className?: string;
   startTime?: number;
   endTime?: number;
+  onLoadStart?: () => void;
 }) {
   const [mediaSrc, setMediaSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,10 @@ export const VideoComponent = memo(function VideoComponent({
   }, []);
 
   const renderFileLink = () => (
-    <div className="mt-2 text-center text-xs text-gray-500 truncate px-2" title={filePath}>
+    <div
+      className="mt-2 text-center text-xs text-gray-500 truncate px-2"
+      title={filePath}
+    >
       {customDescription || filePath}
     </div>
   );
@@ -51,18 +56,34 @@ export const VideoComponent = memo(function VideoComponent({
     }
   };
 
+  const isMounted = useRef(true);
+
   useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isSubscribed = true;
+
     async function loadMedia() {
       try {
-        const sanitizedPath = sanitizeFilePath(filePath);
-        console.log("Sanitized path:", sanitizedPath);
+        if (!mediaSrc && isSubscribed) {
+          onLoadStart?.();
+        }
 
-        if (!sanitizedPath) {
-          throw new Error("Invalid file path");
+        const sanitizedPath = sanitizeFilePath(filePath);
+
+        if (!sanitizedPath || !isSubscribed) {
+          return;
         }
 
         const validationStatus = await validateMedia(sanitizedPath);
-        console.log("Media file:", validationStatus);
+
+        if (!isSubscribed) {
+          return;
+        }
 
         if (validationStatus === "valid media file") {
           setIsAudio(
@@ -76,37 +97,33 @@ export const VideoComponent = memo(function VideoComponent({
             bytes[i] = binaryData.charCodeAt(i);
           }
           const blob = new Blob([bytes], { type: mimeType });
-          setMediaSrc(URL.createObjectURL(blob));
-        } else if (validationStatus.startsWith("media file does not exist")) {
-          throw new Error(
-            `${
-              isAudio ? "audio" : "video"
-            } file not exists, it might get deleted`
-          );
-        } else if (validationStatus.startsWith("invalid media file")) {
-          throw new Error(
-            `the ${
-              isAudio ? "audio" : "video"
-            } file is not written completely, please try again later`
-          );
+          if (isSubscribed) {
+            setMediaSrc(URL.createObjectURL(blob));
+          }
         } else {
-          throw new Error("unknown media validation status");
+          throw new Error("Invalid media file");
         }
       } catch (error) {
-        console.warn("Failed to load media:", error);
-        setError(
-          `Failed to load media: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
+        if (isSubscribed) {
+          console.warn("Failed to load media:", error);
+          setError(
+            `Failed to load media: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
+        }
       }
     }
 
     loadMedia();
+
     return () => {
-      if (mediaSrc) URL.revokeObjectURL(mediaSrc);
+      isSubscribed = false;
+      if (mediaSrc) {
+        URL.revokeObjectURL(mediaSrc);
+      }
     };
-  }, [filePath, sanitizeFilePath]);
+  }, [filePath, sanitizeFilePath, onLoadStart]);
 
   if (error) {
     return (

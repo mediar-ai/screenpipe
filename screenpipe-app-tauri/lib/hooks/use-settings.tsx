@@ -44,6 +44,7 @@ export type User = {
   credits?: {
     amount: number;
   };
+  stripe_connected?: boolean;
 }
 
 export type Settings = {
@@ -86,6 +87,9 @@ export type Settings = {
   showScreenpipeShortcut: string;
   startRecordingShortcut: string;
   stopRecordingShortcut: string;
+  pipeShortcuts: Record<string, string>;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -138,6 +142,9 @@ const DEFAULT_SETTINGS: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   startRecordingShortcut: "Super+Alt+R",
   stopRecordingShortcut: "Super+Alt+X",
+  pipeShortcuts: {},
+  enableRealtimeAudioTranscription: false,
+  realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [

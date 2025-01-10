@@ -29,30 +29,25 @@ for non technical users or those who want to get started quickly, we recommend g
   </Tab>
 </Tabs>
 
-then open the simple timeline UI:
+then stream the OCR data (requires `jq`):
 
 <Tabs items={['macos', 'linux', 'windows']}>
   <Tab>
     ```bash copy
-    git clone https://github.com/mediar-ai/screenpipe
-    open screenpipe-server/examples/timeline_ui_simple/index.html
+    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
     ```
   </Tab>
   <Tab>
     ```bash copy
-    git clone https://github.com/mediar-ai/screenpipe
-    xdg-open screenpipe-server/examples/timeline_ui_simple/index.html
+    curl -N "http://localhost:3030/sse/audio" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
     ```
   </Tab>
   <Tab>
     ```powershell copy
-    git clone https://github.com/mediar-ai/screenpipe
-    start screenpipe-server/examples/timeline_ui_simple/index.html
+    curl -N "http://localhost:3030/sse/audio" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
     ```
   </Tab>
 </Tabs>
-
-this will open a rewind.ai alike timeline powered by a single html file :) that you can tweak around!
 
 now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
 

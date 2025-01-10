@@ -1,6 +1,14 @@
 use anyhow::Result;
+use chrono::Utc;
+use log::debug;
 use realfft::num_complex::{Complex32, ComplexFloat};
 use realfft::RealFftPlanner;
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
+use std::path::PathBuf;
+
+use crate::encode_single_audio;
 
 pub fn normalize_v2(audio: &[f32]) -> Vec<f32> {
     let rms = (audio.iter().map(|&x| x * x).sum::<f32>() / audio.len() as f32).sqrt();
@@ -100,4 +108,56 @@ pub fn audio_to_mono(audio: &[f32], channels: u16) -> Vec<f32> {
     }
 
     mono_samples
+}
+
+pub fn resample(input: &[f32], from_sample_rate: u32, to_sample_rate: u32) -> Result<Vec<f32>> {
+    debug!("Resampling audio");
+    let params = SincInterpolationParameters {
+        sinc_len: 256,
+        f_cutoff: 0.95,
+        interpolation: SincInterpolationType::Linear,
+        oversampling_factor: 256,
+        window: WindowFunction::BlackmanHarris2,
+    };
+
+    let mut resampler = SincFixedIn::<f32>::new(
+        to_sample_rate as f64 / from_sample_rate as f64,
+        2.0,
+        params,
+        input.len(),
+        1,
+    )?;
+
+    let waves_in = vec![input.to_vec()];
+    debug!("Performing resampling");
+    let waves_out = resampler.process(&waves_in, None)?;
+    debug!("Resampling complete");
+    Ok(waves_out.into_iter().next().unwrap())
+}
+
+pub fn write_audio_to_file(
+    audio: &[f32],
+    sample_rate: u32,
+    output_path: &PathBuf,
+    device: &str,
+    skip_encoding: bool,
+) -> Result<String> {
+    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let sanitized_device_name = device.replace(['/', '\\'], "_");
+    let file_path = PathBuf::from(output_path)
+        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string();
+    let file_path_clone = file_path.clone();
+    // Run FFmpeg in a separate task
+    if !skip_encoding {
+        encode_single_audio(
+            bytemuck::cast_slice(audio),
+            sample_rate,
+            1,
+            &file_path.into(),
+        )?;
+    }
+    Ok(file_path_clone)
 }
