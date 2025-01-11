@@ -5,14 +5,12 @@ import { closeAllMessageDialogues } from '../simple-actions/close-dialogues';
 import { clickFirstMessageButton } from '../simple-actions/click-message';
 import { checkIfConnected } from '../simple-actions/check-if-connected';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-
 export async function checkAllMessages() {
     console.log('starting message check automation...');
     const state = await loadState();
     
     // Check Chrome connection
-    const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
+    const statusResponse = await fetch('/api/chrome/status');
     const statusData = await statusResponse.json();
     
     if (statusData.status !== 'connected' || !statusData.wsUrl) {
