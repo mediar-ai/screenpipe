@@ -101,6 +101,15 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     paid: true,
   },
   {
+    id: "pipe-linkedin-ai-assistant",
+    name: "linkedin ai assistant",
+    description:
+      "AI agent that automatically get new connections on linkedin",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant",
+    credits: 20,
+    paid: true,
+  },
+  {
     id: "memories",
     name: "memories gallery",
     description:
@@ -162,15 +171,6 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
     credits: 15,
     paid: true,
-  },
-  {
-    id: "pipe-linkedin-ai-assistant",
-    name: "linkedin ai assistant (preview)",
-    description:
-      "ai assistant that helps you write better linkedin posts and engage with your network - coming soon",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
-    credits: 0,
-    paid: false,
   },
   {
     id: "pipe-for-loom",
