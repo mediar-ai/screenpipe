@@ -6,7 +6,7 @@ async function monitorVision() {
   console.log("------------------------------");
   console.log("to view screenshots:");
   console.log(
-    "1. paste this in a new terminal: 'open /Users/louisbeaumont/Documents/screenpipe/screenpipe-js/examples/vision-monitor/screenshots/viewer.html'"
+    "1. paste this in a new terminal: 'open $(pwd)/screenpipe-js/examples/vision-monitor/screenshots/viewer.html'"
   );
   console.log("2. watch live updates every 1s");
   console.log("------------------------------");
