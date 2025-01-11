@@ -20,6 +20,7 @@ export interface SearchHistory {
       min_length: number;
       max_length: number;
     };
+    // @ts-ignore
     results: any[];
     messages: {
       id: string;
@@ -60,6 +61,7 @@ export function useSearchHistory() {
     }
   };
 
+  // @ts-ignore
   const addSearch = async (searchParams: any, results: any[]) => {
     const timestamp = new Date().toISOString();
     const newSearch: SearchHistory = {

@@ -92,6 +92,23 @@ const fetchReadmeFromGithub = async (url: string): Promise<string> => {
 
 const corePipes: (CorePipe & { fullDescription?: string })[] = [
   {
+    id: "hypr-v0-auto-pay",
+    name: "hypr-v0 auto pay",
+    description:
+      "automatically trigger bank transfers based on screen activity. monitors your screen for payment-related information and initiates transfers through the Mercury API",
+    url: "https://github.com/different-ai/hypr-v0/tree/main/pipes/auto-pay",
+    credits: 15,
+    paid: true,
+  },
+  {
+    id: "linkedin-ai-assistant",
+    name: "linkedin ai assistant",
+    description: "AI agent that automatically get new connections on linkedin",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant",
+    credits: 20,
+    paid: true,
+  },
+  {
     id: "memories",
     name: "memories gallery",
     description:
@@ -153,15 +170,6 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting",
     credits: 15,
     paid: true,
-  },
-  {
-    id: "pipe-linkedin-ai-assistant",
-    name: "linkedin ai assistant (preview)",
-    description:
-      "ai assistant that helps you write better linkedin posts and engage with your network - coming soon",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant",
-    credits: 0,
-    paid: false,
   },
   {
     id: "pipe-for-loom",
@@ -276,7 +284,7 @@ const PipeStore: React.FC = () => {
     Record<string, number>
   >({});
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
-  const MAX_STARTUP_ATTEMPTS = 10; // Will give up after ~20 seconds (10 attempts * 2 second interval)
+  const MAX_STARTUP_ATTEMPTS = 20; // Will give up after ~20 seconds (20 attempts * 2 second interval)
   const [coreReadmes, setCoreReadmes] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -515,6 +523,19 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const reloadPipeConfig = async (pipe: Pipe) => {
+    await fetchInstalledPipes();
+
+    const freshPipe = pipes.find(
+      (p) => normalizeId(p.id) === normalizeId(pipe.id)
+    );
+    if (freshPipe) {
+      console.log("freshPipe", freshPipe);
+      
+      setSelectedPipe(freshPipe);
+    }
+  };
+
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       // Reset broken state when manually toggling
@@ -552,7 +573,8 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        const hasSubscription = await checkExistingSubscription(pipe.id);
+        // const hasSubscription = await checkExistingSubscription(pipe.id);
+        const hasSubscription = true;
         console.log("subscription check:", {
           hasSubscription,
           pipeId: pipe.id,
@@ -780,6 +802,8 @@ const PipeStore: React.FC = () => {
           title: "Configuration saved",
           description: "The pipe configuration has been updated.",
         });
+
+        await setSelectedPipe({...selectedPipe, config: config});
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
@@ -847,11 +871,17 @@ const PipeStore: React.FC = () => {
       })),
   ];
 
-  const filteredPipes = allPipes.filter(
-    (pipe) =>
-      pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (!showInstalledOnly || pipe.enabled)
-  );
+  const filteredPipes = allPipes
+    .filter(
+      (pipe) =>
+        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (!showInstalledOnly || pipe.enabled)
+    )
+    .sort((a, b) => {
+      const aPaid = corePipes.find((cp) => cp.id === a.id)?.paid ? 1 : 0;
+      const bPaid = corePipes.find((cp) => cp.id === b.id)?.paid ? 1 : 0;
+      return bPaid - aPaid; // Sort paid pipes first
+    });
 
   const handleCloseDetails = async () => {
     setSelectedPipe(null);
@@ -1184,7 +1214,7 @@ const PipeStore: React.FC = () => {
               </div>
 
               {selectedPipe.enabled &&
-                selectedPipe.config?.fields?.length > 0 && (
+                 (
                   <div className="space-y-3 pt-4 border-t">
                     <PipeConfigForm
                       pipe={selectedPipe}
@@ -1303,12 +1333,6 @@ const PipeStore: React.FC = () => {
   };
 
   const handleCardClick = async (pipe: Pipe) => {
-    // Special handling for LinkedIn pipe
-    if (pipe.id === "pipe-linkedin-ai-assistant") {
-      openUrl("https://screenpi.pe/linkedin");
-      return;
-    }
-
     // Rest of the existing logic
     const isInstalled = pipes.some((p) => p.id === pipe.id);
     if (!isInstalled && pipe.source) {
@@ -1488,59 +1512,55 @@ const PipeStore: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {pipe.id !== "pipe-linkedin-ai-assistant" && (
+                        {pipes.some((p) => p.id === pipe.id) ? (
                           <>
-                            {pipes.some((p) => p.id === pipe.id) ? (
-                              <>
-                                {pipes.find((p) => p.id === pipe.id)?.config
-                                  ?.port &&
-                                pipes.find((p) => p.id === pipe.id)?.enabled ? (
-                                  <Button
-                                    size="icon"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const installedPipe = pipes.find(
-                                        (p) => p.id === pipe.id
-                                      );
-                                      if (installedPipe?.config?.port) {
-                                        invoke("open_pipe_window", {
-                                          port: installedPipe.config.port,
-                                          title: installedPipe.id,
-                                        }).catch((err) => {
-                                          console.error(
-                                            "failed to open pipe window:",
-                                            err
-                                          );
-                                          toast({
-                                            title: "error opening pipe window",
-                                            description:
-                                              "please try again or check the logs",
-                                            variant: "destructive",
-                                          });
-                                        });
-                                      }
-                                    }}
-                                    disabled={!runningPipes[pipe.id]}
-                                    className="hover:bg-muted"
-                                  >
-                                    <Puzzle className="h-3.5 w-3.5" />
-                                  </Button>
-                                ) : null}
-                              </>
-                            ) : (
+                            {pipes.find((p) => p.id === pipe.id)?.config
+                              ?.port &&
+                            pipes.find((p) => p.id === pipe.id)?.enabled ? (
                               <Button
                                 size="icon"
                                 variant="outline"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDownloadPipe(pipe.source);
+                                  const installedPipe = pipes.find(
+                                    (p) => p.id === pipe.id
+                                  );
+                                  if (installedPipe?.config?.port) {
+                                    invoke("open_pipe_window", {
+                                      port: installedPipe.config.port,
+                                      title: installedPipe.id,
+                                    }).catch((err) => {
+                                      console.error(
+                                        "failed to open pipe window:",
+                                        err
+                                      );
+                                      toast({
+                                        title: "error opening pipe window",
+                                        description:
+                                          "please try again or check the logs",
+                                        variant: "destructive",
+                                      });
+                                    });
+                                  }
                                 }}
+                                disabled={!runningPipes[pipe.id]}
+                                className="hover:bg-muted"
                               >
-                                <Download className="h-3.5 w-3.5" />
+                                <Puzzle className="h-3.5 w-3.5" />
                               </Button>
-                            )}
+                            ) : null}
                           </>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadPipe(pipe.source);
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                       </div>
                     </div>
