@@ -25,8 +25,6 @@ import { closeAllMessageDialogues } from '../simple-actions/close-dialogues';
 import { hasRecentMessages } from '../simple-actions/check-recent-messages';
 import { setRunningState, updateWorkflowStep, updateQueueStats } from '../../app/api/workflow/status/state';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-
 export async function startAutomation(maxProfiles: number = Infinity) {
     try {
         setRunningState(true);
@@ -37,7 +35,7 @@ export async function startAutomation(maxProfiles: number = Infinity) {
         
         // Chrome setup
         updateWorkflowStep('browser', 'running', 'connecting to chrome');
-        const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
+        const statusResponse = await fetch(`/api/chrome/status`);
         const statusData = await statusResponse.json();
         
         if (statusData.status !== 'connected' || !statusData.wsUrl) {

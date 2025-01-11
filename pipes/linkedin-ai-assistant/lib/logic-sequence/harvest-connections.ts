@@ -15,7 +15,7 @@ import { closeAllMessageDialogues } from '../simple-actions/close-dialogues';
 import { cleanProfileUrl } from '../simple-actions/extract-profiles-from-search-results';
 import { showClickAnimation } from '../simple-actions/click-animation';
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://127.0.0.1:13000';
 
 // Global harvesting state using an EventEmitter
 const harvestingState = new EventEmitter();
@@ -134,7 +134,7 @@ export async function startHarvesting(
 
     // Browser setup
     updateWorkflowStep('browser', 'running', 'connecting to chrome');
-    const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
+    const statusResponse = await fetch('/api/chrome/status');
     const statusData = await statusResponse.json();
 
     if (statusData.status !== 'connected' || !statusData.wsUrl) {
