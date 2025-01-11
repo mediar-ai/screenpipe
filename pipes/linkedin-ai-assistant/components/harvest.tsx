@@ -37,7 +37,7 @@ type ApiError = {
 };
 
 // Add this new component
-function CountdownTimer({ targetTime }: { targetTime: number }) {
+function CountdownTimer({ targetTime, prefix = "next profile in:" }: { targetTime: number, prefix?: string }) {
   const [timeLeft, setTimeLeft] = useState<string>('');
 
   useEffect(() => {
@@ -58,7 +58,7 @@ function CountdownTimer({ targetTime }: { targetTime: number }) {
 
   return (
     <span className="text-sm text-gray-500">
-      next profile in: {timeLeft}
+      {prefix} {timeLeft}
     </span>
   );
 }
@@ -335,11 +335,12 @@ export function HarvestClosestConnections() {
         )}
         {refreshProgress && !rateLimitedUntil && (
           <span className="ml-2 text-sm text-gray-500">
-            checking {refreshProgress.current - 1}/{refreshProgress.total} profiles
-            {stats.averageProfileCheckDuration && (
-              <span className="ml-2">
-                (~{formatTimeRemaining((refreshProgress.total - (refreshProgress.current - 1)) * stats.averageProfileCheckDuration)} remaining)
-              </span>
+            checking {refreshProgress.current}/{refreshProgress.total} profiles
+            {stats.averageProfileCheckDuration && nextProfileTime && (
+              <CountdownTimer 
+                targetTime={nextProfileTime} 
+                prefix="~"
+              />
             )}
           </span>
         )}
