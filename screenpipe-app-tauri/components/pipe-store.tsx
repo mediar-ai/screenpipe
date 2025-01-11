@@ -573,8 +573,8 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        // const hasSubscription = await checkExistingSubscription(pipe.id);
-        const hasSubscription = true;
+        const hasSubscription = await checkExistingSubscription(pipe.id);
+
         console.log("subscription check:", {
           hasSubscription,
           pipeId: pipe.id,
