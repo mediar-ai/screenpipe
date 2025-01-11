@@ -12,7 +12,7 @@ async function queryScreenpipe() {
   const results = await pipe.queryScreenpipe({
     startTime: fiveMinutesAgo,
     limit: 10,
-    contentType: "all", // can be "text", "vision", or "all"
+    contentType: "all", // can be "ocr", "audio", "ui", or "all"
   });
 
   if (!results) {
