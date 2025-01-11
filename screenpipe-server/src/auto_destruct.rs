@@ -1,12 +1,15 @@
 use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
-
-use tracing::{debug, info};
+#[cfg(target_os = "windows")]
+use tracing::debug;
+use tracing::info;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{CloseHandle, HANDLE, STILL_ACTIVE};
 #[cfg(target_os = "windows")]
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, GetExitCodeProcess};
+use windows::Win32::System::Threading::{
+    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION,
+};
 
 #[cfg(target_os = "windows")]
 fn is_process_alive(pid: u32) -> bool {

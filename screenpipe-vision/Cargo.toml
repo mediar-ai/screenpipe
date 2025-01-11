@@ -43,6 +43,8 @@ which = "6.0"
 serde = "1.0.200"
 
 once_cell = { workspace = true }
+chrono = { version = "0.4.39", features = ["serde"] }
+base64 = "0.22.1"
 
 [dev-dependencies]
 tempfile = "3.3.0"
@@ -57,7 +59,6 @@ memory-stats = "1.2.0"
 futures-util = "0.3"
 tokio-tungstenite = "0.20"
 serde = "1.0.200"
-base64 = "0.22.1"
 
 [build-dependencies]
 cc = "1.0"
@@ -87,7 +88,12 @@ path = "examples/websocket.rs"
 
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Graphics_Imaging", "Media_Ocr", "Storage", "Storage_Streams"] }
+windows = { version = "0.58", features = [
+  "Graphics_Imaging",
+  "Media_Ocr",
+  "Storage",
+  "Storage_Streams",
+] }
 xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]

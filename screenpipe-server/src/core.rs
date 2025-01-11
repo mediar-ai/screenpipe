@@ -14,6 +14,7 @@ use screenpipe_audio::{
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
+use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -51,6 +52,7 @@ pub async fn start_continuous_recording(
     realtime_audio_enabled: bool,
     realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -63,6 +65,7 @@ pub async fn start_continuous_recording(
                 let ocr_engine = Arc::clone(&ocr_engine);
                 let ignored_windows_video = ignored_windows.to_vec();
                 let include_windows_video = include_windows.to_vec();
+                let realtime_vision_sender_clone = realtime_vision_sender.clone();
 
                 let languages = languages.clone();
 
@@ -81,6 +84,7 @@ pub async fn start_continuous_recording(
                         video_chunk_duration,
                         languages.clone(),
                         capture_unfocused_windows,
+                        realtime_vision_sender_clone,
                     )
                     .await
                 })
@@ -186,6 +190,7 @@ async fn record_video(
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -237,6 +242,17 @@ async fn record_video(
                         } else {
                             &window_result.text
                         };
+
+                        let _ = realtime_vision_sender.send(RealtimeVisionEvent::Ocr(WindowOcr {
+                            image: Some(frame.image.clone()),
+                            text: text.clone(),
+                            text_json: window_result.text_json.clone(),
+                            app_name: window_result.app_name.clone(),
+                            window_name: window_result.window_name.clone(),
+                            focused: window_result.focused,
+                            confidence: window_result.confidence,
+                            timestamp: frame.timestamp,
+                        }));
                         if let Err(e) = db
                             .insert_ocr_text(
                                 frame_id,

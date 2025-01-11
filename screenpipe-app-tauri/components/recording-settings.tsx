@@ -983,6 +983,79 @@ export function RecordingSettings() {
             />
           </div>
 
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-medium">
+                enable realtime audio transcription
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                transcribe audio in real-time as you speak (experimental)
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">experimental</Badge>
+              <Switch
+                id="enableRealtimeAudio"
+                checked={settings.enableRealtimeAudioTranscription}
+                onCheckedChange={(checked) =>
+                  handleSettingsChange({
+                    enableRealtimeAudioTranscription: checked,
+                  })
+                }
+              />
+            </div>
+          </div>
+
+          {settings.enableRealtimeAudioTranscription && (
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="realtimeAudioTranscriptionEngine"
+                className="flex items-center space-x-2"
+              >
+                <Mic className="h-4 w-4" />
+                <span>realtime transcription model</span>
+              </Label>
+              <Select
+                onValueChange={(value) =>
+                  handleSettingsChange({
+                    realtimeAudioTranscriptionEngine: value,
+                  })
+                }
+                value={settings.realtimeAudioTranscriptionEngine}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="select realtime transcription engine" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="screenpipe-cloud">
+                    <div className="flex items-center justify-between w-full space-x-2">
+                      <span>screenpipe cloud</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">cloud</Badge>
+                        {!credits?.amount && (
+                          <Badge variant="outline" className="text-xs">
+                            get credits
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="deepgram">
+                    <div className="flex items-center justify-between w-full space-x-2">
+                      <span>deepgram</span>
+                      <Badge variant="secondary">cloud</Badge>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
+                  <SelectItem value="whisper-large">whisper-large</SelectItem>
+                  <SelectItem value="whisper-large-v3-turbo">
+                    whisper-large-turbo
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="flex flex-col space-y-2">
             <Label
               htmlFor="audioTranscriptionModel"
@@ -1092,7 +1165,11 @@ export function RecordingSettings() {
               <Mic className="h-4 w-4" />
               <span>audio devices</span>
             </Label>
-            <Popover open={openAudioDevices} onOpenChange={setOpenAudioDevices} modal={true}>
+            <Popover
+              open={openAudioDevices}
+              onOpenChange={setOpenAudioDevices}
+              modal={true}
+            >
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"

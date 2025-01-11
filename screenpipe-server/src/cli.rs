@@ -303,9 +303,21 @@ pub enum PipeCommand {
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
     },
-    /// Download a new pipe
+    /// Download a new pipe (deprecated: use 'install' instead)
+    #[deprecated(since = "0.2.26", note = "please use `install` instead")]
     Download {
         /// URL of the pipe to download
+        url: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+    /// Install a new pipe
+    Install {
+        /// URL of the pipe to install
         url: String,
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]

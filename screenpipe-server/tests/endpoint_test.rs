@@ -47,6 +47,7 @@ mod tests {
             ui_monitoring_enabled: false,
             realtime_transcription_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
             realtime_transcription_enabled: false,
+            realtime_vision_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
         });
 
         let router = create_router();
