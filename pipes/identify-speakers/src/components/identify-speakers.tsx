@@ -65,14 +65,11 @@ export default function IdentifySpeakers({
   showIdentifySpeakers,
   setShowIdentifySpeakers,
   segments,
-  className,
 }: {
   showIdentifySpeakers: boolean;
   setShowIdentifySpeakers: (show: boolean) => void;
   segments?: MeetingSegment[];
-  className?: string;
 }) {
-  const { settings } = useSettings();
   const [unnamedSpeakers, setUnnamedSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

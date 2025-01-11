@@ -276,7 +276,7 @@ const PipeStore: React.FC = () => {
     Record<string, number>
   >({});
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
-  const MAX_STARTUP_ATTEMPTS = 10; // Will give up after ~20 seconds (10 attempts * 2 second interval)
+  const MAX_STARTUP_ATTEMPTS = 20; // Will give up after ~20 seconds (20 attempts * 2 second interval)
   const [coreReadmes, setCoreReadmes] = useState<Record<string, string>>({});
 
   useEffect(() => {
