@@ -3,7 +3,6 @@ const nextConfig = {
   images: {
     domains: ['screenpi.pe'],
   },
-  experimental: {},
   logging: {
     fetches: {
       fullUrl: true,
@@ -16,10 +15,7 @@ const nextConfig = {
     }
     return config
   },
-  server: {
-    port: 13000,
-    host: '127.0.0.1',
-  },
 };
 
 export default nextConfig;
+

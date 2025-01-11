@@ -4,6 +4,7 @@ import { getActiveBrowser } from '@/lib/browser-setup';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 import { Page } from 'puppeteer-core';
+import { REFRESH_INTERVAL } from '@/lib/config';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -128,11 +129,19 @@ interface RefreshProgress {
 // Add progress tracking at module level
 let refreshProgress: RefreshProgress | null = null;
 
+// Add refresh interval tracking
+let lastRefreshTime = 0;
+let isRefreshing = false;
+
 export async function GET(request: Request) {
   const nextDelay = 0;
   try {
     const url = new URL(request.url);
-    const shouldRefresh = url.searchParams.get('refresh') === 'true';
+    // Check if it's time for auto-refresh
+    const now = Date.now();
+    const shouldRefresh = (url.searchParams.get('refresh') === 'true' || 
+      (now - lastRefreshTime > REFRESH_INTERVAL)) && !isRefreshing;
+
     let connectionsStore = await loadConnections();
 
     // Only log if values changed
@@ -197,41 +206,47 @@ export async function GET(request: Request) {
     }
 
     if (shouldRefresh) {
-      const { page } = getActiveBrowser();
-      if (page) {
-        const startTime = Date.now();
-        
-        const pendingConnections = Object.entries(connectionsStore.connections)
-          .filter(([, connection]) => connection.status === 'pending');
-        
-        refreshProgress = {
-          current: 0,
-          total: pendingConnections.length
-        };
-
-        // Check pending connections
-        for (const [url, connection] of pendingConnections) {
-          refreshProgress.current++;
+      try {
+        isRefreshing = true;
+        lastRefreshTime = now;
+        const { page } = getActiveBrowser();
+        if (page) {
+          const startTime = Date.now();
           
-          const newStatus = await checkConnectionStatus(page, url, connection);
-          if (newStatus !== connection.status) {
-            await saveConnection({
-              ...connection,
-              status: newStatus,
-              timestamp: new Date().toISOString()
-            });
+          const pendingConnections = Object.entries(connectionsStore.connections)
+            .filter(([, connection]) => connection.status === 'pending');
+          
+          refreshProgress = {
+            current: 0,
+            total: pendingConnections.length
+          };
+
+          // Check pending connections
+          for (const [url, connection] of pendingConnections) {
+            refreshProgress.current++;
+            
+            const newStatus = await checkConnectionStatus(page, url, connection);
+            if (newStatus !== connection.status) {
+              await saveConnection({
+                ...connection,
+                status: newStatus,
+                timestamp: new Date().toISOString()
+              });
+            }
           }
+          
+          // Calculate and save duration stats
+          const totalDuration = Date.now() - startTime;
+          await saveRefreshStats(totalDuration, pendingConnections.length);
+          
+          // Reset progress after completion
+          refreshProgress = null;
         }
-        
-        // Calculate and save duration stats
-        const totalDuration = Date.now() - startTime;
-        await saveRefreshStats(totalDuration, pendingConnections.length);
-        
-        // Reset progress after completion
-        refreshProgress = null;
+        // Reload after updates
+        connectionsStore = await loadConnections();
+      } finally {
+        isRefreshing = false;
       }
-      // Reload after updates
-      connectionsStore = await loadConnections();
     }
     
     // Calculate stats from connections
@@ -266,8 +281,10 @@ export async function GET(request: Request) {
       refreshProgress,
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
+      lastRefreshTime,
     });
   } catch (error: unknown) {
+    isRefreshing = false; // Make sure to reset on error
     return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });
   }
 } 

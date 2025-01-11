@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { REFRESH_INTERVAL } from '@/lib/config';
 
 interface ConnectionStats {
   pending: number;
@@ -82,6 +83,7 @@ export function HarvestClosestConnections() {
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
   const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
+  const [nextRefreshTime, setNextRefreshTime] = useState<number>(Date.now() + REFRESH_INTERVAL);
 
   useEffect(() => {
     // Update initial state
@@ -151,6 +153,11 @@ export function HarvestClosestConnections() {
               setNextProfileTime(data.nextProfileTime);
             } else {
               setNextProfileTime(null);
+            }
+
+            // Update next refresh time if provided
+            if (data.lastRefreshTime) {
+              setNextRefreshTime(data.lastRefreshTime + REFRESH_INTERVAL);
             }
           })
           .catch(error => {
@@ -323,6 +330,14 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
+        {nextRefreshTime > Date.now() && (
+          <div className="ml-2">
+            <CountdownTimer 
+              targetTime={nextRefreshTime} 
+              prefix="next auto-refresh in:" 
+            />
+          </div>
+        )}
         {nextProfileTime && nextProfileTime > Date.now() && (
           <div className="ml-2">
             <CountdownTimer targetTime={nextProfileTime} />
@@ -335,12 +350,11 @@ export function HarvestClosestConnections() {
         )}
         {refreshProgress && !rateLimitedUntil && (
           <span className="ml-2 text-sm text-gray-500">
-            checking {refreshProgress.current}/{refreshProgress.total} profiles
-            {stats.averageProfileCheckDuration && nextProfileTime && (
-              <CountdownTimer 
-                targetTime={nextProfileTime} 
-                prefix="~"
-              />
+            checking {refreshProgress.current - 1}/{refreshProgress.total} profiles
+            {stats.averageProfileCheckDuration && (
+              <span className="ml-2">
+                (~{formatTimeRemaining((refreshProgress.total - (refreshProgress.current - 1)) * stats.averageProfileCheckDuration)} remaining)
+              </span>
             )}
           </span>
         )}
