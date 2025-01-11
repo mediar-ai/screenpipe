@@ -545,6 +545,7 @@ async fn main() {
             commands::show_identify_speakers,
             commands::open_pipe_window,
             update_global_shortcuts,
+            get_env
         ])
         .setup(|app| {
             // Logging setup

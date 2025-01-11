@@ -41,6 +41,7 @@ export type User = {
   image?: string;
   token?: string;
   clerk_id?: string;
+  api_key?: string;
   credits?: {
     amount: number;
   };

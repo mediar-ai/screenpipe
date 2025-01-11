@@ -21,6 +21,7 @@ import {
   Coins,
   UserCog,
   ExternalLinkIcon,
+  Key,
 } from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
@@ -409,6 +410,39 @@ export function AccountSection() {
                   ) : (
                     "connect"
                   )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                    <Key className="w-4 h-4 text-gray-900/60" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">api key</div>
+                    <p className="text-xs font-mono text-muted-foreground">
+                      {user?.api_key || "no api key yet"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => {
+                    if (user?.api_key) {
+                      navigator.clipboard.writeText(user.api_key);
+                      toast({
+                        title: "copied to clipboard",
+                        description: "your api key has been copied to your clipboard",
+                      });
+                    }
+                  }}
+                  disabled={!user?.api_key}
+                >
+                  copy
                 </Button>
               </div>
             </div>
