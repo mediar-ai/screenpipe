@@ -206,6 +206,7 @@ export interface Settings {
   enableFrameCache: boolean;
   enableUiMonitoring: boolean;
   aiMaxContextChars: number;
+  analyticsEnabled: boolean;
   user: User;
   customSettings?: Record<string, any>;
 }
