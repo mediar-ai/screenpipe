@@ -8,6 +8,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+// import { pipe } from "@screenpipe/js";
 
 interface Props {
   loginStatus: 'checking' | 'logged_in' | 'logged_out' | null;
@@ -42,6 +43,10 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       await killChrome();
       setStatus('connecting');
 
+      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
+      //   status: "started"
+      // });
+
       const response = await fetch('/api/chrome', { method: 'POST' });
       if (!response.ok) throw new Error('Failed to launch chrome');
 
@@ -49,6 +54,10 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       pollDebuggerStatus();
     } catch (error) {
       console.error('failed to launch chrome:', error);
+      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
+      //   status: "error",
+      //   error: error instanceof Error ? error.message : String(error)
+      // });
       setStatus('error');
     }
   };
