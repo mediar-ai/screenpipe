@@ -31,8 +31,10 @@ const cooldownProfiles = new Set<string>();
 export function stopHarvesting() {
   stopRequested = true;
   harvestingState.emit('stop');
-  saveHarvestingState(false).catch(console.error);
-  updateConnectionsSent(0).catch(console.error);
+  // Ensure we clean up state
+  attemptedProfiles.clear();
+  emailVerificationProfiles.clear();
+  cooldownProfiles.clear();
 }
 
 export interface HarvestStatus {
@@ -56,6 +58,22 @@ export async function isHarvesting(): Promise<boolean> {
 export async function startHarvesting(
   maxDailyConnections: number = 35
 ): Promise<HarvestStatus> {
+  // Reset stop flag at start
+  stopRequested = false;
+
+  // Add early check for existing harvesting state
+  const isCurrentlyHarvesting = await isHarvesting();
+  if (isCurrentlyHarvesting) {
+    console.log('harvest already in progress');
+    const connections = await loadConnections();
+    return {
+      connectionsSent: connections.connectionsSent || 0,
+      weeklyLimitReached: false,
+      dailyLimitReached: false,
+      isHarvesting: true
+    };
+  }
+
   // Initialize status variables at the start
   let connectionsSent = 0;
   let weeklyLimitReached = false;
@@ -213,10 +231,8 @@ export async function startHarvesting(
           // Add random delay between connections
           const delay = 3000 + Math.floor(Math.random() * 1000);
           await new Promise((resolve) => setTimeout(resolve, delay));
-
-          if (stopRequested) {
-            break;
-          }
+          
+          continue; // Continue the loop instead of returning
         } else if (result.weeklyLimitReached) {
           console.log('Weekly limit reached, stopping');
           weeklyLimitReached = true;
@@ -318,18 +334,22 @@ export async function startHarvesting(
   };
 }
 
-// Function to click the next connect button
-async function clickNextConnectButton(
-  page: Page,
-  stopRequested: boolean
-): Promise<{
+// Add this interface near the top with other interfaces
+interface ConnectionResult {
   success: boolean;
   profileUrl?: string;
+  nextProfileTime?: number;
   weeklyLimitReached?: boolean;
   emailRequired?: boolean;
   cooldown?: boolean;
   cooldownUntil?: string;
-}> {
+}
+
+// Update the function signature
+async function clickNextConnectButton(
+  page: Page,
+  stopRequested: boolean
+): Promise<ConnectionResult> {
   try {
     // Load existing connections first
     const { connections } = await loadConnections();

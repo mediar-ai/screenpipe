@@ -36,6 +36,33 @@ type ApiError = {
   toString: () => string;
 };
 
+// Add this new component
+function CountdownTimer({ targetTime }: { targetTime: number }) {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      if (now >= targetTime) {
+        setTimeLeft('');
+        clearInterval(interval);
+        return;
+      }
+      setTimeLeft(formatTimeRemaining(targetTime - now));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <span className="text-sm text-gray-500">
+      next profile in: {timeLeft}
+    </span>
+  );
+}
+
 export function HarvestClosestConnections() {
   const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
   const [status, setStatus] = useState("");
@@ -53,6 +80,8 @@ export function HarvestClosestConnections() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
+  const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
 
   useEffect(() => {
     // Update initial state
@@ -117,6 +146,12 @@ export function HarvestClosestConnections() {
                   });
               }
             }
+
+            if (data.nextProfileTime) {
+              setNextProfileTime(data.nextProfileTime);
+            } else {
+              setNextProfileTime(null);
+            }
           })
           .catch(error => {
             console.error('failed to fetch status:', error);
@@ -167,20 +202,26 @@ export function HarvestClosestConnections() {
 
   const stopHarvesting = async () => {
     try {
+      // Set status immediately to improve UI responsiveness
+      setHarvestingStatus('stopped');
+      setStatus("stopping harvest process...");
+
       const response = await fetch("/api/harvest/stop", {
         method: "POST",
       });
       
-      if (response.ok) {
-        setStatus("stopping harvest process...");
-      } else {
+      if (!response.ok) {
         const data = await response.json();
         setStatus(`error stopping: ${data.message?.toLowerCase() || 'unknown error'}`);
+        // Revert status if there was an error
+        setHarvestingStatus('running');
       }
     } catch (error: unknown) {
       console.error("failed to stop harvesting:", error);
       const err = error as ApiError;
       setStatus(`${err.message?.toLowerCase() || err.toString().toLowerCase()}`);
+      // Revert status if there was an error
+      setHarvestingStatus('running');
     }
   };
 
@@ -201,6 +242,13 @@ export function HarvestClosestConnections() {
       const response = await fetch("/api/harvest/status?refresh=true");
       const data = await response.json();
       
+      // Add rate limit handling
+      if (data.rateLimitedUntil) {
+        setRateLimitedUntil(data.rateLimitedUntil);
+      } else {
+        setRateLimitedUntil(null);
+      }
+
       // Clear polling and progress
       clearInterval(pollInterval);
       setRefreshProgress(null);
@@ -263,9 +311,9 @@ export function HarvestClosestConnections() {
         <span className="text-sm font-medium">stats</span>
         <button
           onClick={refreshStats}
-          disabled={isRefreshing}
+          disabled={isRefreshing || !!rateLimitedUntil}
           className={`p-2 rounded-md transition-all ${
-            isRefreshing ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-100'
+            isRefreshing || rateLimitedUntil ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-100'
           }`}
           aria-label="refresh stats"
         >
@@ -275,12 +323,22 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
-        {refreshProgress && (
+        {nextProfileTime && nextProfileTime > Date.now() && (
+          <div className="ml-2">
+            <CountdownTimer targetTime={nextProfileTime} />
+          </div>
+        )}
+        {rateLimitedUntil && (
+          <span className="ml-2 text-sm text-red-500">
+            rate limited ({formatTimeRemaining(new Date(rateLimitedUntil).getTime() - Date.now())})
+          </span>
+        )}
+        {refreshProgress && !rateLimitedUntil && (
           <span className="ml-2 text-sm text-gray-500">
-            checking {refreshProgress.current}/{refreshProgress.total} profiles
+            checking {refreshProgress.current - 1}/{refreshProgress.total} profiles
             {stats.averageProfileCheckDuration && (
               <span className="ml-2">
-                (~{formatTimeRemaining((refreshProgress.total - refreshProgress.current) * stats.averageProfileCheckDuration)} remaining)
+                (~{formatTimeRemaining((refreshProgress.total - (refreshProgress.current - 1)) * stats.averageProfileCheckDuration)} remaining)
               </span>
             )}
           </span>

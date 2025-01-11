@@ -15,61 +15,88 @@ type Connection = {
 };
 
 async function checkConnectionStatus(page: Page, profileUrl: string, connection: Connection) {
-  // check if pending for more than 14 days
-  if (connection.status === 'pending' && connection.timestamp) {
-    const daysAsPending = (new Date().getTime() - new Date(connection.timestamp).getTime()) / (1000 * 60 * 60 * 24);
-    
-    if (daysAsPending > 14) {
-      console.log(`connection request to ${profileUrl} has been pending for ${Math.floor(daysAsPending)} days, canceling...`);
-      
-      // attempt to cancel the request
-      const result = await clickCancelConnectionRequest(page);
-      if (result.success) {
-        return 'declined';
-      }
-      // if cancellation fails, continue with normal status check
-    }
-  }
+  try {
+    const maxRetries = 3;
+    const baseDelay = 60000; // base delay of 1 minute
 
-  const maxRetries = 3;
-  const retryDelay = 60000; // 1 minute delay between retries
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Add delay only after first attempt
+        if (attempt > 0 || (refreshProgress && refreshProgress.current > 1)) {
+          const nextDelay = Math.floor(Math.random() * 1000) + 20000;
+          await new Promise(resolve => setTimeout(resolve, nextDelay));
+        }
 
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-      
-      // check for rate limit error (429)
-      const is429 = await page.evaluate(() => {
-        return document.body.textContent?.includes('HTTP ERROR 429') || false;
-      });
+        // check if page is still valid
+        try {
+          await page.evaluate(() => document.title);
+        } catch {
+          // page is detached, get a new one
+          const browser = getActiveBrowser();
+          if (!browser.page) throw new Error('failed to get new page');
+          page = browser.page;
+        }
 
-      if (is429) {
-        console.log(`rate limited on ${profileUrl}, waiting ${retryDelay/1000}s before retry ${attempt + 1}/${maxRetries}`);
+        // Navigate once at the start
+        await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+        
+        // check for rate limit error (429)
+        const is429 = await page.evaluate(() => {
+          return document.body.textContent?.includes('HTTP ERROR 429') || false;
+        });
+
+        if (is429) {
+          const retryDelay = baseDelay + Math.floor(Math.random() * baseDelay);
+          console.log(`rate limited on ${profileUrl}, waiting ${retryDelay/1000}s before retry ${attempt + 1}/${maxRetries}`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          continue;
+        }
+
+        // First check if we need to cancel old pending request
+        if (connection.status === 'pending' && connection.timestamp) {
+          const daysAsPending = (new Date().getTime() - new Date(connection.timestamp).getTime()) / (1000 * 60 * 60 * 24);
+          
+          if (daysAsPending > 14) {
+            console.log(`connection request to ${profileUrl} has been pending for ${Math.floor(daysAsPending)} days, canceling...`);
+            const result = await clickCancelConnectionRequest(page);
+            if (result.success) {
+              return 'declined';
+            }
+          }
+        }
+
+        // Then check current connection status
+        await page.waitForSelector('body', { timeout: 30000 });
+        const isAccepted = await page.evaluate(() => {
+          const distanceBadge = document.querySelector('.distance-badge');
+          return distanceBadge?.textContent?.trim().includes('1st') || false;
+        });
+
+        return isAccepted ? 'accepted' : 'pending';
+
+      } catch (error) {
+        console.error(`failed to check status for ${profileUrl} (attempt ${attempt + 1}/${maxRetries}):`, error);
+        
+        if (error instanceof Error && error.message.includes('detached Frame')) {
+          const browser = getActiveBrowser();
+          if (!browser.page) throw new Error('failed to get new page');
+          page = browser.page;
+        }
+        
+        if (attempt === maxRetries - 1) {
+          return 'pending';
+        }
+        
+        const retryDelay = baseDelay + Math.floor(Math.random() * baseDelay);
         await new Promise(resolve => setTimeout(resolve, retryDelay));
-        continue;
       }
-
-      await page.waitForSelector('body', { timeout: 30000 });
-
-      // Check for 1st degree connection indicator
-      const isAccepted = await page.evaluate(() => {
-        const distanceBadge = document.querySelector('.distance-badge');
-        return distanceBadge?.textContent?.trim().includes('1st') || false;
-      });
-
-      return isAccepted ? 'accepted' : 'pending';
-    } catch (error) {
-      console.error(`failed to check status for ${profileUrl} (attempt ${attempt + 1}/${maxRetries}):`, error);
-      
-      if (attempt === maxRetries - 1) {
-        return 'pending'; // Keep as pending if we can't determine status after all retries
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, retryDelay));
     }
-  }
 
-  return 'pending';
+    return 'pending';
+  } catch (error) {
+    console.error(`failed to check status for ${profileUrl}:`, error);
+    return 'pending';
+  }
 }
 
 // Add type for status
@@ -102,6 +129,7 @@ interface RefreshProgress {
 let refreshProgress: RefreshProgress | null = null;
 
 export async function GET(request: Request) {
+  let nextDelay = 0;
   try {
     const url = new URL(request.url);
     const shouldRefresh = url.searchParams.get('refresh') === 'true';
@@ -199,6 +227,7 @@ export async function GET(request: Request) {
         const totalDuration = Date.now() - startTime;
         await saveRefreshStats(totalDuration, pendingConnections.length);
         
+        // Reset progress after completion
         refreshProgress = null;
       }
       // Reload after updates
@@ -234,7 +263,9 @@ export async function GET(request: Request) {
         averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
       },
       // Add refresh progress to response
-      refreshProgress
+      refreshProgress,
+      rateLimitedUntil: null,
+      nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
     });
   } catch (error: unknown) {
     return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });

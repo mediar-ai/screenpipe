@@ -47,30 +47,42 @@ export async function clickCancelConnectionRequest(page: Page): Promise<{
         });
 
         if (!isButtonAttached) {
-            // check if there's a "Connect" button first before failing
-            const connectButton = await page.evaluateHandle(() => {
-                const buttons = document.querySelectorAll<HTMLButtonElement>('button.artdeco-button');
-                for (const btn of buttons) {
-                    // Check both direct text and text within span
-                    const buttonText = btn.innerText.trim();
-                    const spanText = btn.querySelector('span.artdeco-button__text')?.textContent?.trim();
-                    if (buttonText === 'Connect' || spanText === 'Connect') {
-                        return btn;
+            console.log('pending button not found, checking for connect button...');
+            
+            // wait longer and retry multiple times
+            for (let i = 0; i < 3; i++) {
+                await delay(1000); // wait 1s between attempts
+                
+                // wait for any button to appear
+                await page.waitForSelector('button.artdeco-button', { timeout: 5000 });
+                
+                const connectButton = await page.evaluateHandle((attempt) => {
+                    const buttons = document.querySelectorAll<HTMLButtonElement>('button.artdeco-button');
+                    console.log(`attempt ${attempt + 1}: found ${buttons.length} buttons`); // debug
+                    for (const btn of buttons) {
+                        const buttonText = btn.innerText.trim();
+                        const spanText = btn.querySelector('span.artdeco-button__text')?.textContent?.trim();
+                        console.log(`checking button: text="${buttonText}", span="${spanText}"`); // debug
+                        if (buttonText === 'Connect' || spanText === 'Connect') {
+                            return btn;
+                        }
                     }
-                }
-                return null;
-            });
+                    return null;
+                }, i); // pass i as an argument
 
-            // in case we found the connect button, that means the request was already canceled
-            const connectExists = connectButton
-                ? await (connectButton as ElementHandle<HTMLButtonElement>).evaluate(btn => btn instanceof HTMLButtonElement)
-                : false;
-            if (connectExists) {
-                console.log('found connect button - request was already cancelled');
-                return { success: true };
+                const connectExists = connectButton
+                    ? await (connectButton as ElementHandle<HTMLButtonElement>).evaluate(btn => btn instanceof HTMLButtonElement)
+                    : false;
+                    
+                if (connectExists) {
+                    console.log('found connect button - request was already cancelled');
+                    return { success: true };
+                }
+                
+                console.log(`attempt ${i + 1}: connect button not found, will retry...`);
             }
 
-            console.log('button is no longer attached to dom');
+            console.log('no connect button found after 3 attempts');
             return { success: false };
         }
 
