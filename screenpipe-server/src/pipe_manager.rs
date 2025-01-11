@@ -77,10 +77,19 @@ impl PipeManager {
 
         debug!("is_enabled: {}", is_enabled.unwrap_or(false));
 
+        // Handle both top-level properties and nested fields
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
-                for (key, value) in updates {
-                    existing_config.insert(key, value);
+                // Update top-level properties
+                for (key, value) in updates.iter() {
+                    if key != "fields" {  // Handle non-fields properties directly
+                        existing_config.insert(key.clone(), value.clone());
+                    }
+                }
+                
+                // Handle fields separately if they exist
+                if let Some(Value::Array(new_fields)) = updates.get("fields") {
+                    existing_config.insert("fields".to_string(), Value::Array(new_fields.clone()));
                 }
             } else {
                 return Err(anyhow::anyhow!("new configuration must be an object"));

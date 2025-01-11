@@ -523,6 +523,19 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const reloadPipeConfig = async (pipe: Pipe) => {
+    await fetchInstalledPipes();
+
+    const freshPipe = pipes.find(
+      (p) => normalizeId(p.id) === normalizeId(pipe.id)
+    );
+    if (freshPipe) {
+      console.log("freshPipe", freshPipe);
+      
+      setSelectedPipe(freshPipe);
+    }
+  };
+
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       // Reset broken state when manually toggling
@@ -560,7 +573,8 @@ const PipeStore: React.FC = () => {
           return;
         }
 
-        const hasSubscription = await checkExistingSubscription(pipe.id);
+        // const hasSubscription = await checkExistingSubscription(pipe.id);
+        const hasSubscription = true;
         console.log("subscription check:", {
           hasSubscription,
           pipeId: pipe.id,
@@ -788,6 +802,8 @@ const PipeStore: React.FC = () => {
           title: "Configuration saved",
           description: "The pipe configuration has been updated.",
         });
+
+        await setSelectedPipe({...selectedPipe, config: config});
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
@@ -1198,7 +1214,7 @@ const PipeStore: React.FC = () => {
               </div>
 
               {selectedPipe.enabled &&
-                selectedPipe.config?.fields?.length > 0 && (
+                 (
                   <div className="space-y-3 pt-4 border-t">
                     <PipeConfigForm
                       pipe={selectedPipe}
