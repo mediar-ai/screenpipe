@@ -103,8 +103,7 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
   {
     id: "pipe-linkedin-ai-assistant",
     name: "linkedin ai assistant",
-    description:
-      "AI agent that automatically get new connections on linkedin",
+    description: "AI agent that automatically get new connections on linkedin",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant",
     credits: 20,
     paid: true,
@@ -856,11 +855,17 @@ const PipeStore: React.FC = () => {
       })),
   ];
 
-  const filteredPipes = allPipes.filter(
-    (pipe) =>
-      pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (!showInstalledOnly || pipe.enabled)
-  );
+  const filteredPipes = allPipes
+    .filter(
+      (pipe) =>
+        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (!showInstalledOnly || pipe.enabled)
+    )
+    .sort((a, b) => {
+      const aPaid = corePipes.find((cp) => cp.id === a.id)?.paid ? 1 : 0;
+      const bPaid = corePipes.find((cp) => cp.id === b.id)?.paid ? 1 : 0;
+      return bPaid - aPaid; // Sort paid pipes first
+    });
 
   const handleCloseDetails = async () => {
     setSelectedPipe(null);
@@ -1312,12 +1317,6 @@ const PipeStore: React.FC = () => {
   };
 
   const handleCardClick = async (pipe: Pipe) => {
-    // Special handling for LinkedIn pipe
-    if (pipe.id === "pipe-linkedin-ai-assistant") {
-      openUrl("https://screenpi.pe/linkedin");
-      return;
-    }
-
     // Rest of the existing logic
     const isInstalled = pipes.some((p) => p.id === pipe.id);
     if (!isInstalled && pipe.source) {
@@ -1497,59 +1496,55 @@ const PipeStore: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
-                        {pipe.id !== "pipe-linkedin-ai-assistant" && (
+                        {pipes.some((p) => p.id === pipe.id) ? (
                           <>
-                            {pipes.some((p) => p.id === pipe.id) ? (
-                              <>
-                                {pipes.find((p) => p.id === pipe.id)?.config
-                                  ?.port &&
-                                pipes.find((p) => p.id === pipe.id)?.enabled ? (
-                                  <Button
-                                    size="icon"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const installedPipe = pipes.find(
-                                        (p) => p.id === pipe.id
-                                      );
-                                      if (installedPipe?.config?.port) {
-                                        invoke("open_pipe_window", {
-                                          port: installedPipe.config.port,
-                                          title: installedPipe.id,
-                                        }).catch((err) => {
-                                          console.error(
-                                            "failed to open pipe window:",
-                                            err
-                                          );
-                                          toast({
-                                            title: "error opening pipe window",
-                                            description:
-                                              "please try again or check the logs",
-                                            variant: "destructive",
-                                          });
-                                        });
-                                      }
-                                    }}
-                                    disabled={!runningPipes[pipe.id]}
-                                    className="hover:bg-muted"
-                                  >
-                                    <Puzzle className="h-3.5 w-3.5" />
-                                  </Button>
-                                ) : null}
-                              </>
-                            ) : (
+                            {pipes.find((p) => p.id === pipe.id)?.config
+                              ?.port &&
+                            pipes.find((p) => p.id === pipe.id)?.enabled ? (
                               <Button
                                 size="icon"
                                 variant="outline"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDownloadPipe(pipe.source);
+                                  const installedPipe = pipes.find(
+                                    (p) => p.id === pipe.id
+                                  );
+                                  if (installedPipe?.config?.port) {
+                                    invoke("open_pipe_window", {
+                                      port: installedPipe.config.port,
+                                      title: installedPipe.id,
+                                    }).catch((err) => {
+                                      console.error(
+                                        "failed to open pipe window:",
+                                        err
+                                      );
+                                      toast({
+                                        title: "error opening pipe window",
+                                        description:
+                                          "please try again or check the logs",
+                                        variant: "destructive",
+                                      });
+                                    });
+                                  }
                                 }}
+                                disabled={!runningPipes[pipe.id]}
+                                className="hover:bg-muted"
                               >
-                                <Download className="h-3.5 w-3.5" />
+                                <Puzzle className="h-3.5 w-3.5" />
                               </Button>
-                            )}
+                            ) : null}
                           </>
+                        ) : (
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadPipe(pipe.source);
+                            }}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                       </div>
                     </div>
