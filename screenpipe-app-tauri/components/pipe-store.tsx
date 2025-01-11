@@ -101,7 +101,7 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     paid: true,
   },
   {
-    id: "pipe-linkedin-ai-assistant",
+    id: "linkedin-ai-assistant",
     name: "linkedin ai assistant",
     description: "AI agent that automatically get new connections on linkedin",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant",
