@@ -30,6 +30,21 @@ async function saveDailyLog(logEntry: DailyLog) {
   }
 }
 
+async function retry(fn: any, retries = 3, delay = 5000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await fn();
+      if (result){
+        return result;
+      }
+    } catch (error) {
+      console.log(`Screenpipe query failed, retry, attempt: ${i + 1}`)
+      if (i === retries - 1) throw error;
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+}
+
 export async function GET() {
   try {
     console.log("starting daily log pipeline");
@@ -105,15 +120,15 @@ export async function GET() {
     }
 
     const now = new Date();
-    const oneMinuteAgo = new Date(now.getTime() - interval);
+    const startTime = new Date(now.getTime() - interval);
 
-    const screenData = await pipe.queryScreenpipe({
-      startTime: oneMinuteAgo.toISOString(),
+    const screenData = await retry(() => pipe.queryScreenpipe({
+      startTime: startTime.toISOString(),
       endTime: now.toISOString(),
       windowName: windowName,
       limit: pageSize,
       contentType: contentType,
-    });
+    }));
 
     let logEntry: DailyLog | undefined;
     if (screenData && screenData.data && screenData.data.length > 0) {
@@ -162,13 +177,13 @@ export async function GET() {
     }
 
     if (shouldSendSummary) {
-      const screenData = await pipe.queryScreenpipe({
-        startTime: oneMinuteAgo.toISOString(),
+      const screenData = await retry(() => pipe.queryScreenpipe({
+        startTime: startTime.toISOString(),
         endTime: now.toISOString(),
         windowName: windowName,
         limit: pageSize,
         contentType: contentType,
-      });
+      }));
 
       if (screenData && screenData.data && screenData.data.length > 0) {
         if (aiProvider === "screenpipe-cloud" && !userToken) {
@@ -237,7 +252,7 @@ export async function GET() {
         }
         lastEmailSent = now;
         return NextResponse.json(
-          { message: "pipe executed successfully", logEntry: JSON.stringify(logEntry, null, 2) },
+          { message: "pipe executed successfully", suggestedQuestions: redditQuestions },
           { status: 200 }
         );
       } else {

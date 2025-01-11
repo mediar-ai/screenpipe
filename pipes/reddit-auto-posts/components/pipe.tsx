@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label";
 import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
-import ReactMarkdown from 'react-markdown';
+import { MemoizedReactMarkdown } from "./markdown";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import {
   Select,
   SelectContent,
@@ -17,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
-import { CodeBlock } from "./ui/codeblock";
 
 const Pipe: React.FC = () => {
 
@@ -62,8 +63,8 @@ const Pipe: React.FC = () => {
         }) 
       }
       const data = await res.json();
-      if (data.logEntry) {
-        setLastLog(JSON.stringify(JSON.parse(data.logEntry), null, 2));
+      if (data.suggestedQuestions) {
+        setLastLog(data.suggestedQuestions);
       } else {
         setLastLog(JSON.stringify(data, null, 2));
       }
@@ -284,30 +285,37 @@ const Pipe: React.FC = () => {
           disabled={loading}
           className="w-full"
         >
-          {loading ? "testing..." : "test log generation"}
+          {loading ? "generating..." : "generate reddit questions"}
         </Button>
 
         {lastLog && (
         <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
-          <ReactMarkdown
-            children={`\`\`\`json\n${lastLog}\n\`\`\``}
+          <MemoizedReactMarkdown
+            className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-[35vw] text-sm"
+            remarkPlugins={[remarkGfm, remarkMath]}
             components={{
-              code({ node, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || '');
-                return match ? (
-                  <CodeBlock 
-                    language={match[1]} 
-                    value={String(children).replace(/\n$/, '')} 
+              p: ({ children }) => (
+                <p className="mb-2 last:mb-0">{children}</p>
+              ),
+              a: ({ href, children, ...props }) => {
+                const isExternal =
+                  href?.startsWith("http") || href?.startsWith("https");
+                return (
+                  <a
+                    href={href}
+                    target={isExternal ? "_blank" : undefined}
+                    rel={isExternal ? "noopener noreferrer" : undefined}
+                    className="break-all text-blue-500 hover:underline"
                     {...props}
-                  />
-                ) : (
-                  <code className={className} {...props}>
+                  >
                     {children}
-                  </code>
+                  </a>
                 );
               },
             }}
-          />
+          >
+            {lastLog}
+          </MemoizedReactMarkdown>
         </div>
         )}
       </div>
