@@ -92,6 +92,15 @@ const fetchReadmeFromGithub = async (url: string): Promise<string> => {
 
 const corePipes: (CorePipe & { fullDescription?: string })[] = [
   {
+    id: "hypr-v0-auto-pay",
+    name: "hypr-v0 auto pay",
+    description:
+      "automatically trigger bank transfers based on screen activity. monitors your screen for payment-related information and initiates transfers through the Mercury API",
+    url: "https://github.com/different-ai/hypr-v0/tree/main/pipes/auto-pay",
+    credits: 15,
+    paid: true,
+  },
+  {
     id: "memories",
     name: "memories gallery",
     description:
