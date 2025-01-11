@@ -30,14 +30,18 @@ export async function POST() {
     await quitBrowser();
 
     const chromePath = getChromePath();
+    console.log('using chrome path:', chromePath);
+
     const chromeProcess = spawn(chromePath, [
       '--remote-debugging-port=9222',
       '--restore-last-session',
       '--no-first-run',
       '--no-default-browser-check',
-      // add these flags for production
       '--no-sandbox',
-      '--disable-setuid-sandbox'
+      '--disable-setuid-sandbox',
+      // Add these flags to help with stability
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
     ], { 
       detached: true, 
       stdio: 'ignore' 
@@ -45,24 +49,33 @@ export async function POST() {
 
     chromeProcess.unref();
 
-    // increase timeout to ensure chrome is ready
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // verify chrome is running by checking debug port
-    try {
-      const response = await fetch('http://127.0.0.1:9222/json/version');
-      if (!response.ok) {
-        throw new Error('chrome debug port not responding');
+    // increase timeout and add retries
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (attempts < maxAttempts) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const response = await fetch('http://127.0.0.1:9222/json/version');
+        if (response.ok) {
+          console.log('chrome debug port responding');
+          return NextResponse.json({ success: true });
+        }
+      } catch (err) {
+        console.log(`attempt ${attempts + 1} failed:`, err);
+        attempts++;
+        if (attempts === maxAttempts) {
+          throw new Error('failed to connect to chrome debug port after multiple attempts');
+        }
       }
-    } catch {
-      throw new Error('failed to connect to chrome debug port');
     }
-
-    console.log('chrome launch confirmed');
-    return NextResponse.json({ success: true });
   } catch (err) {
     console.error('failed to launch chrome:', err);
-    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ 
+      success: false, 
+      error: String(err),
+      details: err instanceof Error ? err.stack : undefined 
+    }, { status: 500 });
   }
 }
 

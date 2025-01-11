@@ -5,7 +5,7 @@ let activePage: Page | null = null;
 
 export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> {
     if (!activeBrowser) {
-        let retries = 3;
+        let retries = 5;
         let lastError;
         
         while (retries > 0) {
@@ -23,24 +23,28 @@ export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> 
                     browserWSEndpoint: freshWsUrl,
                     defaultViewport: null,
                 });
+                
                 console.log('browser connected to:', freshWsUrl);
 
                 const pages = await activeBrowser.pages();
+                if (!pages.length) {
+                    throw new Error('no pages available');
+                }
                 activePage = pages[0];
                 console.log('got active page');
                 break;
             } catch (error) {
                 lastError = error;
-                console.error(`connection attempt ${4 - retries} failed:`, error);
+                console.error(`connection attempt ${6 - retries} failed:`, error);
                 retries--;
                 if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 }
             }
         }
 
         if (!activeBrowser) {
-            throw new Error(`failed to connect to browser after 3 attempts: ${lastError}`);
+            throw new Error(`failed to connect to browser after 5 attempts: ${lastError}`);
         }
     }
 
