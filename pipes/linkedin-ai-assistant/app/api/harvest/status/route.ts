@@ -129,7 +129,7 @@ interface RefreshProgress {
 let refreshProgress: RefreshProgress | null = null;
 
 export async function GET(request: Request) {
-  let nextDelay = 0;
+  const nextDelay = 0;
   try {
     const url = new URL(request.url);
     const shouldRefresh = url.searchParams.get('refresh') === 'true';

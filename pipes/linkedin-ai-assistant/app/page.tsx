@@ -1,21 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { LaunchLinkedInChromeSession } from "@/components/launch-linkedin-chrome-session";
 import { IntroRequester } from "@/components/intro-requester";
 import { ReloadButton } from "@/components/reload-button";
 import { HarvestClosestConnections } from "@/components/harvest";
-import { ChevronDown, ChevronRight } from "lucide-react";
 
 export default function Home() {
   const [loginStatus, setLoginStatus] = useState<'checking' | 'logged_in' | 'logged_out' | null>(null);
-  const [isGettingStartedOpen, setIsGettingStartedOpen] = useState(true);
-
-  useEffect(() => {
-    if (loginStatus === 'logged_in') {
-      setIsGettingStartedOpen(false);
-    }
-  }, [loginStatus]);
 
   return (
     <div className="min-h-screen w-full p-4 pb-20 sm:p-8">
@@ -37,7 +29,7 @@ export default function Home() {
               loginStatus={loginStatus}
               setLoginStatus={setLoginStatus}
             />
-            {/* <ReloadButton /> */}
+            <ReloadButton />
           </div>
         </section>
 
