@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { Settings } from "@screenpipe/js";
 // Force Node.js runtime
 export const runtime = "nodejs"; // Add this line
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const defaultSettings: Settings = {
@@ -30,6 +30,7 @@ export async function GET() {
     user: {
       token: "",
     },
+    analyticsEnabled: true,
   };
 
   try {

@@ -15,6 +15,8 @@ import {
   FileText,
   PlusCircle,
   ChevronDown,
+  Pencil,
+  Save,
 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
@@ -35,6 +37,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "./ui/checkbox";
+import { pipe } from "@screenpipe/browser";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Textarea } from "./ui/textarea";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -93,6 +102,7 @@ interface Meeting {
   selectedDevices: Set<string>;
   deviceNames: Set<string>;
   segments: MeetingSegment[];
+  isEditing?: boolean;
 }
 
 interface Speaker {
@@ -115,6 +125,12 @@ interface AudioContent {
 interface AudioTranscription {
   type: "Audio";
   content: AudioContent;
+}
+
+interface LiveMeeting {
+  isRecording: boolean;
+  startTime: string;
+  transcription: string;
 }
 
 export default function MeetingHistory({
@@ -140,6 +156,11 @@ export default function MeetingHistory({
     "please provide a concise summary of the following meeting transcript"
   );
   const [isClearing, setIsClearing] = useState(false);
+  const [liveMeeting, setLiveMeeting] = useState<LiveMeeting | null>(null);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
+  const [editedTranscriptions, setEditedTranscriptions] = useState<{
+    [key: number]: string;
+  }>({});
 
   useEffect(() => {
     if (showMeetingHistory) {
@@ -172,6 +193,19 @@ export default function MeetingHistory({
     console.log("fetching meetings...");
     setLoading(true);
     try {
+      // Get current meetings from state AND storage to ensure we have everything
+      const storedMeetings = (await getItem("meetings")) || [];
+      const currentMeetings = [...meetings, ...storedMeetings];
+
+      // Filter unique meetings by meetingGroup
+      const uniqueMeetings = Array.from(
+        new Map(currentMeetings.map((m) => [m.meetingGroup, m])).values()
+      );
+
+      const liveRecordings = uniqueMeetings.filter((m) =>
+        Array.from(m.deviceNames).includes("live recording")
+      );
+
       // Always fetch from the last 7x24 hours
       const startTime = new Date(
         Date.now() - 7 * 24 * 60 * 60 * 1000
@@ -192,28 +226,10 @@ export default function MeetingHistory({
       const newMeetings = processMeetings(camelCaseResult.data);
       console.log("processed new meetings:", newMeetings);
 
-      // merge new meetings with stored meetings, updating existing ones
-      let updatedMeetings = [...meetings];
-      newMeetings.forEach((newMeeting) => {
-        const existingMeetingIndex = updatedMeetings.findIndex(
-          (m) => m.meetingGroup === newMeeting.meetingGroup
-        );
-        if (existingMeetingIndex === -1) {
-          // add new meeting if it doesn't exist
-          updatedMeetings.push(newMeeting);
-        } else {
-          // update existing meeting with new data
-          updatedMeetings[existingMeetingIndex] = {
-            ...updatedMeetings[existingMeetingIndex],
-            ...newMeeting,
-            fullTranscription:
-              updatedMeetings[existingMeetingIndex].fullTranscription +
-              newMeeting.fullTranscription,
-          };
-        }
-      });
+      // Combine live recordings with fetched meetings
+      const updatedMeetings = [...liveRecordings, ...newMeetings];
 
-      // sort meetings by start time (descending)
+      // Sort meetings by start time (descending)
       updatedMeetings.sort(
         (a, b) =>
           new Date(b.meetingStart).getTime() -
@@ -221,8 +237,6 @@ export default function MeetingHistory({
       );
 
       setMeetings(updatedMeetings);
-
-      // store updated meetings
       await setItem("meetings", updatedMeetings);
     } catch (err) {
       setError(
@@ -559,8 +573,15 @@ export default function MeetingHistory({
       ]),
     };
 
-    updatedMeetings[index] = mergedMeeting;
-    updatedMeetings.splice(index + 1, 1); // remove the next meeting
+    // Remove both meetings and add the merged one
+    updatedMeetings.splice(index, 2, mergedMeeting);
+
+    // Re-sort meetings by start time
+    updatedMeetings.sort(
+      (a, b) =>
+        new Date(b.meetingStart).getTime() - new Date(a.meetingStart).getTime()
+    );
+
     setMeetings(updatedMeetings);
     setItem("meetings", updatedMeetings);
   };
@@ -588,6 +609,135 @@ export default function MeetingHistory({
     []
   );
 
+  const startRecording = async () => {
+    setIsStartingRecording(true);
+    try {
+      setLiveMeeting({
+        isRecording: true,
+        startTime: new Date().toISOString(),
+        transcription: "",
+      });
+
+      // Start streaming transcriptions
+      for await (const chunk of pipe.streamTranscriptions()) {
+        console.log("chunk", chunk);
+        setLiveMeeting((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            transcription: prev.transcription + (chunk.choices[0]?.text || ""),
+          };
+        });
+      }
+    } catch (error) {
+      console.error("error starting recording:", error);
+      toast({
+        title: "error",
+        description: "failed to start recording. please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStartingRecording(false);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!liveMeeting) return;
+
+    try {
+      // Create a new meeting from the live recording
+      const newMeeting: Meeting = {
+        meetingGroup: Math.max(...meetings.map((m) => m.meetingGroup), 0) + 1,
+        meetingStart: liveMeeting.startTime,
+        meetingEnd: new Date().toISOString(),
+        fullTranscription: liveMeeting.transcription,
+        name: null,
+        participants: null,
+        summary: null,
+        selectedDevices: new Set(["live recording"]),
+        deviceNames: new Set(["live recording"]),
+        segments: [
+          {
+            timestamp: liveMeeting.startTime,
+            transcription: liveMeeting.transcription,
+            deviceName: "live recording",
+            deviceType: "input",
+            speaker: {
+              id: -1,
+              name: "live",
+            },
+          },
+        ],
+      };
+
+      setMeetings((prev) => [newMeeting, ...prev]);
+      await setItem("meetings", [newMeeting, ...meetings]);
+
+      setLiveMeeting(null);
+      setIsStartingRecording(false);
+
+      toast({
+        title: "recording saved",
+        description: "your meeting has been saved successfully.",
+      });
+    } catch (error) {
+      console.error("error saving recording:", error);
+      setIsStartingRecording(false);
+      toast({
+        title: "error",
+        description: "failed to save recording. please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startEditing = (meetingGroup: number) => {
+    setMeetings(
+      meetings.map((m) =>
+        m.meetingGroup === meetingGroup ? { ...m, isEditing: true } : m
+      )
+    );
+
+    const meeting = meetings.find((m) => m.meetingGroup === meetingGroup);
+    if (meeting) {
+      setEditedTranscriptions({
+        ...editedTranscriptions,
+        [meetingGroup]: meeting.segments
+          .filter((s) => meeting.selectedDevices.has(s.deviceName))
+          .map((s) => s.transcription)
+          .join("\n"),
+      });
+    }
+  };
+
+  const saveEdits = async (meetingGroup: number) => {
+    const meeting = meetings.find((m) => m.meetingGroup === meetingGroup);
+    if (!meeting) return;
+
+    const updatedMeetings = meetings.map((m) =>
+      m.meetingGroup === meetingGroup
+        ? {
+            ...m,
+            isEditing: false,
+            segments: [
+              {
+                ...m.segments[0], // Keep original metadata
+                transcription: editedTranscriptions[meetingGroup],
+              },
+            ],
+          }
+        : m
+    );
+
+    setMeetings(updatedMeetings);
+    await setItem("meetings", updatedMeetings);
+
+    toast({
+      title: "changes saved",
+      description: "your edits have been saved successfully.",
+    });
+  };
+
   return (
     <Card>
       <CardContent
@@ -596,13 +746,58 @@ export default function MeetingHistory({
           e.stopPropagation();
         }}
       >
-        <CardHeader className="py-4">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center">
-              meeting and conversation history
-              <Badge variant="secondary" className="ml-2">
-                experimental
-              </Badge>
+        <CardHeader className="py-4 px-0">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">
+                meeting and conversation history
+              </h2>
+              {!liveMeeting ? (
+                <Button
+                  onClick={startRecording}
+                  disabled={isStartingRecording}
+                  variant="outline"
+                  size="sm"
+                  className="ml-4"
+                >
+                  {isStartingRecording ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  start recording
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <span className="flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                        </span>
+                        recording live
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">live transcription</h4>
+                        <div className="h-40 overflow-y-auto text-sm bg-gray-50 p-2 rounded">
+                          {liveMeeting.transcription}
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    onClick={stopRecording}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    stop
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="flex space-x-2">
               <TooltipProvider>
@@ -658,20 +853,9 @@ export default function MeetingHistory({
                 </Tooltip>
               </TooltipProvider>
             </div>
-          </CardTitle>
+          </div>
         </CardHeader>
-        <CardDescription className="mb-4">
-          <span className="block text-sm text-gray-600">
-            this page provides transcriptions and summaries of your daily
-            meetings. it uses your ai settings to generate summaries. note:
-            phrases like &quot;thank you&quot; or &quot;you know&quot; might be
-            transcription errors. for better accuracy, consider using deepgram
-            as the engine or adjust your prompt to ignore these.
-          </span>
-          <span className="block text-sm text-gray-600 mt-2">
-            <strong>make sure to setup your ai settings</strong>
-          </span>
-        </CardDescription>
+
         <div className="flex-grow overflow-auto">
           {loading ? (
             <div className="space-y-6">
@@ -770,60 +954,103 @@ export default function MeetingHistory({
                       <CardContent>
                         <div className="mb-4 relative">
                           <h4 className="font-semibold mb-2">transcription:</h4>
-                          <Button
-                            onClick={() =>
-                              copyWithToast(
-                                meeting.segments
-                                  .filter((s) =>
-                                    meeting.selectedDevices.has(s.deviceName)
-                                  )
-                                  .map((s) => {
-                                    return `${formatTimestamp(s.timestamp)} [${
-                                      s.speaker
-                                        ? s.speaker.name
-                                        : s.deviceType?.toLowerCase() ===
-                                          "input"
-                                        ? "you"
-                                        : "others"
-                                    }] ${s.transcription}`;
-                                  })
-                                  .join("\n"),
-                                "transcription"
-                              )
-                            }
-                            className="absolute top-0 right-0 p-1 h-6 w-6"
-                            variant="outline"
-                            size="icon"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
-                            {meeting.segments
-                              .filter((s) =>
-                                meeting.selectedDevices.has(s.deviceName)
-                              )
-                              .sort(
-                                (a, b) =>
-                                  new Date(a.timestamp).getTime() -
-                                  new Date(b.timestamp).getTime()
-                              )
-                              .map((s, i) => (
-                                <React.Fragment key={i}>
-                                  <span className="font-bold">
-                                    {`${formatTimestamp(s.timestamp)} [${
-                                      s.speaker
-                                        ? s.speaker.name
-                                        : s.deviceType?.toLowerCase() ===
-                                          "input"
-                                        ? "you"
-                                        : "others"
-                                    }]`}
-                                  </span>{" "}
-                                  {s.transcription}
-                                  {"\n"}
-                                </React.Fragment>
-                              ))}
-                          </pre>
+                          <div className="flex gap-2 absolute top-0 right-0">
+                            {!meeting.isEditing ? (
+                              <>
+                                <Button
+                                  onClick={() =>
+                                    copyWithToast(
+                                      meeting.segments
+                                        .filter((s) =>
+                                          meeting.selectedDevices.has(
+                                            s.deviceName
+                                          )
+                                        )
+                                        .map(
+                                          (s) =>
+                                            `${formatTimestamp(s.timestamp)} [${
+                                              s.speaker
+                                                ? s.speaker.name
+                                                : s.deviceType?.toLowerCase() ===
+                                                  "input"
+                                                ? "you"
+                                                : "others"
+                                            }] ${s.transcription}`
+                                        )
+                                        .join("\n"),
+                                      "transcription"
+                                    )
+                                  }
+                                  className="p-1 h-6 w-6"
+                                  variant="outline"
+                                  size="icon"
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  onClick={() =>
+                                    startEditing(meeting.meetingGroup)
+                                  }
+                                  className="p-1 h-6 w-6"
+                                  variant="outline"
+                                  size="icon"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                onClick={() => saveEdits(meeting.meetingGroup)}
+                                className="p-1 h-6 w-6"
+                                variant="outline"
+                                size="icon"
+                              >
+                                <Save className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          {!meeting.isEditing ? (
+                            <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
+                              {meeting.segments
+                                .filter((s) =>
+                                  meeting.selectedDevices.has(s.deviceName)
+                                )
+                                .sort(
+                                  (a, b) =>
+                                    new Date(a.timestamp).getTime() -
+                                    new Date(b.timestamp).getTime()
+                                )
+                                .map((s, i) => (
+                                  <React.Fragment key={i}>
+                                    <span className="font-bold">
+                                      {`${formatTimestamp(s.timestamp)} [${
+                                        s.speaker
+                                          ? s.speaker.name
+                                          : s.deviceType?.toLowerCase() ===
+                                            "input"
+                                          ? "you"
+                                          : "others"
+                                      }]`}
+                                    </span>{" "}
+                                    {s.transcription}
+                                    {"\n"}
+                                  </React.Fragment>
+                                ))}
+                            </pre>
+                          ) : (
+                            <Textarea
+                              value={
+                                editedTranscriptions[meeting.meetingGroup] || ""
+                              }
+                              onChange={(e) =>
+                                setEditedTranscriptions({
+                                  ...editedTranscriptions,
+                                  [meeting.meetingGroup]: e.target.value,
+                                })
+                              }
+                              className="min-h-[10rem] font-mono text-sm"
+                            />
+                          )}
                         </div>
                         <div className="relative">
                           <h4 className="font-semibold mb-2">summary:</h4>

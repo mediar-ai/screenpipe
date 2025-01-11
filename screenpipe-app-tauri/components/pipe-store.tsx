@@ -40,6 +40,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Progress } from "@/components/ui/progress";
 import supabase from "@/lib/supabase/client";
 import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
+import localforage from "localforage";
 
 export interface Pipe {
   enabled: boolean;
@@ -60,7 +61,45 @@ interface CorePipe {
   paid: boolean;
 }
 
-const corePipes: CorePipe[] = [
+interface RunningPipe {
+  id: string;
+  port: number;
+  isRunning: boolean;
+}
+
+const BROKEN_PIPES_KEY = "broken_pipes";
+interface BrokenPipe {
+  id: string;
+  lastAttempt: number;
+}
+
+const fetchReadmeFromGithub = async (url: string): Promise<string> => {
+  try {
+    // Convert github.com URL to raw.githubusercontent.com
+    const rawUrl = url
+      .replace("github.com", "raw.githubusercontent.com")
+      .replace("/tree/main", "/main");
+
+    const response = await fetch(`${rawUrl}/README.md`);
+    if (!response.ok) return "No description available.";
+    const text = await response.text();
+    return convertHtmlToMarkdown(text);
+  } catch (error) {
+    console.error("failed to fetch readme:", error);
+    return "No description available.";
+  }
+};
+
+const corePipes: (CorePipe & { fullDescription?: string })[] = [
+  {
+    id: "hypr-v0-auto-pay",
+    name: "hypr-v0 auto pay",
+    description:
+      "automatically trigger bank transfers based on screen activity. monitors your screen for payment-related information and initiates transfers through the Mercury API",
+    url: "https://github.com/different-ai/hypr-v0/tree/main/pipes/auto-pay",
+    credits: 15,
+    paid: true,
+  },
   {
     id: "memories",
     name: "memories gallery",
@@ -222,6 +261,14 @@ const normalizeId = (id: string): string => {
   return id.replace(/^pipe-/, "").toLowerCase();
 };
 
+const DEFAULT_PIPES = [
+  "memories",
+  "data-table",
+  "search",
+  "timeline",
+  "identify-speakers",
+];
+
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -233,16 +280,94 @@ const PipeStore: React.FC = () => {
   const { user, refreshUser } = useUser();
   const [showCreditDialog, setShowCreditDialog] = useState(false);
   const [isEnabling, setIsEnabling] = useState(false);
+  const [runningPipes, setRunningPipes] = useState<Record<string, boolean>>({});
+  const [startupAttempts, setStartupAttempts] = useState<
+    Record<string, number>
+  >({});
+  const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
+  const MAX_STARTUP_ATTEMPTS = 20; // Will give up after ~20 seconds (20 attempts * 2 second interval)
+  const [coreReadmes, setCoreReadmes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchInstalledPipes();
+  }, [health?.status]);
+
+  useEffect(() => {
+    localforage.getItem<BrokenPipe[]>(BROKEN_PIPES_KEY).then((stored) => {
+      if (stored) setBrokenPipes(stored);
+    });
+  }, []);
+
+  useEffect(() => {
+    const loadReadmes = async () => {
+      const readmes: Record<string, string> = {};
+
+      await Promise.all(
+        corePipes.map(async (pipe) => {
+          readmes[pipe.id] = await fetchReadmeFromGithub(pipe.url);
+        })
+      );
+
+      setCoreReadmes(readmes);
+    };
+
+    loadReadmes();
+  }, []); // Run once on component mount
+
+  // Add this new effect to install default pipes
+  useEffect(() => {
+    const installDefaultPipes = async () => {
+      if (!health || health?.status === "error") return;
+
+      // Get currently installed pipes
+      const response = await fetch("http://localhost:3030/pipes/list");
+      const data = await response.json();
+      const installedPipeIds = data.data.map((p: Pipe) => p.id);
+
+      // Find which default pipes need to be installed
+      const pipesToInstall = DEFAULT_PIPES.filter(
+        (id) => !installedPipeIds.includes(id)
+      );
+
+      if (pipesToInstall.length === 0) return;
+
+      // Create initial toast
+      const t = toast({
+        title: "installing core pipes",
+        description: "setting up your workspace...",
+        duration: 100000,
+      });
+
+      // Install each missing pipe
+      for (const pipeId of pipesToInstall) {
+        const pipe = corePipes.find((p) => p.id === pipeId);
+        if (pipe?.url) {
+          try {
+            await handleDownloadPipe(pipe.url);
+          } catch (error) {
+            console.error(`Failed to install ${pipeId}:`, error);
+          }
+        }
+      }
+
+      t.update({
+        id: t.id,
+        title: "core pipes installed",
+        description: "your workspace is ready!",
+        duration: 2000,
+      });
+
+      await fetchInstalledPipes();
+    };
+
+    installDefaultPipes();
   }, [health?.status]);
 
   const handleResetAllPipes = async () => {
     try {
       toast({
         title: "resetting pipes",
-        description: "this will delete all your pipes and reinstall them.",
+        description: "this will delete all your pipes.",
       });
       const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
@@ -371,6 +496,7 @@ const PipeStore: React.FC = () => {
       if (freshPipe) {
         setSelectedPipe(freshPipe);
       }
+      t.dismiss();
     } catch (error) {
       console.error("Failed to download pipe:", error);
       toast({
@@ -400,6 +526,14 @@ const PipeStore: React.FC = () => {
 
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
+      // Reset broken state when manually toggling
+      await updateBrokenPipes(pipe.id, false);
+      setStartupAttempts((prev) => {
+        const next = { ...prev };
+        delete next[pipe.id];
+        return next;
+      });
+
       // Set loading state when enabling
       if (!pipe.enabled) {
         setIsEnabling(true);
@@ -600,6 +734,7 @@ const PipeStore: React.FC = () => {
 
         await fetchInstalledPipes();
         setNewRepoUrl("");
+        t.dismiss();
       } catch (error) {
         console.error("failed to add custom pipe:", error);
         toast({
@@ -667,6 +802,7 @@ const PipeStore: React.FC = () => {
   };
   const handleDeletePipe = async (pipe: Pipe) => {
     try {
+      await updateBrokenPipes(pipe.id, false);
       posthog.capture("delete_pipe", {
         pipe_id: pipe.id,
       });
@@ -714,7 +850,7 @@ const PipeStore: React.FC = () => {
       )
       .map((cp) => ({
         id: cp.id,
-        fullDescription: cp.description,
+        fullDescription: coreReadmes[cp.id] || cp.description, // Fallback to short description
         source: cp.url,
         enabled: false,
       })),
@@ -783,6 +919,8 @@ const PipeStore: React.FC = () => {
 
       // Refresh the pipe list
       await fetchInstalledPipes();
+
+      t.dismiss();
     } catch (error) {
       console.error("failed to update pipe:", error);
       toast({
@@ -793,8 +931,109 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const checkPipeRunning = async (port: number): Promise<boolean> => {
+    try {
+      // Use Tauri's http client instead of fetch to avoid CORS
+      const response = await fetch(`http://localhost:${port}`, {
+        mode: "no-cors", // Add no-cors mode to avoid CORS errors
+      });
+      return true; // If we get here, the port is responding
+    } catch {
+      return false;
+    }
+  };
+
+  const checkRunningPipes = async () => {
+    const runningStates: Record<string, boolean> = {};
+
+    // First check all pipes
+    for (const pipe of pipes) {
+      if (pipe.enabled && pipe.config?.port) {
+        runningStates[pipe.id] = await checkPipeRunning(pipe.config.port);
+      }
+    }
+
+    // Then update states based on results
+    setRunningPipes((prevRunning) => {
+      setStartupAttempts((prevAttempts) => {
+        const updatedAttempts = { ...prevAttempts };
+
+        for (const pipe of pipes) {
+          if (pipe.enabled && pipe.config?.port) {
+            const isRunning = runningStates[pipe.id];
+
+            if (!isRunning) {
+              updatedAttempts[pipe.id] = (prevAttempts[pipe.id] || 0) + 1;
+              console.log(
+                `Attempt ${updatedAttempts[pipe.id]} for pipe ${pipe.id}`
+              );
+
+              if (updatedAttempts[pipe.id] >= MAX_STARTUP_ATTEMPTS) {
+                handleDisablePipe(pipe.id);
+                delete updatedAttempts[pipe.id];
+                updateBrokenPipes(pipe.id, true);
+              }
+            } else {
+              delete updatedAttempts[pipe.id];
+              updateBrokenPipes(pipe.id, false);
+            }
+          }
+        }
+        return updatedAttempts;
+      });
+      return runningStates;
+    });
+  };
+
+  // Separate function to handle pipe disabling
+  const handleDisablePipe = async (pipeId: string) => {
+    try {
+      await fetch(`http://localhost:3030/pipes/disable`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipeId }),
+      });
+
+      toast({
+        title: "pipe startup failed",
+        description:
+          "the pipe has been disabled. please check the logs for more information.",
+        variant: "destructive",
+      });
+
+      // unselect the pipe
+      setSelectedPipe(null);
+
+      await fetchInstalledPipes();
+    } catch (error) {
+      console.error("failed to disable pipe:", error);
+    }
+  };
+
+  // Add this effect to periodically check running pipes
+  useEffect(() => {
+    const interval = setInterval(checkRunningPipes, 2000);
+    return () => clearInterval(interval);
+  }, [pipes]);
+
+  const updateBrokenPipes = async (pipeId: string, isBroken: boolean) => {
+    const updated = isBroken
+      ? [...brokenPipes, { id: pipeId, lastAttempt: Date.now() }]
+      : brokenPipes.filter((p) => p.id !== pipeId);
+
+    setBrokenPipes(updated);
+    await localforage.setItem(BROKEN_PIPES_KEY, updated);
+  };
+
   const renderPipeDetails = () => {
     if (!selectedPipe) return null;
+
+    const isPipeRunning = runningPipes[selectedPipe.id];
+    const startupAttempt = startupAttempts[selectedPipe.id] || 0;
+    const brokenPipe = brokenPipes.find((p) => p.id === selectedPipe.id);
+    const isStartupFailing = startupAttempt > 0;
 
     return (
       <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
@@ -970,7 +1209,6 @@ const PipeStore: React.FC = () => {
               {selectedPipe.enabled && selectedPipe?.config?.port && (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">pipe ui</h3>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
@@ -979,10 +1217,14 @@ const PipeStore: React.FC = () => {
                             `http://localhost:${selectedPipe.config!.port}`
                           )
                         }
-                        disabled={isEnabling}
+                        disabled={!isPipeRunning || isEnabling}
                       >
                         <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        {isEnabling ? "initializing..." : "open in browser"}
+                        {isEnabling
+                          ? "initializing..."
+                          : isPipeRunning
+                          ? "open in browser"
+                          : "initializing..."}
                       </Button>
                       <Button
                         variant="default"
@@ -1001,10 +1243,14 @@ const PipeStore: React.FC = () => {
                             });
                           }
                         }}
-                        disabled={isEnabling}
+                        disabled={!isPipeRunning || isEnabling}
                       >
                         <Puzzle className="mr-2 h-3.5 w-3.5" />
-                        {isEnabling ? "initializing..." : "open as app"}
+                        {isEnabling
+                          ? "initializing..."
+                          : isPipeRunning
+                          ? "open as app"
+                          : "initializing..."}
                       </Button>
                     </div>
                   </div>
@@ -1068,7 +1314,7 @@ const PipeStore: React.FC = () => {
   const handleCardClick = async (pipe: Pipe) => {
     // Special handling for LinkedIn pipe
     if (pipe.id === "pipe-linkedin-ai-assistant") {
-      openUrl("https://cal.com/louis030195/screenpipe-linkedin-onboarding");
+      openUrl("https://screenpi.pe/linkedin");
       return;
     }
 
@@ -1284,6 +1530,7 @@ const PipeStore: React.FC = () => {
                                         });
                                       }
                                     }}
+                                    disabled={!runningPipes[pipe.id]}
                                     className="hover:bg-muted"
                                   >
                                     <Puzzle className="h-3.5 w-3.5" />
@@ -1341,16 +1588,21 @@ const PipeStore: React.FC = () => {
                 <div className="flex-1 relative">
                   <Input
                     type="url"
-                    placeholder="enter github url or local path"
+                    placeholder={
+                      health?.status === "error"
+                        ? "screenpipe not running..."
+                        : "enter github url or local path"
+                    }
                     value={newRepoUrl}
                     onChange={(e) => setNewRepoUrl(e.target.value)}
                     autoCorrect="off"
                     autoComplete="off"
+                    disabled={health?.status === "error"}
                   />
                 </div>
                 <Button
                   onClick={handleAddOwnPipe}
-                  disabled={!newRepoUrl}
+                  disabled={!newRepoUrl || health?.status === "error"}
                   size="icon"
                   className="h-10 w-10"
                 >
@@ -1361,6 +1613,7 @@ const PipeStore: React.FC = () => {
                   variant="outline"
                   size="icon"
                   className="h-10 w-10"
+                  disabled={health?.status === "error"}
                 >
                   <FolderOpen className="h-4 w-4" />
                 </Button>

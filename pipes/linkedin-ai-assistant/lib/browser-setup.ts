@@ -17,21 +17,21 @@ export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> 
                 const data = await response.json() as { webSocketDebuggerUrl: string };
                 const freshWsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
                 
-                console.log('attempting connection with fresh ws url:', freshWsUrl);
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
                 activeBrowser = await puppeteer.connect({
                     browserWSEndpoint: freshWsUrl,
                     defaultViewport: null,
                 });
                 
-                console.log('browser connected to:', freshWsUrl);
-
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 const pages = await activeBrowser.pages();
+                
                 if (!pages.length) {
                     throw new Error('no pages available');
                 }
                 activePage = pages[0];
-                console.log('got active page');
+                console.log('browser setup complete');
                 break;
             } catch (error) {
                 lastError = error;

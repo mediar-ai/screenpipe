@@ -110,6 +110,14 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-ui-monitoring");
     }
 
+    if (settings.enableRealtimeAudioTranscription) {
+      args.push("--enable-realtime-audio-transcription");
+      args.push("--realtime-audio-transcription-engine");
+      args.push(
+        settings.realtimeAudioTranscriptionEngine || "whisper-large-v3-turbo"
+      );
+    }
+
     const envString = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
     return `${envString}${cliPath} ${args.join(" ")}`;
   };

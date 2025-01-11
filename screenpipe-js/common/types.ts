@@ -206,6 +206,7 @@ export interface Settings {
   enableFrameCache: boolean;
   enableUiMonitoring: boolean;
   aiMaxContextChars: number;
+  analyticsEnabled: boolean;
   user: User;
   customSettings?: Record<string, any>;
 }
@@ -223,4 +224,42 @@ export interface ParsedConfig<T = unknown> {
     value?: T;
     default?: T;
   }[];
+}
+
+export interface TranscriptionChunk {
+  transcription: string;
+  timestamp: string; // ISO string
+  device: string;
+  is_input: boolean;
+  is_final: boolean;
+}
+
+export interface TranscriptionStreamResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    text: string;
+    index: number;
+    finish_reason: string | null;
+  }>;
+  metadata?: {
+    timestamp: string;
+    device: string;
+    isInput: boolean;
+  };
+}
+
+export interface VisionEvent {
+  image?: string; // base64 encoded image
+  text: string;
+  timestamp: string;
+  app_name?: string;
+  window_name?: string;
+}
+
+export interface VisionStreamResponse {
+  type: string;
+  data: VisionEvent;
 }
