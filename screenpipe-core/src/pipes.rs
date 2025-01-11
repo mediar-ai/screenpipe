@@ -131,15 +131,32 @@ mod pipes {
                 "setting up next.js specific configuration for pipe: {}",
                 pipe
             );
+            
+            let mut assigned_port = None;
+            
             // Handle Next.js specific setup including crons
             if pipe_json_path.exists() {
                 debug!("reading pipe.json for next.js configuration");
                 let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                 let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
-                // Update pipe.json with the port
-                let port = pick_unused_port().expect("No ports free");
-                debug!("picked unused port {} for next.js pipe", port);
+                // Try to use user-configured port first
+                if let Some(user_port) = pipe_config.get("port").and_then(|p| p.as_u64()) {
+                    debug!("found user-configured port: {}", user_port);
+                    // Verify port is available
+                    if is_port_available(user_port as u16) {
+                        assigned_port = Some(user_port as u16);
+                        debug!("user-configured port {} is available", user_port);
+                    } else {
+                        debug!("user-configured port {} is in use, will assign random port", user_port);
+                    }
+                }
+
+                // Fallback to random port if needed
+                let port = assigned_port.unwrap_or_else(|| pick_unused_port().expect("No ports free"));
+                info!("using port {} for next.js pipe", port);
+
+                // Update pipe.json with the actual port being used
                 let mut updated_config = pipe_config.clone();
                 updated_config["port"] = json!(port);
                 let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
@@ -216,7 +233,7 @@ mod pipes {
                 debug!("successfully installed dependencies for next.js pipe");
             } else {
                 let port = pick_unused_port().expect("No ports free");
-                debug!("no pipe.json found, using port {} for next.js pipe", port);
+                debug!("no pipe.json found, using random port {} for next.js pipe", port);
                 env_vars.push(("PORT".to_string(), port.to_string()));
             }
 
@@ -1031,6 +1048,12 @@ mod pipes {
             );
             Ok(false)
         }
+    }
+
+    // Add this helper function to check if a port is available
+    fn is_port_available(port: u16) -> bool {
+        use std::net::TcpListener;
+        TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 }
 
