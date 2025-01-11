@@ -2,7 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { Chrome, CheckCircle, LogIn, Loader2 } from "lucide-react";
+import { Chrome, CheckCircle, LogIn, Loader2, Info } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 interface Props {
   loginStatus: 'checking' | 'logged_in' | 'logged_out' | null;
@@ -135,10 +140,10 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          {(status === 'idle' || status === 'connecting') && (
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        {(status === 'idle' || status === 'connecting') && (
+          <div className="flex items-center gap-2">
             <Button
               onClick={launchChrome}
               disabled={status === 'connecting'}
@@ -147,20 +152,27 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
               <Chrome className="w-4 h-4" />
               {status === 'connecting' ? 'launching chrome...' : 'launch'}
             </Button>
-          )}
-          {status === 'connected' && (
-            <Button
-              onClick={killChrome}
-              variant="destructive"
-              className="flex items-center gap-2"
-            >
-              exit chrome
-            </Button>
-          )}
-        </div>
-        <span className="text-xs text-gray-500">
-          it will close your chrome browser, but you can restore tabs
-        </span>
+            <HoverCard>
+              <HoverCardTrigger>
+                <Info className="w-4 h-4 text-gray-500" />
+              </HoverCardTrigger>
+              <HoverCardContent className="w-80">
+                <p className="text-sm text-gray-500">
+                  it will close your chrome browser, but you can restore tabs
+                </p>
+              </HoverCardContent>
+            </HoverCard>
+          </div>
+        )}
+        {status === 'connected' && (
+          <Button
+            onClick={killChrome}
+            variant="destructive"
+            className="flex items-center gap-2"
+          >
+            exit chrome
+          </Button>
+        )}
       </div>
 
       {status === 'connected' && (

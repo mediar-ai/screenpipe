@@ -31,32 +31,14 @@ export default function Home() {
 
       <div className="space-y-8">
         <section>
-          <button 
-            onClick={() => setIsGettingStartedOpen(!isGettingStartedOpen)}
-            className="flex items-center w-full hover:text-gray-600 transition-colors"
-          >
+          <div className="flex items-center gap-4">
             <h2 className="text-xl font-semibold">getting started</h2>
-            {isGettingStartedOpen ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            )}
-          </button>
-          
-          {isGettingStartedOpen && (
-            <div className="border rounded-lg p-4 space-y-4 mt-4">
-              <p className="text-sm text-muted-foreground">
-                follow these steps to begin using the linkedin ai assistant:
-              </p>
-              <div className="flex flex-col gap-2">
-                <LaunchLinkedInChromeSession
-                  loginStatus={loginStatus}
-                  setLoginStatus={setLoginStatus}
-                />
-                <ReloadButton />
-              </div>
-            </div>
-          )}
+            <LaunchLinkedInChromeSession
+              loginStatus={loginStatus}
+              setLoginStatus={setLoginStatus}
+            />
+            {/* <ReloadButton /> */}
+          </div>
         </section>
 
         {loginStatus === 'logged_in' && (
