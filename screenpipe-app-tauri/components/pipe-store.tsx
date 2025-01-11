@@ -531,6 +531,8 @@ const PipeStore: React.FC = () => {
       (p) => normalizeId(p.id) === normalizeId(pipe.id)
     );
     if (freshPipe) {
+      console.log("freshPipe", freshPipe);
+      
       setSelectedPipe(freshPipe);
     }
   };
@@ -802,7 +804,7 @@ const PipeStore: React.FC = () => {
           description: "The pipe configuration has been updated.",
         });
 
-        await reloadPipeConfig(selectedPipe);
+        await setSelectedPipe({...selectedPipe, config: config});
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({

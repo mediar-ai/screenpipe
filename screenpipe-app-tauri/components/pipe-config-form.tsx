@@ -62,57 +62,6 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    console.log("submitting config:", config);
-
-    try {
-      toast({
-        title: "updating pipe configuration",
-        description: "please wait...",
-      });
-
-      if (!pipe.id) {
-        throw new Error("pipe id is missing");
-      }
-
-      const response = await fetch(`http://localhost:3030/pipes/update`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          pipe_id: pipe.id,
-          config: config,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`failed to update pipe config: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log("update response:", result);
-
-      onConfigSave(config || {});
-
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      toast({
-        title: "Configuration updated",
-        description: "The pipe configuration has been successfully updated.",
-      });
-    } catch (error) {
-      console.error("Error saving pipe config:", error);
-      toast({
-        title: "Error updating configuration",
-        description: "Failed to update pipe configuration. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const renderConfigInput = (field: FieldConfig) => {
     const value = field?.value ?? field?.default;
 
@@ -402,7 +351,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="space-y-6">
       <h3 className="text-lg font-semibold">pipe configuration</h3>
       
       {config?.is_nextjs && (
@@ -414,7 +363,7 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
             <Input
               id="port"
               type="number"
-              value={config.port || 3000}
+              value={config.port ?? ''}
               onChange={(e) => setConfig(prev => prev ? {
                 ...prev,
                 port: parseInt(e.target.value) || 3000
@@ -494,11 +443,6 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
         </div>
       )}
 
-
-        <Button type="submit">
-          save configuration
-        </Button>
-
       {config?.fields?.map((field: FieldConfig) => (
         <div key={field.name} className="space-y-2">
           <Label htmlFor={field.name} className="font-medium">
@@ -554,6 +498,9 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           </MemoizedReactMarkdown>
         </div>
       ))}
-    </form>
+        <Button type="submit" onClick={() => onConfigSave(config || {})}>
+          save configuration
+        </Button>
+    </div>
   );
 };
