@@ -263,7 +263,7 @@ export async function GET() {
       }
     } else {
       return NextResponse.json(
-        { message: "pipe executed successfully!", logEntry: JSON.stringify(logEntry, null, 2) },
+        { message: "pipe executed successfully, but its not that time to send questions!" },
         { status: 200 }
       );
     }
