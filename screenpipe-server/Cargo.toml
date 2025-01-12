@@ -17,6 +17,7 @@ screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
 screenpipe-actions = { path = "../screenpipe-actions", optional = true }
+killport = { version = "1.1.0" }
 
 # Image processing
 image = { workspace = true }
