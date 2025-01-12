@@ -1,36 +1,34 @@
 // app/api/settings/route.ts
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
-import type { Settings } from "@screenpipe/js";
 import { promises as fs } from "fs";
 import path from "path";
+import os from "os";
 // Force Node.js runtime
 export const runtime = "nodejs"; // Add this line
 export const dynamic = "force-dynamic";
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 
+function getAppDataDir(): string {
+  const homeDir = os.homedir();
+  return path.join(homeDir, ".screenpipe");
+}
+
 async function updateCronSchedule(intervalMinutes: number) {
   try {
-    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const screenpipeDir = process.env.SCREENPIPE_DIR || getAppDataDir();
     const pipeConfigPath = path.join(
       screenpipeDir,
       "pipes",
       "obsidian",
       "pipe.json"
     );
-    const settingsPath = path.join(
-      screenpipeDir,
-      "pipes",
-      "obsidian",
-      "settings.json"
-    );
 
     console.log(`updating cron schedule at: ${pipeConfigPath}`);
 
     // Load or initialize both configs
     let config: any = {};
-    let settings: any = {};
 
     try {
       const content = await fs.readFile(pipeConfigPath, "utf8");
@@ -41,20 +39,6 @@ async function updateCronSchedule(intervalMinutes: number) {
       );
       config = { crons: [] };
     }
-
-    try {
-      const settingsContent = await fs.readFile(settingsPath, "utf8");
-      settings = JSON.parse(settingsContent);
-    } catch (err) {
-      console.log(
-        `no existing settings found, creating new one at ${settingsPath}`
-      );
-      settings = { interval: intervalMinutes * 60000 };
-    }
-
-    // Update settings
-    settings.interval = intervalMinutes * 60000;
-    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
 
     // Update cron config
     config.crons = [
@@ -84,7 +68,7 @@ export async function GET() {
     }
 
     // Load persisted settings if they exist
-    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const screenpipeDir = process.env.SCREENPIPE_DIR || getAppDataDir();
     const settingsPath = path.join(
       screenpipeDir,
       "pipes",
