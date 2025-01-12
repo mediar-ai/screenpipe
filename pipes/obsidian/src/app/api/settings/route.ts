@@ -46,6 +46,10 @@ async function updateCronSchedule(intervalMinutes: number) {
         path: "/api/log",
         schedule: `0 */${intervalMinutes} * * * *`,
       },
+      {
+        path: "/api/intelligence",
+        schedule: "0 0 */1 * * *",
+      },
     ];
     config.enabled = config.enabled ?? true;
     config.is_nextjs = config.is_nextjs ?? true;
