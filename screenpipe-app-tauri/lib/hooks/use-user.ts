@@ -17,7 +17,10 @@ async function verifyUserToken(token: string): Promise<User> {
   }
 
   const data = await response.json();
-  return data.user as User;
+  return {
+    ...data.user,
+    stripe_connected: data.user.stripe_connected ?? false,
+  } as User;
 }
 
 export function useUser() {

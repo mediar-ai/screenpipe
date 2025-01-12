@@ -40,6 +40,9 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
         ui_monitoring_enabled: false,
+        realtime_transcription_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
+        realtime_transcription_enabled: false,
+        realtime_vision_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
     });
 
     let app = create_router().with_state(app_state.clone());

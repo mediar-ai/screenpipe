@@ -1,7 +1,7 @@
-use crate::{get_base_dir, SidecarState};
+use crate::get_store;
+use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::async_runtime::JoinHandle;
@@ -9,11 +9,10 @@ use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_store::StoreBuilder;
+use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
-use tauri_plugin_store::Store;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -44,12 +43,24 @@ pub struct User {
 impl User {
     pub fn from_store<R: tauri::Runtime>(store: &Store<R>) -> Self {
         Self {
-            id: store.get("user.id").and_then(|v| v.as_str().map(String::from)),
-            email: store.get("user.email").and_then(|v| v.as_str().map(String::from)),
-            name: store.get("user.name").and_then(|v| v.as_str().map(String::from)),
-            image: store.get("user.image").and_then(|v| v.as_str().map(String::from)),
-            token: store.get("user.token").and_then(|v| v.as_str().map(String::from)),
-            clerk_id: store.get("user.clerk_id").and_then(|v| v.as_str().map(String::from)),
+            id: store
+                .get("user.id")
+                .and_then(|v| v.as_str().map(String::from)),
+            email: store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from)),
+            name: store
+                .get("user.name")
+                .and_then(|v| v.as_str().map(String::from)),
+            image: store
+                .get("user.image")
+                .and_then(|v| v.as_str().map(String::from)),
+            token: store
+                .get("user.token")
+                .and_then(|v| v.as_str().map(String::from)),
+            clerk_id: store
+                .get("user.clerk_id")
+                .and_then(|v| v.as_str().map(String::from)),
             credits: Some(UserCredits {
                 amount: store
                     .get("user.credits.amount")
@@ -95,7 +106,7 @@ pub async fn kill_all_sreenpipes(
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
-                .args(&["/F", "/IM", "screenpipe.exe"])
+                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
@@ -133,9 +144,7 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+    let store = get_store(app, None).unwrap();
 
     let audio_transcription_engine = store
         .get("audioTranscriptionEngine")
@@ -235,6 +244,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
+
+    let enable_realtime_audio_transcription = store
+        .get("enableRealtimeAudioTranscription")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let realtime_audio_transcription_engine = store
+        .get("realtimeAudioTranscriptionEngine")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("whisper-large-v3-turbo"));
 
     let user = User::from_store(&store);
 
@@ -353,17 +372,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(data_dir.as_str());
     }
 
-    args.push("--debug");
+    if enable_realtime_audio_transcription {
+        args.push("--enable-realtime-audio-transcription");
+        args.push("--realtime-audio-transcription-engine");
+        args.push(realtime_audio_transcription_engine.as_str());
+    }
 
-    // Add exe directory path before the Windows-specific block
-    let exe_dir = env::current_exe()
-        .expect("Failed to get current executable path")
-        .parent()
-        .expect("Failed to get parent directory of executable")
-        .to_path_buf();
+    // args.push("--debug");
 
     if cfg!(windows) {
-
+        let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
@@ -508,9 +526,7 @@ impl SidecarManager {
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+        let store = get_store(app, None).unwrap();
 
         let restart_interval = store
             .get("restartInterval")

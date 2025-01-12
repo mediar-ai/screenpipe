@@ -124,6 +124,10 @@ pub struct Cli {
     #[arg(short = 'i', long)]
     pub audio_device: Vec<String>,
 
+    // Audio devices to use for realtime audio transcription
+    #[arg(short = 'r', long)]
+    pub realtime_audio_device: Vec<String>,
+
     /// List available audio devices
     #[arg(long)]
     pub list_audio_devices: bool,
@@ -143,6 +147,18 @@ pub struct Cli {
     /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
     #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
+
+        /// Realtime Audio transcription engine to use.
+    /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
+    /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
+    /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
+    /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
+    #[arg(long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
+    pub realtime_audio_transcription_engine: CliAudioTranscriptionEngine,
+
+    /// Enable realtime audio transcription
+    #[arg(long, default_value_t = false)]
+    pub enable_realtime_audio_transcription: bool,
 
     /// OCR engine to use.
     /// AppleNative is the default local OCR engine for macOS.
@@ -287,9 +303,21 @@ pub enum PipeCommand {
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
     },
-    /// Download a new pipe
+    /// Download a new pipe (deprecated: use 'install' instead)
+    #[deprecated(since = "0.2.26", note = "please use `install` instead")]
     Download {
         /// URL of the pipe to download
+        url: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+    /// Install a new pipe
+    Install {
+        /// URL of the pipe to install
         url: String,
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]

@@ -3,7 +3,10 @@
 // cargo bench --bench vision_benchmark
 // ! not very useful bench
 
+use std::sync::Arc;
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use screenpipe_vision::capture_screenshot_by_window::WindowFilters;
 use screenpipe_vision::monitor::get_default_monitor;
 use screenpipe_vision::{continuous_capture, OcrEngine};
 use tokio::sync::mpsc;
@@ -12,16 +15,16 @@ use tokio::time::Duration;
 async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
     let (result_tx, mut result_rx) = mpsc::channel(100);
 
+    let window_filters = Arc::new(WindowFilters::new(&[], &[]));
     let capture_handle = tokio::spawn(async move {
         continuous_capture(
             result_tx,
             Duration::from_millis(100),
-            false,
             OcrEngine::Tesseract,
             get_default_monitor().await.id(),
-            &[],
-            &[],
+            window_filters,
             vec![],
+            false,
         )
         .await;
     });

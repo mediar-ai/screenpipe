@@ -1,6 +1,7 @@
 #[cfg(feature = "llm")]
+use anyhow::Result;
+#[cfg(feature = "llm")]
 fn main() -> Result<()> {
-    use anyhow::Result;
     use candle::Device;
     use screenpipe_core::{generate_text_streaming, load_llama_model};
     use std::env;

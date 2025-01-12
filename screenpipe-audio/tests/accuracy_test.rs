@@ -1,4 +1,3 @@
-use candle_transformers::models::metavoice::transformer;
 use candle_transformers::models::whisper;
 use futures::future::join_all;
 use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
@@ -54,7 +53,6 @@ async fn test_transcription_accuracy() {
     ));
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));
-    let output_path = Arc::new(PathBuf::from("test_output"));
 
     let mut tasks = Vec::new();
 

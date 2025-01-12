@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { ContentItem } from "@screenpipe/js";
-import { pipe } from "@screenpipe/js/node";
+import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -24,7 +24,7 @@ async function generateWorkLog(
 ): Promise<WorkLog> {
   const now = new Date();
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  
+
   const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
     Rules:
     - use the current time to generate the log entry
@@ -58,14 +58,17 @@ async function generateWorkLog(
 async function syncLogToObsidian(
   logEntry: WorkLog,
   obsidianPath: string
-): Promise<void> {
-  await fs.mkdir(obsidianPath, { recursive: true });
+): Promise<string> {
+  const normalizedPath = path.normalize(obsidianPath);
+  await fs.mkdir(normalizedPath, { recursive: true });
 
   const today = new Date();
   const filename = `${today.getFullYear()}-${String(
     today.getMonth() + 1
   ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
-  const filePath = path.join(obsidianPath, filename);
+  const filePath = path.join(normalizedPath, filename);
+
+  const vaultName = path.basename(path.resolve(normalizedPath));
 
   const tableRow = `| ${logEntry.title} | ${
     logEntry.description
@@ -80,16 +83,20 @@ async function syncLogToObsidian(
     const content = `| Title | Description | Tags | Start Time | End Time |\n|-------|-------------|------|------------|------------|\n${tableRow}`;
     await fs.writeFile(filePath, content, "utf8");
   }
+
+  return `obsidian://open?vault=${encodeURIComponent(
+    vaultName
+  )}&file=${encodeURIComponent(filename)}`;
 }
 
 export async function GET() {
   try {
     const settings = await pipe.settings.getNamespaceSettings("obsidian");
-    const interval = settings.interval || 3600000;
-    const obsidianPath = settings.path;
-    const customPrompt = settings.prompt;
-    const pageSize = settings.pageSize || 100;
-    const model = settings.aiModel;
+    const interval = settings?.interval || 3600000;
+    const obsidianPath = settings?.path;
+    const customPrompt = settings?.prompt;
+    const pageSize = settings?.pageSize || 100;
+    const model = settings?.aiModel;
 
     if (!obsidianPath) {
       return NextResponse.json(
@@ -117,7 +124,7 @@ export async function GET() {
       model,
       customPrompt
     );
-    await syncLogToObsidian(logEntry, obsidianPath);
+    const _ = await syncLogToObsidian(logEntry, obsidianPath);
 
     return NextResponse.json({
       message: "work log synced successfully",

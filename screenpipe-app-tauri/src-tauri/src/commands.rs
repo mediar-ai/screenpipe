@@ -2,7 +2,7 @@ use crate::get_data_dir;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::Manager;
-use tracing::{info, error};
+use tracing::{error, info};
 
 #[tauri::command]
 pub fn set_tray_unhealth_icon(app_handle: tauri::AppHandle<tauri::Wry>) {
@@ -247,44 +247,7 @@ pub struct AuthStatus {
     message: Option<String>,
 }
 
-// Command to open the auth window
-#[tauri::command]
-pub async fn open_auth_window(app_handle: tauri::AppHandle<tauri::Wry>) -> Result<(), String> {
-    // #[cfg(debug_assertions)]
-    // let auth_url = "http://localhost:3001/login";
-    // #[cfg(not(debug_assertions))]
-    let auth_url = "https://screenpi.pe/login";
 
-    // If window exists, try to close it and wait a bit
-    if let Some(existing_window) = app_handle.get_webview_window("auth") {
-        let _ = existing_window.destroy();
-        // Give it a moment to properly close
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    }
-
-    let window = tauri::WebviewWindowBuilder::new(
-        &app_handle,
-        "auth",
-        tauri::WebviewUrl::External(auth_url.parse().unwrap()),
-    )
-    .title("screenpipe login")
-    .center()
-    .inner_size(800.0, 600.0)
-    .build()
-    .map_err(|e| format!("failed to open auth window: {}", e))?;
-
-    // Add close event listener to cleanup the window
-    let window_handle = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Destroyed = event {
-            if let Some(w) = window_handle.get_webview_window("auth") {
-                let _ = w.close();
-            }
-        }
-    });
-
-    Ok(())
-}
 
 #[tauri::command]
 pub async fn open_pipe_window(
@@ -309,7 +272,8 @@ pub async fn open_pipe_window(
     .inner_size(1200.0, 850.0)
     .always_on_top(true)
     .visible_on_all_workspaces(true)
-    .build() {
+    .build()
+    {
         Ok(window) => window,
         Err(e) => {
             error!("failed to create window: {}", e);

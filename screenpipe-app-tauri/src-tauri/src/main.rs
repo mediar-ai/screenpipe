@@ -45,6 +45,7 @@ mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod store;
 mod tray;
 mod updates;
 pub use commands::reset_all_pipes;
@@ -53,15 +54,20 @@ pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use store::get_profiles_store;
+pub use store::get_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
+
+use std::collections::HashMap;
 use tauri::AppHandle;
-use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+mod health;
+use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -70,16 +76,54 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let base_dir = get_base_dir(app, None).map_err(|e| e.to_string())?;
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(app, path)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+
+        let profile_shortcuts = match get_profiles_store(app) {
+            Ok(profiles_store) => {
+                let profiles = profiles_store
+                    .get("profiles")
+                    .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+                    .unwrap_or_default();
+
+                profiles
+                    .into_iter()
+                    .filter_map(|profile| {
+                        profiles_store
+                            .get(&format!("shortcuts.{}", profile))
+                            .and_then(|v| v.as_str().map(String::from))
+                            .map(|shortcut| (profile, shortcut))
+                    })
+                    .collect()
+            }
+            Err(_) => HashMap::new(),
+        };
+
+        let pipe_shortcuts = store
+            .keys()
+            .into_iter()
+            .filter_map(|key| {
+                if key.starts_with("pipeShortcuts.") {
+                    store
+                        .get(key.clone())
+                        .and_then(|v| v.as_str().map(String::from))
+                        .map(|v| {
+                            (
+                                key.trim_start_matches("pipeShortcuts.").to_string(),
+                                v.to_string(),
+                            )
+                        })
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<String, String>>();
 
         Ok(Self {
             show: store
@@ -94,6 +138,8 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            profile_shortcuts,
+            pipe_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -137,11 +183,15 @@ async fn update_global_shortcuts(
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        profile_shortcuts,
+        pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -154,7 +204,6 @@ async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
-    // Unregister all existing shortcuts first
     global_shortcut.unregister_all().unwrap();
 
     // Register show shortcut
@@ -200,6 +249,43 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
+
+    // Register profile shortcuts
+    for (profile, shortcut) in &config.profile_shortcuts {
+        if !shortcut.is_empty() {
+            let profile = profile.clone();
+            register_shortcut(app, shortcut, false, move |app| {
+                info!("switch-profile shortcut triggered for profile: {}", profile);
+                let _ = app.emit("switch-profile", profile.clone());
+            })
+            .await?;
+        }
+    }
+
+    info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
+
+    // Register pipe shortcuts
+    for (pipe_id, shortcut) in &config.pipe_shortcuts {
+        if !shortcut.is_empty() {
+            let pipe_id = pipe_id.clone();
+            let shortcut_id = format!("pipe_{}", pipe_id);
+            info!(
+                "registering pipe shortcut for pipe: {}, is disabled: {}",
+                shortcut_id,
+                config.is_disabled(&shortcut_id)
+            );
+            register_shortcut(
+                app,
+                shortcut,
+                config.is_disabled(&shortcut_id),
+                move |app| {
+                    info!("pipe shortcut triggered for pipe: {}", pipe_id);
+                    let _ = app.emit("open-pipe", pipe_id.clone());
+                },
+            )
+            .await?;
+        }
+    }
 
     Ok(())
 }
@@ -264,15 +350,17 @@ fn send_recording_notification(
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let base_dir = get_base_dir(app, None)?;
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(app, path).build();
+    // Create a new runtime for this synchronous function
+
+    let store = get_store(app, None)?;
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store?
+
+    let data_dir = store
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
+
     if data_dir == "default" {
         Ok(default_path)
     } else {
@@ -395,6 +483,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -432,7 +521,6 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -448,7 +536,6 @@ async fn main() {
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
-            commands::open_auth_window,
             commands::show_meetings,
             commands::show_identify_speakers,
             commands::open_pipe_window,
@@ -526,9 +613,9 @@ async fn main() {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
 
                 let start_recording =
-                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                    MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
                 let stop_recording =
-                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+                    MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
 
                 let version = MenuItemBuilder::with_id(
                     "version",
@@ -551,6 +638,9 @@ async fn main() {
                     ])
                     .build()?;
                 let _ = main_tray.set_menu(Some(menu));
+
+                let update_item = update_manager.update_now_menu_item_ref().clone();
+                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
 
                 main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
                     "show" => {
@@ -791,6 +881,18 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
 
+            // Start health check service
+            // macos only
+            #[cfg(target_os = "macos")]
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = start_health_check(app_handle).await {
+                        error!("Failed to start health check service: {}", e);
+                    }
+                });
+            }
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
@@ -817,22 +919,6 @@ async fn main() {
                     }
                 });
             }
-
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            app.deep_link().register_all()?;
-
-            app.deep_link().on_open_url(move |event| {
-                let urls: Vec<_> = event.urls().into_iter().collect();
-                info!("deep link URLs: {:?}", urls);
-            });
-            // Register URL scheme on Windows/Linux
-            #[cfg(any(windows, target_os = "linux"))]
-            {
-                if let Err(err) = app.handle().deep_link().register("screenpipe") {
-                    error!("Failed to register deep link protocol: {}", err);
-                }
-            }
-
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -840,7 +926,6 @@ async fn main() {
                     error!("Failed to initialize global shortcuts: {}", e);
                 }
             });
-
             Ok(())
         })
         .build(tauri::generate_context!())

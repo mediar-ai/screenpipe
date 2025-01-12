@@ -3,17 +3,15 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import { Language } from "@/lib/language";
 import {
-  createStore as createStoreEasyPeasy,
   action,
   Action,
   persist,
-  createTypedHooks,
   PersistStorage,
+  createContextStore,
 } from "easy-peasy";
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
-import { invoke } from "@tauri-apps/api/core";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -36,7 +34,7 @@ export enum Shortcut {
   STOP_RECORDING = "stop_recording",
 }
 
-export interface User {
+export type User = {
   id?: string;
   email?: string;
   name?: string;
@@ -46,6 +44,7 @@ export interface User {
   credits?: {
     amount: number;
   };
+  stripe_connected?: boolean;
 }
 
 export type Settings = {
@@ -88,6 +87,9 @@ export type Settings = {
   showScreenpipeShortcut: string;
   startRecordingShortcut: string;
   stopRecordingShortcut: string;
+  pipeShortcuts: Record<string, string>;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -118,7 +120,7 @@ const DEFAULT_SETTINGS: Settings = {
   includedWindows: [],
   aiProviderType: "openai",
   aiUrl: "https://api.openai.com/v1",
-  aiMaxContextChars: 30000,
+  aiMaxContextChars: 512000,
   fps: 0.5,
   vadSensitivity: "high",
   analyticsEnabled: true,
@@ -140,6 +142,9 @@ const DEFAULT_SETTINGS: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   startRecordingShortcut: "Super+Alt+R",
   stopRecordingShortcut: "Super+Alt+X",
+  pipeShortcuts: {},
+  enableRealtimeAudioTranscription: false,
+  realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -182,7 +187,7 @@ export interface StoreModel {
   resetSetting: Action<StoreModel, keyof Settings>;
 }
 
-function createDefaultSettingsObject(): Settings {
+export function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
   try {
     const currentPlatform = platform();
@@ -205,7 +210,6 @@ function createDefaultSettingsObject(): Settings {
 
     return defaultSettings;
   } catch (e) {
-    console.error("failed to get platform", e);
     return DEFAULT_SETTINGS;
   }
 }
@@ -213,11 +217,22 @@ function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
+/** 
+ * @warning Do not change autoSave to true, it causes race conditions
+ */
 const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
-      return new TauriStore(`${dir}/screenpipe/store.bin`);
+      const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
+        autoSave: false,
+      });
+      const activeProfile = await profilesStore.get("activeProfile") || "default";
+      const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
+      console.log("activeProfile", activeProfile, file);
+      return new TauriStore(`${dir}/screenpipe/${file}`, {
+        autoSave: false,
+      });
     })();
   }
   return storePromise;
@@ -263,7 +278,7 @@ const tauriStorage: PersistStorage = {
   },
 };
 
-export const store = createStoreEasyPeasy<StoreModel>(
+export const store = createContextStore<StoreModel>(
   persist(
     {
       settings: createDefaultSettingsObject(),
@@ -288,15 +303,11 @@ export const store = createStoreEasyPeasy<StoreModel>(
   )
 );
 
-const typedHooks = createTypedHooks<StoreModel>();
-const useStoreActions = typedHooks.useStoreActions;
-const useStoreState = typedHooks.useStoreState;
-
 export function useSettings() {
-  const settings = useStoreState((state) => state.settings);
-  const setSettings = useStoreActions((actions) => actions.setSettings);
-  const resetSettings = useStoreActions((actions) => actions.resetSettings);
-  const resetSetting = useStoreActions((actions) => actions.resetSetting);
+  const settings = store.useStoreState((state) => state.settings);
+  const setSettings = store.useStoreActions((actions) => actions.setSettings);
+  const resetSettings = store.useStoreActions((actions) => actions.resetSettings);
+  const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
@@ -311,15 +322,12 @@ export function useSettings() {
     let p = "macos";
     try {
       p = platform();
-    } catch (e) {
-      console.error("failed to get platform", e);
-    }
+    } catch (e) {}
 
     return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`
       : `${homeDirPath}\\.screenpipe`;
   };
-
 
   return {
     settings,

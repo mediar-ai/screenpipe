@@ -42,8 +42,8 @@ get_os_arch() {
 
 echo "fetching latest version from github..."
 LATEST_RELEASE=$(curl -s https://api.github.com/repos/mediar-ai/screenpipe/releases/latest)
-VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": "v[^"]*"' | cut -d'"' -f4 | sed 's/^v//')
-
+# Extract version using grep and sed for cross-platform compatibility
+VERSION=$(echo "$LATEST_RELEASE" | grep -o '"tag_name": *"v[^"]*"' | sed 's/.*"v\([^"]*\)".*/\1/')
 if [ -z "$VERSION" ]; then
     echo "failed to fetch latest version"
     exit 1
@@ -297,3 +297,18 @@ echo "│                                          │"
 echo "│  check the docs:                         │"
 echo "│  --> https://docs.screenpi.pe            │"
 echo "╰──────────────────────────────────────────╯"
+
+curl -sL -X POST https://eu.i.posthog.com/capture/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
+    "event": "cli_install",
+    "properties": {
+      "distinct_id": "'$(hostname)'",
+      "version": "'$VERSION'",
+      "os": "'$os'",
+      "arch": "'$arch'"
+    }
+  }' >/dev/null 2>&1 || true
+
+
