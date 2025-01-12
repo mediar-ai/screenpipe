@@ -8,7 +8,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { REFRESH_INTERVAL } from '@/lib/config';
 
 interface ConnectionStats {
   pending: number;
@@ -83,25 +82,39 @@ export function HarvestClosestConnections() {
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
   const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
-  const [nextRefreshTime, setNextRefreshTime] = useState<number>(Date.now() + REFRESH_INTERVAL);
 
   useEffect(() => {
-    // Update initial state
-    fetch("/api/harvest/status")
-      .then(res => res.json())
-      .then(data => {
+    // Load initial state with stats
+    const loadInitialState = async () => {
+      try {
+        const res = await fetch("/api/harvest/status?refresh=true");
+        const data = await res.json();
+        
         setHarvestingStatus(data.isHarvesting);
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        
+        if (data.stats) {
+          setStats(data.stats);
+        }
+        
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
           if (new Date(data.nextHarvestTime) > new Date()) {
-            setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
+            const message = data.connectionsSent >= 35
+              ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
+              : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
+            setStatus(message);
           }
         }
-      })
-      .catch(console.error);
+      } catch (error) {
+        console.error('failed to load initial state:', error);
+        setStatus('failed to load initial state');
+      }
+    };
+
+    loadInitialState();
   }, []);
 
   // Combine both status polling effects into one
@@ -153,11 +166,6 @@ export function HarvestClosestConnections() {
               setNextProfileTime(data.nextProfileTime);
             } else {
               setNextProfileTime(null);
-            }
-
-            // Update next refresh time if provided
-            if (data.lastRefreshTime) {
-              setNextRefreshTime(data.lastRefreshTime + REFRESH_INTERVAL);
             }
           })
           .catch(error => {
@@ -330,14 +338,6 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
-        {nextRefreshTime > Date.now() && (
-          <div className="ml-2">
-            <CountdownTimer 
-              targetTime={nextRefreshTime} 
-              prefix="next auto-refresh in:" 
-            />
-          </div>
-        )}
         {nextProfileTime && nextProfileTime > Date.now() && (
           <div className="ml-2">
             <CountdownTimer targetTime={nextProfileTime} />
@@ -350,11 +350,12 @@ export function HarvestClosestConnections() {
         )}
         {refreshProgress && !rateLimitedUntil && (
           <span className="ml-2 text-sm text-gray-500">
-            checking {refreshProgress.current - 1}/{refreshProgress.total} profiles
-            {stats.averageProfileCheckDuration && (
-              <span className="ml-2">
-                (~{formatTimeRemaining((refreshProgress.total - (refreshProgress.current - 1)) * stats.averageProfileCheckDuration)} remaining)
-              </span>
+            checking {refreshProgress.current}/{refreshProgress.total} profiles
+            {stats.averageProfileCheckDuration && nextProfileTime && (
+              <CountdownTimer 
+                targetTime={nextProfileTime} 
+                prefix="~"
+              />
             )}
           </span>
         )}
@@ -399,3 +400,4 @@ export function HarvestClosestConnections() {
     </div>
   );
 }
+

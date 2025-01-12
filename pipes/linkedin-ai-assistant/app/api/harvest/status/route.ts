@@ -4,7 +4,6 @@ import { getActiveBrowser } from '@/lib/browser-setup';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 import { Page } from 'puppeteer-core';
-import { REFRESH_INTERVAL } from '@/lib/config';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -129,19 +128,11 @@ interface RefreshProgress {
 // Add progress tracking at module level
 let refreshProgress: RefreshProgress | null = null;
 
-// Add refresh interval tracking
-let lastRefreshTime = 0;
-let isRefreshing = false;
-
 export async function GET(request: Request) {
   const nextDelay = 0;
   try {
     const url = new URL(request.url);
-    // Check if it's time for auto-refresh
-    const now = Date.now();
-    const shouldRefresh = (url.searchParams.get('refresh') === 'true' || 
-      (now - lastRefreshTime > REFRESH_INTERVAL)) && !isRefreshing;
-
+    const shouldRefresh = url.searchParams.get('refresh') === 'true';
     let connectionsStore = await loadConnections();
 
     // Only log if values changed
@@ -158,9 +149,8 @@ export async function GET(request: Request) {
 
     // If isHarvesting is true but no active harvesting is happening, restart it
     if (connectionsStore.isHarvesting && !connectionsStore.nextHarvestTime) {
-      console.log('detected stale harvesting state, restarting process');
-      
-      // Start harvesting in the background
+      console.log('detected stale harvesting state, forcing isHarvesting to false, then restarting process');
+      await saveHarvestingState(false);
       startHarvesting().then(() => {
         // console.log('harvest restart result:', result);
       }).catch(error => {
@@ -206,47 +196,41 @@ export async function GET(request: Request) {
     }
 
     if (shouldRefresh) {
-      try {
-        isRefreshing = true;
-        lastRefreshTime = now;
-        const { page } = getActiveBrowser();
-        if (page) {
-          const startTime = Date.now();
-          
-          const pendingConnections = Object.entries(connectionsStore.connections)
-            .filter(([, connection]) => connection.status === 'pending');
-          
-          refreshProgress = {
-            current: 0,
-            total: pendingConnections.length
-          };
+      const { page } = getActiveBrowser();
+      if (page) {
+        const startTime = Date.now();
+        
+        const pendingConnections = Object.entries(connectionsStore.connections)
+          .filter(([, connection]) => connection.status === 'pending');
+        
+        refreshProgress = {
+          current: 0,
+          total: pendingConnections.length
+        };
 
-          // Check pending connections
-          for (const [url, connection] of pendingConnections) {
-            refreshProgress.current++;
-            
-            const newStatus = await checkConnectionStatus(page, url, connection);
-            if (newStatus !== connection.status) {
-              await saveConnection({
-                ...connection,
-                status: newStatus,
-                timestamp: new Date().toISOString()
-              });
-            }
+        // Check pending connections
+        for (const [url, connection] of pendingConnections) {
+          refreshProgress.current++;
+          
+          const newStatus = await checkConnectionStatus(page, url, connection);
+          if (newStatus !== connection.status) {
+            await saveConnection({
+              ...connection,
+              status: newStatus,
+              timestamp: new Date().toISOString()
+            });
           }
-          
-          // Calculate and save duration stats
-          const totalDuration = Date.now() - startTime;
-          await saveRefreshStats(totalDuration, pendingConnections.length);
-          
-          // Reset progress after completion
-          refreshProgress = null;
         }
-        // Reload after updates
-        connectionsStore = await loadConnections();
-      } finally {
-        isRefreshing = false;
+        
+        // Calculate and save duration stats
+        const totalDuration = Date.now() - startTime;
+        await saveRefreshStats(totalDuration, pendingConnections.length);
+        
+        // Reset progress after completion
+        refreshProgress = null;
       }
+      // Reload after updates
+      connectionsStore = await loadConnections();
     }
     
     // Calculate stats from connections
@@ -281,10 +265,8 @@ export async function GET(request: Request) {
       refreshProgress,
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
-      lastRefreshTime,
     });
   } catch (error: unknown) {
-    isRefreshing = false; // Make sure to reset on error
     return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });
   }
 } 

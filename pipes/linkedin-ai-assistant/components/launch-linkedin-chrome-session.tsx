@@ -167,7 +167,7 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
               </HoverCardTrigger>
               <HoverCardContent className="w-80">
                 <p className="text-sm text-gray-500">
-                  it will close your chrome browser, but you can restore tabs
+                  opens linkedin in a new chrome window while keeping your existing tabs
                 </p>
               </HoverCardContent>
             </HoverCard>

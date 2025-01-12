@@ -1,20 +1,23 @@
 import { NextResponse } from 'next/server';
-import { startHarvesting, isHarvesting } from '@/lib/logic-sequence/harvest-connections';
-import { saveHarvestingState } from '@/lib/storage/storage';
+import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
+import { loadConnections, saveHarvestingState } from '@/lib/storage/storage';
 
 export async function POST() {
   try {
-    // Check if already harvesting
-    if (await isHarvesting()) {
+    const connections = await loadConnections();
+    
+    // Only block start if in active cooldown
+    if (connections.isHarvesting && connections.nextHarvestTime && new Date(connections.nextHarvestTime) > new Date()) {
       return NextResponse.json(
         { 
-          message: 'harvesting already in progress',
+          message: `harvesting cooldown active until ${new Date(connections.nextHarvestTime).toLocaleString()}`,
           isHarvesting: true,
           weeklyLimitReached: false,
           dailyLimitReached: false,
-          connectionsSent: 0
+          connectionsSent: connections.connectionsSent || 0,
+          nextHarvestTime: connections.nextHarvestTime
         },
-        { status: 409 }  // Conflict status code
+        { status: 429 }
       );
     }
 

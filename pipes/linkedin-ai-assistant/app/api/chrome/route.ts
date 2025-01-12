@@ -95,7 +95,6 @@ export async function DELETE() {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }
 }
-
 async function quitChrome() {
   const platform = os.platform();
   const killCommand = platform === 'win32' 
