@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Info } from "lucide-react";
+import { RefreshCw, Info, Loader2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -20,7 +20,7 @@ interface ConnectionStats {
 }
 
 // Add type for harvesting status
-type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
+type HarvestingStatus = 'stopped' | 'running' | 'cooldown';
 
 // Add helper function for formatting time
 function formatTimeRemaining(milliseconds: number): string {
@@ -88,9 +88,10 @@ export function HarvestClosestConnections() {
     const loadInitialState = async () => {
       try {
         const res = await fetch("/api/harvest/status?refresh=true");
-        const data = await res.json();
+        if (!res.ok) return;
         
-        setHarvestingStatus(data.isHarvesting);
+        const data = await res.json();
+        setHarvestingStatus(data.harvestingStatus || 'stopped');
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
@@ -111,6 +112,7 @@ export function HarvestClosestConnections() {
       } catch (error) {
         console.error('failed to load initial state:', error);
         setStatus('failed to load initial state');
+        setHarvestingStatus('stopped');
       }
     };
 
@@ -122,56 +124,46 @@ export function HarvestClosestConnections() {
     if (harvestingStatus !== 'stopped') {
       const interval = setInterval(() => {
         fetch("/api/harvest/status")
-          .then(res => res.json())
+          .then(res => {
+            if (!res.ok) {
+              console.error('status check failed:', res.status);
+              return null;
+            }
+            return res.json();
+          })
           .then(data => {
-            setHarvestingStatus(data.isHarvesting);
-            setConnectionsSent(data.connectionsSent || 0);
-            setDailyLimitReached(data.connectionsSent >= 35);
-            setWeeklyLimitReached(data.weeklyLimitReached || false);
-            if (data.stats) {
-              setStats(data.stats);
-            }
-            if (data.nextHarvestTime) {
-              setNextHarvestTime(data.nextHarvestTime);
-              if (new Date(data.nextHarvestTime) > new Date()) {
-                const message = data.connectionsSent >= 35
-                  ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
-                  : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
-                setStatus(message);
+            if (!data) return;
+            
+            // Batch state updates together
+            const updates = () => {
+              setConnectionsSent(data.connectionsSent || 0);
+              setHarvestingStatus(data.harvestingStatus);
+              setDailyLimitReached(data.connectionsSent >= 35);
+              setWeeklyLimitReached(data.weeklyLimitReached || false);
+              if (data.stats) setStats(data.stats);
+              if (data.nextProfileTime) {
+                setNextProfileTime(data.nextProfileTime);
+              } else {
+                setNextProfileTime(null);
               }
-            }
-
-            // Check for cooldown restart if needed
-            if (!data.isHarvesting && data.nextHarvestTime) {
-              const now = new Date();
-              const harvestTime = new Date(data.nextHarvestTime);
               
-              if (now >= harvestTime) {
-                console.log('cooldown period ended, initiating restart');
-                setNextHarvestTime(null);
-                setStatus('cooldown period ended, restarting...');
-                
-                // Force a status refresh to trigger the backend restart
-                fetch('/api/harvest/status?refresh=true')
-                  .then(() => new Promise(resolve => setTimeout(resolve, 1000)))
-                  .then(() => setHarvestingStatus('running'))
-                  .catch(error => {
-                    console.error('failed to restart harvesting:', error);
-                    setStatus('failed to restart after cooldown');
-                  });
+              if (data.nextHarvestTime) {
+                setNextHarvestTime(data.nextHarvestTime);
+                if (new Date(data.nextHarvestTime) > new Date()) {
+                  const message = data.connectionsSent >= 35
+                    ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
+                    : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
+                  setStatus(message);
+                }
               }
-            }
-
-            if (data.nextProfileTime) {
-              setNextProfileTime(data.nextProfileTime);
-            } else {
-              setNextProfileTime(null);
-            }
+            };
+            
+            updates();
           })
           .catch(error => {
             console.error('failed to fetch status:', error);
           });
-      }, 1000);
+      }, 2000); // Increased to 2 seconds
 
       return () => clearInterval(interval);
     }
@@ -179,21 +171,24 @@ export function HarvestClosestConnections() {
 
   const startHarvesting = async () => {
     try {
+      console.log('attempting to start harvesting...');
       setHarvestingStatus('running');
-      setStatus("starting harvesting process...");
+      setStatus("starting farming process...");
 
       const response = await fetch("/api/harvest/start", {
         method: "POST",
       });
 
+      console.log('harvest start response status:', response.status);
       const data = await response.json();
-      console.log('harvest start response:', data);
+      console.log('harvest start response data:', data);
 
       if (response.ok) {
         setStatus(data.message?.toLowerCase() || 'unknown status');
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setHarvestingStatus(data.harvestingStatus);
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
         }
@@ -202,7 +197,9 @@ export function HarvestClosestConnections() {
         if (response.status === 429) {
           setNextHarvestTime(data.nextHarvestTime);
           setStatus(data.message?.toLowerCase() || 'rate limit reached');
+          setHarvestingStatus('cooldown');
         } else {
+          console.error('failed to start harvesting:', data);
           setStatus(`error: ${data.message?.toLowerCase() || 'unknown error'}`);
           setHarvestingStatus('stopped');
         }
@@ -219,7 +216,7 @@ export function HarvestClosestConnections() {
     try {
       // Set status immediately to improve UI responsiveness
       setHarvestingStatus('stopped');
-      setStatus("stopping harvest process...");
+      setStatus("farming stopped");
 
       const response = await fetch("/api/harvest/stop", {
         method: "POST",
@@ -253,7 +250,7 @@ export function HarvestClosestConnections() {
         }
       }, 1000);
 
-      // Trigger the actual refresh
+      // Trigger the actual refresh with refresh=true
       const response = await fetch("/api/harvest/status?refresh=true");
       const data = await response.json();
       
@@ -287,24 +284,26 @@ export function HarvestClosestConnections() {
       <div className="flex flex-row items-center gap-4">
         <div className="flex items-center gap-4">
           <span className="text-lg font-medium">
-            farming connections {connectionsSent > 0 && `(${connectionsSent})`}
+            farming connections
           </span>
-          <div className="flex gap-2">
-            {harvestingStatus === 'stopped' && (
+          <div className="flex items-center gap-2">
+            {harvestingStatus === 'stopped' ? (
               <button
                 onClick={startHarvesting}
                 className="bg-black text-white px-4 py-2 rounded-md text-base"
               >
                 start
               </button>
-            )}
-            {(harvestingStatus === 'running' || harvestingStatus === 'cooldown') && (
-              <button
-                onClick={stopHarvesting}
-                className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
-              >
-                stop
-              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                <button
+                  onClick={stopHarvesting}
+                  className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
+                >
+                  stop
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -314,12 +313,16 @@ export function HarvestClosestConnections() {
               ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
               : weeklyLimitReached && nextHarvestTime 
                 ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
-                : status}
+                : harvestingStatus === 'running'
+                  ? connectionsSent > 0 
+                    ? `sent ${connectionsSent} connections` 
+                    : ''
+                  : status}
           </span>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        automatically send connection requests to your closest linkedin connections
+        automatically send connection requests to your closest linkedin network
       </p>
 
       <div className="flex items-center mt-4 mb-2">

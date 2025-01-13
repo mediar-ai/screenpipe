@@ -102,14 +102,14 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
 // Add type for status
 interface HarvestStatus {
   nextHarvestTime: string;
-  isHarvesting: string;
+  harvestingStatus: 'stopped' | 'running' | 'cooldown';
   connectionsSent: number;
 }
 
-// Initialize with empty strings instead of undefined
+// Initialize with proper status
 let lastStatus: HarvestStatus = {
   nextHarvestTime: '',
-  isHarvesting: '',
+  harvestingStatus: 'stopped',
   connectionsSent: 0
 };
 
@@ -128,18 +128,21 @@ interface RefreshProgress {
 // Add progress tracking at module level
 let refreshProgress: RefreshProgress | null = null;
 
+// Add mutex-like check at module level
+let harvestRestartInProgress = false;
+
 export async function GET(request: Request) {
   const nextDelay = 0;
   try {
+    let connectionsStore = await loadConnections();
     const url = new URL(request.url);
     const shouldRefresh = url.searchParams.get('refresh') === 'true';
-    let connectionsStore = await loadConnections();
 
     // Only log if values changed
     const currentStatus = {
       nextHarvestTime: connectionsStore.nextHarvestTime || '',
-      isHarvesting: String(connectionsStore.isHarvesting || ''),
-      connectionsSent: connectionsStore.connectionsSent
+      harvestingStatus: connectionsStore.harvestingStatus,
+      connectionsSent: connectionsStore.connectionsSent || 0
     };
 
     if (JSON.stringify(lastStatus) !== JSON.stringify(currentStatus)) {
@@ -147,51 +150,15 @@ export async function GET(request: Request) {
       lastStatus = currentStatus;
     }
 
-    // If isHarvesting is true but no active harvesting is happening, restart it
-    if (connectionsStore.isHarvesting && !connectionsStore.nextHarvestTime) {
-      console.log('detected stale harvesting state, forcing isHarvesting to false, then restarting process');
-      await saveHarvestingState(false);
-      startHarvesting().then(() => {
-        // console.log('harvest restart result:', result);
-      }).catch(error => {
-        console.error('failed to restart harvesting:', error);
-        // Reset harvesting state if start fails
-        saveHarvestingState(false).catch(console.error);
-      });
-    }
-
-    // Original cooldown check
+    // Only check cooldown in status endpoint, don't restart
     if (connectionsStore.nextHarvestTime) {
       const nextTime = new Date(connectionsStore.nextHarvestTime);
       const now = new Date();
-      const shouldRestart = nextTime <= now;
-
-      // Only track nextTime and shouldRestart state changes
-      const currentCooldownCheck = {
-        nextTime: nextTime.toISOString(),
-        shouldRestart
-      };
-
-      if (JSON.stringify(lastCooldownCheck) !== JSON.stringify(currentCooldownCheck)) {
-        console.log('cooldown check:', {
-          ...currentCooldownCheck,
-          now: now.toISOString() // Include now only in the log
-        });
-        lastCooldownCheck = currentCooldownCheck;
-      }
-
-      if (shouldRestart) {
-        console.log('cooldown period ended, restarting harvest process');
+      
+      if (nextTime <= now) {
+        // Just clear the cooldown time without restarting
         await saveNextHarvestTime('');
-        await saveHarvestingState(true);
-        connectionsStore = await loadConnections();
-        
-        startHarvesting().then(() => {
-          // console.log('harvest restart result:', result);
-        }).catch(error => {
-          console.error('failed to restart harvesting:', error);
-          saveHarvestingState(false).catch(console.error);
-        });
+        await saveHarvestingState('stopped');
       }
     }
 
@@ -233,40 +200,56 @@ export async function GET(request: Request) {
       connectionsStore = await loadConnections();
     }
     
-    // Calculate stats from connections
+    // Move stats calculation after store reload
     const stats = Object.values(connectionsStore.connections).reduce((acc, connection) => {
       const status = connection.status || 'pending';
       acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
+    // Return basic status even if refresh fails
+    let refreshError = null;
+    
+    if (shouldRefresh) {
+      try {
+        const { page } = getActiveBrowser();
+        if (page) {
+          // ... refresh logic ...
+        }
+      } catch (err) {
+        console.error('refresh failed:', err);
+        refreshError = (err as Error).message;
+      }
+    }
+
     return NextResponse.json({
-      // Convert boolean isHarvesting to three-state status
-      isHarvesting: connectionsStore.nextHarvestTime && new Date(connectionsStore.nextHarvestTime) > new Date()
-        ? 'cooldown'
-        : connectionsStore.isHarvesting
-          ? 'running'
-          : 'stopped',
+      harvestingStatus: connectionsStore.harvestingStatus,
       nextHarvestTime: connectionsStore.nextHarvestTime,
       connectionsSent: connectionsStore.connectionsSent || 0,
-      dailyLimitReached: connectionsStore.connectionsSent >= 35,
+      dailyLimitReached: (connectionsStore.connectionsSent || 0) >= 35,
       weeklyLimitReached: false,
       stats: {
-        pending: stats.pending || 0,
-        accepted: stats.accepted || 0,
-        declined: stats.declined || 0,
-        email_required: stats.email_required || 0,
-        cooldown: stats.cooldown || 0,
+        pending: stats?.pending || 0,
+        accepted: stats?.accepted || 0,
+        declined: stats?.declined || 0,
+        email_required: stats?.email_required || 0,
+        cooldown: stats?.cooldown || 0,
         total: Object.keys(connectionsStore.connections).length,
         lastRefreshDuration: connectionsStore.lastRefreshDuration,
         averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
       },
-      // Add refresh progress to response
       refreshProgress,
+      refreshError, // Include any refresh errors
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
     });
-  } catch (error: unknown) {
-    return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });
+
+  } catch (error) {
+    // Return minimal status on error
+    console.error('status check failed:', error);
+    return NextResponse.json({
+      harvestingStatus: 'stopped',
+      error: (error as Error).message
+    }, { status: 200 }); // Return 200 with error info instead of 500
   }
 } 

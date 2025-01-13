@@ -209,7 +209,7 @@ export interface Connection {
 interface ConnectionsStore {
     nextHarvestTime?: string;
     connections: Record<string, Connection>;
-    isHarvesting?: boolean;
+    harvestingStatus: 'stopped' | 'running' | 'cooldown';
     connectionsSent: number;
     lastRefreshDuration?: number;  // in milliseconds
     averageProfileCheckDuration?: number;  // in milliseconds
@@ -228,7 +228,7 @@ export async function loadConnections(): Promise<ConnectionsStore> {
             return {
                 connections: {},
                 connectionsSent: 0,
-                isHarvesting: false,
+                harvestingStatus: 'stopped',
             };
         }
         console.error('Failed to read or parse connections.json:', err);
@@ -258,22 +258,15 @@ export async function saveNextHarvestTime(timestamp: string) {
     console.log(`saved next harvest time: ${timestamp}`);
 }
 
-export async function saveHarvestingState(isHarvesting: boolean) {
-    let connectionsStore: ConnectionsStore;
-    try {
-        connectionsStore = await loadConnections();
-    } catch (error) {
-        console.error('Failed to load connections for saving harvesting state:', error);
-        throw new Error('Cannot save harvesting state because connections data could not be loaded.');
-    }
-
-    connectionsStore.isHarvesting = isHarvesting;
-
+export async function saveHarvestingState(status: 'stopped' | 'running' | 'cooldown') {
+    const connectionsStore = await loadConnections();
+    connectionsStore.harvestingStatus = status;
+    
     await fs.writeFile(
         path.join(STORAGE_DIR, 'connections.json'),
         JSON.stringify(connectionsStore, null, 2)
     );
-    console.log(`saved harvesting state: ${isHarvesting}`);
+    console.log(`saved harvesting status: ${status}`);
 }
 
 export async function updateConnectionsSent(connectionsSent: number) {
