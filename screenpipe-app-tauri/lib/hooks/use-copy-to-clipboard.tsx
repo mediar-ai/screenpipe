@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "@/components/ui/use-toast";
 import * as React from "react";
 
 export interface useCopyToClipboardProps {
@@ -22,6 +23,10 @@ export function useCopyToClipboard({
 
     navigator.clipboard.writeText(value).then(() => {
       setIsCopied(true);
+      toast({
+        title: "Copied to clipboard",
+        duration: 2000,
+      });
 
       setTimeout(() => {
         setIsCopied(false);

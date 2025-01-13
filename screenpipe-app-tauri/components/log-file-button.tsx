@@ -32,7 +32,7 @@ const LogContent = ({ content }: { content: string }) => {
       isTextWrapped={false}
       hasLineNumbers={true}
       data={content}
-      height="65vh"
+      height="58vh"
       toolbar={
         <Toolbar>
           <ToolbarContent>
@@ -172,21 +172,9 @@ export const LogFileButton = ({
             </div>
 
             {/* Content area */}
-            <div className="flex flex-col space-y-2 overflow-hidden">
+            <div className="flex flex-col space-y-2 h-full">
               {logPath && (
                 <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-sm truncate">
-                      {logPath}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyToClipboard(logPath)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
                   <div className="relative flex-1 border rounded-md">
                     <LogContent content={logContent} />
                     <Button
@@ -194,6 +182,18 @@ export const LogFileButton = ({
                       size="sm"
                       className="absolute top-2 right-2 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
                       onClick={() => copyToClipboard(logContent)}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between px-2 py-1 bg-secondary/50 rounded-md">
+                    <code className="text-sm font-mono">
+                      {logPath}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(logPath)}
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
