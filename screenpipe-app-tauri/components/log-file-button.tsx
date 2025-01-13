@@ -139,7 +139,7 @@ export const LogFileButton = ({
       </TooltipProvider>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[90vw] h-[80vh] overflow-hidden">
+        <DialogContent className="sm:max-w-[90vw] h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>log files</DialogTitle>
             <DialogDescription>
@@ -147,61 +147,68 @@ export const LogFileButton = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-[250px,1fr] gap-4 h-[calc(100%-80px)]">
-            {/* Sidebar with log files list */}
-            <div className="border rounded-md overflow-hidden">
-              <ScrollArea className="h-full">
-                <div className="p-2 space-y-1">
-                  {logFiles.map((file, i) => (
-                    <Button
-                      key={i}
-                      variant={
-                        logPath === file.modified_at.toString()
-                          ? "secondary"
-                          : "ghost"
-                      }
-                      className="w-full justify-start text-xs"
-                      onClick={() => loadLogContent(file.path)}
-                    >
-                      <FileText className="h-3 w-3 mr-2" />
-                      <span className="truncate">{file.name}</span>
-                    </Button>
-                  ))}
-                </div>
-              </ScrollArea>
+          {logFiles.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <FileText className="h-12 w-12 mb-4 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground">
+                no log files found yet, come back later
+              </p>
             </div>
+          ) : (
+            <div className="grid grid-cols-[250px,1fr] gap-4 h-[calc(100%-80px)]">
+              {/* Sidebar with log files list */}
+              <div className="border rounded-md overflow-hidden">
+                <ScrollArea className="h-full">
+                  <div className="p-2 space-y-1">
+                    {logFiles.map((file, i) => (
+                      <Button
+                        key={i}
+                        variant={
+                          logPath === file.modified_at.toString()
+                            ? "secondary"
+                            : "ghost"
+                        }
+                        className="w-full justify-start text-xs"
+                        onClick={() => loadLogContent(file.path)}
+                      >
+                        <FileText className="h-3 w-3 mr-2" />
+                        <span className="truncate">{file.name}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
 
-            {/* Content area */}
-            <div className="flex flex-col space-y-2 h-full">
-              {logPath && (
-                <>
-                  <div className="relative flex-1 border rounded-md">
-                    <LogContent content={logContent} />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="absolute top-2 right-2 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
-                      onClick={() => copyToClipboard(logContent)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center justify-between px-2 py-1 bg-secondary/50 rounded-md">
-                    <code className="text-sm font-mono">
-                      {logPath}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(logPath)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </>
-              )}
+              {/* Content area */}
+              <div className="flex flex-col space-y-2 h-full">
+                {logPath && (
+                  <>
+                    <div className="relative flex-1 border rounded-md">
+                      <LogContent content={logContent} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute top-2 right-2 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
+                        onClick={() => copyToClipboard(logContent)}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between px-2 py-1 bg-secondary/50 rounded-md">
+                      <code className="text-sm font-mono">{logPath}</code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(logPath)}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
