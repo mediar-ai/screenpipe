@@ -61,7 +61,7 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
+use tauri_plugin_sentry::sentry;
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -536,6 +536,15 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Initialize Sentry early
+    let sentry_guard = sentry::init((
+        "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", // Replace with your actual Sentry DSN
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
     {
@@ -597,6 +606,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_sentry::init(&sentry_guard))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,

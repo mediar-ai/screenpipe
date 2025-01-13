@@ -1289,23 +1289,26 @@ const PipeStore: React.FC = () => {
                           </TooltipProvider>
                         )}
 
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              onClick={() => handleDeletePipe(selectedPipe)}
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>delete pipe</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      {/* Only show delete button for non-core pipes */}
+                      {!corePipes.some((cp) => cp.id === selectedPipe.id) && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                onClick={() => handleDeletePipe(selectedPipe)}
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>delete pipe</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
                     </div>
                   </div>
 

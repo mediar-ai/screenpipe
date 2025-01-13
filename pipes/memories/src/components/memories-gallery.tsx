@@ -232,6 +232,9 @@ export function MemoriesGallery() {
   };
 
   const generateCollectiveDescription = async () => {
+    pipe.captureMainFeatureEvent("memories", {
+      action: "generate-summary",
+    });
     if (memories.length === 0) return;
 
     setCollectiveDescription({ loading: true, content: "" });
