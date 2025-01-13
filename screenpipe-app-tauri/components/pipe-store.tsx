@@ -16,6 +16,7 @@ import {
   Puzzle,
   X,
   Loader2,
+  BanknoteIcon,
 } from "lucide-react";
 import { PipeConfigForm } from "./pipe-config-form";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -267,6 +268,24 @@ const DEFAULT_PIPES = [
   "timeline",
   "identify-speakers",
 ];
+
+const checkSubscription = async (pipeId: string, userId: string) => {
+  try {
+    console.log("checking subscription for pipe:", pipeId, userId);
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("pipe_id", pipeId)
+      .eq("user_id", userId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error("failed to check subscription:", error);
+    return null;
+  }
+};
 
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
@@ -531,7 +550,7 @@ const PipeStore: React.FC = () => {
     );
     if (freshPipe) {
       console.log("freshPipe", freshPipe);
-      
+
       setSelectedPipe(freshPipe);
     }
   };
@@ -803,7 +822,7 @@ const PipeStore: React.FC = () => {
           description: "The pipe configuration has been updated.",
         });
 
-        await setSelectedPipe({...selectedPipe, config: config});
+        await setSelectedPipe({ ...selectedPipe, config: config });
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
@@ -1180,23 +1199,112 @@ const PipeStore: React.FC = () => {
                         </Tooltip>
                       </TooltipProvider>
                     )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() => handleDeletePipe(selectedPipe)}
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>delete pipe</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <div className="flex items-center gap-2">
+                      {user?.id &&
+                        corePipes.find((cp) => cp.id === selectedPipe.id)
+                          ?.paid && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={async () => {
+                                    try {
+                                      const sub = await checkSubscription(
+                                        selectedPipe.id,
+                                        user!.id!
+                                      );
+                                      if (!sub) {
+                                        toast({
+                                          title: "no active subscription found",
+                                          variant: "destructive",
+                                        });
+                                        return;
+                                      }
+
+                                      const res = await fetch(
+                                        "https://screenpi.pe/api/subscription-end",
+                                        {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          body: JSON.stringify({
+                                            subscription_id: sub.id,
+                                          }),
+                                        }
+                                      );
+
+                                      if (!res.ok)
+                                        throw new Error(
+                                          "failed to end subscription"
+                                        );
+
+                                      // Remove the pipe completely
+                                      await fetch(
+                                        "http://localhost:3030/pipes/delete",
+                                        {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                          },
+                                          body: JSON.stringify({
+                                            pipe_id: selectedPipe.id,
+                                          }),
+                                        }
+                                      );
+
+                                      toast({
+                                        title: "subscription ended",
+                                        description:
+                                          "access will continue for 30 days",
+                                      });
+
+                                      await reloadPipeConfig(selectedPipe);
+                                    } catch (error) {
+                                      console.error(
+                                        "failed to end subscription:",
+                                        error
+                                      );
+                                      toast({
+                                        title: "error ending subscription",
+                                        description:
+                                          "please try again or contact support",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                >
+                                  <BanknoteIcon className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>end subscription</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() => handleDeletePipe(selectedPipe)}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>delete pipe</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
 
                   {corePipes.find((cp) => cp.id === selectedPipe.id)?.paid && (
@@ -1213,15 +1321,14 @@ const PipeStore: React.FC = () => {
                 </div>
               </div>
 
-              {selectedPipe.enabled &&
-                 (
-                  <div className="space-y-3 pt-4 border-t">
-                    <PipeConfigForm
-                      pipe={selectedPipe}
-                      onConfigSave={handleConfigSave}
-                    />
-                  </div>
-                )}
+              {selectedPipe.enabled && (
+                <div className="space-y-3 pt-4 border-t">
+                  <PipeConfigForm
+                    pipe={selectedPipe}
+                    onConfigSave={handleConfigSave}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
