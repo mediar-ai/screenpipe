@@ -398,7 +398,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let resource_monitor = ResourceMonitor::new();
-    resource_monitor.start_monitoring(Duration::from_secs(10));
+    resource_monitor.start_monitoring(Duration::from_secs(10), local_data_dir.to_string_lossy().to_string());
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
