@@ -686,6 +686,19 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  const reloadPipeConfig = async (pipe: Pipe) => {
+    await fetchInstalledPipes();
+
+    const freshPipe = pipes.find(
+      (p) => normalizeId(p.id) === normalizeId(pipe.id)
+    );
+    if (freshPipe) {
+      console.log("freshPipe", freshPipe);
+
+      setSelectedPipe(freshPipe);
+    }
+  };
+
   const handleAddOwnPipe = async () => {
     if (newRepoUrl) {
       try {
@@ -810,9 +823,8 @@ const PipeStore: React.FC = () => {
           description: "The pipe configuration has been updated.",
         });
 
-        await setSelectedPipe({...selectedPipe, config: config});
+        await setSelectedPipe({ ...selectedPipe, config: config });
         setIsEnabling(false);
-
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
