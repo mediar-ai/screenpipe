@@ -11,6 +11,7 @@
 - screen device
 - input audio device
 - output audio device
+- record your screen before starting the test
 
 ### installation
 1. download latest screenpipe from https://web.crabnebula.cloud/mediar/screenpipe/releases
@@ -71,5 +72,6 @@
 - [ ] meeting transcription accurate
 - [ ] audio devices used
 - [ ] clean process exit
+- [ ] share screen recording
 
 report any failures or unexpected behavior to https://github.com/mediar-ai/screenpipe/issues
