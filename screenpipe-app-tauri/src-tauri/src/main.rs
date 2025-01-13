@@ -307,6 +307,19 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
+async fn list_pipes() -> anyhow::Result<Value> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get("http://localhost:3030/pipes/list")
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+
+    Ok(response)
+}
+
+
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
@@ -648,10 +661,30 @@ async fn main() {
                     }
                     "quit" => {
                         debug!("Quit requested");
-                        // First try to stop any running recordings
-                        let state = app_handle.state::<SidecarState>();
-                        tauri::async_runtime::block_on(async {
-                            if let Err(e) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                        // Kill all pipes before quitting
+                        let app_handle_clone = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Ok(response) = list_pipes().await {
+                                if let Some(pipes) = response["data"].as_array() {
+                                    for pipe in pipes {
+                                        if pipe["enabled"].as_bool().unwrap_or(false) {
+                                            if let Some(id) = pipe["id"].as_str() {
+                                                let _ = reqwest::Client::new()
+                                                    .post(format!("http://localhost:3030/pipes/disable"))
+                                                    .json(&serde_json::json!({
+                                                        "pipe_id": id
+                                                    }))
+                                                    .send()
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Stop any running recordings
+                            let state = app_handle_clone.state::<SidecarState>();
+                            if let Err(e) = kill_all_sreenpipes(state, app_handle_clone.clone()).await {
                                 error!("Error stopping recordings during quit: {}", e);
                             }
                         });

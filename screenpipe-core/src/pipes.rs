@@ -38,6 +38,13 @@ mod pipes {
     use reqwest_middleware::ClientBuilder;
     use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
 
+    #[derive(Clone, Debug, Copy)]
+    pub enum PipeState {
+        Port(u16),
+        Pid(i32),
+    }
+    
+
     pub struct CronHandle {
         shutdown: watch::Sender<bool>,
     }
@@ -73,7 +80,7 @@ mod pipes {
             .to_string()
     }
 
-    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<tokio::process::Child> {
+    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<(tokio::process::Child, PipeState)> {
         let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
@@ -245,7 +252,8 @@ mod pipes {
                 .find(|(k, _)| k == "PORT")
                 .map(|(_, v)| v)
                 .unwrap()
-                .clone();
+                .parse::<u16>()
+                .expect("Invalid port number");
 
             // Run the Next.js project
             info!(
@@ -267,7 +275,7 @@ mod pipes {
 
             command
                 .arg("--port")
-                .arg(port)
+                .arg(port.to_string())
                 .current_dir(&pipe_dir)
                 .envs(env_vars)
                 .stdout(std::process::Stdio::piped())
@@ -278,7 +286,7 @@ mod pipes {
             debug!("streaming logs for next.js pipe");
             stream_logs(pipe, &mut child).await?;
 
-            return Ok(child);
+            return Ok((child, PipeState::Port(port)));
         }
 
         // If it's not a Next.js project, run as regular pipe
@@ -302,7 +310,8 @@ mod pipes {
         // Stream logs
         stream_logs(pipe, &mut child).await?;
 
-        Ok(child)
+        let child_id = child.id().unwrap();
+        Ok((child, PipeState::Pid(child_id as i32))) // Return 0 or handle port differently for non-Next.js projects
     }
 
     async fn stream_logs(pipe: &str, child: &mut tokio::process::Child) -> Result<()> {

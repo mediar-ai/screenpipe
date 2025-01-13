@@ -542,19 +542,6 @@ const PipeStore: React.FC = () => {
     }
   };
 
-  const reloadPipeConfig = async (pipe: Pipe) => {
-    await fetchInstalledPipes();
-
-    const freshPipe = pipes.find(
-      (p) => normalizeId(p.id) === normalizeId(pipe.id)
-    );
-    if (freshPipe) {
-      console.log("freshPipe", freshPipe);
-
-      setSelectedPipe(freshPipe);
-    }
-  };
-
   const handleToggleEnabled = async (pipe: Pipe) => {
     try {
       // Reset broken state when manually toggling
@@ -801,6 +788,7 @@ const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
+        setIsEnabling(true);
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
           headers: {
@@ -822,7 +810,9 @@ const PipeStore: React.FC = () => {
           description: "The pipe configuration has been updated.",
         });
 
-        await setSelectedPipe({ ...selectedPipe, config: config });
+        await setSelectedPipe({...selectedPipe, config: config});
+        setIsEnabling(false);
+
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
@@ -831,6 +821,7 @@ const PipeStore: React.FC = () => {
             "please try again or check the logs for more information.",
           variant: "destructive",
         });
+        setIsEnabling(false);
       }
     }
   };
@@ -1054,8 +1045,7 @@ const PipeStore: React.FC = () => {
 
   // Add this effect to periodically check running pipes
   useEffect(() => {
-    const interval = setInterval(checkRunningPipes, 2000);
-    return () => clearInterval(interval);
+    checkRunningPipes();
   }, [pipes]);
 
   const updateBrokenPipes = async (pipeId: string, isBroken: boolean) => {
