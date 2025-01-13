@@ -670,7 +670,10 @@ async fn main() {
                                         if pipe["enabled"].as_bool().unwrap_or(false) {
                                             if let Some(id) = pipe["id"].as_str() {
                                                 let _ = reqwest::Client::new()
-                                                    .post(format!("http://localhost:3030/pipes/stop/{}", id))
+                                                    .post(format!("http://localhost:3030/pipes/disable"))
+                                                    .json(&serde_json::json!({
+                                                        "pipe_id": id
+                                                    }))
                                                     .send()
                                                     .await;
                                             }
