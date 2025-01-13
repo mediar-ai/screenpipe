@@ -46,6 +46,7 @@ rand = "0.8.5"
 thiserror = "1"
 
 #opentelemetry
+sentry = { workspace = true }
 opentelemetry = "0.21"
 opentelemetry-appender-tracing = "0.2"
 opentelemetry-otlp = { version = "0.14", features = [

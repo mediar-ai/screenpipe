@@ -19,6 +19,7 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use sentry;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -132,6 +133,19 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
+
+    // Initialize Sentry only if telemetry is enabled
+    let _sentry_guard = if !cli.disable_telemetry {
+        Some(sentry::init((
+            "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            }
+        )))
+    } else {
+        None
+    };
 
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
