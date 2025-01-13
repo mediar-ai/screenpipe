@@ -329,6 +329,69 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     Ok(local_data_dir)
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct LogFile {
+    name: String,
+    path: String,
+    modified_at: u64,
+}
+
+#[tauri::command]
+async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
+    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let mut log_files = Vec::new();
+    
+    // Collect all entries first
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&data_dir).await.map_err(|e| e.to_string())?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
+    }
+
+    // Sort by modified time descending (newest first)
+    entries.sort_by_key(|(_, metadata)| {
+        std::cmp::Reverse(
+            metadata
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        )
+    });
+
+    // Process sorted entries
+    for (entry, metadata) in entries {
+        let path = entry.path();
+        if let Some(extension) = path.extension() {
+            if extension == "log" {
+                let modified = metadata
+                    .modified()
+                    .map_err(|e| e.to_string())?
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_secs();
+
+                log_files.push(LogFile {
+                    name: path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    modified_at: modified,
+                });
+            }
+        }
+    }
+
+    Ok(log_files)
+}
+
+
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
     success: bool,
@@ -552,6 +615,7 @@ async fn main() {
             commands::show_meetings,
             commands::show_identify_speakers,
             commands::open_pipe_window,
+            get_log_files,
             update_global_shortcuts,
         ])
         .setup(|app| {
