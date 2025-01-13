@@ -299,7 +299,6 @@ export function SearchChat() {
 
   const [speakerSearchQuery, setSpeakerSearchQuery] = useState("");
 
-
   useEffect(() => {
     if (Object.keys(selectedSpeakers).length > 0) {
       setSelectedTypes({
@@ -737,6 +736,12 @@ export function SearchChat() {
   };
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
+    await pipe.captureMainFeatureEvent("search", {
+      contentType: overrides.contentType || contentType,
+      limit: overrides.limit || limit,
+      offset: newOffset,
+      startDate: overrides.startDate || startDate,
+    });
     setHasSearched(true);
     setShowExamples(false);
     setIsLoading(true);
