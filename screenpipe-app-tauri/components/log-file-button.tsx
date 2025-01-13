@@ -1,6 +1,4 @@
-import { homeDir } from "@tauri-apps/api/path";
 import { useToast } from "./ui/use-toast";
-import { platform } from "@tauri-apps/plugin-os";
 import {
   Tooltip,
   TooltipContent,
@@ -9,7 +7,6 @@ import {
 } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { FileText, Copy } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -21,12 +18,9 @@ import {
   DialogContent,
   DialogDescription,
 } from "./ui/dialog";
-import { useRef, useState, useEffect } from "react";
+import { useState } from "react";
 import { ScrollArea } from "./ui/scroll-area";
-import { readDir } from "@tauri-apps/plugin-fs";
 import { invoke } from "@tauri-apps/api/core";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { LazyLog } from "@melloware/react-logviewer";
 import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
@@ -34,10 +28,11 @@ import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 const LogContent = ({ content }: { content: string }) => {
   return (
     <LogViewer
-    theme="dark"
+      theme="dark"
       isTextWrapped={false}
       hasLineNumbers={true}
       data={content}
+      height="65vh"
       toolbar={
         <Toolbar>
           <ToolbarContent>
@@ -144,7 +139,7 @@ export const LogFileButton = ({
       </TooltipProvider>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-[90vw] sm:max-h-[90vh]">
+        <DialogContent className="sm:max-w-[90vw] h-[80vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>log files</DialogTitle>
             <DialogDescription>
@@ -152,9 +147,9 @@ export const LogFileButton = ({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-[250px,1fr] gap-4 h-full">
+          <div className="grid grid-cols-[250px,1fr] gap-4 h-[calc(100%-80px)]">
             {/* Sidebar with log files list */}
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-hidden">
               <ScrollArea className="h-full">
                 <div className="p-2 space-y-1">
                   {logFiles.map((file, i) => (
@@ -177,7 +172,7 @@ export const LogFileButton = ({
             </div>
 
             {/* Content area */}
-            <div className="flex flex-col space-y-2">
+            <div className="flex flex-col space-y-2 overflow-hidden">
               {logPath && (
                 <>
                   <div className="flex items-center justify-between">
