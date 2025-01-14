@@ -20,7 +20,8 @@ export type AIProviderType =
   | "openai"
   | "custom"
   | "embedded"
-  | "screenpipe-cloud";
+  | "screenpipe-cloud"
+  | "gemini";
 
 export type EmbeddedLLMConfig = {
   enabled: boolean;
