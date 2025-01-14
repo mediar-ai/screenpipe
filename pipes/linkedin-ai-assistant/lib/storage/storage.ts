@@ -213,6 +213,8 @@ interface ConnectionsStore {
     connectionsSent: number;
     lastRefreshDuration?: number;  // in milliseconds
     averageProfileCheckDuration?: number;  // in milliseconds
+    shouldStopRefresh?: boolean;
+    stopRequested: boolean;
 }
 
 type FileError = Error & { code?: string };
@@ -290,4 +292,34 @@ export async function saveRefreshStats(totalDuration: number, profileCount: numb
         JSON.stringify(connectionsStore, null, 2)
     );
     console.log(`saved refresh stats: ${totalDuration}ms for ${profileCount} profiles`);
+}
+
+export async function setShouldStopRefresh(value: boolean) {
+    const store = await loadConnections();
+    store.shouldStopRefresh = value;
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    console.log('saved shouldStopRefresh:', value);
+}
+
+export async function getShouldStopRefresh(): Promise<boolean> {
+    const store = await loadConnections();
+    return store.shouldStopRefresh || false;
+}
+
+export async function setStopRequested(value: boolean) {
+    const store = await loadConnections();
+    store.stopRequested = value;
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    console.log('saved stopRequested:', value);
+}
+
+export async function isStopRequested(): Promise<boolean> {
+    const store = await loadConnections();
+    return store.stopRequested || false;
 } 

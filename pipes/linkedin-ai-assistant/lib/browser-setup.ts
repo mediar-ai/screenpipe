@@ -1,35 +1,37 @@
 import puppeteer, { Browser, Page } from 'puppeteer-core';
+import { ChromeSession } from './chrome-session';
 
 let activeBrowser: Browser | null = null;
 let activePage: Page | null = null;
 
+// Export this function so it can be used elsewhere if needed
+export async function getDebuggerUrl(): Promise<string> {
+    const response = await fetch('http://127.0.0.1:9222/json/version');
+    if (!response.ok) {
+        throw new Error('failed to get fresh websocket url');
+    }
+    const data = await response.json() as { webSocketDebuggerUrl: string };
+    return data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+}
+
 // we rely on an existing or newly launched chrome instance
 export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> {
     if (!activeBrowser) {
+        const session = ChromeSession.getInstance();
+        const wsUrl = session.getWsUrl() || await getDebuggerUrl();
+        
         let retries = 5;
         let lastError;
         
         while (retries > 0) {
             try {
-                // fetch the debug url
-                const response = await fetch('http://127.0.0.1:9222/json/version');
-                if (!response.ok) {
-                    throw new Error('failed to get fresh websocket url');
-                }
-                const data = await response.json() as { webSocketDebuggerUrl: string };
-                // use replacement for 'ws://localhost' to ensure 127.0.0.1
-                const freshWsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
-                
-                // small delay for stability
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                // connect puppeteer
                 activeBrowser = await puppeteer.connect({
-                    browserWSEndpoint: freshWsUrl,
+                    browserWSEndpoint: wsUrl,
                     defaultViewport: null,
                 });
                 
-                // another delay for stability
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 const pages = await activeBrowser.pages();
                 
@@ -37,6 +39,7 @@ export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> 
                     throw new Error('no pages available');
                 }
                 activePage = pages[0];
+                session.setActivePage(activePage);
                 console.log('browser setup complete');
                 break;
             } catch (error) {
@@ -63,11 +66,16 @@ export async function setupBrowser(): Promise<{ browser: Browser; page: Page }> 
 
 // helper to return the active browser and page
 export function getActiveBrowser() {
-    return { browser: activeBrowser, page: activePage };
+    const session = ChromeSession.getInstance();
+    return { 
+        browser: activeBrowser, 
+        page: session.getActivePage() || activePage 
+    };
 }
 
 // used to disconnect puppeteer if desired
 export async function quitBrowser() {
+    ChromeSession.getInstance().clear();
     if (activeBrowser) {
         try {
             await activeBrowser.disconnect();

@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
 interface ConnectionStats {
   pending: number;
@@ -84,10 +85,10 @@ export function HarvestClosestConnections() {
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load initial state with stats
+    // Load initial state with status only
     const loadInitialState = async () => {
       try {
-        const res = await fetch("/api/harvest/status?refresh=true");
+        const res = await fetch("/api/harvest/connection-status-update");
         if (!res.ok) return;
         
         const data = await res.json();
@@ -95,10 +96,6 @@ export function HarvestClosestConnections() {
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
-        
-        if (data.stats) {
-          setStats(data.stats);
-        }
         
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
@@ -119,55 +116,77 @@ export function HarvestClosestConnections() {
     loadInitialState();
   }, []);
 
-  // Combine both status polling effects into one
+  // Stats polling without condition
   useEffect(() => {
-    if (harvestingStatus !== 'stopped') {
-      const interval = setInterval(() => {
-        fetch("/api/harvest/status")
-          .then(res => {
-            if (!res.ok) {
-              console.error('status check failed:', res.status);
-              return null;
-            }
-            return res.json();
-          })
-          .then(data => {
-            if (!data) return;
-            
-            // Batch state updates together
-            const updates = () => {
-              setConnectionsSent(data.connectionsSent || 0);
-              setHarvestingStatus(data.harvestingStatus);
-              setDailyLimitReached(data.connectionsSent >= 35);
-              setWeeklyLimitReached(data.weeklyLimitReached || false);
-              if (data.stats) setStats(data.stats);
-              if (data.nextProfileTime) {
-                setNextProfileTime(data.nextProfileTime);
-              } else {
-                setNextProfileTime(null);
-              }
-              
-              if (data.nextHarvestTime) {
-                setNextHarvestTime(data.nextHarvestTime);
-                if (new Date(data.nextHarvestTime) > new Date()) {
-                  const message = data.connectionsSent >= 35
-                    ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
-                    : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
-                  setStatus(message);
-                }
-              }
-            };
-            
-            updates();
-          })
-          .catch(error => {
-            console.error('failed to fetch status:', error);
-          });
-      }, 2000); // Increased to 2 seconds
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/harvest/stats");
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // update stats
+        if (data.stats) {
+          setStats(data.stats);
+        }
+      } catch (error) {
+        console.error("failed to fetch stats:", error);
+      }
+    }, 2000);
 
-      return () => clearInterval(interval);
+    return () => clearInterval(interval);
+  }, []); // Empty dependency array since we want it to run always
+
+  // Add this useEffect near your other effects
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (isRefreshing) {
+      // Start polling only when refreshing is true
+      pollInterval = setInterval(async () => {
+        const response = await fetch("/api/harvest/connection-status-update");
+        const data = await response.json();
+        if (data.refreshProgress) {
+          setRefreshProgress(data.refreshProgress);
+        }
+      }, 1000);
     }
-  }, [harvestingStatus]);
+
+    // Cleanup when isRefreshing becomes false or component unmounts
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [isRefreshing]); // Only re-run when isRefreshing changes
+
+  // Simplify the updateConnectionsStatus function
+  const updateConnectionsStatus = async () => {
+    try {
+      if (isRefreshing) {
+        await fetch("/api/harvest/connection-status-update/stop", { method: "POST" });
+        setIsRefreshing(false);
+        setRefreshProgress(null);
+        return;
+      }
+      
+      setIsRefreshing(true);
+      // Trigger the update
+      const statusRes = await fetch("/api/harvest/connection-status-update?refresh=true");
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setHarvestingStatus(data.harvestingStatus || 'stopped');
+        setConnectionsSent(data.connectionsSent || 0);
+        setDailyLimitReached(data.dailyLimitReached || false);
+        setWeeklyLimitReached(data.weeklyLimitReached || false);
+        
+        if (data.nextHarvestTime) {
+          setNextHarvestTime(data.nextHarvestTime);
+        }
+      }
+    } catch (error) {
+      console.error("failed to update connections status:", error);
+    }
+  };
 
   const startHarvesting = async () => {
     try {
@@ -237,48 +256,6 @@ export function HarvestClosestConnections() {
     }
   };
 
-  const refreshStats = async () => {
-    try {
-      setIsRefreshing(true);
-      
-      // Start polling for progress
-      const pollInterval = setInterval(async () => {
-        const response = await fetch("/api/harvest/status");
-        const data = await response.json();
-        if (data.refreshProgress) {
-          setRefreshProgress(data.refreshProgress);
-        }
-      }, 1000);
-
-      // Trigger the actual refresh with refresh=true
-      const response = await fetch("/api/harvest/status?refresh=true");
-      const data = await response.json();
-      
-      // Add rate limit handling
-      if (data.rateLimitedUntil) {
-        setRateLimitedUntil(data.rateLimitedUntil);
-      } else {
-        setRateLimitedUntil(null);
-      }
-
-      // Clear polling and progress
-      clearInterval(pollInterval);
-      setRefreshProgress(null);
-      
-      setConnectionsSent(data.connectionsSent || 0);
-      setDailyLimitReached(data.dailyLimitReached || false);
-      setWeeklyLimitReached(data.weeklyLimitReached || false);
-      if (data.stats) {
-        setStats(data.stats);
-      }
-    } catch (error) {
-      console.error("failed to refresh stats:", error);
-    } finally {
-      setIsRefreshing(false);
-      setRefreshProgress(null);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-row items-center gap-4">
@@ -290,7 +267,10 @@ export function HarvestClosestConnections() {
             {harvestingStatus === 'stopped' ? (
               <button
                 onClick={startHarvesting}
-                className="bg-black text-white px-4 py-2 rounded-md text-base"
+                disabled={isRefreshing}
+                className={`bg-black text-white px-4 py-2 rounded-md text-base ${
+                  isRefreshing ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 start
               </button>
@@ -328,12 +308,14 @@ export function HarvestClosestConnections() {
       <div className="flex items-center mt-4 mb-2">
         <span className="text-sm font-medium">stats</span>
         <button
-          onClick={refreshStats}
-          disabled={isRefreshing || !!rateLimitedUntil}
+          onClick={updateConnectionsStatus}
+          disabled={isRefreshing || !!rateLimitedUntil || harvestingStatus === 'running'}
           className={`p-2 rounded-md transition-all ${
-            isRefreshing || rateLimitedUntil ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-100'
+            isRefreshing || rateLimitedUntil || harvestingStatus === 'running' 
+              ? 'bg-gray-100 cursor-not-allowed' 
+              : 'hover:bg-gray-100'
           }`}
-          aria-label="refresh stats"
+          aria-label="update connections status"
         >
           <RefreshCw 
             className={`h-5 w-5 transition-all ${
@@ -341,6 +323,15 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
+        {isRefreshing && (
+          <button
+            onClick={() => updateConnectionsStatus()}
+            className="ml-2 p-2 rounded-md bg-red-100 hover:bg-red-200 transition-all"
+            aria-label="stop refreshing"
+          >
+            <span className="text-red-600 text-sm">stop</span>
+          </button>
+        )}
         {nextProfileTime && nextProfileTime > Date.now() && (
           <div className="ml-2">
             <CountdownTimer targetTime={nextProfileTime} />

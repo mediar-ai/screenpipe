@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { stopHarvesting } from '@/lib/logic-sequence/harvest-connections';
-import { saveHarvestingState } from '@/lib/storage/storage';
+import { saveHarvestingState, setStopRequested } from '@/lib/storage/storage';
 
 export async function POST() {
   try {
-    stopHarvesting();
+    await setStopRequested(true);
+    await stopHarvesting();
     await saveHarvestingState('stopped');
     
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Give time for state to update
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     return NextResponse.json({ 
-      message: 'stopping harvest process',
+      message: 'stopping farming process',
       harvestingStatus: 'stopped'
     });
   } catch (error: unknown) {

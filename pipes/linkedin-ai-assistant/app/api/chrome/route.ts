@@ -3,6 +3,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { quitBrowser } from '@/lib/browser-setup';
 import os from 'os';
+import { ChromeSession } from '@/lib/chrome-session';
 
 export const runtime = 'nodejs'; // specify node runtime
 
@@ -62,9 +63,12 @@ export async function POST() {
         
         if (response.ok && data.webSocketDebuggerUrl) {
           console.log('chrome debug port responding');
+          const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+          ChromeSession.getInstance().setWsUrl(wsUrl);
+          
           return NextResponse.json({ 
             success: true,
-            wsUrl: data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:')
+            wsUrl
           });
         }
       } catch (err) {
@@ -89,6 +93,7 @@ export async function DELETE() {
     await quitChrome();
     await quitBrowser();
     console.log('chrome process terminated');
+    ChromeSession.getInstance().clear();
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('failed to kill chrome:', error);

@@ -7,6 +7,8 @@ import {
   saveNextHarvestTime,
   saveHarvestingState,
   updateConnectionsSent,
+  setStopRequested,
+  isStopRequested,
 } from '../storage/storage';
 import { setupBrowser } from '../browser-setup';
 import { updateWorkflowStep } from '../../app/api/workflow/status/state';
@@ -18,7 +20,7 @@ const port = process.env.PORT!;
 const BASE_URL = `http://127.0.0.1:${port}`;
 
 // Variables to track the harvesting status
-let stopRequested = false;
+// let stopRequested = false;
 
 // Set to track profiles we've already attempted to connect with
 const attemptedProfiles = new Set<string>();
@@ -28,8 +30,8 @@ const cooldownProfiles = new Set<string>();
 // Add state management to track active harvesting
 let isCurrentlyHarvesting = false;
 
-export function stopHarvesting() {
-  stopRequested = true;
+export async function stopHarvesting() {
+  await setStopRequested(true);
   isCurrentlyHarvesting = false;
   // Ensure we clean up state
   attemptedProfiles.clear();
@@ -58,6 +60,9 @@ export async function isHarvesting(): Promise<boolean> {
 export async function startHarvesting(
   maxDailyConnections: number = 35
 ): Promise<HarvestStatus> {
+  // Reset stop flag at start
+  await setStopRequested(false);
+
   // Prevent multiple harvesting processes
   if (isCurrentlyHarvesting) {
     console.log('harvest already in progress, skipping start');
@@ -89,9 +94,6 @@ export async function startHarvesting(
       };
     }
 
-    // Reset stop flag
-    stopRequested = false;
-    
     // Initialize counters
     let connectionsSent = 0;
     let weeklyLimitReached = false;
@@ -105,7 +107,7 @@ export async function startHarvesting(
 
     try {
       // Reset the stop request flag
-      stopRequested = false;
+      await setStopRequested(false);
       const connections = await loadConnections();
 
       // Check cooldown period
@@ -173,12 +175,13 @@ export async function startHarvesting(
       updateWorkflowStep('navigation', 'done');
 
       // Add stop handler
-      if (stopRequested) {
+      if (await isStopRequested()) {
         await saveHarvestingState('stopped');
         return {
           connectionsSent,
           weeklyLimitReached,
-          dailyLimitReached,
+          dailyLimitReached: false,
+          stopped: true,
           harvestingStatus: 'stopped'
         };
       }
@@ -186,10 +189,10 @@ export async function startHarvesting(
       while (
         connectionsSent < maxDailyConnections &&
         !weeklyLimitReached &&
-        !stopRequested
+        !await isStopRequested()
       ) {
         // Check if stop was requested
-        if (stopRequested) {
+        if (await isStopRequested()) {
           console.log('harvest process stopped by user');
           await saveHarvestingState('stopped');
           return {
@@ -204,9 +207,9 @@ export async function startHarvesting(
         updateWorkflowStep('processing', 'running', `processing connections`);
 
         try {
-          const result = await clickNextConnectButton(page, stopRequested);
+          const result = await clickNextConnectButton(page, await isStopRequested());
 
-          if (stopRequested) {
+          if (await isStopRequested()) {
             break;
           }
 
@@ -257,15 +260,15 @@ export async function startHarvesting(
             continue;
           } else {
             // No valid connect buttons found, attempt to go to next page
-            const hasNextPage = await goToNextPage(page, stopRequested);
-            if (stopRequested || !hasNextPage) {
+            const hasNextPage = await goToNextPage(page, await isStopRequested());
+            if (await isStopRequested() || !hasNextPage) {
               console.log('no more pages available or stopped, ending harvest');
               break;
             }
             // Small delay after page navigation
             await new Promise((resolve) => setTimeout(resolve, 2000));
 
-            if (stopRequested) {
+            if (await isStopRequested()) {
               break;
             }
           }
@@ -273,7 +276,7 @@ export async function startHarvesting(
           // Add small delay between attempts
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          if (stopRequested) {
+          if (await isStopRequested()) {
             break;
           }
         } catch (error) {
@@ -289,7 +292,7 @@ export async function startHarvesting(
       throw error;
     }
 
-    if (stopRequested) {
+    if (await isStopRequested()) {
       await saveHarvestingState('stopped');
       return {
         connectionsSent,
@@ -503,21 +506,19 @@ async function clickNextConnectButton(
           if (errorText?.includes('You can resend an invitation 3 weeks after')) {
             console.log('connection in cooldown period');
 
-            // Add to cooldown set
+            // Add to cooldown set to avoid retrying during this session
             cooldownProfiles.add(cleanUrl);
-
-            // Save to storage with cooldown status
-            await saveConnection({
-              profileUrl: cleanUrl,
-              status: 'cooldown',
-              timestamp: new Date().toISOString(),
-            });
 
             // Dismiss the toast
             const dismissButton = await page.$('button[aria-label^="Dismiss"]');
             if (dismissButton) await dismissButton.click();
 
-            continue;
+            // Return cooldown result without saving connection
+            return {
+              success: false,
+              profileUrl: cleanUrl,
+              cooldown: true
+            };
           }
         }
       } catch (_) {
