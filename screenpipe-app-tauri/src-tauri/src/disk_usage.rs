@@ -7,11 +7,22 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiskUsage {
-    pub pipes: Vec<(String, String)>, // why not pipes' size??
+    pub pipes: DiskUsedByPipes,
+    pub media: DiskUsedByMedia,
     pub total_data_size: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiskUsedByPipes {
+    pub pipes: Vec<(String, String)>, // why not pipes' size??
     pub total_pipes_size: String,
-    pub total_video_size: String,
-    pub total_audio_size: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DiskUsedByMedia {
+    pub videos_size: String,
+    pub audios_size: String,
+    pub total_media_size: String,
 }
 
 pub fn directory_size(path: &Path) -> io::Result<u64> {
@@ -36,7 +47,7 @@ pub fn readable(size: u64) -> String {
         size /= 1024.0;
         unit += 1;
     }
-    format!("{:.2} {}", size, units[unit])
+    format!("{:.1} {}", size, units[unit])
 }
 
 pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {
@@ -57,7 +68,8 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         }
     }
 
-    let total_data_size= directory_size(&data_dir).map_err(|e| e.to_string())?;
+    let total_data_size = directory_size(&screenpipe_dir).map_err(|e| e.to_string())?;
+    let total_media_size= directory_size(&data_dir).map_err(|e| e.to_string())?;
     let total_pipes_size = directory_size(&pipes_dir).map_err(|e| e.to_string())?;
 
     for entry in fs::read_dir(&data_dir).map_err(|e| e.to_string())? {
@@ -75,11 +87,16 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     }
 
     let disk_usage = DiskUsage {
-        pipes,
+        pipes: DiskUsedByPipes {
+            pipes,
+            total_pipes_size: readable(total_pipes_size),
+        },
+        media: DiskUsedByMedia {
+            videos_size: readable(total_video_size),
+            audios_size: readable(total_audio_size),
+            total_media_size: readable(total_media_size),
+        },
         total_data_size: readable(total_data_size),
-        total_pipes_size: readable(total_pipes_size),
-        total_video_size: readable(total_video_size),
-        total_audio_size: readable(total_audio_size),
     };
 
     Ok(Some(disk_usage))
