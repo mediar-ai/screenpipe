@@ -47,7 +47,11 @@ pub fn readable(size: u64) -> String {
         size /= 1024.0;
         unit += 1;
     }
-    format!("{:.1} {}", size, units[unit])
+    if units[unit] == "GB" {
+        format!("{:.2} {}", size, units[unit])
+    } else {
+        format!("{:.1} {}", size, units[unit])
+    }
 }
 
 pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {

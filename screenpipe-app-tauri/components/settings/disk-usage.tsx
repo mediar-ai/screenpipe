@@ -67,15 +67,26 @@ export default function DiskUsage() {
             <AccordionItem value="total-pipes-size">
               <AccordionTrigger className="mx-4 h-[80px] hover:no-underline">
                 <div className="w-full flex items-center justify-between">
-                  <span className="font-semibold">disk used by pipes<span></span></span>
-                  <Badge variant={"outline"} className="mr-4 font-semibold min-w-[5.5rem]">{diskUsage.pipes.total_pipes_size}</Badge>
+                  <div className="flex flex-col !float-left items-start">
+                    <span className="font-semibold">disk used by pipes</span>
+                    <span className="text-[14px] !font-normal text-muted-foreground">total space used by installed pipes</span>
+                  </div>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                    {diskUsage.pipes.total_pipes_size}
+                  </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="w-full">
                 {diskUsage.pipes.pipes.map(([name, size], index) => (
                   <div key={index} className="flex items-center justify-between px-1 py-1">
                     <span className="text-base ml-8">{name}</span>
-                    <Badge variant={"outline"} className="mr-10 min-w-[5.5rem] text-center">{size}</Badge>
+                    <Badge 
+                      variant={"outline"}
+                      className="mr-10 min-w-[5.5rem] flex flex-row justify-center">
+                      {size}
+                    </Badge>
                   </div>
                 ))}
               </AccordionContent>
@@ -88,18 +99,35 @@ export default function DiskUsage() {
             <AccordionItem value="total-pipes-size">
               <AccordionTrigger className="mx-4 h-[80px] hover:no-underline">
                 <div className="w-full flex items-center justify-between">
-                  <span className="font-semibold">total data captured</span>
-                  <Badge variant={"outline"} className="mr-4 font-semibold min-w-[5.5rem]">{diskUsage.media.total_media_size}</Badge>
+                  <div className="flex flex-col !float-left items-start">
+                    <span className="font-semibold">total data captured</span>
+                    <span className="text-[14px] !font-normal text-muted-foreground">
+                      amount of data captured by screenpipe over the time
+                    </span>
+                  </div>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                    {diskUsage.media.total_media_size}
+                  </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="w-full">
                 <div key={"video"} className="flex items-center justify-between px-1 py-1">
                   <span className="text-base ml-8">video data</span>
-                  <Badge variant={"outline"} className="mr-10 min-w-[5.5rem] text-center">{diskUsage.media.videos_size}</Badge>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center">
+                    {diskUsage.media.videos_size}
+                  </Badge>
                 </div>
                 <div key={"audio"} className="flex items-center justify-between px-1 py-1">
                   <span className="text-base ml-8">audio data</span>
-                  <Badge variant={"outline"} className="mr-10 min-w-[5.5rem] text-center">{diskUsage.media.audios_size}</Badge>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center ">
+                    {diskUsage.media.audios_size}
+                  </Badge>
                 </div>
               </AccordionContent>
             </AccordionItem>
