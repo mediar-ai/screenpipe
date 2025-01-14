@@ -310,7 +310,7 @@ export function HarvestClosestConnections() {
                     : status}
           </span>
         )}
-        {restrictionInfo?.reason && (
+        {restrictionInfo?.isRestricted && restrictionInfo?.reason && (
           <span className="text-sm text-red-500">
             {restrictionInfo.reason}
           </span>

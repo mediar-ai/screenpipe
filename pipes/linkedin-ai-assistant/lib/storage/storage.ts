@@ -268,18 +268,27 @@ export async function loadConnections(): Promise<ConnectionsStore> {
   await ensureStorageDir();
   let connectionsStore: ConnectionsStore;
 
+  // Try filesystem first
   try {
     const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
     connectionsStore = {
       ...DEFAULT_CONNECTION_STORE,  // Start with defaults
       ...JSON.parse(data)          // Override with stored values
     };
+    // If found in fs but not in chrome, save to chrome
+    await saveToChrome('linkedin_assistant_connections', connectionsStore);
   } catch {
+    // Try chrome if fs fails
     try {
       connectionsStore = {
         ...DEFAULT_CONNECTION_STORE,
         ...await loadFromChrome('linkedin_assistant_connections')
       };
+      // If found in chrome but not in fs, save to fs
+      await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(connectionsStore, null, 2)
+      );
     } catch {
       connectionsStore = { ...DEFAULT_CONNECTION_STORE };
     }
