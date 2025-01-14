@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
+import { getActiveBrowser } from '../browser-setup';
 
 const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
 console.log('storage directory:', STORAGE_DIR);
@@ -16,39 +17,49 @@ async function ensureStorageDir() {
 
 export async function loadState(): Promise<State> {
     await ensureStorageDir();
+    let state: State | null = null;
+
+    // Try file system first
     try {
         const statePath = path.join(STORAGE_DIR, 'state.json');
-        // console.log('attempting to load state from:', statePath);
-        
         const data = await fs.readFile(statePath, 'utf-8');
-        // console.log('raw state data:', data.slice(0, 200) + '...');
-        
-        const state = JSON.parse(data);
-        console.log('parsed state:', {
-            visitedProfilesCount: state.visitedProfiles?.length || 0,
-            toVisitProfilesCount: state.toVisitProfiles?.length || 0
-        });
-        
-        return {
-            visitedProfiles: state.visitedProfiles || [],
-            toVisitProfiles: state.toVisitProfiles || []
-        };
+        state = JSON.parse(data);
     } catch (err) {
-        console.log('failed to load state:', err);
+        console.log('failed to load state from fs:', err);
+        
+        // Try Chrome storage as fallback
+        try {
+            state = await loadFromChrome('linkedin_assistant_state');
+            console.log('loaded state from chrome storage');
+        } catch (err) {
+            console.log('failed to load state from chrome:', err);
+        }
+    }
+
+    // Return default state if both failed
+    if (!state) {
         return { 
             visitedProfiles: [],
             toVisitProfiles: []
         };
     }
+
+    return state;
 }
 
 export async function saveState(state: State) {
-    const statePath = path.join(STORAGE_DIR, 'state.json');
-    console.log('saving state to:', statePath, {
-        visitedProfilesCount: state.visitedProfiles?.length || 0,
-        toVisitProfilesCount: state.toVisitProfiles?.length || 0
-    });
-    await fs.writeFile(statePath, JSON.stringify(state, null, 2));
+    try {
+        // Save to file
+        const statePath = path.join(STORAGE_DIR, 'state.json');
+        await fs.writeFile(statePath, JSON.stringify(state, null, 2));
+        
+        // Save to Chrome
+        await saveToChrome('linkedin_assistant_state', state);
+        
+        console.log('state saved to both locations');
+    } catch (err) {
+        console.error('error saving state:', err);
+    }
 }
 
 export async function updateOrAddProfileVisit(state: State, newVisit: ProfileVisit) {
@@ -78,12 +89,19 @@ export async function updateOrAddProfileVisit(state: State, newVisit: ProfileVis
 
 export async function loadMessages(): Promise<MessageStore> {
     await ensureStorageDir();
+    let messageStore: MessageStore;
+
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'messages.json'), 'utf-8');
-        return JSON.parse(data);
+        messageStore = JSON.parse(data);
     } catch {
-        return { messages: {} };
+        try {
+            messageStore = await loadFromChrome('linkedin_assistant_messages');
+        } catch {
+            messageStore = { messages: {} };
+        }
     }
+    return messageStore;
 }
 
 export async function saveMessages(profileUrl: string, newMessages: Message[]) {
@@ -142,19 +160,32 @@ export async function scheduleMessage(state: State, profileUrl: string, text: st
 }
 
 export async function loadProfiles(): Promise<ProfileStore> {
+    let profiles: ProfileStore;
+    
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'profiles.json'), 'utf-8');
-        return JSON.parse(data);
+        profiles = JSON.parse(data);
     } catch {
-        return { profiles: {} };
+        try {
+            profiles = await loadFromChrome('linkedin_assistant_profiles');
+        } catch {
+            profiles = { profiles: {} };
+        }
     }
+    return profiles;
 }
 
 export async function saveProfile(profileUrl: string, details: ProfileDetails) {
     const profiles = await loadProfiles();
     profiles.profiles[profileUrl] = details;
-    await fs.writeFile(path.join(STORAGE_DIR, 'profiles.json'), JSON.stringify(profiles, null, 2));
-    console.log('saved profile details');
+    
+    try {
+        await fs.writeFile(path.join(STORAGE_DIR, 'profiles.json'), JSON.stringify(profiles, null, 2));
+        await saveToChrome('linkedin_assistant_profiles', profiles);
+        console.log('saved profile details to both locations');
+    } catch (err) {
+        console.error('error saving profile:', err);
+    }
 }
 
 export async function updateMultipleProfileVisits(state: State, newVisits: ProfileVisit[]) {
@@ -221,65 +252,88 @@ type FileError = Error & { code?: string };
 
 export async function loadConnections(): Promise<ConnectionsStore> {
     await ensureStorageDir();
+    let connectionsStore: ConnectionsStore;
+
     try {
         const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
-        return JSON.parse(data);
-    } catch (error: unknown) {
-        const err = error as FileError;
-        if (err.code === 'ENOENT') {
-            return {
+        connectionsStore = JSON.parse(data);
+    } catch {
+        try {
+            connectionsStore = await loadFromChrome('linkedin_assistant_connections');
+        } catch {
+            connectionsStore = {
                 connections: {},
                 connectionsSent: 0,
                 harvestingStatus: 'stopped',
+                stopRequested: false
             };
         }
-        console.error('Failed to read or parse connections.json:', err);
-        throw new Error('Could not load connections data.');
     }
+    return connectionsStore;
 }
 
 export async function saveConnection(connection: Connection) {
     const connectionsStore = await loadConnections();
     connectionsStore.connections[connection.profileUrl] = connection;
 
-    await fs.writeFile(
-        path.join(STORAGE_DIR, 'connections.json'),
-        JSON.stringify(connectionsStore, null, 2)
-    );
-    console.log(`saved connection to ${connection.profileUrl} with status ${connection.status}`);
+    try {
+        await fs.writeFile(
+            path.join(STORAGE_DIR, 'connections.json'),
+            JSON.stringify(connectionsStore, null, 2)
+        );
+        await saveToChrome('linkedin_assistant_connections', connectionsStore);
+        console.log(`saved connection to both locations: ${connection.profileUrl}`);
+    } catch (err) {
+        console.error('error saving connection:', err);
+    }
 }
 
 export async function saveNextHarvestTime(timestamp: string) {
     const connectionsStore = await loadConnections();
     connectionsStore.nextHarvestTime = timestamp;
     
-    await fs.writeFile(
-        path.join(STORAGE_DIR, 'connections.json'),
-        JSON.stringify(connectionsStore, null, 2)
-    );
-    console.log(`saved next harvest time: ${timestamp}`);
+    try {
+        await fs.writeFile(
+            path.join(STORAGE_DIR, 'connections.json'),
+            JSON.stringify(connectionsStore, null, 2)
+        );
+        await saveToChrome('linkedin_assistant_connections', connectionsStore);
+        console.log(`saved next harvest time to both locations: ${timestamp}`);
+    } catch (err) {
+        console.error('error saving harvest time:', err);
+    }
 }
 
 export async function saveHarvestingState(status: 'stopped' | 'running' | 'cooldown') {
     const connectionsStore = await loadConnections();
     connectionsStore.harvestingStatus = status;
     
-    await fs.writeFile(
-        path.join(STORAGE_DIR, 'connections.json'),
-        JSON.stringify(connectionsStore, null, 2)
-    );
-    console.log(`saved harvesting status: ${status}`);
+    try {
+        await fs.writeFile(
+            path.join(STORAGE_DIR, 'connections.json'),
+            JSON.stringify(connectionsStore, null, 2)
+        );
+        await saveToChrome('linkedin_assistant_connections', connectionsStore);
+        console.log(`saved harvesting status to both locations: ${status}`);
+    } catch (err) {
+        console.error('error saving harvesting state:', err);
+    }
 }
 
 export async function updateConnectionsSent(connectionsSent: number) {
     const connectionsStore = await loadConnections();
     connectionsStore.connectionsSent = connectionsSent;
 
-    await fs.writeFile(
-        path.join(STORAGE_DIR, 'connections.json'),
-        JSON.stringify(connectionsStore, null, 2)
-    );
-    console.log(`Updated connections sent count to ${connectionsSent}`);
+    try {
+        await fs.writeFile(
+            path.join(STORAGE_DIR, 'connections.json'),
+            JSON.stringify(connectionsStore, null, 2)
+        );
+        await saveToChrome('linkedin_assistant_connections', connectionsStore);
+        console.log(`updated connections sent count to ${connectionsSent} in both locations`);
+    } catch (err) {
+        console.error('error updating connections sent:', err);
+    }
 }
 
 export async function saveRefreshStats(totalDuration: number, profileCount: number) {
@@ -323,3 +377,28 @@ export async function isStopRequested(): Promise<boolean> {
     const store = await loadConnections();
     return store.stopRequested || false;
 } 
+
+export async function saveToChrome(key: string, data: any) {
+    const { page } = getActiveBrowser();
+    if (!page) return;
+    
+    // Navigate to LinkedIn if we're not already there
+    if (!page.url().includes('linkedin.com')) {
+        await page.goto('https://www.linkedin.com');
+    }
+    
+    await page.evaluate((key: string, data: unknown) => {
+        localStorage.setItem(key, JSON.stringify(data));
+    }, key, data);
+}
+
+export async function loadFromChrome(key: string) {
+    const { page } = getActiveBrowser();
+    if (!page) return null;
+    
+    const data = await page.evaluate((key: string) => {
+        return localStorage.getItem(key);
+    }, key);
+    
+    return data ? JSON.parse(data) : null;
+}
