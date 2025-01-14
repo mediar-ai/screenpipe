@@ -392,24 +392,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
             <Separator className="my-12" />
             <DevModeSettings localDataDir={localDataDir} />
-
-            {!isMac ? null : (
-              <Collapsible
-                open={isLogOpen}
-                onOpenChange={setIsLogOpen}
-                className="w-full mt-4"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
-                    recorder logs
-                    <span>{isLogOpen ? "▲" : "▼"}</span>
-                  </CollapsibleTrigger>
-                </div>
-                <CollapsibleContent>
-                  <LogViewer className="mt-2" />
-                </CollapsibleContent>
-              </Collapsible>
-            )}
           </div>
         </DialogContent>
       </Dialog>

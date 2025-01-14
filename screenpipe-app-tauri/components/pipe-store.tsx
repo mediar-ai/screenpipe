@@ -269,24 +269,6 @@ const DEFAULT_PIPES = [
   "identify-speakers",
 ];
 
-const checkSubscription = async (pipeId: string, userId: string) => {
-  try {
-    console.log("checking subscription for pipe:", pipeId, userId);
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("pipe_id", pipeId)
-      .eq("user_id", userId)
-      .single();
-
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error("failed to check subscription:", error);
-    return null;
-  }
-};
-
 const PipeStore: React.FC = () => {
   const [newRepoUrl, setNewRepoUrl] = useState("");
   const [selectedPipe, setSelectedPipe] = useState<Pipe | null>(null);
@@ -361,7 +343,7 @@ const PipeStore: React.FC = () => {
         const pipe = corePipes.find((p) => p.id === pipeId);
         if (pipe?.url) {
           try {
-            await handleDownloadPipe(pipe.url);
+            await handleDownloadPipe(pipe.url, pipe.id);
           } catch (error) {
             console.error(`Failed to install ${pipeId}:`, error);
           }
@@ -443,7 +425,7 @@ const PipeStore: React.FC = () => {
     }
   };
 
-  const handleDownloadPipe = async (url: string) => {
+  const handleDownloadPipe = async (url: string, id: string) => {
     try {
       posthog.capture("download_pipe", {
         pipe_id: url,
@@ -504,6 +486,15 @@ const PipeStore: React.FC = () => {
           </div>
         ),
         duration: 2000,
+      });
+
+      // enable now
+      await fetch("http://localhost:3030/pipes/enable", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       await fetchInstalledPipes();
@@ -945,7 +936,7 @@ const PipeStore: React.FC = () => {
           duration: 100000,
         });
 
-        await handleDownloadPipe(pipe.source);
+        await handleDownloadPipe(pipe.source, pipe.id);
       }
 
       t.update({
@@ -1073,9 +1064,6 @@ const PipeStore: React.FC = () => {
     if (!selectedPipe) return null;
 
     const isPipeRunning = runningPipes[selectedPipe.id];
-    const startupAttempt = startupAttempts[selectedPipe.id] || 0;
-    const brokenPipe = brokenPipes.find((p) => p.id === selectedPipe.id);
-    const isStartupFailing = startupAttempt > 0;
 
     return (
       <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
@@ -1202,113 +1190,26 @@ const PipeStore: React.FC = () => {
                       </TooltipProvider>
                     )}
                     <div className="flex items-center gap-2">
-                      {user?.id &&
-                        corePipes.find((cp) => cp.id === selectedPipe.id)
-                          ?.paid && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={async () => {
-                                    try {
-                                      const sub = await checkSubscription(
-                                        selectedPipe.id,
-                                        user!.id!
-                                      );
-                                      if (!sub) {
-                                        toast({
-                                          title: "no active subscription found",
-                                          variant: "destructive",
-                                        });
-                                        return;
-                                      }
-
-                                      const res = await fetch(
-                                        "https://screenpi.pe/api/subscription-end",
-                                        {
-                                          method: "POST",
-                                          headers: {
-                                            "Content-Type": "application/json",
-                                          },
-                                          body: JSON.stringify({
-                                            subscription_id: sub.id,
-                                          }),
-                                        }
-                                      );
-
-                                      if (!res.ok)
-                                        throw new Error(
-                                          "failed to end subscription"
-                                        );
-
-                                      // Remove the pipe completely
-                                      await fetch(
-                                        "http://localhost:3030/pipes/delete",
-                                        {
-                                          method: "POST",
-                                          headers: {
-                                            "Content-Type": "application/json",
-                                          },
-                                          body: JSON.stringify({
-                                            pipe_id: selectedPipe.id,
-                                          }),
-                                        }
-                                      );
-
-                                      toast({
-                                        title: "subscription ended",
-                                        description:
-                                          "access will continue for 30 days",
-                                      });
-
-                                      await reloadPipeConfig(selectedPipe);
-                                    } catch (error) {
-                                      console.error(
-                                        "failed to end subscription:",
-                                        error
-                                      );
-                                      toast({
-                                        title: "error ending subscription",
-                                        description:
-                                          "please try again or contact support",
-                                        variant: "destructive",
-                                      });
-                                    }
-                                  }}
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                >
-                                  <BanknoteIcon className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>end subscription</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-
                       {/* Only show delete button for non-core pipes */}
-                      {!corePipes.some((cp) => cp.id === selectedPipe.id) && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                onClick={() => handleDeletePipe(selectedPipe)}
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>delete pipe</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
+                      {/* {!corePipes.some((cp) => cp.id === selectedPipe.id) && ( */}
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() => handleDeletePipe(selectedPipe)}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>delete pipe</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {/* )} */}
                     </div>
                   </div>
 
@@ -1357,6 +1258,8 @@ const PipeStore: React.FC = () => {
                           ? "initializing..."
                           : isPipeRunning
                           ? "open in browser"
+                          : brokenPipes.some((p) => p.id === selectedPipe.id)
+                          ? "pipe is broken"
                           : "initializing..."}
                       </Button>
                       <Button
@@ -1383,6 +1286,8 @@ const PipeStore: React.FC = () => {
                           ? "initializing..."
                           : isPipeRunning
                           ? "open as app"
+                          : brokenPipes.some((p) => p.id === selectedPipe.id)
+                          ? "pipe is broken"
                           : "initializing..."}
                       </Button>
                     </div>
@@ -1449,7 +1354,7 @@ const PipeStore: React.FC = () => {
     const isInstalled = pipes.some((p) => p.id === pipe.id);
     if (!isInstalled && pipe.source) {
       try {
-        await handleDownloadPipe(pipe.source);
+        await handleDownloadPipe(pipe.source, pipe.id);
         // Fetch the updated pipe data and wait for it
         const response = await fetch("http://localhost:3030/pipes/list");
         const data = await response.json();
@@ -1668,7 +1573,7 @@ const PipeStore: React.FC = () => {
                             variant="outline"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDownloadPipe(pipe.source);
+                              handleDownloadPipe(pipe.source, pipe.id);
                             }}
                           >
                             <Download className="h-3.5 w-3.5" />
