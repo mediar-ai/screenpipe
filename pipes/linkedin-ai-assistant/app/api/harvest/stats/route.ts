@@ -8,22 +8,6 @@ export async function GET() {
   try {
     const connectionsStore = await loadConnections();
     
-    // Ensure we have valid data before processing
-    if (!connectionsStore?.connections) {
-      return NextResponse.json({
-        stats: {
-          pending: 0,
-          accepted: 0,
-          declined: 0,
-          email_required: 0,
-          cooldown: 0,
-          total: 0,
-          lastRefreshDuration: 0,
-          averageProfileCheckDuration: 0
-        }
-      });
-    }
-
     // Calculate stats using reduce
     const stats = Object.values(connectionsStore.connections).reduce((acc, connection) => {
       const status = connection.status || 'pending';
@@ -39,8 +23,8 @@ export async function GET() {
         email_required: stats?.email_required || 0,
         cooldown: stats?.cooldown || 0,
         total: Object.keys(connectionsStore.connections).length,
-        lastRefreshDuration: connectionsStore?.lastRefreshDuration || 0,
-        averageProfileCheckDuration: connectionsStore?.averageProfileCheckDuration || 0
+        lastRefreshDuration: connectionsStore.lastRefreshDuration,
+        averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
       }
     });
   } catch (error) {
