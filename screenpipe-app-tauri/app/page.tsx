@@ -1,7 +1,7 @@
 "use client";
 
 import { Settings } from "@/components/settings";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { getStore, useSettings } from "@/lib/hooks/use-settings";
 import {
   Card,
   CardContent,
@@ -38,8 +38,15 @@ export default function Home() {
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const isProcessingRef = React.useRef(false);
 
   useEffect(() => {
+    const getAudioDevices = async () => {
+      const store = await getStore();
+      const devices = (await store.get("audioDevices")) as string[];
+      return devices;
+    };
+
     const unlisten = Promise.all([
       listen("shortcut-start-recording", async () => {
         await invoke("spawn_screenpipe");
@@ -78,20 +85,64 @@ export default function Home() {
         relaunch();
       }),
 
-      listen<string>('open-pipe', async (event) => {
+      listen<string>("open-pipe", async (event) => {
         const pipeId = event.payload;
 
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
-        const pipe = pipeList.find(p => p.id === pipeId);
+        const pipe = pipeList.find((p) => p.id === pipeId);
         if (pipe) {
           await invoke("open_pipe_window", {
             port: pipe.port,
             title: pipe.id,
           });
         }
-      })
+      }),
 
+      listen("shortcut-start-audio", async () => {
+        if (isProcessingRef.current) return;
+        isProcessingRef.current = true;
+        try {
+          const devices = await getAudioDevices();
+          const pipeApi = new PipeApi();
+          console.log("audio-devices", devices);
+          await Promise.all(devices.map(device => pipeApi.startAudio(device)));
+          toast({
+            title: "audio started",
+            description: "audio has been started",
+          });
+        } catch (error) {
+          console.error("error starting audio:", error);
+          toast({
+            title: "error starting audio",
+            description: error instanceof Error ? error.message : "unknown error occurred",
+            variant: "destructive",
+          });
+        } finally {
+          isProcessingRef.current = false;
+        }
+      }),
+
+      listen("shortcut-stop-audio", async (event) => {
+        try {
+          const devices = await getAudioDevices();
+          const pipeApi = new PipeApi();
+          devices.forEach((device) => {
+            pipeApi.stopAudio(device);
+          });
+          toast({
+            title: "audio stopped",
+            description: "audio has been stopped",
+          });
+        } catch (error) {
+          console.error("error stopping audio:", error);
+          toast({
+            title: "error stopping audio", 
+            description: error instanceof Error ? error.message : "unknown error occurred",
+            variant: "destructive",
+          });
+        }
+      }),
     ]);
 
     return () => {

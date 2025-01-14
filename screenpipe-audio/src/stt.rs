@@ -2,7 +2,7 @@ use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
-use crate::resample;
+use crate::{resample, DeviceControl};
 pub use crate::segments::prepare_segments;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
@@ -24,6 +24,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
+use dashmap::DashMap;
 
 pub fn stt_sync(
     audio: &[f32],
@@ -155,6 +156,7 @@ pub async fn create_whisper_channel(
     output_path: &PathBuf,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
+    audio_devices_control: Option<Arc<DashMap<AudioDevice, DeviceControl>>>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -202,6 +204,17 @@ pub async fn create_whisper_channel(
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
+                            // Check if device should be recording
+                            if let Some(control) = audio_devices_control.as_ref().unwrap().get(&audio.device) {
+                                if !control.is_running {
+                                    debug!("Skipping audio processing for stopped device: {}", audio.device);
+                                    continue;
+                                }
+                            } else {
+                                debug!("Device not found in control list: {}", audio.device);
+                                continue;
+                            }
+
                             debug!("Received input from input_receiver");
                             let timestamp = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)

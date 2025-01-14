@@ -16,7 +16,7 @@
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
     "@screenpipe/browser": "0.1.12",
-    "@screenpipe/js": "1.0.0",
+    "@screenpipe/js": "^1.0.6",
     "@sentry/nextjs": "^8.42.0",
     "@tauri-apps/api": "^2.1.1",
     "chrome-launcher": "^1.1.2",
