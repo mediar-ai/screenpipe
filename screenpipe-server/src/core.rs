@@ -2,7 +2,7 @@ use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
-use crossbeam::queue::SegQueue;
+use dashmap::DashMap;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
@@ -16,7 +16,7 @@ use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -32,7 +32,7 @@ pub async fn start_continuous_recording(
     audio_chunk_duration: Duration,
     video_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_devices_control: Arc<DashMap<AudioDevice, DeviceControl>>,
     audio_disabled: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
@@ -120,6 +120,7 @@ pub async fn start_continuous_recording(
             &PathBuf::from(output_path.as_ref()),
             VadSensitivity::from(vad_sensitivity),
             languages.clone(),
+            Some(audio_devices_control.clone()),
         )
         .await?
     };
@@ -292,7 +293,7 @@ async fn record_audio(
     chunk_duration: Duration,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
-    audio_devices_control: Arc<SegQueue<(AudioDevice, DeviceControl)>>,
+    audio_devices_control: Arc<DashMap<AudioDevice, DeviceControl>>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_audio_enabled: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
@@ -306,9 +307,18 @@ async fn record_audio(
     let mut previous_transcript_id: Option<i64> = None;
     let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     loop {
-        while let Some((audio_device, device_control)) = audio_devices_control.pop() {
-            debug!("Received audio device: {}", &audio_device);
+        // Iterate over DashMap entries and process each device
+        for entry in audio_devices_control.iter() {
+            let audio_device = entry.key().clone();
+            let device_control = entry.value().clone();
             let device_id = audio_device.to_string();
+
+            // Skip if we're already handling this device
+            if handles.contains_key(&device_id) {
+                continue;
+            }
+
+            info!("Received audio device: {}", &audio_device);
 
             if !device_control.is_running {
                 info!("Device control signaled stop for device {}", &audio_device);
@@ -316,6 +326,8 @@ async fn record_audio(
                     handle.abort();
                     info!("Stopped thread for device {}", &audio_device);
                 }
+                // Remove from DashMap
+                audio_devices_control.remove(&audio_device);
                 continue;
             }
 

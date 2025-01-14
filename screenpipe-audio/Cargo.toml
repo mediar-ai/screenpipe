@@ -65,6 +65,7 @@ screenpipe-core = { path = "../screenpipe-core" }
 
 # crossbeam
 crossbeam = { workspace = true }
+dashmap = { workspace = true }
 
 # Directories
 dirs = "5.0.1"

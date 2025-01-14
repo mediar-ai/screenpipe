@@ -92,6 +92,7 @@ reqwest = { workspace = true }
 
 # Concurrency
 crossbeam = { workspace = true }
+dashmap = { workspace = true }
 
 # filtering
 ndarray = "0.15.6"
