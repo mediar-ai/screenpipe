@@ -22,6 +22,7 @@ interface DiskUsageData {
     total_pipes_size: string;
   };
   total_data_size: string;
+  avaiable_space: string;
 }
 
 export default function DiskUsage() {
@@ -130,6 +131,39 @@ export default function DiskUsage() {
                   </Badge>
                 </div>
               </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
+        {diskUsage && diskUsage.total_data_size && diskUsage.avaiable_space && (
+          <Accordion type="single" 
+            className="w-[90%] border rounded-lg">
+            <AccordionItem value="total-pipes-size">
+              <AccordionTrigger className="mx-4 h-[120px] flex-col flex hover:no-underline">
+                <div className="w-full flex flex-row items-center justify-between">
+                  <div className="flex flex-col !float-left items-start">
+                    <span className="font-semibold">total space used by screenpipe</span>
+                  </div>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                    {diskUsage.total_data_size}
+                  </Badge>
+                </div>
+                  <div className="flex justify-center">
+                    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+                    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+                  </div>
+                <div className="w-full flex flex-row items-center justify-between">
+                  <div className="flex flex-col !float-left items-start">
+                    <span className="font-semibold">avaiable space left on your system</span>
+                  </div>
+                  <Badge 
+                    variant={"outline"} 
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                    {diskUsage.avaiable_space}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
             </AccordionItem>
           </Accordion>
         )}

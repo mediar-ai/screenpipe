@@ -4,12 +4,14 @@ use tracing::info;
 use std::path::Path;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use sysinfo::{System, SystemExt, DiskExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiskUsage {
     pub pipes: DiskUsedByPipes,
     pub media: DiskUsedByMedia,
     pub total_data_size: String,
+    pub avaiable_space: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -90,6 +92,17 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         }
     }
 
+    let avaiable_space = {
+        let mut sys = System::new();
+        sys.refresh_disks_list();
+        let path_obj = Path::new(&screenpipe_dir);
+        sys.disks()
+            .iter()
+            .find(|disk| path_obj.starts_with(disk.mount_point()))
+            .map(|disk| disk.available_space())
+            .unwrap_or(0)
+    };
+
     let disk_usage = DiskUsage {
         pipes: DiskUsedByPipes {
             pipes,
@@ -101,6 +114,7 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
             total_media_size: readable(total_media_size),
         },
         total_data_size: readable(total_data_size),
+        avaiable_space: readable(avaiable_space),
     };
 
     Ok(Some(disk_usage))
