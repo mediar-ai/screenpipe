@@ -1,13 +1,13 @@
 [package]
 name = "screenpipe-app"
-version = "0.24.6"
+version = "0.25.0"
 description = ""
 authors = ["you"]
 license = ""
 repository = ""
 default-run = "screenpipe-app"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.75" 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -79,6 +79,7 @@ url = "2.4.0"
 tauri-plugin-deep-link = "2"
 
 once_cell = "1.20.0"
+tauri-plugin-sentry = "0.4.0"
 
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]

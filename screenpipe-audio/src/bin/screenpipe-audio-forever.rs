@@ -95,6 +95,7 @@ async fn main() -> Result<()> {
         &PathBuf::from("output.mp4"),
         VadSensitivity::Medium,
         languages,
+        None,
     )
     .await?;
 

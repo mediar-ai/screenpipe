@@ -61,7 +61,7 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
+use tauri_plugin_sentry::sentry;
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -76,6 +76,8 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    start_audio: String,
+    stop_audio: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
@@ -138,6 +140,14 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            start_audio: store
+                .get("startAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
+            stop_audio: store
+                .get("stopAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
             profile_shortcuts,
             pipe_shortcuts,
             disabled: store
@@ -183,6 +193,8 @@ async fn update_global_shortcuts(
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    start_audio_shortcut: String,
+    stop_audio_shortcut: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
@@ -190,6 +202,8 @@ async fn update_global_shortcuts(
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        start_audio: start_audio_shortcut,
+        stop_audio: stop_audio_shortcut,
         profile_shortcuts,
         pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
@@ -262,6 +276,36 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         }
     }
 
+    // Register start audio shortcut
+    register_shortcut(
+        app,
+        &config.start_audio,
+        config.is_disabled("start_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", false);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-start-audio", ());
+            info!("start audio shortcut triggered");
+        },
+    )
+    .await?;
+    
+    // Register stop audio shortcut
+    register_shortcut(
+        app,
+        &config.stop_audio,
+        config.is_disabled("stop_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", true);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-stop-audio", ());
+            info!("stop audio shortcut triggered");
+        },
+    )
+    .await?;
+
     info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
 
     // Register pipe shortcuts
@@ -328,6 +372,69 @@ fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::
     fs::create_dir_all(&local_data_dir.join("data"))?;
     Ok(local_data_dir)
 }
+
+#[derive(Debug, serde::Serialize)]
+pub struct LogFile {
+    name: String,
+    path: String,
+    modified_at: u64,
+}
+
+#[tauri::command]
+async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
+    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let mut log_files = Vec::new();
+    
+    // Collect all entries first
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&data_dir).await.map_err(|e| e.to_string())?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
+    }
+
+    // Sort by modified time descending (newest first)
+    entries.sort_by_key(|(_, metadata)| {
+        std::cmp::Reverse(
+            metadata
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        )
+    });
+
+    // Process sorted entries
+    for (entry, metadata) in entries {
+        let path = entry.path();
+        if let Some(extension) = path.extension() {
+            if extension == "log" {
+                let modified = metadata
+                    .modified()
+                    .map_err(|e| e.to_string())?
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_secs();
+
+                log_files.push(LogFile {
+                    name: path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    modified_at: modified,
+                });
+            }
+        }
+    }
+
+    Ok(log_files)
+}
+
 
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
@@ -473,6 +580,15 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Initialize Sentry early
+    // let sentry_guard = sentry::init((
+    //     "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", // Replace with your actual Sentry DSN
+    //     sentry::ClientOptions {
+    //         release: sentry::release_name!(),
+    //         ..Default::default()
+    //     },
+    // ));
+
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
     {
@@ -534,6 +650,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // .plugin(tauri_plugin_sentry::init(&sentry_guard))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -552,6 +669,7 @@ async fn main() {
             commands::show_meetings,
             commands::show_identify_speakers,
             commands::open_pipe_window,
+            get_log_files,
             update_global_shortcuts,
         ])
         .setup(|app| {

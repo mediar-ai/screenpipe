@@ -165,7 +165,26 @@ export function RecordingSettings() {
         title: "settings changed",
         description: "restart required to apply changes",
         action: (
-          <ToastAction altText="restart now" onClick={handleUpdate}>
+          <ToastAction
+            altText="restart now"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Wrap in setTimeout to ensure event handling is complete
+              setTimeout(() => {
+                handleUpdate();
+              }, 0);
+              return false;
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onMouseUp={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
             restart now
           </ToastAction>
         ),

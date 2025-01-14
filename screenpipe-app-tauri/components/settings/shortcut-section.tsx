@@ -51,6 +51,22 @@ const ShortcutSection = () => {
           value={settings.stopRecordingShortcut}
         />
 
+        <ShortcutRow
+          type="global"
+          shortcut="startAudioShortcut"
+          title="start audio recording"
+          description="global shortcut to start audio recording"
+          value={settings.startAudioShortcut}
+        />
+
+        <ShortcutRow
+          type="global"
+          shortcut="stopAudioShortcut"
+          title="stop audio recording"
+          description="global shortcut to stop audio recording"
+          value={settings.stopAudioShortcut}
+        />
+
         {profiles.length > 1 && (
           <>
             <div className="mt-8 mb-4">
