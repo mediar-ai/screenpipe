@@ -1,7 +1,9 @@
 
-analyse your screen/mic activity in real time and write logs, to extract specific information like CRM, customer, market research, or ideas
+turn your screen into a living knowledge base with ai
 
-100% private on your computer using 4-5 AI models, use total 5 gb RAM including existing screenpipe stack (llama3.2, phi4 etc.)
+analyse your screen/mic activity in real time and write logs, to build a CRM, market research, ideas, user personas, etc.
+
+local LLM first 
 
 https://github.com/user-attachments/assets/e4c115d9-51cf-4870-aec4-4df4743d2d02
 

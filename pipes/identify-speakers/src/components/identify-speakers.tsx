@@ -33,6 +33,7 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
+import { pipe } from "@screenpipe/browser";
 
 export interface MeetingSegment {
   timestamp: string;
@@ -321,6 +322,10 @@ export default function IdentifySpeakers({
   };
 
   const handleUpdateSpeakerName = async (newName: string) => {
+    pipe.captureMainFeatureEvent("identify-speakers", {
+      action: "update-speaker-name",
+      newName: newName,
+    });
     // use the endpoint /speakers/update to update the name
     try {
       await fetch(`http://localhost:3030/speakers/update`, {

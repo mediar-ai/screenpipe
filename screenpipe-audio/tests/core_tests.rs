@@ -216,6 +216,7 @@ mod tests {
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
+            None,
         )
         .await
         .unwrap();

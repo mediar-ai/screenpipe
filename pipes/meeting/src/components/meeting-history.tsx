@@ -250,6 +250,9 @@ export default function MeetingHistory({
   }
 
   async function generateSummary(meeting: Meeting) {
+    pipe.captureMainFeatureEvent("meeting-history", {
+      action: "generate-summary",
+    });
     setIsSummarizing(true);
 
     try {

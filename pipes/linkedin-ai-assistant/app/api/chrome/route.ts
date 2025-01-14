@@ -12,26 +12,29 @@ const execPromise = promisify(exec);
 // helper to get chrome path based on platform
 function getChromePath() {
   switch (os.platform()) {
-    case 'darwin':
-      return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-    case 'linux':
-      return '/usr/bin/google-chrome';
-    case 'win32':
-      return 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+    case "darwin":
+      return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    case "linux":
+      return "/usr/bin/google-chrome";
+    case "win32":
+      return "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
     default:
-      throw new Error('unsupported platform');
+      throw new Error("unsupported platform");
   }
 }
 
 export async function POST() {
   try {
-    console.log('attempting to launch chrome in', process.env.NODE_ENV);
+    pipe.captureMainFeatureEvent("linkedin-ai-assistant", {
+      action: "launch-chrome",
+    });
+    console.log("attempting to launch chrome in", process.env.NODE_ENV);
 
     await quitChrome();
     await quitBrowser();
 
     const chromePath = getChromePath();
-    console.log('using chrome path:', chromePath);
+    console.log("using chrome path:", chromePath);
 
     const chromeProcess = spawn(chromePath, [
       '--remote-debugging-port=9222',
@@ -55,7 +58,7 @@ export async function POST() {
     // More robust connection check
     let attempts = 0;
     const maxAttempts = 5;
-    
+
     while (attempts < maxAttempts) {
       try {
         const response = await fetch('http://127.0.0.1:9222/json/version');
@@ -96,20 +99,25 @@ export async function DELETE() {
     ChromeSession.getInstance().clear();
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('failed to kill chrome:', error);
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    console.error("failed to kill chrome:", error);
+    return NextResponse.json(
+      { success: false, error: String(error) },
+      { status: 500 }
+    );
   }
 }
 async function quitChrome() {
   const platform = os.platform();
-  const killCommand = platform === 'win32' 
-    ? `taskkill /F /IM chrome.exe`
-    : `pkill -f -- "Google Chrome"`;
-    
+  const killCommand =
+    platform === "win32"
+      ? `taskkill /F /IM chrome.exe`
+      : `pkill -f -- "Google Chrome"`;
+
   try {
     await execPromise(killCommand);
-    console.log('chrome killed');
+    console.log("chrome killed");
   } catch (error) {
-    console.log('no chrome process found to kill', error);
+    console.log("no chrome process found to kill", error);
   }
 }
+

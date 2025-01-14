@@ -1,5 +1,8 @@
 use anyhow::Result;
-use screenpipe_core::download_pipe;
+use killport::cli::Mode;
+use killport::killport::{Killport, KillportOperations};
+use killport::signal::KillportSignal;
+use screenpipe_core::{download_pipe, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -10,7 +13,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
@@ -22,7 +25,7 @@ pub struct PipeInfo {
 }
 
 struct PipeHandle {
-    pid: i32,
+    state: PipeState,
     kill_tx: Sender<()>,
 }
 
@@ -236,7 +239,7 @@ impl PipeManager {
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
-            info!("stopping pipe: {} with pid {}", id, handle.pid);
+            info!("stopping pipe: {}", id);
 
             // Send kill signal and wait for confirmation
             handle.kill_tx.send(()).await?;
@@ -247,28 +250,59 @@ impl PipeManager {
             // Wait a bit for the process to actually terminate
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-            // Force kill the process if it's still running
-            #[cfg(unix)]
-            {
-                use nix::sys::signal::{kill, Signal};
-                use nix::unistd::Pid;
-                let _ = kill(Pid::from_raw(handle.pid), Signal::SIGKILL);
-            }
-            #[cfg(windows)]
-            {
-                use windows::Win32::System::Threading::{
-                    OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                };
-                unsafe {
-                    if let Ok(h_process) = OpenProcess(
-                        PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                        false,
-                        handle.pid as u32,
-                    ) {
-                        let _ = TerminateProcess(h_process, 1);
+            match handle.state {
+                PipeState::Port(port) => {
+                    tokio::task::spawn_blocking(move || {
+                        let killport = Killport;
+                        let signal: KillportSignal = "SIGKILL".parse().unwrap();
+
+                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false) {
+                            Ok(killed_services) => {
+                                if killed_services.is_empty() {
+                                    debug!("no services found using port {}", port);
+                                } else {
+                                    for (killable_type, name) in killed_services {
+                                        debug!(
+                                            "successfully killed {} '{}' listening on port {}",
+                                            killable_type, name, port
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("error killing port {}: {}", port, e);
+                            }
+                        }
+                    }).await.map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                }
+                PipeState::Pid(pid) => {
+                    // Force kill the process if it's still running
+                    #[cfg(unix)]
+                    {
+                        use nix::sys::signal::{kill, Signal};
+                        use nix::unistd::Pid;
+                        let _ = kill(Pid::from_raw(pid), Signal::SIGKILL);
+                    }
+                    #[cfg(windows)]
+                    {
+                        use windows::Win32::System::Threading::{
+                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
+                        };
+                        unsafe {
+                            if let Ok(h_process) = OpenProcess(
+                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
+                                false,
+                                pid as u32,
+                            ) {
+                                let _ = TerminateProcess(h_process, 1);
+                            }
+                        }
                     }
                 }
             }
+
+            // Clean up cron jobs
+            screenpipe_core::pipes::cleanup_pipe_crons(id).await?;
 
             info!("stopped pipe: {}", id);
         }
@@ -282,19 +316,25 @@ impl PipeManager {
 
         Ok(async move {
             match screenpipe_core::run_pipe(&id, screenpipe_dir.clone()).await {
-                Ok(mut child) => {
-                    let pid = child.id().expect("Failed to get child pid") as i32;
+                Ok((mut child, pipe_state)) => {
                     let (kill_tx, mut kill_rx) = mpsc::channel::<()>(1);
 
                     running_pipes.write().await.insert(
                         id_for_map.clone(),
                         PipeHandle {
-                            pid,
+                            state: pipe_state,
                             kill_tx: kill_tx.clone(),
                         },
                     );
 
-                    info!("started pipe: {} with pid {}", id, pid);
+                    match pipe_state {
+                        PipeState::Port(port) => {
+                            info!("started pipe: {} on port {}", id, port);
+                        }
+                        PipeState::Pid(pid) => {
+                            info!("started pipe: {} on pid {}", id, pid);
+                        }
+                    }
 
                     tokio::select! {
                         status = child.wait() => {
