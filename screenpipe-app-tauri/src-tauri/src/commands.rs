@@ -296,3 +296,28 @@ pub async fn open_pipe_window(
 
     Ok(())
 }
+
+#[tauri::command]
+pub async fn get_disk_usage(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+) -> Result<serde_json::Value, String> {
+    let screenpipe_dir_path = get_data_dir(&app_handle)
+        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe"));
+    match crate::disk_usage::disk_usage(&screenpipe_dir_path).await {
+        Ok(Some(disk_usage)) => {
+            match serde_json::to_value(&disk_usage) {
+                Ok(json_value) => Ok(json_value),
+                Err(e) => {
+                    error!("Failed to serialize disk usage: {}", e);
+                    Err(format!("Failed to serialize disk usage: {}", e))
+                }
+            }
+        }
+        Ok(None) => Err("No disk usage data found".to_string()),
+        Err(e) => {
+            error!("Failed to get disk usage: {}", e);
+            Err(format!("Failed to get disk usage: {}", e))
+        }
+    }
+}
+
