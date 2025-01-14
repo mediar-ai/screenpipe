@@ -13,6 +13,9 @@ import OnboardingSelection from "@/components/onboarding/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/explain-instructions";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { useSettings } from "@/lib/hooks/use-settings";
+import OnboardingLogin from "./onboarding/login";
+import OnboardingPipeStore from "./onboarding/pipe-store";
+import posthog from "posthog-js";
 
 const setFirstTimeUserFlag = async () => {
   await localforage.setItem("isFirstTimeUser", false);
@@ -21,12 +24,14 @@ const setFirstTimeUserFlag = async () => {
 type SlideKey =
   | "intro"
   | "status"
+  | "login"
   | "selection"
   | "personalize"
   | "apiSetup"
   | "devOrNonDev"
   | "devConfig"
   | "pipes"
+  | "pipeStore"
   | "instructions";
 
 const slideFlow: Record<
@@ -51,8 +56,13 @@ const slideFlow: Record<
   },
   status: {
     // status of screenpipe (blockage or not)
-    next: () => "selection",
+    next: () => "login",
     prev: () => "intro",
+  },
+  login: {
+    // login
+    next: () => "apiSetup",
+    prev: () => "status",
   },
   selection: {
     // selection (four options)
@@ -78,16 +88,13 @@ const slideFlow: Record<
   },
   apiSetup: {
     // api setup & validation
-    next: () => "instructions",
-    prev: (selectedOptions) => {
-      if (
-        selectedOptions?.length === 1 &&
-        selectedOptions?.includes("professionalUse")
-      ) {
-        return "selection";
-      }
-      return "personalize";
-    },
+    next: () => "pipeStore",
+    prev: () => "login",
+  },
+  pipeStore: {
+    // pipe store
+    next: () => null,
+    prev: () => "apiSetup",
   },
   devOrNonDev: {
     // dev or no dev
@@ -125,6 +132,16 @@ const slideFlow: Record<
       return "devOrNonDev";
     },
   },
+};
+
+const trackOnboardingStep = (
+  step: SlideKey | "completed",
+  properties?: Record<string, any>
+) => {
+  posthog.capture("onboarding_step", {
+    step,
+    ...properties,
+  });
 };
 
 const Onboarding: React.FC = () => {
@@ -174,6 +191,14 @@ const Onboarding: React.FC = () => {
       selectedPreference,
       selectedPersonalization
     );
+
+    trackOnboardingStep(currentSlide, {
+      selectedOptions,
+      selectedPreference,
+      selectedPersonalization,
+      direction: "next",
+    });
+
     if (
       currentSlide === "selection" &&
       (!selectedOptions || selectedOptions.length === 0)
@@ -202,6 +227,14 @@ const Onboarding: React.FC = () => {
 
   const handlePrevSlide = () => {
     setIsVisible(false);
+
+    trackOnboardingStep(currentSlide, {
+      selectedOptions,
+      selectedPreference,
+      selectedPersonalization,
+      direction: "back",
+    });
+
     setTimeout(() => {
       const prevSlide = slideFlow[currentSlide].prev(
         selectedOptions,
@@ -231,6 +264,12 @@ const Onboarding: React.FC = () => {
   };
 
   const handleEnd = async () => {
+    trackOnboardingStep("completed", {
+      finalOptions: selectedOptions,
+      finalPreference: selectedPreference,
+      finalPersonalization: selectedPersonalization,
+    });
+
     setShowOnboarding(false);
     await setFirstTimeUserFlag();
     updateSettings({
@@ -255,6 +294,14 @@ const Onboarding: React.FC = () => {
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
+            />
+          )}
+          {currentSlide === "login" && (
+            <OnboardingLogin
+              className={`transition-opacity duration-300 
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handleNextSlide={handleNextSlide}
+              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === "selection" && (
@@ -282,6 +329,14 @@ const Onboarding: React.FC = () => {
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleNextSlide={handleNextSlide}
+              handlePrevSlide={handlePrevSlide}
+            />
+          )}
+          {currentSlide === "pipeStore" && (
+            <OnboardingPipeStore
+              className={`transition-opacity duration-300 ease-in-out 
+              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+              handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
           )}

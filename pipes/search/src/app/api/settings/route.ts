@@ -30,6 +30,7 @@ export async function GET() {
     user: {
       token: "",
     },
+    analyticsEnabled: true,
   };
 
   try {

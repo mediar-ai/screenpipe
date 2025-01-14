@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   const defaultSettings: Settings = {
+    analyticsEnabled: true,
     openaiApiKey: "",
     deepgramApiKey: "",
     aiModel: "gpt-4",

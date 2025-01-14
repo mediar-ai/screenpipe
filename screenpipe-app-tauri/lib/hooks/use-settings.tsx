@@ -87,6 +87,8 @@ export type Settings = {
   showScreenpipeShortcut: string;
   startRecordingShortcut: string;
   stopRecordingShortcut: string;
+  startAudioShortcut: string;
+  stopAudioShortcut: string;
   pipeShortcuts: Record<string, string>;
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
@@ -142,6 +144,8 @@ const DEFAULT_SETTINGS: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   startRecordingShortcut: "Super+Alt+R",
   stopRecordingShortcut: "Super+Alt+X",
+  startAudioShortcut: "",
+  stopAudioShortcut: "",
   pipeShortcuts: {},
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
@@ -220,7 +224,7 @@ let storePromise: Promise<LazyStore> | null = null;
 /** 
  * @warning Do not change autoSave to true, it causes race conditions
  */
-const getStore = async () => {
+export const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();

@@ -27,9 +27,9 @@ agents are quite dumb without context. screenpipe is the bridge between human co
 - **rich APIs**: 
   - `pipe.input` for keyboard/mouse control
   - `pipe.queryScreenpipe` for context
-  - `pipe.streamTranscriptions` for audio transcription streaming
-  - `pipe.streamVision` for OCR/Accessibility streaming
   - `pipe.settings` for app settings
+  - experimental `pipe.streamTranscriptions` for audio transcription streaming (atm uses a lot of RAM, make sure to enable it in settings/CLI)
+  - experimental `pipe.streamVision` for OCR/Accessibility streaming (atm uses a lot of RAM)
 - **sandboxed & cross-platform**: safe execution on all OS
 - **real-time**: process screen & audio as it happens
 - **cron jobs**: schedule your pipes to run at specific times, same API as Vercel
@@ -68,13 +68,13 @@ The fastest way to create a new pipe is using our CLI:
 
 follow installation instructions & test your pipe locally
 
-then enable your pipe in screenpipe
-
 ```bash copy
-screenpipe pipe enable my-pipe
+bun dev
 ```
 
-the CLI will guide you through setting up your pipe
+you can deploy your pipe to your screenpipe app through the UI or using `screenpipe install <path>` and `screenpipe enable <id/folder of your pipe>`.
+
+when you're ready to deploy, send a PR to the [screenpipe repo](https://github.com/mediar-ai/screenpipe) to add your pipe to the store.
 
 ### available pipes
 
@@ -93,14 +93,5 @@ the CLI will guide you through setting up your pipe
 </MotionDiv>
 
 to install a pipe from the store, just add the url of the folder in the UI and click install.
-
-in CLI:
-
-```bash copy
-screenpipe pipe download https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-obsidian-time-logs
-screenpipe pipe enable pipe-obsidian-time-logs
-```
-
-
 
 

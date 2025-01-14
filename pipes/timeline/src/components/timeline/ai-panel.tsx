@@ -9,7 +9,7 @@ import { Loader2, Send, Square, X, GripHorizontal } from "lucide-react";
 import { StreamTimeSeriesResponse } from "@/app/page";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Agent } from "./agents";
-import { type Settings } from "@screenpipe/browser";
+import { pipe, type Settings } from "@screenpipe/browser";
 
 interface AIPanelProps {
   position: { x: number; y: number };
@@ -151,6 +151,9 @@ export function AIPanel({
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
+    pipe.captureMainFeatureEvent("ai-panel", {
+      action: "ai-submit",
+    });
     e.preventDefault();
     if (!selectionRange || !aiInput.trim()) return;
 

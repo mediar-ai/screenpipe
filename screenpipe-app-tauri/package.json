@@ -2,12 +2,12 @@
   "name": "screenpipe-app",
   "private": true,
   "scripts": {
-    "predev": "echo 'make sure to run cargo build --release and bun predev if you are using non dev mode in screenpipe UI'",
     "dev": "next dev",
     "build": "next build",
+    "predev": "bun scripts/pre_build.js",
     "prebuild": "bun scripts/pre_build.js",
     "tauri": "tauri",
-    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg} node_modules"
+    "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -15,6 +15,8 @@
     "@opentelemetry/resources": "^1.26.0",
     "@opentelemetry/sdk-trace-base": "^1.22.0",
     "@opentelemetry/sdk-trace-web": "^1.22.0",
+    "@patternfly/react-core": "^6.1.0",
+    "@patternfly/react-log-viewer": "^6.1.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.1",
