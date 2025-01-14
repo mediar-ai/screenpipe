@@ -27,6 +27,7 @@ export function useSettings() {
     user: {
       token: "",
     },
+    analyticsEnabled: true,
   };
 
   const [settings, setSettings] = useState<Settings>(defaultSettings);

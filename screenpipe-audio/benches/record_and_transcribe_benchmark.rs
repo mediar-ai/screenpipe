@@ -25,6 +25,7 @@ async fn setup_test() -> (
         &output_path,
         VadSensitivity::High,
         vec![],
+        None,
     )
     .await
     .unwrap();

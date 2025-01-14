@@ -89,6 +89,8 @@ const ShortcutRow = ({
     showScreenpipeShortcut: string;
     startRecordingShortcut: string;
     stopRecordingShortcut: string;
+    startAudioShortcut: string;
+    stopAudioShortcut: string;
     profileShortcuts: Record<string, string>;
     pipeShortcuts: Record<string, string>;
   }) => {
@@ -96,6 +98,8 @@ const ShortcutRow = ({
       showShortcut: updatedShortcuts.showScreenpipeShortcut,
       startShortcut: updatedShortcuts.startRecordingShortcut,
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
+      startAudioShortcut: updatedShortcuts.startAudioShortcut,
+      stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
       profileShortcuts: updatedShortcuts.profileShortcuts,
       pipeShortcuts: updatedShortcuts.pipeShortcuts,
     });
@@ -105,6 +109,8 @@ const ShortcutRow = ({
       showShortcut: updatedShortcuts.showScreenpipeShortcut,
       startShortcut: updatedShortcuts.startRecordingShortcut,
       stopShortcut: updatedShortcuts.stopRecordingShortcut,
+      startAudioShortcut: updatedShortcuts.startAudioShortcut,
+      stopAudioShortcut: updatedShortcuts.stopAudioShortcut,
       profileShortcuts: updatedShortcuts.profileShortcuts,
       pipeShortcuts: updatedShortcuts.pipeShortcuts,
     });
@@ -170,6 +176,7 @@ const ShortcutRow = ({
           break;
       }
     } catch (error) {
+      console.error("error updating shortcut", error);
       toast({
         title: "error updating shortcut",
         description:
