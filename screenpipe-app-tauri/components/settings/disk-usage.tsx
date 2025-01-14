@@ -62,6 +62,13 @@ export default function DiskUsage() {
           : ""}
       </h1>
       <div className="flex flex-col items-center justify-center space-y-4">
+        {loading && !diskUsage ? 
+          <div className="flex space-x-2 justify-center items-center mt-12">
+            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce"></div>
+          </div>
+          : ""}
         {diskUsage && diskUsage.pipes && (
           <Accordion type="single" collapsible 
             className="w-[90%] border rounded-lg">
