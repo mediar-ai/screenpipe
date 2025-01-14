@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
-import { loadConnections, saveConnection, saveNextHarvestTime, saveHarvestingState, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh } from '@/lib/storage/storage';
-import { setupBrowser } from '@/lib/browser-setup';
+import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh } from '@/lib/storage/storage';
+import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 import { ChromeSession } from '@/lib/chrome-session';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
-import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 import { Page } from 'puppeteer-core';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 // Add types for page and connection
+type ConnectionStatus = 'cooldown' | 'declined' | 'accepted' | 'pending' | 'email_required';
+
 type Connection = {
-  status: string;
+  status: ConnectionStatus;
   timestamp?: string;
 };
 
@@ -105,26 +106,6 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
   }
 }
 
-// Add type for status
-interface HarvestStatus {
-  nextHarvestTime: string;
-  harvestingStatus: 'stopped' | 'running' | 'cooldown';
-  connectionsSent: number;
-}
-
-// Initialize with proper status
-let lastStatus: HarvestStatus = {
-  nextHarvestTime: '',
-  harvestingStatus: 'stopped',
-  connectionsSent: 0
-};
-
-// Add cache for cooldown check
-let lastCooldownCheck = {
-  nextTime: '',
-  shouldRestart: false
-};
-
 // Add type for progress updates
 interface RefreshProgress {
   current: number;
@@ -133,9 +114,6 @@ interface RefreshProgress {
 
 // Add progress tracking at module level
 let refreshProgress: RefreshProgress | null = null;
-
-// Add mutex-like check at module level
-let harvestRestartInProgress = false;
 
 // Add new endpoint to handle stop refresh
 export async function POST() {

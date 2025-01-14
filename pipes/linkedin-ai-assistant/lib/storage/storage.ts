@@ -248,8 +248,6 @@ interface ConnectionsStore {
     stopRequested: boolean;
 }
 
-type FileError = Error & { code?: string };
-
 export async function loadConnections(): Promise<ConnectionsStore> {
     await ensureStorageDir();
     let connectionsStore: ConnectionsStore;
@@ -378,7 +376,7 @@ export async function isStopRequested(): Promise<boolean> {
     return store.stopRequested || false;
 } 
 
-export async function saveToChrome(key: string, data: any) {
+export async function saveToChrome(key: string, data: unknown) {
     const { page } = getActiveBrowser();
     if (!page) return;
     

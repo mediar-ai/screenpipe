@@ -1,9 +1,11 @@
+import { Page } from 'puppeteer-core';
+
 // Create a new file for managing Chrome session state
 export class ChromeSession {
     private static instance: ChromeSession;
     private wsUrl: string | null = null;
     private isConnected: boolean = false;
-    private activePage: any = null;
+    private activePage: Page | null = null;
 
     private constructor() {}
 
@@ -23,11 +25,11 @@ export class ChromeSession {
         return this.wsUrl;
     }
 
-    setActivePage(page: any) {
+    setActivePage(page: Page) {
         this.activePage = page;
     }
 
-    getActivePage(): any {
+    getActivePage(): Page | null {
         return this.activePage;
     }
 
