@@ -248,34 +248,51 @@ interface ConnectionsStore {
     stopRequested: boolean;
 }
 
+// Define default values
+const DEFAULT_CONNECTION_STORE: ConnectionsStore = {
+  connections: {},
+  connectionsSent: 0,
+  harvestingStatus: 'stopped',
+  stopRequested: false,
+  nextHarvestTime: '',
+  lastRefreshDuration: 0,
+  averageProfileCheckDuration: 0
+};
+
 export async function loadConnections(): Promise<ConnectionsStore> {
-    await ensureStorageDir();
-    let connectionsStore: ConnectionsStore;
+  await ensureStorageDir();
+  let connectionsStore: ConnectionsStore;
 
+  try {
+    const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
+    connectionsStore = {
+      ...DEFAULT_CONNECTION_STORE,  // Start with defaults
+      ...JSON.parse(data)          // Override with stored values
+    };
+  } catch {
     try {
-        const data = await fs.readFile(path.join(STORAGE_DIR, 'connections.json'), 'utf-8');
-        connectionsStore = JSON.parse(data);
+      connectionsStore = {
+        ...DEFAULT_CONNECTION_STORE,
+        ...await loadFromChrome('linkedin_assistant_connections')
+      };
     } catch {
-        try {
-            connectionsStore = await loadFromChrome('linkedin_assistant_connections');
-        } catch {
-            // Ensure default values are set
-            connectionsStore = {
-                connections: {},
-                connectionsSent: 0,
-                harvestingStatus: 'stopped',
-                stopRequested: false
-            };
-        }
+      connectionsStore = { ...DEFAULT_CONNECTION_STORE };
     }
+  }
 
-    // Ensure all required properties exist
-    connectionsStore.connections = connectionsStore.connections || {};
-    connectionsStore.connectionsSent = connectionsStore.connectionsSent || 0;
-    connectionsStore.harvestingStatus = connectionsStore.harvestingStatus || 'stopped';
-    connectionsStore.stopRequested = connectionsStore.stopRequested || false;
+  // Ensure connections object exists and all connections have valid status
+  connectionsStore.connections = connectionsStore.connections || {};
+  Object.entries(connectionsStore.connections).forEach(([url, connection]) => {
+    if (!connection || !connection.status) {
+      connectionsStore.connections[url] = {
+        profileUrl: url,
+        status: 'pending',
+        timestamp: new Date().toISOString()
+      };
+    }
+  });
 
-    return connectionsStore;
+  return connectionsStore;
 }
 
 export async function saveConnection(connection: Connection) {
