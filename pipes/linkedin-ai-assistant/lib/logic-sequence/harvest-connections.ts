@@ -15,6 +15,7 @@ import { updateWorkflowStep } from '../../app/api/workflow/status/state';
 import { closeAllMessageDialogues } from '../simple-actions/close-dialogues';
 import { cleanProfileUrl } from '../simple-actions/extract-profiles-from-search-results';
 import { showClickAnimation } from '../simple-actions/click-animation';
+import { checkIfRestricted } from '../simple-actions/check-if-restricted';
 
 const port = process.env.PORT!;
 const BASE_URL = `http://127.0.0.1:${port}`;
@@ -736,10 +737,28 @@ async function goToNextPage(
                 timeout: 15000,
               }
             );
+            
+            // Check for restrictions after navigation
+            const restrictionStatus = await checkIfRestricted(page);
+            if (restrictionStatus.isRestricted) {
+              console.log('account restriction detected after page navigation:', restrictionStatus);
+              if (restrictionStatus.restrictionEndDate) {
+                // Add 12 hours buffer to the restriction end date
+                const endDate = new Date(restrictionStatus.restrictionEndDate);
+                const bufferEndDate = new Date(endDate.getTime() + 12 * 60 * 60 * 1000).toISOString();
+                await saveHarvestingState('cooldown');
+                await saveNextHarvestTime(bufferEndDate);
+                throw new Error(`account restricted until ${bufferEndDate}`);
+              } else {
+                await saveHarvestingState('stopped');
+                throw new Error('account restricted with unknown end date');
+              }
+            }
+
             console.log('search results loaded successfully');
             return true;
           } catch (error) {
-            console.error('failed to find search results:', error);
+            console.error('failed after page navigation:', error);
             return false;
           }
         }
