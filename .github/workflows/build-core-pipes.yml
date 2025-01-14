@@ -40,10 +40,19 @@ jobs:
               bun install
               bun run build
               
-              # create zip of dist folder
-              cd dist
-              zip -r ../../$pipe.zip .
-              cd ../..
+              # create zip only if build succeeded and dist exists
+              if [ -d "dist" ]; then
+                cd dist
+                zip -r ../../$pipe.zip .
+                cd ../..
+              else
+                echo "warning: no dist directory found for $pipe"
+              fi
+              
+              # go back to root for next iteration
+              cd ../../
+            else
+              echo "warning: pipe directory $pipe not found"
             fi
           done
 

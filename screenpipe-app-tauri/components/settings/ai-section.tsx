@@ -48,6 +48,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import posthog from "posthog-js";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -171,6 +172,7 @@ const AISection = () => {
   };
 
   const startOllamaSidecar = async () => {
+    posthog.capture("start_ollama_sidecar");
     setOllamaStatus("running");
     toast({
       title: "starting ai",
@@ -236,10 +238,6 @@ const AISection = () => {
     }
   };
 
-  const handleModelChange = (value: string) => {
-    updateSettings({ aiModel: value });
-  };
-
   const handleCustomPromptChange = (
     e: React.ChangeEvent<HTMLTextAreaElement>
   ) => {
@@ -254,10 +252,6 @@ const AISection = () => {
     let newUrl = "";
     let newModel = settings.aiModel;
 
-    if (newValue === "screenpipe-cloud" && !credits?.amount) {
-      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
-      return;
-    }
     switch (newValue) {
       case "openai":
         newUrl = "https://api.openai.com/v1";
@@ -341,22 +335,29 @@ const AISection = () => {
         </Label>
         <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
           <AIProviderCard
-            type="screenpipe-cloud"
-            title="screenpipe cloud"
-            description="use openai, anthropic and google models without worrying about api keys or usage"
-            imageSrc="/images/screenpipe.png"
-            selected={settings.aiProviderType === "screenpipe-cloud"}
-            onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            warningText={!credits?.amount ? "requires credits" : undefined}
-          />
-
-          <AIProviderCard
             type="openai"
             title="openai"
             description="use your own openai api key for gpt-4 and other models"
             imageSrc="/images/openai.png"
             selected={settings.aiProviderType === "openai"}
             onClick={() => handleAiProviderChange("openai")}
+          />
+
+          <AIProviderCard
+            type="screenpipe-cloud"
+            title="screenpipe cloud"
+            description="use openai, anthropic and google models without worrying about api keys or usage"
+            imageSrc="/images/screenpipe.png"
+            selected={settings.aiProviderType === "screenpipe-cloud"}
+            onClick={() => handleAiProviderChange("screenpipe-cloud")}
+            disabled={!user}
+            warningText={
+              !user
+                ? "login required"
+                : !credits?.amount
+                ? "requires credits"
+                : undefined
+            }
           />
 
           <AIProviderCard

@@ -30,36 +30,8 @@
       "icons/screenpipe-logo-tray-failed.png",
       "icons/screenpipe-logo-tray-black.png"
     ],
-    "longDescription": "",
     "resources": [
       "assets/*"
-    ],
-    "shortDescription": "",
-    "fileAssociations": [
-      {
-        "description": "Video files",
-        "ext": [
-          "mp4",
-          "mkv",
-          "avi",
-          "mov",
-          "wmv",
-          "webm"
-        ]
-      },
-      {
-        "description": "Audio files",
-        "ext": [
-          "mp3",
-          "wav",
-          "aac",
-          "flac",
-          "oga",
-          "ogg",
-          "opic",
-          "opus"
-        ]
-      }
     ]
   },
   "productName": "screenpipe",
@@ -75,16 +47,22 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["screenpipe"]
+        "schemes": [
+          "screenpipe"
+        ]
       },
       "mobile": [
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/auth"]
+          "pathPrefix": [
+            "/auth"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/stripe-connect"]
+          "pathPrefix": [
+            "/stripe-connect"
+          ]
         }
       ]
     }
