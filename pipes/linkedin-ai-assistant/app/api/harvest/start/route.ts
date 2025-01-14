@@ -4,16 +4,16 @@ import { loadConnections, saveHarvestingState } from '@/lib/storage/storage';
 
 export async function POST() {
   try {
-    console.log('harvest start endpoint called');
+    console.log('farming start endpoint called');
     const connections = await loadConnections();
     console.log('current harvesting status:', connections.harvestingStatus);
     
     // Check if already running first
     if (connections.harvestingStatus === 'running') {
-      console.log('harvesting already in progress');
+      console.log('farming already in progress');
       return NextResponse.json(
         { 
-          message: 'harvesting already in progress',
+          message: 'farming already in progress',
           harvestingStatus: 'running',
           weeklyLimitReached: false,
           dailyLimitReached: false,
@@ -28,7 +28,7 @@ export async function POST() {
       console.log('in cooldown period until:', connections.nextHarvestTime);
       return NextResponse.json(
         { 
-          message: `harvesting cooldown active until ${new Date(connections.nextHarvestTime).toLocaleString()}`,
+          message: `farming cooldown active until ${new Date(connections.nextHarvestTime).toLocaleString()}`,
           harvestingStatus: 'cooldown',
           weeklyLimitReached: false,
           dailyLimitReached: false,
@@ -40,10 +40,10 @@ export async function POST() {
     }
 
     // Set state to running and start harvest
-    console.log('setting harvesting state to running');
+    console.log('setting farming state to running');
     await saveHarvestingState('running');
     
-    console.log('starting harvest process');
+    console.log('starting farming process');
     const result = await startHarvesting(35);
     console.log('harvest result:', result);
 
@@ -67,11 +67,11 @@ export async function POST() {
     if (result.weeklyLimitReached) {
       message = `weekly limit reached, retrying at ${new Date(result.nextHarvestTime!).toLocaleString()}`;
     } else if (result.dailyLimitReached) {
-      message = `daily limit of ${result.connectionsSent} connections reached, next harvest at ${new Date(result.nextHarvestTime!).toLocaleString()}`;
+      message = `daily limit of ${result.connectionsSent} connections reached, next farming at ${new Date(result.nextHarvestTime!).toLocaleString()}`;
     } else if (result.harvestingStatus === 'stopped') {
-      message = "no new connections found to harvest";
+      message = "farming stopped";
     } else {
-      message = `harvesting started, sent ${result.connectionsSent} connections so far`;
+      message = `farming started, sent ${result.connectionsSent} connections so far`;
     }
 
     return NextResponse.json(
@@ -86,7 +86,7 @@ export async function POST() {
       { status: 200 }
     );
   } catch (error: unknown) {
-    console.error('error starting harvesting:', error);
+    console.error('error starting farming:', error);
     await saveHarvestingState('stopped');
     return NextResponse.json(
       { 
