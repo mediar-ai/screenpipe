@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import { quitBrowser } from '@/lib/browser-setup';
 import os from 'os';
 import { ChromeSession } from '@/lib/chrome-session';
+// import { pipe } from "@screenpipe/js";
 
 export const runtime = 'nodejs'; // specify node runtime
 
@@ -25,9 +26,9 @@ function getChromePath() {
 
 export async function POST() {
   try {
-    pipe.captureMainFeatureEvent("linkedin-ai-assistant", {
-      action: "launch-chrome",
-    });
+    // pipe.capture("linkedin-ai-assistant", {
+    //   action: "launch-chrome",
+    // });
     console.log("attempting to launch chrome in", process.env.NODE_ENV);
 
     await quitChrome();
