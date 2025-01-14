@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh } from '@/lib/storage/storage';
+import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh, saveHarvestingState, saveNextHarvestTime } from '@/lib/storage/storage';
 import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 import { ChromeSession } from '@/lib/chrome-session';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
 import { Page } from 'puppeteer-core';
+import { checkIfRestricted } from '@/lib/simple-actions/check-if-restricted';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -47,6 +48,20 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
         // Navigate once at the start
         await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
         
+        // Check for restriction after each navigation
+        const restrictionStatus = await checkIfRestricted(page);
+        if (restrictionStatus.isRestricted) {
+          console.log('account restriction detected during status check:', restrictionStatus);
+          await setShouldStopRefresh(true);
+          if (restrictionStatus.restrictionEndDate) {
+            await saveHarvestingState('cooldown');
+            await saveNextHarvestTime(restrictionStatus.restrictionEndDate);
+          } else {
+            await saveHarvestingState('stopped');
+          }
+          throw new Error(`account restricted until ${restrictionStatus.restrictionEndDate}`);
+        }
+
         // check for rate limit error (429)
         const is429 = await page.evaluate(() => {
           return document.body.textContent?.includes('HTTP ERROR 429') || false;
@@ -197,6 +212,11 @@ export async function GET(request: Request) {
       refreshError: null,
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
+      restrictionInfo: {
+        isRestricted: connectionsStore.harvestingStatus === 'cooldown',
+        endDate: connectionsStore.nextHarvestTime,
+        reason: 'linkedin has detected automated activity on your account'
+      }
     });
 
   } catch (error) {

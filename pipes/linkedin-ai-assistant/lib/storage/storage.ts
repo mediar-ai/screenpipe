@@ -246,6 +246,11 @@ interface ConnectionsStore {
     averageProfileCheckDuration?: number;  // in milliseconds
     shouldStopRefresh?: boolean;
     stopRequested: boolean;
+    restrictionInfo?: {
+        isRestricted: boolean;
+        endDate?: string;
+        reason?: string;
+    };
 }
 
 // Define default values

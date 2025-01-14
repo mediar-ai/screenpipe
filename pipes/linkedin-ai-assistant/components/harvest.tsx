@@ -84,6 +84,11 @@ export function HarvestClosestConnections() {
   const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
+  const [restrictionInfo, setRestrictionInfo] = useState<{
+    isRestricted: boolean;
+    endDate?: string;
+    reason?: string;
+  } | null>(null);
 
   useEffect(() => {
     // Load initial state with status only
@@ -97,6 +102,7 @@ export function HarvestClosestConnections() {
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setRestrictionInfo(data.restrictionInfo || null);
         
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
@@ -179,6 +185,7 @@ export function HarvestClosestConnections() {
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setRestrictionInfo(data.restrictionInfo || null);
         
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
@@ -290,15 +297,22 @@ export function HarvestClosestConnections() {
         </div>
         {harvestingStatus && (
           <span className="text-sm text-gray-500">
-            {dailyLimitReached && nextHarvestTime 
-              ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
-              : weeklyLimitReached && nextHarvestTime 
-                ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
-                : harvestingStatus === 'running'
-                  ? connectionsSent > 0 
-                    ? `sent ${connectionsSent} connections` 
-                    : ''
-                  : status}
+            {restrictionInfo?.isRestricted 
+              ? `account restricted until ${new Date(restrictionInfo.endDate!).toLocaleString()}`
+              : dailyLimitReached && nextHarvestTime 
+                ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                : weeklyLimitReached && nextHarvestTime 
+                  ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                  : harvestingStatus === 'running'
+                    ? connectionsSent > 0 
+                      ? `sent ${connectionsSent} connections` 
+                      : ''
+                    : status}
+          </span>
+        )}
+        {restrictionInfo?.reason && (
+          <span className="text-sm text-red-500">
+            {restrictionInfo.reason}
           </span>
         )}
       </div>
@@ -392,6 +406,20 @@ export function HarvestClosestConnections() {
           <span className="text-sm text-muted-foreground">cooldown</span>
         </div>
       </div>
+
+      {restrictionInfo?.isRestricted && (
+        <div className="mt-2 p-4 bg-red-50 border border-red-200 rounded-md">
+          <h3 className="text-red-600 font-medium mb-2">account temporarily restricted</h3>
+          <p className="text-sm text-gray-600 mb-2">
+            linkedin has detected automated activity on your account. to protect your account:
+          </p>
+          <ul className="text-sm text-gray-600 list-disc list-inside ml-2 space-y-1">
+            <li>consider using linkedin manually for a few days after the restriction</li>
+            <li>avoid using any automation tools until the restriction ends + a few days</li>
+            <li>report issue to the support team matt@screenpi.pe</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
