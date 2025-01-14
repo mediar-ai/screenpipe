@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import path from "path";
+import { pipe } from "@screenpipe/browser";
 
 export function ObsidianSettings() {
   const { settings, updateSettings } = useSettings();
@@ -34,6 +35,9 @@ export function ObsidianSettings() {
   >(null);
 
   const handleSave = async (e: React.FormEvent) => {
+    pipe.captureMainFeatureEvent("obsidian", {
+      action: "save-settings",
+    });
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
 

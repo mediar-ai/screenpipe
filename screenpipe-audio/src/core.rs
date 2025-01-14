@@ -50,7 +50,7 @@ impl Default for AudioTranscriptionEngine {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DeviceControl {
     pub is_running: bool,
     pub is_paused: bool,
