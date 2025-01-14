@@ -259,6 +259,7 @@ export async function loadConnections(): Promise<ConnectionsStore> {
         try {
             connectionsStore = await loadFromChrome('linkedin_assistant_connections');
         } catch {
+            // Ensure default values are set
             connectionsStore = {
                 connections: {},
                 connectionsSent: 0,
@@ -267,6 +268,13 @@ export async function loadConnections(): Promise<ConnectionsStore> {
             };
         }
     }
+
+    // Ensure all required properties exist
+    connectionsStore.connections = connectionsStore.connections || {};
+    connectionsStore.connectionsSent = connectionsStore.connectionsSent || 0;
+    connectionsStore.harvestingStatus = connectionsStore.harvestingStatus || 'stopped';
+    connectionsStore.stopRequested = connectionsStore.stopRequested || false;
+
     return connectionsStore;
 }
 
