@@ -230,9 +230,12 @@ mod pipes {
 
                 // Install dependencies using bun
                 info!("installing dependencies for next.js pipe [{}]", pipe);
+
                 let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
+                    .env("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
+                    .env("BUN_CONFIG_REGISTRY", "https://registry.npmjs.org")
                     .output()
                     .await?;
 

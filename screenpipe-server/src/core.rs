@@ -16,7 +16,7 @@ use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

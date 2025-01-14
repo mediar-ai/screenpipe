@@ -322,7 +322,6 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_devices_control = Arc::new(DashMap::new());
     let audio_devices_control_recording = audio_devices_control.clone();
-    let audio_devices_control_server = audio_devices_control.clone();
 
     let mut realtime_audio_devices = Vec::new();
 
