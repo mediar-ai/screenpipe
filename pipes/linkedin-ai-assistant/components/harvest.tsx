@@ -8,7 +8,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
 
 interface ConnectionStats {
   pending: number;
@@ -81,7 +80,9 @@ export function HarvestClosestConnections() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
 
   useEffect(() => {

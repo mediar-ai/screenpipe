@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getActiveBrowser, setupBrowser } from '@/lib/browser-setup';
+import { setupBrowser } from '@/lib/browser-setup';
 import { ChromeSession } from '@/lib/chrome-session';
 import type { Page } from 'puppeteer-core';
 

@@ -119,6 +119,7 @@ export async function startHarvesting(
             weeklyLimitReached,
             dailyLimitReached,
             nextHarvestTime: connections.nextHarvestTime,
+            harvestingStatus: 'cooldown'
           };
         }
       }
