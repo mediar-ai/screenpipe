@@ -434,13 +434,13 @@ export async function saveToChrome(key: string, data: unknown) {
             console.log('navigation complete, new url:', await page.url());
         }
         
-        console.log(`attempting to save ${key} to chrome storage...`);
+        // console.log(`attempting to save ${key} to chrome storage...`);
         await page.evaluate((key: string, data: unknown) => {
             console.log('in page context, saving:', key, data);
             localStorage.setItem(key, JSON.stringify(data));
             console.log('storage after save:', localStorage.getItem(key));
         }, key, data);
-        console.log('chrome storage save complete');
+        // console.log('chrome storage save complete');
     } catch (err) {
         console.log('failed to save to chrome storage:', err);
     }
