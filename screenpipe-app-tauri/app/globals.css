@@ -113,11 +113,7 @@
     @apply bg-background text-foreground !pointer-events-auto;
   }
 }
-.pf-v6-c-log-viewer__text {
-  font-family: monospace!important;
-  padding-inline-end: 16px!important;
-  padding-inline-start: 16px!important;
-}
+
 .pf-v6-c-text-input-group__text-input {
   overflow: hidden;
     text-overflow: ellipsis;
@@ -143,21 +139,4 @@
   position: absolute!important;
 }
 
-.pf-v6-c-log-viewer.pf-m-line-numbers .pf-v6-c-log-viewer__list::before {
-  position: absolute!important;
-  inset-block-start: 0!important;
-  inset-block-end: 0!important;
-  inset-inline-start: 0!important;
-  width: 1px!important;
-  content: ""!important;
-  background: rgb(199, 199, 199)!important;
-}
 
-.pf-v6-c-log-viewer__index {
-  padding-inline-start: 16px!important;
-  font-family: monospace!important;
-}
-
-.pf-v6-c-log-viewer__string.pf-m-current {
-  background-color: #dca614!important;
-}

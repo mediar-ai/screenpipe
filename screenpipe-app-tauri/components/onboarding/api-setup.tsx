@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import AISection from "../settings/ai-section";
 
 interface OnboardingAPISetupProps {
   className?: string;
@@ -54,12 +55,14 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
 
   useEffect(() => {
     const { aiUrl, openaiApiKey, aiModel } = localSettings;
-    const isApiKeyRequired = aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" && aiUrl !== "http://localhost:11434/v1";
-    
+    const isApiKeyRequired =
+      aiUrl !== "https://ai-proxy.i-f9f.workers.dev/v1" &&
+      aiUrl !== "http://localhost:11434/v1";
+
     setAreAllInputsFilled(
-      aiUrl.trim() !== "" && 
-      aiModel.trim() !== "" && 
-      (!isApiKeyRequired || openaiApiKey.trim() !== "")
+      aiUrl.trim() !== "" &&
+        aiModel.trim() !== "" &&
+        (!isApiKeyRequired || openaiApiKey.trim() !== "")
     );
   }, [localSettings]);
 
@@ -67,6 +70,11 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
     const { aiUrl, openaiApiKey, aiModel } = localSettings;
     const newErrors: { [key: string]: string } = {};
     try {
+      const t = toast({
+        title: "validating AI provider",
+        description: "please wait...",
+        duration: 10000,
+      });
       const response = await fetch(`${aiUrl}/chat/completions`, {
         method: "POST",
         headers: {
@@ -83,7 +91,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
             {
               role: "user",
               content:
-                "Tell me a short joke (1-2 sentences) about screen recording, answer in lower case only.",
+                "Tell me a very short joke (1-2 sentences) about screen recording, AI, and screenpipe, answer in lower case only.",
             },
           ],
           max_tokens: 60,
@@ -96,7 +104,8 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         const joke = data.choices[0].message.content.trim();
 
         console.log("ai is ready!", joke);
-        toast({
+        t.update({
+          id: t.id,
           title: "ai is ready!",
           description: `here's a joke: ${joke}`,
           duration: 5000,
@@ -288,11 +297,15 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         </DialogTitle>
       </DialogHeader>
       <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="text-center">setup api key</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center space-y-4">
-          <div className="w-full max-w-md">
+        <CardContent className="flex flex-col items-center space-y-4 max-h-[60vh] overflow-y-auto ">
+          <AISection />
+          <div className="mb-16" />
+          <div className="mb-16" />
+          <div className="mb-16" />
+          <div className="mb-16" />
+          <div className="mb-16" />
+          <div className="mb-16" />
+          {/* <div className="w-full max-w-md">
             <div className="flex items-center gap-2 mb-2">
               <Label htmlFor="aiUrl" className="min-w-[100px] text-right">
                 ai provider
@@ -421,7 +434,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
                 </Tooltip>
               </TooltipProvider>
             </div>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
       <a
