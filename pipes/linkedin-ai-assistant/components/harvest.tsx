@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Info } from "lucide-react";
+import { RefreshCw, Info, Loader2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -20,7 +20,7 @@ interface ConnectionStats {
 }
 
 // Add type for harvesting status
-type HarvestingStatus = 'running' | 'stopped' | 'cooldown';
+type HarvestingStatus = 'stopped' | 'running' | 'cooldown';
 
 // Add helper function for formatting time
 function formatTimeRemaining(milliseconds: number): string {
@@ -80,105 +80,142 @@ export function HarvestClosestConnections() {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [nextProfileTime, setNextProfileTime] = useState<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rateLimitedUntil, setRateLimitedUntil] = useState<string | null>(null);
+  const [restrictionInfo, setRestrictionInfo] = useState<{
+    isRestricted: boolean;
+    endDate?: string;
+    reason?: string;
+  } | null>(null);
 
   useEffect(() => {
-    // Update initial state
-    fetch("/api/harvest/status")
-      .then(res => res.json())
-      .then(data => {
-        setHarvestingStatus(data.isHarvesting);
+    // Load initial state with status only
+    const loadInitialState = async () => {
+      try {
+        const res = await fetch("/api/harvest/connection-status-update");
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        setHarvestingStatus(data.harvestingStatus || 'stopped');
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setRestrictionInfo(data.restrictionInfo || null);
+        
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
           if (new Date(data.nextHarvestTime) > new Date()) {
-            setStatus(`harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`);
+            const message = data.connectionsSent >= 35
+              ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
+              : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
+            setStatus(message);
           }
         }
-      })
-      .catch(console.error);
+      } catch (error) {
+        console.error('failed to load initial state:', error);
+        setStatus('failed to load initial state');
+        setHarvestingStatus('stopped');
+      }
+    };
+
+    loadInitialState();
   }, []);
 
-  // Combine both status polling effects into one
+  // Stats polling without condition
   useEffect(() => {
-    if (harvestingStatus !== 'stopped') {
-      const interval = setInterval(() => {
-        fetch("/api/harvest/status")
-          .then(res => res.json())
-          .then(data => {
-            setHarvestingStatus(data.isHarvesting);
-            setConnectionsSent(data.connectionsSent || 0);
-            setDailyLimitReached(data.connectionsSent >= 35);
-            setWeeklyLimitReached(data.weeklyLimitReached || false);
-            if (data.stats) {
-              setStats(data.stats);
-            }
-            if (data.nextHarvestTime) {
-              setNextHarvestTime(data.nextHarvestTime);
-              if (new Date(data.nextHarvestTime) > new Date()) {
-                const message = data.connectionsSent >= 35
-                  ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
-                  : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
-                setStatus(message);
-              }
-            }
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/harvest/stats");
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // update stats
+        if (data.stats) {
+          setStats(data.stats);
+        }
+      } catch (error) {
+        console.error("failed to fetch stats:", error);
+      }
+    }, 2000);
 
-            // Check for cooldown restart if needed
-            if (!data.isHarvesting && data.nextHarvestTime) {
-              const now = new Date();
-              const harvestTime = new Date(data.nextHarvestTime);
-              
-              if (now >= harvestTime) {
-                console.log('cooldown period ended, initiating restart');
-                setNextHarvestTime(null);
-                setStatus('cooldown period ended, restarting...');
-                
-                // Force a status refresh to trigger the backend restart
-                fetch('/api/harvest/status?refresh=true')
-                  .then(() => new Promise(resolve => setTimeout(resolve, 1000)))
-                  .then(() => setHarvestingStatus('running'))
-                  .catch(error => {
-                    console.error('failed to restart harvesting:', error);
-                    setStatus('failed to restart after cooldown');
-                  });
-              }
-            }
+    return () => clearInterval(interval);
+  }, []); // Empty dependency array since we want it to run always
 
-            if (data.nextProfileTime) {
-              setNextProfileTime(data.nextProfileTime);
-            } else {
-              setNextProfileTime(null);
-            }
-          })
-          .catch(error => {
-            console.error('failed to fetch status:', error);
-          });
+  // Add this useEffect near your other effects
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout;
+
+    if (isRefreshing) {
+      // Start polling only when refreshing is true
+      pollInterval = setInterval(async () => {
+        const response = await fetch("/api/harvest/connection-status-update");
+        const data = await response.json();
+        if (data.refreshProgress) {
+          setRefreshProgress(data.refreshProgress);
+        }
       }, 1000);
-
-      return () => clearInterval(interval);
     }
-  }, [harvestingStatus]);
+
+    // Cleanup when isRefreshing becomes false or component unmounts
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [isRefreshing]); // Only re-run when isRefreshing changes
+
+  // Simplify the updateConnectionsStatus function
+  const updateConnectionsStatus = async () => {
+    try {
+      if (isRefreshing) {
+        await fetch("/api/harvest/connection-status-update/stop", { method: "POST" });
+        setIsRefreshing(false);
+        setRefreshProgress(null);
+        return;
+      }
+      
+      setIsRefreshing(true);
+      // Trigger the update
+      const statusRes = await fetch("/api/harvest/connection-status-update?refresh=true");
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        setHarvestingStatus(data.harvestingStatus || 'stopped');
+        setConnectionsSent(data.connectionsSent || 0);
+        setDailyLimitReached(data.dailyLimitReached || false);
+        setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setRestrictionInfo(data.restrictionInfo || null);
+        
+        if (data.nextHarvestTime) {
+          setNextHarvestTime(data.nextHarvestTime);
+        }
+      }
+    } catch (error) {
+      console.error("failed to update connections status:", error);
+    }
+  };
 
   const startHarvesting = async () => {
     try {
+      console.log('attempting to start harvesting...');
       setHarvestingStatus('running');
-      setStatus("starting harvesting process...");
+      setStatus("starting farming process...");
 
       const response = await fetch("/api/harvest/start", {
         method: "POST",
       });
 
+      console.log('harvest start response status:', response.status);
       const data = await response.json();
-      console.log('harvest start response:', data);
+      console.log('harvest start response data:', data);
 
       if (response.ok) {
         setStatus(data.message?.toLowerCase() || 'unknown status');
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
+        setHarvestingStatus(data.harvestingStatus);
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
         }
@@ -187,7 +224,9 @@ export function HarvestClosestConnections() {
         if (response.status === 429) {
           setNextHarvestTime(data.nextHarvestTime);
           setStatus(data.message?.toLowerCase() || 'rate limit reached');
+          setHarvestingStatus('cooldown');
         } else {
+          console.error('failed to start harvesting:', data);
           setStatus(`error: ${data.message?.toLowerCase() || 'unknown error'}`);
           setHarvestingStatus('stopped');
         }
@@ -204,7 +243,7 @@ export function HarvestClosestConnections() {
     try {
       // Set status immediately to improve UI responsiveness
       setHarvestingStatus('stopped');
-      setStatus("stopping harvest process...");
+      setStatus("farming stopped");
 
       const response = await fetch("/api/harvest/stop", {
         method: "POST",
@@ -225,97 +264,73 @@ export function HarvestClosestConnections() {
     }
   };
 
-  const refreshStats = async () => {
-    try {
-      setIsRefreshing(true);
-      
-      // Start polling for progress
-      const pollInterval = setInterval(async () => {
-        const response = await fetch("/api/harvest/status");
-        const data = await response.json();
-        if (data.refreshProgress) {
-          setRefreshProgress(data.refreshProgress);
-        }
-      }, 1000);
-
-      // Trigger the actual refresh
-      const response = await fetch("/api/harvest/status?refresh=true");
-      const data = await response.json();
-      
-      // Add rate limit handling
-      if (data.rateLimitedUntil) {
-        setRateLimitedUntil(data.rateLimitedUntil);
-      } else {
-        setRateLimitedUntil(null);
-      }
-
-      // Clear polling and progress
-      clearInterval(pollInterval);
-      setRefreshProgress(null);
-      
-      setConnectionsSent(data.connectionsSent || 0);
-      setDailyLimitReached(data.dailyLimitReached || false);
-      setWeeklyLimitReached(data.weeklyLimitReached || false);
-      if (data.stats) {
-        setStats(data.stats);
-      }
-    } catch (error) {
-      console.error("failed to refresh stats:", error);
-    } finally {
-      setIsRefreshing(false);
-      setRefreshProgress(null);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-row items-center gap-4">
         <div className="flex items-center gap-4">
           <span className="text-lg font-medium">
-            farming connections {connectionsSent > 0 && `(${connectionsSent})`}
+            farming connections
           </span>
-          <div className="flex gap-2">
-            {harvestingStatus === 'stopped' && (
+          <div className="flex items-center gap-2">
+            {harvestingStatus === 'stopped' ? (
               <button
                 onClick={startHarvesting}
-                className="bg-black text-white px-4 py-2 rounded-md text-base"
+                disabled={isRefreshing}
+                className={`bg-black text-white px-4 py-2 rounded-md text-base ${
+                  isRefreshing ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 start
               </button>
-            )}
-            {(harvestingStatus === 'running' || harvestingStatus === 'cooldown') && (
-              <button
-                onClick={stopHarvesting}
-                className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
-              >
-                stop
-              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                <button
+                  onClick={stopHarvesting}
+                  className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
+                >
+                  stop
+                </button>
+              </div>
             )}
           </div>
         </div>
         {harvestingStatus && (
           <span className="text-sm text-gray-500">
-            {dailyLimitReached && nextHarvestTime 
-              ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
-              : weeklyLimitReached && nextHarvestTime 
-                ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
-                : status}
+            {restrictionInfo?.isRestricted 
+              ? `account restricted until ${new Date(restrictionInfo.endDate!).toLocaleString()}`
+              : dailyLimitReached && nextHarvestTime 
+                ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                : weeklyLimitReached && nextHarvestTime 
+                  ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                  : harvestingStatus === 'running'
+                    ? connectionsSent > 0 
+                      ? `sent ${connectionsSent} connections` 
+                      : ''
+                    : status}
+          </span>
+        )}
+        {restrictionInfo?.isRestricted && restrictionInfo?.reason && (
+          <span className="text-sm text-red-500">
+            {restrictionInfo.reason}
           </span>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        automatically send connection requests to your closest linkedin connections
+        automatically send connection requests to your closest linkedin network
       </p>
 
       <div className="flex items-center mt-4 mb-2">
         <span className="text-sm font-medium">stats</span>
         <button
-          onClick={refreshStats}
-          disabled={isRefreshing || !!rateLimitedUntil}
+          onClick={updateConnectionsStatus}
+          disabled={isRefreshing || !!rateLimitedUntil || harvestingStatus === 'running'}
           className={`p-2 rounded-md transition-all ${
-            isRefreshing || rateLimitedUntil ? 'bg-gray-100 cursor-not-allowed' : 'hover:bg-gray-100'
+            isRefreshing || rateLimitedUntil || harvestingStatus === 'running' 
+              ? 'bg-gray-100 cursor-not-allowed' 
+              : 'hover:bg-gray-100'
           }`}
-          aria-label="refresh stats"
+          aria-label="update connections status"
         >
           <RefreshCw 
             className={`h-5 w-5 transition-all ${
@@ -323,6 +338,15 @@ export function HarvestClosestConnections() {
             }`}
           />
         </button>
+        {isRefreshing && (
+          <button
+            onClick={() => updateConnectionsStatus()}
+            className="ml-2 p-2 rounded-md bg-red-100 hover:bg-red-200 transition-all"
+            aria-label="stop refreshing"
+          >
+            <span className="text-red-600 text-sm">stop</span>
+          </button>
+        )}
         {nextProfileTime && nextProfileTime > Date.now() && (
           <div className="ml-2">
             <CountdownTimer targetTime={nextProfileTime} />
@@ -382,6 +406,21 @@ export function HarvestClosestConnections() {
           <span className="text-sm text-muted-foreground">cooldown</span>
         </div>
       </div>
+
+      {restrictionInfo?.isRestricted && (
+        <div className="mt-2 p-4 bg-red-50 border border-red-200 rounded-md">
+          <h3 className="text-red-600 font-medium mb-2">account temporarily restricted</h3>
+          <p className="text-sm text-gray-600 mb-2">
+            linkedin has detected automated activity on your account. to protect your account:
+          </p>
+          <ul className="text-sm text-gray-600 list-disc list-inside ml-2 space-y-1">
+            <li>consider using linkedin manually for a few days after the restriction</li>
+            <li>avoid using any automation tools until the restriction ends + a few days</li>
+            <li>report issue to the support team matt@screenpi.pe</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
+

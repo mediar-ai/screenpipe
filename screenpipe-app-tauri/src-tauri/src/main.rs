@@ -1006,6 +1006,9 @@ async fn main() {
 
             let app_handle = app.handle().clone();
 
+            info!("is_first_time_user: {}", is_first_time_user);
+            info!("use_dev_mode: {}", use_dev_mode);
+
             info!(
                 "will start sidecar: {}",
                 !use_dev_mode && !is_first_time_user

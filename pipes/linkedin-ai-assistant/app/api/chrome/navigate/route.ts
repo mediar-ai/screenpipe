@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getActiveBrowser, setupBrowser } from '@/lib/browser-setup';
+import { setupBrowser } from '@/lib/browser-setup';
+import { ChromeSession } from '@/lib/chrome-session';
 import type { Page } from 'puppeteer-core';
 
 async function navigateToPage(page: Page, url: string) {
@@ -18,6 +19,9 @@ async function navigateToPage(page: Page, url: string) {
         // Wait for the main content to load
         await page.waitForSelector('body', { timeout: 30000 });
 
+        // Store the page in ChromeSession after successful navigation
+        ChromeSession.getInstance().setActivePage(page);
+
         return {
             status: response?.status() || 0,
             finalUrl: page.url()
@@ -35,12 +39,7 @@ export async function POST(request: Request) {
         console.log('attempting to navigate to:', url);
         
         // Setup the browser connection
-        await setupBrowser();
-        
-        const { page } = getActiveBrowser();
-        if (!page) {
-            throw new Error('no active browser session');
-        }
+        const { page } = await setupBrowser();
         
         // Perform the navigation
         const result = await navigateToPage(page, url);

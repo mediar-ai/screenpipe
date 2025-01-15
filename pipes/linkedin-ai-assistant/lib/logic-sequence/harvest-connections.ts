@@ -7,31 +7,33 @@ import {
   saveNextHarvestTime,
   saveHarvestingState,
   updateConnectionsSent,
+  setStopRequested,
+  isStopRequested,
 } from '../storage/storage';
 import { setupBrowser } from '../browser-setup';
 import { updateWorkflowStep } from '../../app/api/workflow/status/state';
-import { EventEmitter } from 'events';
 import { closeAllMessageDialogues } from '../simple-actions/close-dialogues';
 import { cleanProfileUrl } from '../simple-actions/extract-profiles-from-search-results';
 import { showClickAnimation } from '../simple-actions/click-animation';
+import { checkIfRestricted } from '../simple-actions/check-if-restricted';
 
 const port = process.env.PORT!;
 const BASE_URL = `http://127.0.0.1:${port}`;
 
-// Global harvesting state using an EventEmitter
-const harvestingState = new EventEmitter();
-
 // Variables to track the harvesting status
-let stopRequested = false;
+// let stopRequested = false;
 
 // Set to track profiles we've already attempted to connect with
 const attemptedProfiles = new Set<string>();
 const emailVerificationProfiles = new Set<string>();
 const cooldownProfiles = new Set<string>();
 
-export function stopHarvesting() {
-  stopRequested = true;
-  harvestingState.emit('stop');
+// Add state management to track active harvesting
+let isCurrentlyHarvesting = false;
+
+export async function stopHarvesting() {
+  await setStopRequested(true);
+  isCurrentlyHarvesting = false;
   // Ensure we clean up state
   attemptedProfiles.clear();
   emailVerificationProfiles.clear();
@@ -44,295 +46,305 @@ export interface HarvestStatus {
   dailyLimitReached: boolean;
   nextHarvestTime?: string;
   stopped?: boolean;
-  isHarvesting?: boolean;
+  harvestingStatus: 'stopped' | 'running' | 'cooldown';
 }
 
-export function emitProgress(connectionsSent: number) {
-  harvestingState.emit('progress', connectionsSent);
+export async function emitProgress(connectionsSent: number) {
+  await updateConnectionsSent(connectionsSent);
 }
 
 export async function isHarvesting(): Promise<boolean> {
   const store = await loadConnections();
-  return !!store.isHarvesting;
+  return store.harvestingStatus !== 'stopped';
 }
 
 export async function startHarvesting(
   maxDailyConnections: number = 35
 ): Promise<HarvestStatus> {
   // Reset stop flag at start
-  stopRequested = false;
+  await setStopRequested(false);
 
-  // Add early check for existing harvesting state
-  const isCurrentlyHarvesting = await isHarvesting();
+  // Prevent multiple harvesting processes
   if (isCurrentlyHarvesting) {
-    console.log('harvest already in progress');
+    console.log('harvest already in progress, skipping start');
     const connections = await loadConnections();
     return {
       connectionsSent: connections.connectionsSent || 0,
       weeklyLimitReached: false,
       dailyLimitReached: false,
-      isHarvesting: true
+      harvestingStatus: 'running'
     };
   }
 
-  // Initialize status variables at the start
-  let connectionsSent = 0;
-  let weeklyLimitReached = false;
-  const dailyLimitReached = false;
-
-  // Add mutex-like check at the start
-  if (await isHarvesting()) {
-    const store = await loadConnections();
-    if (store.connectionsSent >= maxDailyConnections) {
-      const nextTime = new Date(Date.now() + 86400000).toISOString();
-      await saveNextHarvestTime(nextTime);
-      await saveHarvestingState(false);
-      return {
-        connectionsSent: store.connectionsSent,
-        weeklyLimitReached: false,
-        dailyLimitReached: true,
-        nextHarvestTime: nextTime,
-        isHarvesting: false
-      };
-    }
-    const connections = await loadConnections();
-    return {
-      connectionsSent: connections.connectionsSent || 0,
-      weeklyLimitReached,
-      dailyLimitReached,
-      isHarvesting: true
-    };
-  }
-
-  // Set harvesting state to true immediately
-  await saveHarvestingState(true);
-  await updateConnectionsSent(0);
+  // Set flag before any async operations
+  isCurrentlyHarvesting = true;
+  console.log('starting new harvest process');
 
   try {
-    // Reset the stop request flag
-    stopRequested = false;
-    const connections = await loadConnections();
-
-    // Check cooldown period
-    if (connections.nextHarvestTime) {
-      const nextTime = new Date(connections.nextHarvestTime);
-      if (nextTime > new Date()) {
-        return {
-          connectionsSent: 0,
-          weeklyLimitReached,
-          dailyLimitReached,
-          nextHarvestTime: connections.nextHarvestTime,
-        };
-      }
-    }
-
-    console.log('starting harvest process with max daily connections:', maxDailyConnections);
+    const store = await loadConnections();
     
-    await saveNextHarvestTime('');
-
-    // Load existing connections
-    updateWorkflowStep('setup', 'done', 'connections loaded');
-
-    // Browser setup
-    updateWorkflowStep('browser', 'running', 'connecting to chrome');
-    const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
-    const statusData = await statusResponse.json();
-
-    if (statusData.status !== 'connected' || !statusData.wsUrl) {
-      throw new Error('chrome not connected');
+    // Check cooldown period first
+    if (store.nextHarvestTime && new Date(store.nextHarvestTime) > new Date()) {
+      console.log('in cooldown period, cannot start');
+      return {
+        connectionsSent: store.connectionsSent || 0,
+        weeklyLimitReached: false,
+        dailyLimitReached: true,
+        nextHarvestTime: store.nextHarvestTime,
+        harvestingStatus: 'cooldown'
+      };
     }
 
-    const { page } = await setupBrowser();
-    updateWorkflowStep('browser', 'done', 'browser connected');
+    // Initialize counters
+    let connectionsSent = 0;
+    let weeklyLimitReached = false;
+    const dailyLimitReached = false;
 
-    // Navigate to LinkedIn search results
-    updateWorkflowStep('navigation', 'running', 'navigating to linkedin search');
-    const searchUrl =
-      'https://www.linkedin.com/search/results/people/?network=%5B%22S%22%5D';
-    await navigateToSearch(page, searchUrl, { allowTruncate: true });
+    // Rest of harvesting logic...
 
-    // Close any open message dialogues before starting
-    updateWorkflowStep('navigation', 'running', 'closing message dialogues');
-    await closeAllMessageDialogues(page);
+    // Set harvesting state to running immediately
+    await saveHarvestingState('running');
+    await updateConnectionsSent(0);
 
-    // Wait for the search results to load
-    console.log('waiting for search results container...');
     try {
-      await page.waitForSelector(
-        [
-          'div[data-view-name="search-entity-result-universal-template"]',
-          'ul.reusable-search__entity-result-list',
-        ].join(','),
-        {
-          visible: true,
-          timeout: 15000,
+      // Reset the stop request flag
+      await setStopRequested(false);
+      const connections = await loadConnections();
+
+      // Check cooldown period
+      if (connections.nextHarvestTime) {
+        const nextTime = new Date(connections.nextHarvestTime);
+        if (nextTime > new Date()) {
+          return { 
+            connectionsSent: 0,
+            weeklyLimitReached,
+            dailyLimitReached,
+            nextHarvestTime: connections.nextHarvestTime,
+            harvestingStatus: 'cooldown'
+          };
         }
-      );
-      console.log('search results loaded successfully');
-    } catch (error) {
-      console.error('failed to find search results:', error);
-      throw new Error('no search results found on page');
-    }
+      }
 
-    console.log('search results loaded');
-    updateWorkflowStep('navigation', 'done');
+      console.log('starting farming process with max daily connections:', maxDailyConnections);
+      
+      await saveNextHarvestTime('');
 
-    // Add stop handler
-    harvestingState.once('stop', () => {
-      console.log('harvest process stopped by user');
-      stopRequested = true;
-    });
+      // Load existing connections
+      updateWorkflowStep('setup', 'done', 'connections loaded');
 
-    while (
-      connectionsSent < maxDailyConnections &&
-      !weeklyLimitReached &&
-      !stopRequested
-    ) {
-      // Check if stop was requested
-      if (stopRequested) {
-        console.log('harvest process stopped by user');
-        await saveHarvestingState(false);
+      // Browser setup
+      updateWorkflowStep('browser', 'running', 'connecting to chrome');
+      const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
+      const statusData = await statusResponse.json();
+
+      if (statusData.status !== 'connected' || !statusData.wsUrl) {
+        throw new Error('chrome not connected');
+      }
+
+      const { page } = await setupBrowser();
+      updateWorkflowStep('browser', 'done', 'browser connected');
+
+      // Navigate to LinkedIn search results
+      updateWorkflowStep('navigation', 'running', 'navigating to linkedin search');
+      const searchUrl =
+        'https://www.linkedin.com/search/results/people/?network=%5B%22S%22%5D';
+      await navigateToSearch(page, searchUrl, { allowTruncate: true });
+
+      // Close any open message dialogues before starting
+      updateWorkflowStep('navigation', 'running', 'closing message dialogues');
+      await closeAllMessageDialogues(page);
+
+      // Wait for the search results to load
+      console.log('waiting for search results container...');
+      try {
+        await page.waitForSelector(
+          [
+            'div[data-view-name="search-entity-result-universal-template"]',
+            'ul.reusable-search__entity-result-list',
+          ].join(','),
+          {
+            visible: true,
+            timeout: 15000,
+          }
+        );
+        console.log('search results loaded successfully');
+      } catch (error) {
+        console.error('failed to find search results:', error);
+        throw new Error('no search results found on page');
+      }
+
+      console.log('search results loaded');
+      updateWorkflowStep('navigation', 'done');
+
+      // Add stop handler
+      if (await isStopRequested()) {
+        await saveHarvestingState('stopped');
         return {
           connectionsSent,
           weeklyLimitReached,
           dailyLimitReached: false,
           stopped: true,
+          harvestingStatus: 'stopped'
         };
       }
 
-      updateWorkflowStep('processing', 'running', `processing connections`);
-
-      try {
-        const result = await clickNextConnectButton(page, stopRequested);
-
-        if (stopRequested) {
-          break;
+      while (
+        connectionsSent < maxDailyConnections &&
+        !weeklyLimitReached &&
+        !await isStopRequested()
+      ) {
+        // Check if stop was requested
+        if (await isStopRequested()) {
+          console.log('harvest process stopped by user');
+          await saveHarvestingState('stopped');
+          return {
+            connectionsSent,
+            weeklyLimitReached,
+            dailyLimitReached: false,
+            stopped: true,
+            harvestingStatus: 'stopped'
+          };
         }
 
-        if (result.success) {
-          connectionsSent++;
-          emitProgress(connectionsSent);
+        updateWorkflowStep('processing', 'running', `processing connections`);
 
-          const cleanUrl = result.profileUrl
-            ? cleanProfileUrl(result.profileUrl)
-            : '';
-          console.log(
-            `Connection sent to ${cleanUrl}, total: ${connectionsSent}`
-          );
+        try {
+          const result = await clickNextConnectButton(page, await isStopRequested());
 
-          await saveConnection({
-            profileUrl: cleanUrl,
-            status: 'pending',
-            timestamp: new Date().toISOString(),
-          });
-
-          // Update connectionsSent in the store
-          await updateConnectionsSent(connectionsSent);
-
-          // Add random delay between connections
-          const delay = 3000 + Math.floor(Math.random() * 1000);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          
-          continue; // Continue the loop instead of returning
-        } else if (result.weeklyLimitReached) {
-          console.log('Weekly limit reached, stopping');
-          weeklyLimitReached = true;
-          break;
-        } else if (result.cooldown) {
-          console.log('profile in cooldown period:', result.profileUrl);
-          // Try next button on the page instead of continuing
-          continue;
-        } else if (result.emailRequired && result.profileUrl) {
-          console.log(
-            'email verification required for profile:',
-            result.profileUrl
-          );
-          await saveConnection({
-            profileUrl: result.profileUrl,
-            status: 'email_required',
-            timestamp: new Date().toISOString(),
-          });
-          // Continue to next profile without incrementing connectionsSent
-          continue;
-        } else {
-          // No valid connect buttons found, attempt to go to next page
-          const hasNextPage = await goToNextPage(page, stopRequested);
-          if (stopRequested || !hasNextPage) {
-            console.log('no more pages available or stopped, ending harvest');
+          if (await isStopRequested()) {
             break;
           }
-          // Small delay after page navigation
-          await new Promise((resolve) => setTimeout(resolve, 2000));
 
-          if (stopRequested) {
+          if (result.success) {
+            connectionsSent++;
+            await updateConnectionsSent(connectionsSent);
+
+            const cleanUrl = result.profileUrl
+              ? cleanProfileUrl(result.profileUrl)
+              : '';
+            console.log(
+              `Connection sent to ${cleanUrl}, total: ${connectionsSent}`
+            );
+
+            await saveConnection({
+              profileUrl: cleanUrl,
+              status: 'pending',
+              timestamp: new Date().toISOString(),
+            });
+
+            // Update connectionsSent in the store
+            await updateConnectionsSent(connectionsSent);
+
+            // Add random delay between connections
+            const delay = 3000 + Math.floor(Math.random() * 1000);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            
+            continue; // Continue the loop instead of returning
+          } else if (result.weeklyLimitReached) {
+            console.log('Weekly limit reached, stopping');
+            weeklyLimitReached = true;
+            break;
+          } else if (result.cooldown) {
+            console.log('profile in cooldown period:', result.profileUrl);
+            // Try next button on the page instead of continuing
+            continue;
+          } else if (result.emailRequired && result.profileUrl) {
+            console.log(
+              'email verification required for profile:',
+              result.profileUrl
+            );
+            await saveConnection({
+              profileUrl: result.profileUrl,
+              status: 'email_required',
+              timestamp: new Date().toISOString(),
+            });
+            // Continue to next profile without incrementing connectionsSent
+            continue;
+          } else {
+            // No valid connect buttons found, attempt to go to next page
+            const hasNextPage = await goToNextPage(page, await isStopRequested());
+            if (await isStopRequested() || !hasNextPage) {
+              console.log('no more pages available or stopped, ending harvest');
+              break;
+            }
+            // Small delay after page navigation
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+
+            if (await isStopRequested()) {
+              break;
+            }
+          }
+
+          // Add small delay between attempts
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+
+          if (await isStopRequested()) {
             break;
           }
+        } catch (error) {
+          console.error('error processing connection:', error);
+          continue;
         }
-
-        // Add small delay between attempts
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        if (stopRequested) {
-          break;
-        }
-      } catch (error) {
-        console.error('error processing connection:', error);
-        continue;
       }
+
+      console.log(`Finished sending ${connectionsSent} connections`);
+    } catch (error) {
+      await saveHarvestingState('stopped');
+      console.error('harvesting failed:', error);
+      throw error;
     }
 
-    console.log(`Finished sending ${connectionsSent} connections`);
-  } catch (error) {
-    await saveHarvestingState(false);
-    console.error('harvesting failed:', error);
-    throw error;
-  }
+    if (await isStopRequested()) {
+      await saveHarvestingState('stopped');
+      return {
+        connectionsSent,
+        weeklyLimitReached: false,
+        dailyLimitReached: false,
+        stopped: true,
+        harvestingStatus: 'stopped'
+      };
+    }
 
-  if (stopRequested) {
-    await saveHarvestingState(false);
+    if (weeklyLimitReached) {
+      // Weekly limit reached, set next time and keep harvesting state
+      const nextTime = new Date(
+        Date.now() + 24 * 60 * 60 * 1000
+      ).toISOString();
+      await saveNextHarvestTime(nextTime);
+      return {
+        connectionsSent,
+        weeklyLimitReached: true,
+        dailyLimitReached: false,
+        nextHarvestTime: nextTime,
+        harvestingStatus: 'running'
+      };
+    }
+
+    if (connectionsSent >= maxDailyConnections) {
+      // Daily limit reached, set next time but keep harvesting true
+      const nextTime = new Date(
+        Date.now() + 24 * 60 * 60 * 1000
+      ).toISOString();
+      await saveNextHarvestTime(nextTime);
+      await saveHarvestingState('cooldown');
+      return {
+        connectionsSent,
+        weeklyLimitReached: false,
+        dailyLimitReached: true,
+        nextHarvestTime: nextTime,
+        harvestingStatus: 'cooldown'
+      };
+    }
+
     return {
       connectionsSent,
       weeklyLimitReached: false,
       dailyLimitReached: false,
-      stopped: true,
+      harvestingStatus: 'running'
     };
+  } finally {
+    isCurrentlyHarvesting = false;
   }
-
-  if (weeklyLimitReached) {
-    // Weekly limit reached, set next time and keep harvesting state
-    const nextTime = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
-    ).toISOString();
-    await saveNextHarvestTime(nextTime);
-    return {
-      connectionsSent,
-      weeklyLimitReached: true,
-      dailyLimitReached: false,
-      nextHarvestTime: nextTime,
-    };
-  }
-
-  if (connectionsSent >= maxDailyConnections) {
-    // Daily limit reached, set next time but keep harvesting true
-    const nextTime = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
-    ).toISOString();
-    await saveNextHarvestTime(nextTime);
-    // Don't set harvesting to false here
-    return {
-      connectionsSent,
-      weeklyLimitReached: false,
-      dailyLimitReached: true,
-      nextHarvestTime: nextTime,
-      isHarvesting: true  // Keep harvesting true during cooldown
-    };
-  }
-
-  return {
-    connectionsSent,
-    weeklyLimitReached: false,
-    dailyLimitReached: false,
-  };
 }
 
 // Add this interface near the top with other interfaces
@@ -496,21 +508,19 @@ async function clickNextConnectButton(
           if (errorText?.includes('You can resend an invitation 3 weeks after')) {
             console.log('connection in cooldown period');
 
-            // Add to cooldown set
+            // Add to cooldown set to avoid retrying during this session
             cooldownProfiles.add(cleanUrl);
-
-            // Save to storage with cooldown status
-            await saveConnection({
-              profileUrl: cleanUrl,
-              status: 'cooldown',
-              timestamp: new Date().toISOString(),
-            });
 
             // Dismiss the toast
             const dismissButton = await page.$('button[aria-label^="Dismiss"]');
             if (dismissButton) await dismissButton.click();
 
-            continue;
+            // Return cooldown result without saving connection
+            return {
+              success: false,
+              profileUrl: cleanUrl,
+              cooldown: true
+            };
           }
         }
       } catch (_) {
@@ -727,10 +737,28 @@ async function goToNextPage(
                 timeout: 15000,
               }
             );
+            
+            // Check for restrictions after navigation
+            const restrictionStatus = await checkIfRestricted(page);
+            if (restrictionStatus.isRestricted) {
+              console.log('account restriction detected after page navigation:', restrictionStatus);
+              if (restrictionStatus.restrictionEndDate) {
+                // Add 12 hours buffer to the restriction end date
+                const endDate = new Date(restrictionStatus.restrictionEndDate);
+                const bufferEndDate = new Date(endDate.getTime() + 12 * 60 * 60 * 1000).toISOString();
+                await saveHarvestingState('cooldown');
+                await saveNextHarvestTime(bufferEndDate);
+                throw new Error(`account restricted until ${bufferEndDate}`);
+              } else {
+                await saveHarvestingState('stopped');
+                throw new Error('account restricted with unknown end date');
+              }
+            }
+
             console.log('search results loaded successfully');
             return true;
           } catch (error) {
-            console.error('failed to find search results:', error);
+            console.error('failed after page navigation:', error);
             return false;
           }
         }

@@ -1,4 +1,4 @@
-import { useToast } from "./ui/use-toast";
+import { toast, useToast } from "./ui/use-toast";
 import {
   Tooltip,
   TooltipContent,
@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Button } from "./ui/button";
-import { FileText, Copy } from "lucide-react";
+import { FileText, Copy, AppWindow } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -24,25 +24,59 @@ import { invoke } from "@tauri-apps/api/core";
 import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
+import { open } from "@tauri-apps/plugin-shell";
 
-const LogContent = ({ content }: { content: string }) => {
+const LogContent = ({
+  content,
+  filePath,
+}: {
+  content: string;
+  filePath: string;
+}) => {
+  const handleOpenInDefaultApp = async () => {
+    try {
+      await open(filePath);
+    } catch (error) {
+      console.error("failed to open log file:", error);
+      toast({
+        title: "error",
+        description: "failed to open log file",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
-    <LogViewer
-      theme="dark"
-      isTextWrapped={false}
-      hasLineNumbers={true}
-      data={content}
-      height="58vh"
-      toolbar={
-        <Toolbar>
-          <ToolbarContent>
-            <ToolbarItem>
-              <LogViewerSearch placeholder="Search value" minSearchChars={3} />
-            </ToolbarItem>
-          </ToolbarContent>
-        </Toolbar>
-      }
-    />
+    <div className="relative">
+      <LogViewer
+        theme="dark"
+        isTextWrapped={false}
+        hasLineNumbers={true}
+        data={content}
+        height="58vh"
+        toolbar={
+          <Toolbar>
+            <ToolbarContent className="p-2 relative w-full">
+              <ToolbarItem>
+                <LogViewerSearch
+                  placeholder="Search value"
+                  minSearchChars={3}
+                />
+              </ToolbarItem>
+              <ToolbarItem className="p-2 absolute right-0 top-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenInDefaultApp}
+                >
+                  open in default app
+                </Button>
+              </ToolbarItem>
+            </ToolbarContent>
+          </Toolbar>
+        }
+      />
+    </div>
   );
 };
 LogContent.displayName = "LogContent";
@@ -58,7 +92,6 @@ export const LogFileButton = ({
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
-  const { getDataDir } = useSettings();
 
   const [isOpen, setIsOpen] = useState(false);
   const [logPath, setLogPath] = useState("");
@@ -171,7 +204,11 @@ export const LogFileButton = ({
                         className="w-full justify-start text-xs"
                         onClick={() => loadLogContent(file.path)}
                       >
-                        <FileText className="h-3 w-3 mr-2" />
+                        {file.name.includes("app") ? (
+                          <AppWindow className="h-3 w-3 mr-2" />
+                        ) : (
+                          <FileText className="h-3 w-3 mr-2" />
+                        )}
                         <span className="truncate">{file.name}</span>
                       </Button>
                     ))}
@@ -184,22 +221,14 @@ export const LogFileButton = ({
                 {logPath && (
                   <>
                     <div className="relative flex-1 border rounded-md">
-                      <LogContent content={logContent} />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="absolute top-2 right-2 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 focus:opacity-100"
-                        onClick={() => copyToClipboard(logContent)}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
+                      <LogContent content={logContent} filePath={logPath} />
                     </div>
                     <div className="flex items-center justify-between px-2 py-1 bg-secondary/50 rounded-md">
                       <code className="text-sm font-mono">{logPath}</code>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => copyToClipboard(logPath)}
+                        onClick={() => copyToClipboard(logContent)}
                       >
                         <Copy className="h-3 w-3" />
                       </Button>
