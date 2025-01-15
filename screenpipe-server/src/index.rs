@@ -14,7 +14,7 @@ use walkdir::WalkDir;
 
 use crate::{
     cli::CliOcrEngine,
-    video_utils::{extract_frames_from_video, get_video_metadata},
+    video_utils::{extract_frames_from_video, get_video_metadata, VideoMetadataOverrides},
     DatabaseManager,
 };
 
@@ -24,10 +24,43 @@ pub async fn handle_index_command(
     db: Arc<DatabaseManager>,
     output_format: crate::cli::OutputFormat,
     ocr_engine: Option<CliOcrEngine>,
+    metadata_override: Option<PathBuf>,
 ) -> Result<()> {
+    // Load metadata override if provided
+    let metadata_overrides = if let Some(path) = metadata_override {
+        let content = tokio::fs::read_to_string(path).await?;
+        Some(serde_json::from_str::<VideoMetadataOverrides>(&content)?)
+    } else {
+        None
+    };
+
     // Get list of video files
     let video_files = find_video_files(&path, pattern.as_deref())?;
     info!("found {} video files to process", video_files.len());
+
+    // Validate that we have metadata for all files if overrides are provided
+    if let Some(ref overrides) = metadata_overrides {
+        let mut unmatched_files = Vec::new();
+
+        for video_path in &video_files {
+            let file_str = video_path.to_string_lossy();
+            let matched = overrides
+                .overrides
+                .iter()
+                .any(|override_item| override_item.file_path == file_str);
+
+            if !matched {
+                unmatched_files.push(video_path.clone());
+            }
+        }
+
+        if !unmatched_files.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Missing metadata overrides for files: {:?}",
+                unmatched_files
+            ));
+        }
+    }
 
     let mut total_frames = 0;
     let mut total_text = 0;
@@ -39,12 +72,25 @@ pub async fn handle_index_command(
         info!("processing video: {}", video_path.display());
 
         let video_path = &video_path;
-        let metadata = get_video_metadata(video_path.to_str().unwrap()).await?;
+        let mut metadata = get_video_metadata(video_path.to_str().unwrap()).await?;
+
+        // Apply metadata override if provided and matches the file
+        if let Some(ref overrides) = metadata_overrides {
+            let file_str = video_path.to_string_lossy();
+
+            if let Some(override_item) = overrides
+                .overrides
+                .iter()
+                .find(|item| item.file_path == file_str)
+            {
+                override_item.metadata.apply_to(&mut metadata);
+            }
+        }
+
         let frames = extract_frames_from_video(&video_path, None).await?;
 
         // Create video chunk and frames first
         db.process_video_frames(
-            "arbitrary_device_name",
             video_path.to_str().unwrap(),
             frames.clone(),
             metadata.clone(),

@@ -1866,7 +1866,6 @@ impl DatabaseManager {
 
     pub async fn process_video_frames(
         &self,
-        device_name: &str,
         file_path: &str,
         frames: Vec<DynamicImage>,
         metadata: VideoMetadata,
@@ -1876,7 +1875,7 @@ impl DatabaseManager {
         // 1. Create new video chunk - REMOVE timestamp from INSERT
         let video_chunk_id =
             sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
-                .bind(device_name)
+                .bind(metadata.device_name)
                 .bind(file_path)
                 .execute(&mut *tx)
                 .await?

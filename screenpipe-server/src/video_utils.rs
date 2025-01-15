@@ -410,6 +410,7 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
         creation_time,
         fps,
         duration,
+        device_name: None,
     })
 }
 
@@ -462,4 +463,41 @@ pub struct VideoMetadata {
     pub creation_time: DateTime<Utc>,
     pub fps: f64,
     pub duration: f64,
+    pub device_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VideoMetadataOverrides {
+    pub overrides: Vec<VideoMetadataItem>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VideoMetadataItem {
+    pub file_path: String, // Direct file path
+    pub metadata: VideoMetadataOverride,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VideoMetadataOverride {
+    pub creation_time: Option<DateTime<Utc>>,
+    pub fps: Option<f64>,
+    pub duration: Option<f64>,
+    pub device_name: Option<String>,
+}
+
+impl VideoMetadataOverride {
+    pub fn apply_to(&self, metadata: &mut VideoMetadata) {
+        if let Some(creation_time) = self.creation_time {
+            metadata.creation_time = creation_time;
+        }
+        if let Some(fps) = self.fps {
+            metadata.fps = fps;
+        }
+        if let Some(duration) = self.duration {
+            metadata.duration = duration;
+        }
+        if let Some(ref device_name) = self.device_name {
+            metadata.device_name = Some(device_name.clone());
+        }
+    }
 }

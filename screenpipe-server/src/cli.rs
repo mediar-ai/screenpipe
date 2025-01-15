@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
@@ -312,6 +314,9 @@ pub enum Command {
         /// OCR engine to use
         #[arg(short = 'o', long, value_enum)]
         ocr_engine: Option<CliOcrEngine>,
+        /// Path to JSON file containing metadata overrides
+        #[arg(long)]
+        metadata_override: Option<PathBuf>,
     },
     /// Setup screenpipe environment
     Setup {
