@@ -1,10 +1,17 @@
 use anyhow::Result;
 use image::DynamicImage;
 use regex::Regex;
-use screenpipe_vision::{
-    perform_ocr_apple, perform_ocr_tesseract,
-    utils::{compare_with_previous_image, OcrEngine},
-};
+use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
+
+#[cfg(target_os = "macos")]
+use screenpipe_vision::perform_ocr_apple;
+
+#[cfg(target_os = "windows")]
+use screenpipe_vision::perform_ocr_windows;
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+use screenpipe_vision::perform_ocr_tesseract;
+
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
