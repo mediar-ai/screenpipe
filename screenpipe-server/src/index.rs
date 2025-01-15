@@ -3,44 +3,38 @@ use futures::StreamExt;
 use image::DynamicImage;
 use regex::Regex;
 use screenpipe_vision::{
-    core::{process_ocr_task, OcrTaskData},
+    perform_ocr_apple, perform_ocr_tesseract,
     utils::{compare_with_previous_image, OcrEngine},
 };
 use serde_json::json;
-use std::{path::PathBuf, time::Instant};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{debug, info};
 use walkdir::WalkDir;
 
-use crate::video_utils::extract_frames_from_video;
-
-pub struct IndexOptions {
-    pub path: String,
-    pub fps: f64,
-}
+use crate::{video_utils::extract_frames_from_video, DatabaseManager};
 
 pub async fn handle_index_command(
     path: String,
-    fps: f64,
     pattern: Option<String>,
+    db: DatabaseManager,
     output_format: crate::cli::OutputFormat,
 ) -> Result<()> {
-    let options = IndexOptions { path, fps };
-
     // Get list of video files
-    let video_files = find_video_files(&options.path, pattern.as_deref())?;
+    let video_files = find_video_files(&path, pattern.as_deref())?;
     info!("found {} video files to process", video_files.len());
 
     let mut total_frames = 0;
     let mut total_text = 0;
 
     // Setup channel for OCR results
-    let (tx, mut rx) = mpsc::channel(32);
+    let (tx, mut rx) = mpsc::channel::<(u64, String, f64)>(32);
 
     for video_path in video_files {
         info!("processing video: {}", video_path.display());
 
-        let mut frames = extract_frames_from_video(&video_path, options.fps).await?;
+        let mut frames = extract_frames_from_video(&video_path).await?;
         let mut previous_image: Option<DynamicImage> = None;
         let mut frame_counter: u64 = 0;
 
@@ -67,15 +61,6 @@ pub async fn handle_index_command(
 
             previous_image = Some(frame.clone());
 
-            // Create OCR task
-            let ocr_task = OcrTaskData {
-                image: frame.clone(),
-                window_images: vec![], // Empty for video files
-                frame_number: frame_counter,
-                timestamp: Instant::now(),
-                result_tx: tx.clone(),
-            };
-
             // Use platform-specific OCR engine
             #[cfg(target_os = "macos")]
             let engine = OcrEngine::AppleNative;
@@ -84,44 +69,60 @@ pub async fn handle_index_command(
             #[cfg(not(any(target_os = "macos", target_os = "windows")))]
             let engine = OcrEngine::Tesseract;
 
-            // Process OCR in background
+            let tx = tx.clone();
             tokio::spawn(async move {
-                if let Err(e) = process_ocr_task(ocr_task, &engine, vec![]).await {
-                    info!("error processing frame {}: {}", frame_counter, e);
+                let (text, _, confidence) = match engine {
+                    #[cfg(target_os = "macos")]
+                    OcrEngine::AppleNative => perform_ocr_apple(&frame, &[]),
+                    #[cfg(target_os = "windows")]
+                    OcrEngine::WindowsNative => perform_ocr_windows(&frame).await?,
+                    _ => perform_ocr_tesseract(&frame, vec![]),
+                };
+
+                if let Ok(()) = tx
+                    .send((frame_counter, text, confidence.unwrap_or(0.0)))
+                    .await
+                {
+                    debug!("processed frame {}", frame_counter);
+                } else {
+                    info!("error sending ocr result for frame {}", frame_counter);
                 }
             });
 
             // Handle OCR results
-            while let Ok(result) = rx.try_recv() {
+            while let Ok((frame_num, text, confidence)) = rx.try_recv() {
                 total_frames += 1;
-
-                // Aggregate text from all windows
-                let text = result
-                    .window_ocr_results
-                    .iter()
-                    .map(|w| w.text.clone())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-
                 total_text += text.len();
+
+                if let Err(e) = db
+                    .insert_ocr_text(
+                        frame_num as i64,
+                        &text,
+                        "{}", // empty json since we don't have window-specific data
+                        "",   // no app name
+                        "",   // no window name
+                        Arc::new(engine),
+                        true, // always focused since we're processing full screen
+                    )
+                    .await
+                {
+                    info!("error inserting ocr text: {}", e);
+                }
 
                 match output_format {
                     crate::cli::OutputFormat::Json => {
                         println!(
                             "{}",
                             serde_json::to_string(&json!({
-                                "frame": result.frame_number,
-                                "timestamp": result.timestamp.elapsed().as_secs_f64(),
+                                "frame": frame_num,
                                 "text": text,
-                                "confidence": result.window_ocr_results.iter()
-                                    .map(|w| w.confidence)
-                                    .sum::<f64>() / result.window_ocr_results.len() as f64
+                                "confidence": confidence
                             }))?
                         );
                     }
                     crate::cli::OutputFormat::Text => {
                         if !text.is_empty() {
-                            println!("frame {}: {}", result.frame_number, text);
+                            info!("frame {}: {}", frame_num, text);
                         }
                     }
                 }
@@ -129,17 +130,15 @@ pub async fn handle_index_command(
 
             frame_counter += 1;
         }
+        break;
     }
 
-    // Process remaining results
-    while let Ok(result) = rx.try_recv() {
+    // wait few seconds
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    // Process remaining results at the end
+    while let Ok((_, text, _)) = rx.try_recv() {
         total_frames += 1;
-        let text = result
-            .window_ocr_results
-            .iter()
-            .map(|w| w.text.clone())
-            .collect::<Vec<_>>()
-            .join(" ");
         total_text += text.len();
     }
 

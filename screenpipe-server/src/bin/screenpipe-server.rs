@@ -159,9 +159,6 @@ async fn main() -> anyhow::Result<()> {
                 PipeCommand::List {
                     output: OutputFormat::Text,
                     ..
-                } | PipeCommand::Download {
-                    output: OutputFormat::Text,
-                    ..
                 } | PipeCommand::Install {
                     output: OutputFormat::Text,
                     ..
@@ -280,11 +277,27 @@ async fn main() -> anyhow::Result<()> {
             }
             Command::Index {
                 path,
-                fps,
                 output,
+                data_dir,
                 pattern,
             } => {
-                handle_index_command(path, fps, pattern, output).await?;
+                let local_data_dir = get_base_dir(&data_dir)?;
+
+                handle_index_command(
+                    path,
+                    pattern,
+                    DatabaseManager::new(&format!(
+                        "{}/db.sqlite",
+                        local_data_dir.to_string_lossy()
+                    ))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?,
+                    output,
+                )
+                .await?;
                 return Ok(());
             }
         }

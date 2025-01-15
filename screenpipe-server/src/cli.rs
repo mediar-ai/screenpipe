@@ -285,9 +285,9 @@ pub enum Command {
     Index {
         /// Path to folder containing video files
         path: String,
-        /// FPS to process (default: 1.0)
-        #[arg(long, default_value_t = 1.0)]
-        fps: f64,
+        /// Data directory. Default to $HOME/.screenpipe
+        #[arg(long)]
+        data_dir: Option<String>,
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
         output: OutputFormat,

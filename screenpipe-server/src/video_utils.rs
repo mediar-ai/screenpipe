@@ -187,23 +187,16 @@ pub async fn merge_videos(
 
 pub async fn extract_frames_from_video(
     video_path: &std::path::Path,
-    fps: f64,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<DynamicImage>> + Send>>> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    debug!(
-        "extracting frames from {} at {} fps",
-        video_path.display(),
-        fps
-    );
+    debug!("extracting frames from {}", video_path.display());
 
     let mut command = Command::new(ffmpeg_path);
     command
         .args(&[
             "-i",
             video_path.to_str().unwrap(),
-            "-vf",
-            &format!("fps={}", fps),
             "-f",
             "image2pipe",
             "-vcodec",
