@@ -9,10 +9,11 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::info;
+use tracing::{debug, error, info};
 use walkdir::WalkDir;
 
 use crate::{
+    cli::CliOcrEngine,
     video_utils::{extract_frames_from_video, get_video_metadata},
     DatabaseManager,
 };
@@ -22,6 +23,7 @@ pub async fn handle_index_command(
     pattern: Option<String>,
     db: Arc<DatabaseManager>,
     output_format: crate::cli::OutputFormat,
+    ocr_engine: Option<CliOcrEngine>,
 ) -> Result<()> {
     // Get list of video files
     let video_files = find_video_files(&path, pattern.as_deref())?;
@@ -80,19 +82,30 @@ pub async fn handle_index_command(
 
             previous_image = Some(frame.clone());
 
-            // Use platform-specific OCR engine
-            #[cfg(target_os = "macos")]
-            let engine = OcrEngine::AppleNative;
-            #[cfg(target_os = "windows")]
-            let engine = OcrEngine::WindowsNative;
-            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-            let engine = OcrEngine::Tesseract;
+            // Use specified OCR engine or fall back to platform default
+            let engine = match ocr_engine {
+                Some(ref cli_engine) => cli_engine.clone().into(),
+                None => {
+                    #[cfg(target_os = "macos")]
+                    let engine = OcrEngine::AppleNative;
+                    #[cfg(target_os = "windows")]
+                    let engine = OcrEngine::WindowsNative;
+                    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+                    let engine = OcrEngine::Tesseract;
+                    engine
+                }
+            };
 
             let tx = tx.clone();
             let frame_num = frame_counter;
             let frame = frame.clone();
+            let engine_clone = engine.clone();
+
+            let engine_arc = Arc::new(engine_clone);
             tokio::spawn(async move {
-                let (text, _, confidence) = match engine {
+                let engine_clone = engine.clone();
+
+                let (text, _, confidence) = match engine_clone.clone() {
                     #[cfg(target_os = "macos")]
                     OcrEngine::AppleNative => perform_ocr_apple(&frame, &[]),
                     #[cfg(target_os = "windows")]
@@ -101,9 +114,9 @@ pub async fn handle_index_command(
                 };
 
                 if let Ok(()) = tx.send((frame_num, text, confidence.unwrap_or(0.0))).await {
-                    info!("processed frame {}", frame_num);
+                    debug!("processed frame {}", frame_num);
                 } else {
-                    info!("error sending ocr result for frame {}", frame_num);
+                    error!("error sending ocr result for frame {}", frame_num);
                 }
             });
 
@@ -118,7 +131,7 @@ pub async fn handle_index_command(
                     "{}".to_string(), // empty json
                     "".to_string(),   // no app name
                     "".to_string(),   // no window name
-                    Arc::new(engine),
+                    engine_arc.clone(),
                     true, // focused
                 ));
 
@@ -143,7 +156,7 @@ pub async fn handle_index_command(
                     }
                     crate::cli::OutputFormat::Text => {
                         if !text.is_empty() {
-                            info!("frame {}: {}", frame_num, text);
+                            debug!("frame {}: {}", frame_num, text);
                         }
                     }
                 }

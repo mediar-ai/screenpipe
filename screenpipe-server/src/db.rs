@@ -1892,6 +1892,8 @@ impl DatabaseManager {
             let frame_timestamp = metadata.creation_time
                 + chrono::Duration::milliseconds((i as f64 * (1000.0 / metadata.fps)) as i64);
 
+            debug!("frame timestamp: {}", frame_timestamp);
+
             let frame_id = sqlx::query(
                 "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
             )

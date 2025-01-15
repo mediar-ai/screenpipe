@@ -1,14 +1,38 @@
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
+use chrono::NaiveDateTime;
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use screenpipe_core::find_ffmpeg_path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::path::PathBuf;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+
+#[derive(Debug, Deserialize)]
+struct FFprobeOutput {
+    format: Format,
+    streams: Vec<Stream>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Format {
+    duration: Option<String>,
+    tags: Option<Tags>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Tags {
+    creation_time: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Stream {
+    r_frame_rate: String,
+}
 
 pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
@@ -298,11 +322,100 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
     Ok(fps)
 }
 
+fn parse_time_from_filename(path: &str) -> Option<DateTime<Utc>> {
+    let path = Path::new(path);
+    let filename = path.file_name()?.to_str()?;
+
+    // Assuming format: monitor_1_2024-10-19_02-51-20.mp4
+    let parts: Vec<&str> = filename.split('_').collect();
+    if parts.len() >= 4 {
+        let date = parts[2];
+        let time = parts[3].split('.').next()?;
+        let datetime_str = format!("{} {}", date, time.replace('-', ":"));
+
+        // Parse with format "2024-10-19 02:51:20"
+        NaiveDateTime::parse_from_str(&datetime_str, "%Y-%m-%d %H:%M:%S")
+            .ok()?
+            .and_local_timezone(Utc)
+            .earliest()
+    } else {
+        None
+    }
+}
+
 pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
     let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
 
-    let output = Command::new(&ffprobe_path)
+    // Try ffprobe first
+    let creation_time = match Command::new(&ffprobe_path)
+        .args(&[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            "-show_entries",
+            "format_tags=creation_time",
+            video_path,
+        ])
+        .output()
+        .await
+    {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
+
+            metadata
+                .format
+                .tags
+                .and_then(|t| t.creation_time)
+                .and_then(|t| {
+                    DateTime::parse_from_rfc3339(&t)
+                        .or_else(|_| DateTime::parse_from_str(&t, "%Y-%m-%d %H:%M:%S%.f %z"))
+                        .or_else(|_| DateTime::parse_from_str(&t, "%Y-%m-%d %H:%M:%S"))
+                        .ok()
+                })
+                .map(|t| t.with_timezone(&Utc))
+        }
+        _ => None,
+    };
+
+    // Try filename if ffprobe failed
+    let creation_time = creation_time.or_else(|| parse_time_from_filename(video_path));
+
+    // Try filesystem metadata if everything else failed
+    let creation_time = match creation_time {
+        Some(time) => time,
+        None => {
+            if let Ok(metadata) = tokio::fs::metadata(video_path).await {
+                if let Ok(created) = metadata.created() {
+                    DateTime::<Utc>::from(created)
+                } else {
+                    debug!("falling back to current time for creation_time");
+                    Utc::now()
+                }
+            } else {
+                debug!("falling back to current time for creation_time");
+                Utc::now()
+            }
+        }
+    };
+
+    // Rest of the metadata gathering (fps, duration) remains the same...
+    let (fps, duration) = get_video_technical_metadata(&ffprobe_path, video_path).await?;
+
+    Ok(VideoMetadata {
+        creation_time,
+        fps,
+        duration,
+    })
+}
+
+// Helper function to get fps and duration
+async fn get_video_technical_metadata(ffprobe_path: &Path, video_path: &str) -> Result<(f64, f64)> {
+    let output = Command::new(ffprobe_path)
         .args(&[
             "-v",
             "quiet",
@@ -315,47 +428,9 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
         .output()
         .await?;
 
-    if !output.status.success() {
-        return Err(anyhow::anyhow!("ffprobe failed to get metadata"));
-    }
-
     let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("ffprobe output: {}", stdout); // Debug line to see what we're getting
-
-    #[derive(Deserialize)]
-    struct FFprobeOutput {
-        format: Format,
-        streams: Vec<Stream>,
-    }
-
-    #[derive(Deserialize)]
-    struct Format {
-        duration: Option<String>,
-        tags: Option<Tags>,
-    }
-
-    #[derive(Deserialize)]
-    struct Tags {
-        creation_time: Option<String>,
-    }
-
-    #[derive(Deserialize)]
-    struct Stream {
-        r_frame_rate: String,
-    }
-
     let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
 
-    // Parse creation time
-    let creation_time = metadata
-        .format
-        .tags
-        .and_then(|t| t.creation_time)
-        .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
-        .map(|t| t.with_timezone(&Utc))
-        .unwrap_or_else(Utc::now);
-
-    // Parse FPS (format is usually "num/den")
     let fps = metadata
         .streams
         .first()
@@ -373,18 +448,13 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
         })
         .unwrap_or(30.0);
 
-    // Parse duration
     let duration = metadata
         .format
         .duration
         .and_then(|d| d.parse::<f64>().ok())
         .unwrap_or(0.0);
 
-    Ok(VideoMetadata {
-        creation_time,
-        fps,
-        duration,
-    })
+    Ok((fps, duration))
 }
 
 #[derive(Debug, Clone)]

@@ -309,6 +309,9 @@ pub enum Command {
         /// Regex pattern to filter files (e.g. "monitor.*\.mp4$")
         #[arg(long)]
         pattern: Option<String>,
+        /// OCR engine to use
+        #[arg(short = 'o', long, value_enum)]
+        ocr_engine: Option<CliOcrEngine>,
     },
     /// Setup screenpipe environment
     Setup {

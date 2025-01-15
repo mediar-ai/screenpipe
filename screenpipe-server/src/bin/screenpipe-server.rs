@@ -284,6 +284,7 @@ async fn main() -> anyhow::Result<()> {
                 output,
                 data_dir,
                 pattern,
+                ocr_engine,
             } => {
                 let local_data_dir = get_base_dir(&data_dir)?;
                 let db = Arc::new(
@@ -297,7 +298,7 @@ async fn main() -> anyhow::Result<()> {
                         e
                     })?,
                 );
-                handle_index_command(path, pattern, db, output).await?;
+                handle_index_command(path, pattern, db, output, ocr_engine).await?;
                 return Ok(());
             }
         }
