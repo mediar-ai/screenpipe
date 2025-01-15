@@ -9,46 +9,68 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::info;
 use walkdir::WalkDir;
 
-use crate::{video_utils::extract_frames_from_video, DatabaseManager};
+use crate::{
+    video_utils::{extract_frames_from_video, get_video_metadata},
+    DatabaseManager,
+};
 
 pub async fn handle_index_command(
     path: String,
     pattern: Option<String>,
-    db: DatabaseManager,
+    db: Arc<DatabaseManager>,
     output_format: crate::cli::OutputFormat,
 ) -> Result<()> {
     // Get list of video files
     let video_files = find_video_files(&path, pattern.as_deref())?;
-    debug!("found {} video files to process", video_files.len());
+    info!("found {} video files to process", video_files.len());
 
     let mut total_frames = 0;
     let mut total_text = 0;
 
     // Setup channel for OCR results
-    let (tx, mut rx) = mpsc::channel::<(u64, String, f64)>(32);
+    let (tx, mut rx) = mpsc::channel::<(i64, String, f64)>(100);
 
     for video_path in video_files {
-        debug!("processing video: {}", video_path.display());
+        info!("processing video: {}", video_path.display());
 
+        let video_path = &video_path;
+        let metadata = get_video_metadata(video_path.to_str().unwrap()).await?;
         let frames = extract_frames_from_video(&video_path, None).await?;
-        let mut previous_image: Option<DynamicImage> = None;
-        let mut frame_counter: u64 = 0;
 
-        for frame in frames {
+        // Create video chunk and frames first
+        db.process_video_frames(
+            "arbitrary_device_name",
+            video_path.to_str().unwrap(),
+            frames.clone(),
+            metadata.clone(),
+        )
+        .await?;
+
+        let mut previous_image: Option<DynamicImage> = None;
+        let mut frame_counter: i64 = 0;
+        let mut ocr_batch = Vec::new();
+
+        for (_, frame) in frames.iter().enumerate() {
             // Compare with previous frame to skip similar ones
             let current_average = if let Some(prev) = &previous_image {
-                compare_with_previous_image(Some(prev), &frame, &mut None, frame_counter, &mut 0.0)
-                    .await?
+                compare_with_previous_image(
+                    Some(prev),
+                    &frame,
+                    &mut None,
+                    frame_counter as u64,
+                    &mut 0.0,
+                )
+                .await?
             } else {
                 1.0
             };
 
             // Skip if frames are too similar (threshold from core.rs)
             if current_average < 0.006 && previous_image.is_some() {
-                debug!(
+                info!(
                     "skipping frame {} due to low average difference: {:.3}",
                     frame_counter, current_average
                 );
@@ -68,6 +90,7 @@ pub async fn handle_index_command(
 
             let tx = tx.clone();
             let frame_num = frame_counter;
+            let frame = frame.clone();
             tokio::spawn(async move {
                 let (text, _, confidence) = match engine {
                     #[cfg(target_os = "macos")]
@@ -78,9 +101,9 @@ pub async fn handle_index_command(
                 };
 
                 if let Ok(()) = tx.send((frame_num, text, confidence.unwrap_or(0.0))).await {
-                    debug!("processed frame {}", frame_num);
+                    info!("processed frame {}", frame_num);
                 } else {
-                    debug!("error sending ocr result for frame {}", frame_num);
+                    info!("error sending ocr result for frame {}", frame_num);
                 }
             });
 
@@ -89,19 +112,22 @@ pub async fn handle_index_command(
                 total_frames += 1;
                 total_text += text.len();
 
-                if let Err(e) = db
-                    .insert_ocr_text(
-                        frame_num as i64,
-                        &text,
-                        "{}", // empty json since we don't have window-specific data
-                        "",   // no app name
-                        "",   // no window name
-                        Arc::new(engine),
-                        true, // always focused since we're processing full screen
-                    )
-                    .await
-                {
-                    debug!("error inserting ocr text: {}", e);
+                ocr_batch.push((
+                    frame_num as i64,
+                    text.clone(),
+                    "{}".to_string(), // empty json
+                    "".to_string(),   // no app name
+                    "".to_string(),   // no window name
+                    Arc::new(engine),
+                    true, // focused
+                ));
+
+                // Process OCR batch when it reaches size 100
+                if ocr_batch.len() >= 100 {
+                    if let Err(e) = db.batch_insert_ocr(ocr_batch).await {
+                        info!("error batch inserting ocr text: {}", e);
+                    }
+                    ocr_batch = Vec::new();
                 }
 
                 match output_format {
@@ -117,7 +143,7 @@ pub async fn handle_index_command(
                     }
                     crate::cli::OutputFormat::Text => {
                         if !text.is_empty() {
-                            println!("frame {}: {}", frame_num, text);
+                            info!("frame {}: {}", frame_num, text);
                         }
                     }
                 }
@@ -125,7 +151,13 @@ pub async fn handle_index_command(
 
             frame_counter += 1;
         }
-        break;
+
+        // Process remaining OCR batch
+        if !ocr_batch.is_empty() {
+            if let Err(e) = db.batch_insert_ocr(ocr_batch).await {
+                info!("error batch inserting remaining ocr text: {}", e);
+            }
+        }
     }
 
     // wait few seconds for remaining OCR tasks
@@ -137,7 +169,7 @@ pub async fn handle_index_command(
         total_text += text.len();
     }
 
-    debug!(
+    info!(
         "processed {} frames, extracted {} characters of text",
         total_frames, total_text
     );

@@ -172,6 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
+        Some(Command::Index {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -282,10 +286,7 @@ async fn main() -> anyhow::Result<()> {
                 pattern,
             } => {
                 let local_data_dir = get_base_dir(&data_dir)?;
-
-                handle_index_command(
-                    path,
-                    pattern,
+                let db = Arc::new(
                     DatabaseManager::new(&format!(
                         "{}/db.sqlite",
                         local_data_dir.to_string_lossy()
@@ -295,9 +296,8 @@ async fn main() -> anyhow::Result<()> {
                         error!("failed to initialize database: {:?}", e);
                         e
                     })?,
-                    output,
-                )
-                .await?;
+                );
+                handle_index_command(path, pattern, db, output).await?;
                 return Ok(());
             }
         }

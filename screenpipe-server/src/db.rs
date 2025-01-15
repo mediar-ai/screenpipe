@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
 use screenpipe_audio::{AudioDevice, DeviceType};
@@ -26,6 +27,7 @@ use crate::db_types::{
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
+use crate::video_utils::VideoMetadata;
 
 use futures::future::try_join_all;
 
@@ -1859,6 +1861,57 @@ impl DatabaseManager {
         fts_query_builder.build().execute(&mut *tx).await?;
 
         tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn process_video_frames(
+        &self,
+        device_name: &str,
+        file_path: &str,
+        frames: Vec<DynamicImage>,
+        metadata: VideoMetadata,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // 1. Create new video chunk - REMOVE timestamp from INSERT
+        let video_chunk_id =
+            sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
+                .bind(device_name)
+                .bind(file_path)
+                .execute(&mut *tx)
+                .await?
+                .last_insert_rowid();
+
+        debug!("created video chunk: {} for {}", video_chunk_id, file_path);
+
+        // 2. Create frames with correct timestamps
+        let mut frame_ids = Vec::with_capacity(frames.len());
+
+        for (i, _frame) in frames.iter().enumerate() {
+            // Calculate timestamp for this frame based on creation time and frame number
+            let frame_timestamp = metadata.creation_time
+                + chrono::Duration::milliseconds((i as f64 * (1000.0 / metadata.fps)) as i64);
+
+            let frame_id = sqlx::query(
+                "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
+            )
+            .bind(video_chunk_id)
+            .bind(i as i64)
+            .bind(frame_timestamp)
+            .execute(&mut *tx)
+            .await?
+            .last_insert_rowid();
+
+            frame_ids.push(frame_id);
+        }
+
+        tx.commit().await?;
+        debug!(
+            "created {} frames for video chunk {}",
+            frames.len(),
+            video_chunk_id
+        );
+
         Ok(())
     }
 }

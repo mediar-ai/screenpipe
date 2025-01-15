@@ -1,5 +1,6 @@
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
+use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use screenpipe_core::find_ffmpeg_path;
 use serde::{Deserialize, Serialize};
@@ -295,4 +296,100 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 
     debug!("detected fps from video metadata: {}", fps);
     Ok(fps)
+}
+
+pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
+    let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+    let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
+
+    let output = Command::new(&ffprobe_path)
+        .args(&[
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ])
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("ffprobe failed to get metadata"));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    println!("ffprobe output: {}", stdout); // Debug line to see what we're getting
+
+    #[derive(Deserialize)]
+    struct FFprobeOutput {
+        format: Format,
+        streams: Vec<Stream>,
+    }
+
+    #[derive(Deserialize)]
+    struct Format {
+        duration: Option<String>,
+        tags: Option<Tags>,
+    }
+
+    #[derive(Deserialize)]
+    struct Tags {
+        creation_time: Option<String>,
+    }
+
+    #[derive(Deserialize)]
+    struct Stream {
+        r_frame_rate: String,
+    }
+
+    let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
+
+    // Parse creation time
+    let creation_time = metadata
+        .format
+        .tags
+        .and_then(|t| t.creation_time)
+        .and_then(|t| DateTime::parse_from_rfc3339(&t).ok())
+        .map(|t| t.with_timezone(&Utc))
+        .unwrap_or_else(Utc::now);
+
+    // Parse FPS (format is usually "num/den")
+    let fps = metadata
+        .streams
+        .first()
+        .and_then(|s| {
+            let parts: Vec<f64> = s
+                .r_frame_rate
+                .split('/')
+                .filter_map(|n| n.parse().ok())
+                .collect();
+            if parts.len() == 2 && parts[1] != 0.0 {
+                Some(parts[0] / parts[1])
+            } else {
+                None
+            }
+        })
+        .unwrap_or(30.0);
+
+    // Parse duration
+    let duration = metadata
+        .format
+        .duration
+        .and_then(|d| d.parse::<f64>().ok())
+        .unwrap_or(0.0);
+
+    Ok(VideoMetadata {
+        creation_time,
+        fps,
+        duration,
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct VideoMetadata {
+    pub creation_time: DateTime<Utc>,
+    pub fps: f64,
+    pub duration: f64,
 }

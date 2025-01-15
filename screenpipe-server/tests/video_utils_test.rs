@@ -147,3 +147,29 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_get_video_metadata() -> Result<()> {
+    setup_test_env().await?;
+    let video_path = create_test_video().await?;
+
+    println!("testing metadata extraction from {}", video_path.display());
+
+    let metadata =
+        screenpipe_server::video_utils::get_video_metadata(video_path.to_str().unwrap()).await?;
+
+    println!(
+        "extracted metadata: creation_time={}, fps={}, duration={}s",
+        metadata.creation_time, metadata.fps, metadata.duration
+    );
+
+    // basic validation
+    assert!(metadata.fps > 0.0, "fps should be positive");
+    assert!(metadata.duration > 0.0, "duration should be positive");
+    assert!(
+        metadata.creation_time <= chrono::Utc::now(),
+        "creation time should not be in the future"
+    );
+
+    Ok(())
+}
