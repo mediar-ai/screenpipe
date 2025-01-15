@@ -48,6 +48,7 @@ mod sidecar;
 mod store;
 mod tray;
 mod updates;
+mod disk_usage;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
@@ -481,7 +482,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    if data_dir == "default" {
+    if data_dir == "default" || data_dir.is_empty() {
         Ok(default_path)
     } else {
         get_base_dir(app, Some(data_dir))
@@ -668,6 +669,7 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::show_meetings,
             commands::show_identify_speakers,
+            commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
             update_global_shortcuts,

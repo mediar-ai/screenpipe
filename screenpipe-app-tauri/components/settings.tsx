@@ -11,12 +11,14 @@ import {
   Plus,
   Trash2,
   Check,
+  HardDrive
 } from "lucide-react";
 import { DialogHeader, DialogTitle } from "./ui/dialog";
 import { cn } from "@/lib/utils";
 import { RecordingSettings } from "./recording-settings";
 import { AccountSection } from "./settings/account-section";
 import ShortcutSection from "./settings/shortcut-section";
+import DiskUsage from "./settings/disk-usage";
 import AISection from "./settings/ai-section";
 import {
   DropdownMenu,
@@ -32,7 +34,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { toast } from "./ui/use-toast";
 
-type SettingsSection = "ai" | "shortcuts" | "recording" | "account";
+type SettingsSection = "ai" | "shortcuts" | "recording" | "account" | "diskUsage";
 
 export function Settings() {
   // const { settings, switchProfile, deleteProfile } = useSettings();
@@ -100,6 +102,8 @@ export function Settings() {
         return <RecordingSettings />;
       case "shortcuts":
         return <ShortcutSection />;
+      case "diskUsage":
+        return <DiskUsage />;
     }
   };
 
@@ -211,6 +215,11 @@ export function Settings() {
               id: "shortcuts",
               label: "shortcuts",
               icon: <Keyboard className="h-4 w-4" />,
+            },
+            {
+              id: "diskUsage",
+              label: "disk usage",
+              icon: <HardDrive className="h-4 w-4" />,
             },
           ].map((section) => (
             <button
