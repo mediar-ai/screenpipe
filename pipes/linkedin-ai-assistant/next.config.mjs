@@ -8,7 +8,6 @@ const nextConfig = {
       fullUrl: true,
     },
   },
-  output: 'standalone',
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals.push('child_process', 'node-fetch');

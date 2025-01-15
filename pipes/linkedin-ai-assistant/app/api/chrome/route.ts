@@ -25,18 +25,27 @@ function getChromePath() {
 }
 
 export async function POST() {
-  try {
-    // pipe.capture("linkedin-ai-assistant", {
-    //   action: "launch-chrome",
-    // });
-    console.log("attempting to launch chrome in", process.env.NODE_ENV);
+  const logs: string[] = [];
+  const addLog = (msg: string) => {
+    console.log(msg);  // keep server-side logging
+    logs.push(`${new Date().toISOString()} - ${msg}`);
+  };
 
+  try {
+    addLog('chrome route: starting POST request');
+    addLog(`environment: ${process.env.NODE_ENV}`);
+    addLog(`current platform: ${os.platform()}`);
+
+    addLog("attempting to launch chrome");
+    addLog("killing existing chrome instances...");
     await quitChrome();
-    await quitBrowser();
+    await quitBrowser(logs);
 
     const chromePath = getChromePath();
-    console.log("using chrome path:", chromePath);
+    addLog(`using chrome path: ${chromePath}`);
+    addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
 
+    addLog("spawning chrome with debugging port 9222...");
     const chromeProcess = spawn(chromePath, [
       '--remote-debugging-port=9222',
       '--restore-last-session',
@@ -52,71 +61,88 @@ export async function POST() {
     });
 
     chromeProcess.unref();
+    addLog("chrome process spawned and detached");
 
-    // Wait longer for initial launch
+    addLog("waiting for chrome to initialize...");
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // More robust connection check
     let attempts = 0;
     const maxAttempts = 5;
+    addLog(`attempting to connect to debug port (max ${maxAttempts} attempts)`);
 
     while (attempts < maxAttempts) {
       try {
+        addLog(`connection attempt ${attempts + 1}/${maxAttempts}`);
         const response = await fetch('http://127.0.0.1:9222/json/version');
         const data = await response.json();
         
         if (response.ok && data.webSocketDebuggerUrl) {
-          console.log('chrome debug port responding');
+          addLog('chrome debug port responding');
           const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+          addLog(`websocket url: ${wsUrl}`);
           ChromeSession.getInstance().setWsUrl(wsUrl);
           
           return NextResponse.json({ 
             success: true,
-            wsUrl
+            wsUrl,
+            logs
           });
         }
       } catch (err) {
-        console.log(`attempt ${attempts + 1} failed:`, err);
+        addLog(`attempt ${attempts + 1} failed: ${err}`);
       }
       attempts++;
+      addLog(`waiting 1s before retry ${attempts}/${maxAttempts}`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    throw new Error('failed to connect to chrome debug port');
+    throw new Error('failed to connect to chrome debug port after all attempts');
   } catch (err) {
-    console.error('failed to launch chrome:', err);
+    addLog(`chrome launch failed with error: ${err}`);
     return NextResponse.json({ 
       success: false, 
-      error: String(err)
+      error: String(err),
+      logs
     }, { status: 500 });
   }
 }
 
 export async function DELETE() {
+  const logs: string[] = [];
+  const addLog = (msg: string) => {
+    console.log(msg);
+    logs.push(`${new Date().toISOString()} - ${msg}`);
+  };
+
   try {
+    addLog('chrome route: starting DELETE request');
     await quitChrome();
-    await quitBrowser();
-    console.log('chrome process terminated');
+    await quitBrowser(logs);
+    addLog('chrome processes terminated');
     ChromeSession.getInstance().clear();
-    return NextResponse.json({ success: true });
+    addLog('chrome session cleared');
+    return NextResponse.json({ success: true, logs });
   } catch (error) {
-    console.error("failed to kill chrome:", error);
+    addLog(`failed to kill chrome: ${error}`);
     return NextResponse.json(
-      { success: false, error: String(error) },
+      { success: false, error: String(error), logs },
       { status: 500 }
     );
   }
 }
+
 async function quitChrome() {
   const platform = os.platform();
+  console.log('quitting chrome on platform:', platform);
   const killCommand =
     platform === "win32"
       ? `taskkill /F /IM chrome.exe`
       : `pkill -f -- "Google Chrome"`;
 
   try {
+    console.log('executing kill command:', killCommand);
     await execPromise(killCommand);
-    console.log("chrome killed");
+    console.log("chrome killed successfully");
   } catch (error) {
     console.log("no chrome process found to kill", error);
   }
