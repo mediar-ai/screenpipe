@@ -1,11 +1,9 @@
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
-use futures::Stream;
 use image::DynamicImage;
 use screenpipe_core::find_ffmpeg_path;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::pin::Pin;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tracing::{debug, error, info};
@@ -187,86 +185,114 @@ pub async fn merge_videos(
 
 pub async fn extract_frames_from_video(
     video_path: &std::path::Path,
-) -> Result<Pin<Box<dyn Stream<Item = Result<DynamicImage>> + Send>>> {
+    output_path: Option<PathBuf>,
+) -> Result<Vec<DynamicImage>> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+    let temp_dir = tempfile::tempdir()?;
+    let output_pattern = temp_dir.path().join("frame%d.jpg");
 
-    debug!("extracting frames from {}", video_path.display());
+    debug!(
+        "extracting frames from {} to {}",
+        video_path.display(),
+        output_pattern.display()
+    );
 
-    let mut command = Command::new(ffmpeg_path);
-    command
+    // Ensure video file exists
+    if !video_path.exists() {
+        return Err(anyhow::anyhow!(
+            "video file does not exist: {}",
+            video_path.display()
+        ));
+    }
+
+    // Get source FPS and calculate target FPS
+    let source_fps = match get_video_fps(&ffmpeg_path, video_path.to_str().unwrap()).await {
+        Ok(fps) => fps,
+        Err(e) => {
+            debug!("failed to get video fps, using default 1fps: {}", e);
+            1.0
+        }
+    };
+
+    let target_fps = if source_fps > 10.0 { 1.0 } else { source_fps };
+    let fps_filter = format!("fps={}", target_fps);
+
+    // Extract frames using ffmpeg
+    let status = Command::new(&ffmpeg_path)
         .args(&[
             "-i",
             video_path.to_str().unwrap(),
-            "-f",
-            "image2pipe",
-            "-vcodec",
-            "png",
-            "-",
+            "-vf",
+            &fps_filter,
+            "-strict",
+            "unofficial",
+            "-c:v",
+            "mjpeg",
+            "-q:v",
+            "2",
+            "-qmin",
+            "2",
+            "-qmax",
+            "4",
+            "-vsync",
+            "0",
+            "-threads",
+            "2",
+            "-y",
+            output_pattern.to_str().unwrap(),
         ])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null());
+        .output()
+        .await?;
 
-    debug!("ffmpeg command: {:?}", command);
+    if !status.status.success() {
+        let stderr = String::from_utf8_lossy(&status.stderr);
+        return Err(anyhow::anyhow!("ffmpeg failed: {}", stderr));
+    }
 
-    let mut child = command.spawn()?;
-    let stdout = child.stdout.take().expect("failed to get stdout");
+    // Collect all frames into a vector
+    let mut frames = Vec::new();
+    let mut entries = tokio::fs::read_dir(&temp_dir.path()).await?;
 
-    // Create a stream that processes complete PNG frames
-    let stream = futures::stream::unfold(
-        (stdout, Vec::new(), 0),
-        |(mut stdout, mut buffer, mut pos)| async move {
-            loop {
-                // Read chunks into buffer
-                let mut chunk = vec![0; 32 * 1024];
-                match stdout.read(&mut chunk).await {
-                    Ok(n) if n == 0 => return None, // EOF
-                    Ok(n) => {
-                        buffer.extend_from_slice(&chunk[..n]);
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let frame_data = tokio::fs::read(&path).await?;
+        let img = image::load_from_memory(&frame_data)?;
 
-                        // Try to find PNG signature and IEND chunk
-                        while pos < buffer.len() {
-                            // Look for PNG signature
-                            if pos + 8 <= buffer.len()
-                                && &buffer[pos..pos + 8] == b"\x89PNG\r\n\x1a\n"
-                            {
-                                // Found start of PNG, now look for IEND chunk
-                                let mut end_pos = pos + 8;
-                                while end_pos + 12 <= buffer.len() {
-                                    if &buffer[end_pos..end_pos + 4] == b"IEND" {
-                                        end_pos += 8; // Include IEND chunk
+        if let Some(out_dir) = &output_path {
+            let frame_name = entry.file_name();
+            let dest_path = out_dir.join(frame_name);
+            debug!("saving frame to disk: {}", dest_path.display());
+            img.save(&dest_path)?;
+        }
 
-                                        // We have a complete PNG frame
-                                        let frame_data = buffer[pos..end_pos].to_vec();
-                                        buffer = buffer[end_pos..].to_vec();
-                                        pos = 0;
+        frames.push(img);
+    }
 
-                                        match image::load_from_memory(&frame_data) {
-                                            Ok(img) => {
-                                                return Some((Ok(img), (stdout, buffer, pos)))
-                                            }
-                                            Err(e) => {
-                                                error!("error decoding frame: {}", e);
-                                                continue;
-                                            }
-                                        }
-                                    }
-                                    end_pos += 1;
-                                }
-                            }
-                            pos += 1;
-                        }
-                    }
-                    Err(e) => {
-                        error!("error reading frame: {}", e);
-                        return Some((
-                            Err(anyhow::anyhow!("failed to read frame: {}", e)),
-                            (stdout, buffer, pos),
-                        ));
-                    }
-                }
-            }
-        },
-    );
+    if frames.is_empty() {
+        return Err(anyhow::anyhow!("no frames were extracted"));
+    }
 
-    Ok(Box::pin(stream))
+    debug!("extracted {} frames", frames.len());
+    Ok(frames)
+}
+
+async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
+    let output = Command::new(ffmpeg_path)
+        .args(&["-i", video_path])
+        .output()
+        .await?;
+
+    let metadata = String::from_utf8_lossy(&output.stderr);
+    let fps = metadata
+        .lines()
+        .find(|line| line.contains("fps") && !line.contains("Stream"))
+        .and_then(|line| {
+            line.split_whitespace()
+                .find(|&word| word.parse::<f64>().is_ok())
+                .and_then(|n| n.parse::<f64>().ok())
+        })
+        .unwrap_or(1.0);
+
+    debug!("detected fps from video metadata: {}", fps);
+    Ok(fps)
 }

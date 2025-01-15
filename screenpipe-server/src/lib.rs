@@ -14,7 +14,7 @@ mod server;
 mod video;
 pub mod video_cache;
 mod video_db;
-mod video_utils;
+pub mod video_utils;
 
 pub use auto_destruct::watch_pid;
 pub use cli::Cli;

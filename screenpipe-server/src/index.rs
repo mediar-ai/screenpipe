@@ -1,5 +1,4 @@
 use anyhow::Result;
-use futures::StreamExt;
 use image::DynamicImage;
 use regex::Regex;
 use screenpipe_vision::{
@@ -10,7 +9,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::debug;
 use walkdir::WalkDir;
 
 use crate::{video_utils::extract_frames_from_video, DatabaseManager};
@@ -23,7 +22,7 @@ pub async fn handle_index_command(
 ) -> Result<()> {
     // Get list of video files
     let video_files = find_video_files(&path, pattern.as_deref())?;
-    info!("found {} video files to process", video_files.len());
+    debug!("found {} video files to process", video_files.len());
 
     let mut total_frames = 0;
     let mut total_text = 0;
@@ -32,15 +31,13 @@ pub async fn handle_index_command(
     let (tx, mut rx) = mpsc::channel::<(u64, String, f64)>(32);
 
     for video_path in video_files {
-        info!("processing video: {}", video_path.display());
+        debug!("processing video: {}", video_path.display());
 
-        let mut frames = extract_frames_from_video(&video_path).await?;
+        let frames = extract_frames_from_video(&video_path, None).await?;
         let mut previous_image: Option<DynamicImage> = None;
         let mut frame_counter: u64 = 0;
 
-        while let Some(frame) = frames.next().await {
-            let frame = frame?;
-
+        for frame in frames {
             // Compare with previous frame to skip similar ones
             let current_average = if let Some(prev) = &previous_image {
                 compare_with_previous_image(Some(prev), &frame, &mut None, frame_counter, &mut 0.0)
@@ -51,7 +48,7 @@ pub async fn handle_index_command(
 
             // Skip if frames are too similar (threshold from core.rs)
             if current_average < 0.006 && previous_image.is_some() {
-                info!(
+                debug!(
                     "skipping frame {} due to low average difference: {:.3}",
                     frame_counter, current_average
                 );
@@ -70,6 +67,7 @@ pub async fn handle_index_command(
             let engine = OcrEngine::Tesseract;
 
             let tx = tx.clone();
+            let frame_num = frame_counter;
             tokio::spawn(async move {
                 let (text, _, confidence) = match engine {
                     #[cfg(target_os = "macos")]
@@ -79,13 +77,10 @@ pub async fn handle_index_command(
                     _ => perform_ocr_tesseract(&frame, vec![]),
                 };
 
-                if let Ok(()) = tx
-                    .send((frame_counter, text, confidence.unwrap_or(0.0)))
-                    .await
-                {
-                    debug!("processed frame {}", frame_counter);
+                if let Ok(()) = tx.send((frame_num, text, confidence.unwrap_or(0.0))).await {
+                    debug!("processed frame {}", frame_num);
                 } else {
-                    info!("error sending ocr result for frame {}", frame_counter);
+                    debug!("error sending ocr result for frame {}", frame_num);
                 }
             });
 
@@ -106,7 +101,7 @@ pub async fn handle_index_command(
                     )
                     .await
                 {
-                    info!("error inserting ocr text: {}", e);
+                    debug!("error inserting ocr text: {}", e);
                 }
 
                 match output_format {
@@ -122,7 +117,7 @@ pub async fn handle_index_command(
                     }
                     crate::cli::OutputFormat::Text => {
                         if !text.is_empty() {
-                            info!("frame {}: {}", frame_num, text);
+                            println!("frame {}: {}", frame_num, text);
                         }
                     }
                 }
@@ -133,16 +128,16 @@ pub async fn handle_index_command(
         break;
     }
 
-    // wait few seconds
+    // wait few seconds for remaining OCR tasks
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-    // Process remaining results at the end
+    // Process remaining results
     while let Ok((_, text, _)) = rx.try_recv() {
         total_frames += 1;
         total_text += text.len();
     }
 
-    info!(
+    debug!(
         "processed {} frames, extracted {} characters of text",
         total_frames, total_text
     );
