@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
-import { loadConnections, saveConnection, saveNextHarvestTime, saveHarvestingState, saveRefreshStats } from '@/lib/storage/storage';
-import { getActiveBrowser } from '@/lib/browser-setup';
+import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh, saveHarvestingState, saveNextHarvestTime } from '@/lib/storage/storage';
+import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
+import { ChromeSession } from '@/lib/chrome-session';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
-import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
 import { Page } from 'puppeteer-core';
+import { checkIfRestricted } from '@/lib/simple-actions/check-if-restricted';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 // Add types for page and connection
+type ConnectionStatus = 'cooldown' | 'declined' | 'accepted' | 'pending' | 'email_required';
+
 type Connection = {
-  status: string;
+  status: ConnectionStatus;
   timestamp?: string;
 };
 
@@ -20,11 +23,16 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
     const baseDelay = 60000; // base delay of 1 minute
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
+
       try {
         // Add delay only after first attempt
         if (attempt > 0 || (refreshProgress && refreshProgress.current > 1)) {
           const nextDelay = Math.floor(Math.random() * 1000) + 20000;
           await new Promise(resolve => setTimeout(resolve, nextDelay));
+          if (await getShouldStopRefresh()) {
+            console.log('stop detected after delay, returning current status');
+            return connection.status;
+          }
         }
 
         // check if page is still valid
@@ -40,6 +48,20 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
         // Navigate once at the start
         await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
         
+        // Check for restriction after each navigation
+        const restrictionStatus = await checkIfRestricted(page);
+        if (restrictionStatus.isRestricted) {
+          console.log('account restriction detected during status check:', restrictionStatus);
+          await setShouldStopRefresh(true);
+          if (restrictionStatus.restrictionEndDate) {
+            await saveHarvestingState('cooldown');
+            await saveNextHarvestTime(restrictionStatus.restrictionEndDate);
+          } else {
+            await saveHarvestingState('stopped');
+          }
+          throw new Error(`account restricted until ${restrictionStatus.restrictionEndDate}`);
+        }
+
         // check for rate limit error (429)
         const is429 = await page.evaluate(() => {
           return document.body.textContent?.includes('HTTP ERROR 429') || false;
@@ -99,26 +121,6 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
   }
 }
 
-// Add type for status
-interface HarvestStatus {
-  nextHarvestTime: string;
-  isHarvesting: string;
-  connectionsSent: number;
-}
-
-// Initialize with empty strings instead of undefined
-let lastStatus: HarvestStatus = {
-  nextHarvestTime: '',
-  isHarvesting: '',
-  connectionsSent: 0
-};
-
-// Add cache for cooldown check
-let lastCooldownCheck = {
-  nextTime: '',
-  shouldRestart: false
-};
-
 // Add type for progress updates
 interface RefreshProgress {
   current: number;
@@ -128,91 +130,59 @@ interface RefreshProgress {
 // Add progress tracking at module level
 let refreshProgress: RefreshProgress | null = null;
 
+// Add new endpoint to handle stop refresh
+export async function POST() {
+  console.log('stop requested');
+  await setShouldStopRefresh(true);
+  return NextResponse.json({ message: 'refresh stop requested' });
+}
+
 export async function GET(request: Request) {
   const nextDelay = 0;
   try {
+    let connectionsStore = await loadConnections();
     const url = new URL(request.url);
     const shouldRefresh = url.searchParams.get('refresh') === 'true';
-    let connectionsStore = await loadConnections();
 
-    // Only log if values changed
-    const currentStatus = {
-      nextHarvestTime: connectionsStore.nextHarvestTime || '',
-      isHarvesting: String(connectionsStore.isHarvesting || ''),
-      connectionsSent: connectionsStore.connectionsSent
-    };
-
-    if (JSON.stringify(lastStatus) !== JSON.stringify(currentStatus)) {
-      console.log('harvest status changed:', currentStatus);
-      lastStatus = currentStatus;
-    }
-
-    // If isHarvesting is true but no active harvesting is happening, restart it
-    if (connectionsStore.isHarvesting && !connectionsStore.nextHarvestTime) {
-      console.log('detected stale harvesting state, restarting process');
-      
-      // Start harvesting in the background
-      startHarvesting().then(() => {
-        // console.log('harvest restart result:', result);
-      }).catch(error => {
-        console.error('failed to restart harvesting:', error);
-        // Reset harvesting state if start fails
-        saveHarvestingState(false).catch(console.error);
-      });
-    }
-
-    // Original cooldown check
-    if (connectionsStore.nextHarvestTime) {
-      const nextTime = new Date(connectionsStore.nextHarvestTime);
-      const now = new Date();
-      const shouldRestart = nextTime <= now;
-
-      // Only track nextTime and shouldRestart state changes
-      const currentCooldownCheck = {
-        nextTime: nextTime.toISOString(),
-        shouldRestart
-      };
-
-      if (JSON.stringify(lastCooldownCheck) !== JSON.stringify(currentCooldownCheck)) {
-        console.log('cooldown check:', {
-          ...currentCooldownCheck,
-          now: now.toISOString() // Include now only in the log
-        });
-        lastCooldownCheck = currentCooldownCheck;
-      }
-
-      if (shouldRestart) {
-        console.log('cooldown period ended, restarting harvest process');
-        await saveNextHarvestTime('');
-        await saveHarvestingState(true);
-        connectionsStore = await loadConnections();
-        
-        startHarvesting().then(() => {
-          // console.log('harvest restart result:', result);
-        }).catch(error => {
-          console.error('failed to restart harvesting:', error);
-          saveHarvestingState(false).catch(console.error);
-        });
-      }
-    }
-
+    // Only try to get browser page if we're actually refreshing connection statuses
     if (shouldRefresh) {
-      const { page } = getActiveBrowser();
-      if (page) {
+      await setShouldStopRefresh(false);
+      
+      // First check if we have an active page in the session
+      let page = ChromeSession.getInstance().getActivePage();
+      
+      // If no page in session, try to set up browser
+      if (!page) {
+        const { page: newPage } = await setupBrowser();
+        page = newPage;
+      }
+
+      if (!page) {
+        console.warn('no active browser page, skipping connection status refresh');
+      } else {
         const startTime = Date.now();
         
+        // Get only pending connections for status check
         const pendingConnections = Object.entries(connectionsStore.connections)
           .filter(([, connection]) => connection.status === 'pending');
         
+        // Initialize progress at 0
         refreshProgress = {
           current: 0,
           total: pendingConnections.length
         };
 
-        // Check pending connections
+        // Check each pending connection
         for (const [url, connection] of pendingConnections) {
-          refreshProgress.current++;
-          
+          if (await getShouldStopRefresh()) {
+            console.log('stop detected in main loop, exiting...');
+            refreshProgress = null;
+            return NextResponse.json({
+              harvestingStatus: 'stopped',
+              refreshProgress: null
+            });
+          }
+
           const newStatus = await checkConnectionStatus(page, url, connection);
           if (newStatus !== connection.status) {
             await saveConnection({
@@ -221,53 +191,39 @@ export async function GET(request: Request) {
               timestamp: new Date().toISOString()
             });
           }
+          refreshProgress.current++;
         }
         
-        // Calculate and save duration stats
         const totalDuration = Date.now() - startTime;
         await saveRefreshStats(totalDuration, pendingConnections.length);
         
-        // Reset progress after completion
-        refreshProgress = null;
+        // Reload after updates
+        connectionsStore = await loadConnections();
       }
-      // Reload after updates
-      connectionsStore = await loadConnections();
     }
-    
-    // Calculate stats from connections
-    const stats = Object.values(connectionsStore.connections).reduce((acc, connection) => {
-      const status = connection.status || 'pending';
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
 
     return NextResponse.json({
-      // Convert boolean isHarvesting to three-state status
-      isHarvesting: connectionsStore.nextHarvestTime && new Date(connectionsStore.nextHarvestTime) > new Date()
-        ? 'cooldown'
-        : connectionsStore.isHarvesting
-          ? 'running'
-          : 'stopped',
+      harvestingStatus: connectionsStore.harvestingStatus,
       nextHarvestTime: connectionsStore.nextHarvestTime,
       connectionsSent: connectionsStore.connectionsSent || 0,
-      dailyLimitReached: connectionsStore.connectionsSent >= 35,
+      dailyLimitReached: (connectionsStore.connectionsSent || 0) >= 35,
       weeklyLimitReached: false,
-      stats: {
-        pending: stats.pending || 0,
-        accepted: stats.accepted || 0,
-        declined: stats.declined || 0,
-        email_required: stats.email_required || 0,
-        cooldown: stats.cooldown || 0,
-        total: Object.keys(connectionsStore.connections).length,
-        lastRefreshDuration: connectionsStore.lastRefreshDuration,
-        averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
-      },
-      // Add refresh progress to response
       refreshProgress,
+      refreshError: null,
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
+      restrictionInfo: {
+        isRestricted: connectionsStore.harvestingStatus === 'cooldown',
+        endDate: connectionsStore.nextHarvestTime,
+        reason: 'linkedin has detected automated activity on your account'
+      }
     });
-  } catch (error: unknown) {
-    return NextResponse.json({ message: (error as Error).message?.toLowerCase() }, { status: 500 });
+
+  } catch (error) {
+    console.error('status check failed:', error);
+    return NextResponse.json({
+      harvestingStatus: 'stopped',
+      error: (error as Error).message
+    }, { status: 200 });
   }
 } 

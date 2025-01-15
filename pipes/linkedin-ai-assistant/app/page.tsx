@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LaunchLinkedInChromeSession } from "@/components/launch-linkedin-chrome-session";
-import { IntroRequester } from "@/components/intro-requester";
+// import { IntroRequester } from "@/components/intro-requester";
 import { ReloadButton } from "@/components/reload-button";
 import { HarvestClosestConnections } from "@/components/harvest";
 
@@ -41,12 +41,12 @@ export default function Home() {
                 <HarvestClosestConnections />
               </div>
 
-              <div className="border rounded-lg p-4">
+              {/* <div className="border rounded-lg p-4">
                 <p className="text-sm text-muted-foreground mb-4">
                   send introduction requests to your network based on your criteria
                 </p>
                 <IntroRequester />
-              </div>
+              </div> */}
             </div>
           </section>
         )}
