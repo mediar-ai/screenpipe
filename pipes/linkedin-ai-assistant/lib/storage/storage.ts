@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
 import { getActiveBrowser } from '../browser-setup';
+import { ChromeSession } from '../chrome-session';
 
 const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
 console.log('storage directory:', STORAGE_DIR);
@@ -416,26 +417,56 @@ export async function isStopRequested(): Promise<boolean> {
 } 
 
 export async function saveToChrome(key: string, data: unknown) {
-    const { page } = getActiveBrowser();
-    if (!page) return;
-    
-    // Navigate to LinkedIn if we're not already there
-    if (!page.url().includes('linkedin.com')) {
-        await page.goto('https://www.linkedin.com');
+    const session = ChromeSession.getInstance();
+    const page = session.getActivePage();
+    if (!page) {
+        console.log('cannot save to chrome: no active page in session');
+        return;
     }
     
-    await page.evaluate((key: string, data: unknown) => {
-        localStorage.setItem(key, JSON.stringify(data));
-    }, key, data);
+    try {
+        console.log('current page url:', await page.url());
+        
+        // Navigate to LinkedIn if we're not already there
+        if (!page.url().includes('linkedin.com')) {
+            console.log('navigating to linkedin.com...');
+            await page.goto('https://www.linkedin.com');
+            console.log('navigation complete, new url:', await page.url());
+        }
+        
+        // console.log(`attempting to save ${key} to chrome storage...`);
+        await page.evaluate((key: string, data: unknown) => {
+            console.log('in page context, saving:', key, data);
+            localStorage.setItem(key, JSON.stringify(data));
+            console.log('storage after save:', localStorage.getItem(key));
+        }, key, data);
+        // console.log('chrome storage save complete');
+    } catch (err) {
+        console.log('failed to save to chrome storage:', err);
+    }
 }
 
 export async function loadFromChrome(key: string) {
-    const { page } = getActiveBrowser();
-    if (!page) return null;
+    const session = ChromeSession.getInstance();
+    const page = session.getActivePage();
+    if (!page) {
+        console.log('cannot load from chrome: no active page in session');
+        return null;
+    }
     
-    const data = await page.evaluate((key: string) => {
-        return localStorage.getItem(key);
-    }, key);
-    
-    return data ? JSON.parse(data) : null;
+    try {
+        console.log('attempting to load', key, 'from chrome storage');
+        const data = await page.evaluate((key: string) => {
+            console.log('in page context, loading:', key);
+            const value = localStorage.getItem(key);
+            console.log('loaded value:', value);
+            return value;
+        }, key);
+        
+        console.log('chrome storage load result:', data ? 'found' : 'not found');
+        return data ? JSON.parse(data) : null;
+    } catch (err) {
+        console.log('failed to load from chrome storage:', err);
+        return null;
+    }
 }
