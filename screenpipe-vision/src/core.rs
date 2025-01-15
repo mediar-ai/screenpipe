@@ -2,6 +2,7 @@
 use crate::apple::perform_ocr_apple;
 use crate::capture_screenshot_by_window::CapturedWindow;
 use crate::capture_screenshot_by_window::WindowFilters;
+use crate::custom_ocr::perform_ocr_custom;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
@@ -293,6 +294,11 @@ pub async fn process_ocr_task(
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
             OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
+            OcrEngine::Custom(config) => {
+                perform_ocr_custom(&captured_window.image, languages.clone(), config)
+                    .await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+            }
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,

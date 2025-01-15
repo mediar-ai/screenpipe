@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
@@ -41,6 +41,7 @@ pub enum CliOcrEngine {
     WindowsNative,
     #[cfg(target_os = "macos")]
     AppleNative,
+    Custom,
 }
 
 impl From<CliOcrEngine> for CoreOcrEngine {
@@ -53,6 +54,20 @@ impl From<CliOcrEngine> for CoreOcrEngine {
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
             #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
+            CliOcrEngine::Custom => {
+                // Try to read config from environment variable
+                if let Ok(config_str) = std::env::var("SCREENPIPE_CUSTOM_OCR_CONFIG") {
+                    match serde_json::from_str(&config_str) {
+                        Ok(config) => CoreOcrEngine::Custom(config),
+                        Err(e) => {
+                            log::warn!("failed to parse custom ocr config from env: {}", e);
+                            CoreOcrEngine::Custom(CustomOcrConfig::default())
+                        }
+                    }
+                } else {
+                    CoreOcrEngine::Custom(CustomOcrConfig::default())
+                }
+            }
         }
     }
 }

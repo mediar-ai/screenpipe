@@ -8,6 +8,7 @@ use dirs::home_dir;
 use screenpipe_server::{cli::OutputFormat, handle_index_command, DatabaseManager};
 use tempfile::tempdir;
 use tokio::fs;
+use tracing::debug;
 
 async fn setup_test_env() -> Result<()> {
     tracing_subscriber::fmt()
@@ -62,7 +63,7 @@ async fn test_index_command_with_sql() -> Result<()> {
     let (temp_dir, db) = setup_test_db().await?;
     let video_path = copy_test_video(temp_dir.path()).await?;
 
-    println!("testing indexing with video at {}", video_path.display());
+    debug!("testing indexing with video at {}", video_path.display());
 
     // Run indexing
     handle_index_command(
@@ -77,7 +78,7 @@ async fn test_index_command_with_sql() -> Result<()> {
     let video_chunks = db
         .execute_raw_sql("SELECT * FROM video_chunks WHERE file_path LIKE '%test_video.mp4'")
         .await?;
-    println!(
+    debug!(
         "video chunks: {}",
         serde_json::to_string_pretty(&video_chunks)?
     );
@@ -94,7 +95,7 @@ async fn test_index_command_with_sql() -> Result<()> {
          WHERE vc.file_path LIKE '%test_video.mp4'",
         )
         .await?;
-    println!("frames: {}", serde_json::to_string_pretty(&frames)?);
+    debug!("frames: {}", serde_json::to_string_pretty(&frames)?);
     assert!(
         frames.as_array().unwrap()[0]["frame_count"]
             .as_i64()
@@ -112,7 +113,7 @@ async fn test_index_command_with_sql() -> Result<()> {
          WHERE vc.file_path LIKE '%test_video.mp4'",
         )
         .await?;
-    println!(
+    debug!(
         "ocr results: {}",
         serde_json::to_string_pretty(&ocr_results)?
     );
@@ -132,7 +133,7 @@ async fn test_index_command_with_sql() -> Result<()> {
          WHERE vc.file_path LIKE '%test_video.mp4'",
         )
         .await?;
-    println!("timestamps: {}", serde_json::to_string_pretty(&timestamps)?);
+    debug!("timestamps: {}", serde_json::to_string_pretty(&timestamps)?);
     assert!(
         !timestamps.as_array().unwrap().is_empty(),
         "should have timestamps"
@@ -148,7 +149,7 @@ async fn test_index_command_with_sql() -> Result<()> {
          LIMIT 5",
         )
         .await?;
-    println!(
+    debug!(
         "sample ocr text: {}",
         serde_json::to_string_pretty(&ocr_text)?
     );
