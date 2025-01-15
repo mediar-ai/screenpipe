@@ -189,11 +189,11 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     paid: false,
   },
   {
-    id: "pipe-reddit-auto-posts",
+    id: "reddit-auto-posts",
     name: "reddit auto posts",
     description:
       "promote your content, grow your audience, or learn new things with this automated reddit post generator based on your screen recordings",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-reddit-auto-posts",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/reddit-auto-posts",
     credits: 20,
     paid: true,
   },

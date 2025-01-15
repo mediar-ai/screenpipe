@@ -17,10 +17,6 @@ import OnboardingLogin from "./onboarding/login";
 import OnboardingPipeStore from "./onboarding/pipe-store";
 import posthog from "posthog-js";
 
-const setFirstTimeUserFlag = async () => {
-  await localforage.setItem("isFirstTimeUser", false);
-};
-
 type SlideKey =
   | "intro"
   | "status"
@@ -271,7 +267,6 @@ const Onboarding: React.FC = () => {
     });
 
     setShowOnboarding(false);
-    await setFirstTimeUserFlag();
     updateSettings({
       isFirstTimeUser: false,
     });
