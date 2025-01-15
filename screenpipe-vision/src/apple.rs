@@ -7,8 +7,38 @@ use cidre::{
 use image::DynamicImage;
 use image::GenericImageView;
 use log::error;
+use screenpipe_core::Language;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::{ffi::c_void, ptr::null_mut};
+
+static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
+
+pub fn get_apple_languages(languages: &[Language]) -> Vec<String> {
+    let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert(Language::English, "en-US");
+        m.insert(Language::Spanish, "es-ES");
+        m.insert(Language::French, "fr-FR");
+        m.insert(Language::German, "de-DE");
+        m.insert(Language::Italian, "it-IT");
+        m.insert(Language::Portuguese, "pt-BR");
+        m.insert(Language::Russian, "ru-RU");
+        m.insert(Language::Chinese, "zh-Hans");
+        m.insert(Language::Korean, "ko-KR");
+        m.insert(Language::Japanese, "ja-JP");
+        m.insert(Language::Ukrainian, "uk-UA");
+        m.insert(Language::Thai, "th-TH");
+        m.insert(Language::Arabic, "ar-SA");
+        m
+    });
+
+    languages
+        .iter()
+        .filter_map(|lang| map.get(lang).map(|&s| s.to_string()))
+        .collect()
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct OcrResultBBox {
@@ -41,9 +71,16 @@ extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
-    languages: &ns::ArrayMut<ns::String>,
+    languages: &[Language],
 ) -> (String, String, Option<f64>) {
     cidre::objc::ar_pool(|| {
+        // Convert languages to Apple format and create ns::Array
+        let apple_languages = get_apple_languages(languages);
+        let mut languages_array = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
+        apple_languages.iter().for_each(|language| {
+            languages_array.push(&ns::String::with_str(language));
+        });
+
         let (width, height) = image.dimensions();
         let rgb = image.grayscale().to_luma8();
         let raw_data = rgb.as_raw();
@@ -79,8 +116,7 @@ pub fn perform_ocr_apple(
 
         let handler = ImageRequestHandler::with_cv_pixel_buf(&pixel_buf, None).unwrap();
         let mut request = RecognizeTextRequest::new();
-        // Recognize all languages
-        request.set_recognition_langs(languages);
+        request.set_recognition_langs(&languages_array);
         request.set_uses_lang_correction(false);
         let requests = ns::Array::<vn::Request>::from_slice(&[&request]);
         let result = handler.perform(&requests);

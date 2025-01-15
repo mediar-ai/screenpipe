@@ -12,6 +12,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    handle_index_command,
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -158,9 +159,6 @@ async fn main() -> anyhow::Result<()> {
                 PipeCommand::List {
                     output: OutputFormat::Text,
                     ..
-                } | PipeCommand::Download {
-                    output: OutputFormat::Text,
-                    ..
                 } | PipeCommand::Install {
                     output: OutputFormat::Text,
                     ..
@@ -174,6 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
+        Some(Command::Index {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -275,6 +277,30 @@ async fn main() -> anyhow::Result<()> {
                         e
                     })?;
                 info!("database migrations completed successfully");
+                return Ok(());
+            }
+            Command::Index {
+                path,
+                output,
+                data_dir,
+                pattern,
+                ocr_engine,
+                metadata_override,
+            } => {
+                let local_data_dir = get_base_dir(&data_dir)?;
+                let db = Arc::new(
+                    DatabaseManager::new(&format!(
+                        "{}/db.sqlite",
+                        local_data_dir.to_string_lossy()
+                    ))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?,
+                );
+                handle_index_command(path, pattern, db, output, ocr_engine, metadata_override)
+                    .await?;
                 return Ok(());
             }
         }
