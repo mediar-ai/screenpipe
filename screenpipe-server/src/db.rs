@@ -6,11 +6,11 @@ use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
-use sqlx::Column;
 use sqlx::Error as SqlxError;
 use sqlx::Row;
 use sqlx::TypeInfo;
 use sqlx::ValueRef;
+use sqlx::{Column, QueryBuilder};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -1820,6 +1820,45 @@ impl DatabaseManager {
             .execute(&self.pool)
             .await?;
 
+        Ok(())
+    }
+
+    pub async fn batch_insert_ocr(
+        &self,
+        frames: Vec<(i64, String, String, String, String, Arc<OcrEngine>, bool)>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Prepare batch insert statement
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO ocr_text (frame_id, text, text_json, app_name, window_name, ocr_engine, focused) "
+        );
+
+        query_builder.push_values(
+            &frames,
+            |mut b, (frame_id, text, text_json, app_name, window_name, engine, focused)| {
+                b.push_bind(frame_id)
+                    .push_bind(text)
+                    .push_bind(text_json)
+                    .push_bind(app_name)
+                    .push_bind(window_name)
+                    .push_bind(format!("{:?}", *engine))
+                    .push_bind(focused);
+            },
+        );
+
+        query_builder.build().execute(&mut *tx).await?;
+
+        // Also update FTS table in batch
+        let mut fts_query_builder = QueryBuilder::new("INSERT INTO ocr_text_fts (frame_id, text) ");
+
+        fts_query_builder.push_values(&frames, |mut b, (frame_id, text, ..)| {
+            b.push_bind(frame_id).push_bind(text);
+        });
+
+        fts_query_builder.build().execute(&mut *tx).await?;
+
+        tx.commit().await?;
         Ok(())
     }
 }

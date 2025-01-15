@@ -1,11 +1,14 @@
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
+use futures::Stream;
+use image::DynamicImage;
 use screenpipe_core::find_ffmpeg_path;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::pin::Pin;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String> {
@@ -73,7 +76,7 @@ pub struct MergeVideosResponse {
 
 #[derive(Deserialize)]
 pub struct ValidateMediaParams {
-   pub file_path: String,
+    pub file_path: String,
 }
 
 pub async fn validate_media(file_path: &str) -> Result<()> {
@@ -85,17 +88,9 @@ pub async fn validate_media(file_path: &str) -> Result<()> {
 
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
     let status = Command::new(ffmpeg_path)
-        .args(&[
-            "-v",
-            "error",
-            "-i",
-            file_path,
-            "-f",
-            "null",
-            "-",
-        ])
+        .args(&["-v", "error", "-i", file_path, "-f", "null", "-"])
         .output()
-    .await?;
+        .await?;
 
     if status.status.success() {
         Ok(())
@@ -112,7 +107,10 @@ pub async fn merge_videos(
 
     if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
         error!("failed to create output directory: {:?}", e);
-        return Err(anyhow::anyhow!("failed to create output directory: {:?}", e));
+        return Err(anyhow::anyhow!(
+            "failed to create output directory: {:?}",
+            e
+        ));
     }
 
     let output_filename = format!("output_{}.mp4", Uuid::new_v4());
@@ -123,7 +121,7 @@ pub async fn merge_videos(
     let mut file = tokio::fs::File::create(&temp_file).await?;
     for video_path in &request.video_paths {
         // video validation before writing in txt
-        if let Err(e) = validate_media(video_path).await{
+        if let Err(e) = validate_media(video_path).await {
             error!("invalid file in merging, skipping: {:?}", e);
             continue;
         }
@@ -185,4 +183,97 @@ pub async fn merge_videos(
             stderr
         ))
     }
+}
+
+pub async fn extract_frames_from_video(
+    video_path: &std::path::Path,
+    fps: f64,
+) -> Result<Pin<Box<dyn Stream<Item = Result<DynamicImage>> + Send>>> {
+    let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+
+    debug!(
+        "extracting frames from {} at {} fps",
+        video_path.display(),
+        fps
+    );
+
+    let mut command = Command::new(ffmpeg_path);
+    command
+        .args(&[
+            "-i",
+            video_path.to_str().unwrap(),
+            "-vf",
+            &format!("fps={}", fps),
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "png",
+            "-",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+
+    debug!("ffmpeg command: {:?}", command);
+
+    let mut child = command.spawn()?;
+    let stdout = child.stdout.take().expect("failed to get stdout");
+
+    // Create a stream that processes complete PNG frames
+    let stream = futures::stream::unfold(
+        (stdout, Vec::new(), 0),
+        |(mut stdout, mut buffer, mut pos)| async move {
+            loop {
+                // Read chunks into buffer
+                let mut chunk = vec![0; 32 * 1024];
+                match stdout.read(&mut chunk).await {
+                    Ok(n) if n == 0 => return None, // EOF
+                    Ok(n) => {
+                        buffer.extend_from_slice(&chunk[..n]);
+
+                        // Try to find PNG signature and IEND chunk
+                        while pos < buffer.len() {
+                            // Look for PNG signature
+                            if pos + 8 <= buffer.len()
+                                && &buffer[pos..pos + 8] == b"\x89PNG\r\n\x1a\n"
+                            {
+                                // Found start of PNG, now look for IEND chunk
+                                let mut end_pos = pos + 8;
+                                while end_pos + 12 <= buffer.len() {
+                                    if &buffer[end_pos..end_pos + 4] == b"IEND" {
+                                        end_pos += 8; // Include IEND chunk
+
+                                        // We have a complete PNG frame
+                                        let frame_data = buffer[pos..end_pos].to_vec();
+                                        buffer = buffer[end_pos..].to_vec();
+                                        pos = 0;
+
+                                        match image::load_from_memory(&frame_data) {
+                                            Ok(img) => {
+                                                return Some((Ok(img), (stdout, buffer, pos)))
+                                            }
+                                            Err(e) => {
+                                                error!("error decoding frame: {}", e);
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    end_pos += 1;
+                                }
+                            }
+                            pos += 1;
+                        }
+                    }
+                    Err(e) => {
+                        error!("error reading frame: {}", e);
+                        return Some((
+                            Err(anyhow::anyhow!("failed to read frame: {}", e)),
+                            (stdout, buffer, pos),
+                        ));
+                    }
+                }
+            }
+        },
+    );
+
+    Ok(Box::pin(stream))
 }

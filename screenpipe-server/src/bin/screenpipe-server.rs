@@ -12,6 +12,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    handle_index_command,
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -275,6 +276,15 @@ async fn main() -> anyhow::Result<()> {
                         e
                     })?;
                 info!("database migrations completed successfully");
+                return Ok(());
+            }
+            Command::Index {
+                path,
+                fps,
+                output,
+                pattern,
+            } => {
+                handle_index_command(path, fps, pattern, output).await?;
                 return Ok(());
             }
         }

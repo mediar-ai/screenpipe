@@ -281,6 +281,20 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
+    /// Index video files for search
+    Index {
+        /// Path to folder containing video files
+        path: String,
+        /// FPS to process (default: 1.0)
+        #[arg(long, default_value_t = 1.0)]
+        fps: f64,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Regex pattern to filter files (e.g. "monitor.*\.mp4$")
+        #[arg(long)]
+        pattern: Option<String>,
+    },
     /// Setup screenpipe environment
     Setup {
         /// Enable beta features
