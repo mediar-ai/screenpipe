@@ -1,8 +1,7 @@
 use std::fs;
 use std::io;
 use tracing::info;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sysinfo::{System, SystemExt, DiskExt};
 
@@ -11,6 +10,7 @@ pub struct DiskUsage {
     pub pipes: DiskUsedByPipes,
     pub media: DiskUsedByMedia,
     pub total_data_size: String,
+    pub total_cache_size: String,
     pub avaiable_space: String,
 }
 
@@ -25,6 +25,11 @@ pub struct DiskUsedByMedia {
     pub videos_size: String,
     pub audios_size: String,
     pub total_media_size: String,
+}
+
+pub fn get_cache_dir() -> Result<Option<PathBuf>, String> {
+    let proj_dirs = dirs::cache_dir().ok_or_else(|| "failed to get cache dir".to_string())?;
+    Ok(Some(proj_dirs.join("screenpipe")))
 }
 
 pub fn directory_size(path: &Path) -> io::Result<u64> {
@@ -64,6 +69,10 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
 
     let pipes_dir = screenpipe_dir.join("pipes");
     let data_dir = screenpipe_dir.join("data");
+    let cache_dir = match get_cache_dir()? {
+        Some(dir) => dir,
+        None => return Err("Cache directory not found".to_string()),
+    };
 
     for entry in fs::read_dir(&pipes_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -77,6 +86,7 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     let total_data_size = directory_size(&screenpipe_dir).map_err(|e| e.to_string())?;
     let total_media_size= directory_size(&data_dir).map_err(|e| e.to_string())?;
     let total_pipes_size = directory_size(&pipes_dir).map_err(|e| e.to_string())?;
+    let total_cache_size = directory_size(&cache_dir).map_err(|e| e.to_string())?;
 
     for entry in fs::read_dir(&data_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -113,7 +123,8 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
             audios_size: readable(total_audio_size),
             total_media_size: readable(total_media_size),
         },
-        total_data_size: readable(total_data_size),
+        total_data_size: readable(total_data_size + total_cache_size),
+        total_cache_size: readable(total_cache_size), 
         avaiable_space: readable(avaiable_space),
     };
 

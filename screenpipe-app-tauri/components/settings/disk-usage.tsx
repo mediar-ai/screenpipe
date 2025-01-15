@@ -3,7 +3,8 @@ import React, { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
-
+import localforage from "localforage";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Accordion,
   AccordionContent,
@@ -22,8 +23,30 @@ interface DiskUsageData {
     total_pipes_size: string;
   };
   total_data_size: string;
+  total_cache_size: string;
   avaiable_space: string;
 }
+
+const BadgeItem = ({ label, value, description}: {label: string, value: string, description?: string}) => (
+  <div className="flex flex-row items-center justify-between">
+    <div className="flex flex-col !float-left items-start">
+      <span className="font-semibold">{label}</span>
+      <span className="text-[14px] !font-normal text-muted-foreground">{description}</span>
+    </div>
+    <Badge 
+      variant={"outline"} 
+      className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+      {value}
+    </Badge>
+  </div>
+);
+
+const Divider = () => (
+  <div className="flex my-2 justify-center">
+    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+  </div>
+);
 
 export default function DiskUsage() {
   const [diskUsage, setDiskUsage] = useState<DiskUsageData | null>(null);
@@ -32,14 +55,21 @@ export default function DiskUsage() {
   const getDisk = async () => {
     setLoading(true);
     try {
-      await invoke<DiskUsageData>("get_disk_usage").then((result) => {
-        return new Promise<DiskUsageData>((resolve) => {
+      const cachedData = await localforage.getItem<{diskData: DiskUsageData, lastUpdated: number}>("diskUsage");
+      const now = Date.now();
+      const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
+      if (cachedData && (now - cachedData.lastUpdated) < twoDaysInMillis) {
+        setDiskUsage(cachedData.diskData);
+        setLoading(false);
+      } else {
+        const result = await invoke<DiskUsageData>("get_disk_usage");
+        await new Promise<DiskUsageData>((resolve) => {
           setTimeout(() => resolve(result), 3000);
         });
-      }).then((result) => {
+        await localforage.setItem("diskUsage", { diskData: result, lastUpdated: now });
         setDiskUsage(result);
         setLoading(false);
-      })
+      }
     } catch (error) {
       console.error("Failed to fetch disk usage:", error);
       toast({
@@ -63,10 +93,10 @@ export default function DiskUsage() {
       </h1>
       <div className="flex flex-col items-center justify-center space-y-4">
         {loading && !diskUsage ? 
-          <div className="flex space-x-2 justify-center items-center mt-12">
-            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-            <div className="h-6 w-6 bg-slate-900 rounded-full animate-bounce"></div>
+          <div className="w-full space-y-4">
+            <Skeleton className="h-[80px] w-[90%] mx-auto" />
+            <Skeleton className="h-[80px] w-[90%] mx-auto" />
+            <Skeleton className="h-[200px] w-[90%] mx-auto" />
           </div>
           : ""}
         {diskUsage && diskUsage.pipes && (
@@ -145,32 +175,23 @@ export default function DiskUsage() {
           <Accordion type="single" 
             className="w-[90%] border rounded-lg">
             <AccordionItem value="total-pipes-size">
-              <AccordionTrigger className="mx-4 h-[120px] flex hover:no-underline">
+              <AccordionTrigger className="mx-4 h-[200px] flex hover:no-underline">
                 <div className="w-full">
-                  <div className="mb-3 flex flex-row items-center justify-between">
-                    <div className="flex flex-col !float-left items-start">
-                      <span className="font-semibold">total space used by screenpipe</span>
-                    </div>
-                    <Badge 
-                      variant={"outline"} 
-                      className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
-                      {diskUsage.total_data_size}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-center">
-                    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
-                    <div className="h-[1px] w-[250px] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
-                  </div>
-                  <div className="mt-3 flex flex-row items-center justify-between">
-                    <div className="flex flex-col !float-left items-start">
-                      <span className="font-semibold">avaiable space left on your system</span>
-                    </div>
-                    <Badge 
-                      variant={"outline"} 
-                      className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
-                      {diskUsage.avaiable_space}
-                    </Badge>
-                  </div>
+                  <BadgeItem 
+                    label="screenpipe cache size" 
+                    description="disk space used for models, frames..."
+                    value={diskUsage.total_cache_size} />
+                  <Divider />
+                  <BadgeItem 
+                    label="disk space used by screenpipe" 
+                    description="total disk space utilized by the screenpipe application"
+                    value={diskUsage.total_data_size} />
+                  <Divider />
+                  <BadgeItem 
+                    label="available disk space" 
+                    description="remaining free disk space on your device"
+                    value={diskUsage.avaiable_space} 
+                  />
                 </div>
               </AccordionTrigger>
             </AccordionItem>
