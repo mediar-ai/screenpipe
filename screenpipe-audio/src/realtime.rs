@@ -25,6 +25,7 @@ pub async fn realtime_stt(
 }
 
 #[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct RealtimeTranscriptionEvent {
     pub timestamp: DateTime<Utc>,
     pub device: String,

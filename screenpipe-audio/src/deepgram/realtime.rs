@@ -13,7 +13,6 @@ use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::stream::StreamExt;
 use futures::SinkExt;
 use screenpipe_core::Language;
-use serde_json::json;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::join;
@@ -60,7 +59,12 @@ async fn start_deepgram_stream(
     let audio_stream = stream.subscribe().await;
 
     let req = deepgram_transcription
-        .stream_request()
+        .stream_request_with_options(
+            deepgram::common::options::OptionsBuilder::new()
+                .model(deepgram::common::options::Model::Nova2)
+                .smart_format(true)
+                .build(),
+        )
         .keep_alive()
         .channels(1)
         .sample_rate(sample_rate)
@@ -92,10 +96,7 @@ async fn start_deepgram_stream(
                     match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
                         timestamp: chrono::Utc::now(),
                         device: stream.device.to_string(),
-                        transcription: json!({
-                          "transcript": text
-                        })
-                        .to_string(),
+                        transcription: text.to_string(),
                         is_final,
                         is_input,
                     }) {
