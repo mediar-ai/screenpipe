@@ -68,7 +68,7 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
     }
   };
 
-  const isHealthError = health?.status === "error";
+  const isHealthError = !health || health === null || health?.status === "error";
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
