@@ -47,8 +47,14 @@ async fn start_deepgram_stream(
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let sample_rate = stream.device_config.sample_rate().0;
-    let deepgram =
-        deepgram::Deepgram::new(deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string()))?;
+    let api_key = deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string());
+
+    if api_key.is_empty() {
+        return Err(anyhow::anyhow!("Deepgram API key not found"));
+    }
+
+    let deepgram = deepgram::Deepgram::new(api_key)?;
+
     let deepgram_transcription = deepgram.transcription();
 
     let audio_stream = stream.subscribe().await;
