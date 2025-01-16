@@ -298,7 +298,7 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    /// Index video files for search
+    /// Index video files for search - DOES NOT SUPPORT AUDIO
     Index {
         /// Path to folder containing video files
         path: String,
@@ -317,6 +317,9 @@ pub enum Command {
         /// Path to JSON file containing metadata overrides
         #[arg(long)]
         metadata_override: Option<PathBuf>,
+        /// Copy videos to screenpipe data directory
+        #[arg(long, default_value_t = true)]
+        copy_videos: bool,
     },
     /// Setup screenpipe environment
     Setup {

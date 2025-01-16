@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
 use regex::Regex;
+use screenpipe_vision::perform_ocr_tesseract;
 use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
 
 #[cfg(target_os = "macos")]
@@ -13,10 +14,13 @@ use screenpipe_vision::perform_ocr_windows;
 use screenpipe_vision::perform_ocr_tesseract;
 
 use serde_json::json;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 use crate::{
@@ -26,12 +30,14 @@ use crate::{
 };
 
 pub async fn handle_index_command(
+    screenpipe_dir: PathBuf,
     path: String,
     pattern: Option<String>,
     db: Arc<DatabaseManager>,
     output_format: crate::cli::OutputFormat,
     ocr_engine: Option<CliOcrEngine>,
     metadata_override: Option<PathBuf>,
+    copy_videos: bool,
 ) -> Result<()> {
     // Load metadata override if provided
     let metadata_overrides = if let Some(path) = metadata_override {
@@ -78,7 +84,24 @@ pub async fn handle_index_command(
     for video_path in video_files {
         info!("processing video: {}", video_path.display());
 
-        let video_path = &video_path;
+        let video_path_for_processing = if copy_videos {
+            // Generate unique filename using UUID
+            let ext = video_path.extension().unwrap_or_default();
+            let new_filename = format!("{}.{}", Uuid::new_v4(), ext.to_string_lossy());
+
+            // Construct path in screenpipe data directory
+            let target_path = Path::new(&screenpipe_dir).join("data").join(new_filename);
+
+            // Copy the file
+            info!("copying video to: {}", target_path.display());
+            fs::copy(&video_path, &target_path).await?;
+
+            target_path
+        } else {
+            video_path.clone()
+        };
+
+        let video_path = &video_path_for_processing;
         let mut metadata = get_video_metadata(video_path.to_str().unwrap()).await?;
 
         // Apply metadata override if provided and matches the file
