@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
 use regex::Regex;
+use screenpipe_vision::perform_ocr_tesseract;
 use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
 
 #[cfg(target_os = "macos")]
