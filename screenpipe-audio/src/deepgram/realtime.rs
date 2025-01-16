@@ -68,7 +68,6 @@ async fn start_deepgram_stream(
         .keep_alive()
         .channels(1)
         .sample_rate(sample_rate)
-        .interim_results(true)
         .encoding(Encoding::Linear16);
 
     let mut handle = req.clone().handle().await?;
