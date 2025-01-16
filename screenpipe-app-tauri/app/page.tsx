@@ -174,7 +174,7 @@ export default function Home() {
       ) : (
         <>
           <ChangelogDialog />
-          <BreakingChangesInstructionsDialog />
+          {/* <BreakingChangesInstructionsDialog /> */}
           <Header />
           <div className="h-[32px]" />
           <div className=" w-[90%]">
