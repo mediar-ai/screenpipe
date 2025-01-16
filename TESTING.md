@@ -2,7 +2,7 @@
 
 ### prerequisites
 - fresh computer or VM with:
-  - macos 14.0+ (intel only) or windows 11+ (x86_64)
+  - macos 14.0+ (m series) or windows 11+ (x86_64)
   - minimum 8gb ram
   - minimum 30gb free disk space
 - stable internet connection

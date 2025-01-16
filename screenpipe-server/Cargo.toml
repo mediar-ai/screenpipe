@@ -127,6 +127,10 @@ libsqlite3-sys = { version = "0.26", features = ["bundled"] }
 zerocopy = { version = "0.7.32" }
 port_check = "0.2.1"
 
+walkdir = "2.3.4"
+
+regex = "1.10.0"
+
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"

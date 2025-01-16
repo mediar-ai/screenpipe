@@ -2,6 +2,7 @@ use crate::capture_screenshot_by_window::{
     capture_all_visible_windows, CapturedWindow, WindowFilters,
 };
 use crate::core::MaxAverageFrame;
+use crate::custom_ocr::CustomOcrConfig;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error, warn};
@@ -14,12 +15,13 @@ use xcap_macos::Monitor;
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug)]
 pub enum OcrEngine {
     Unstructured,
     Tesseract,
     WindowsNative,
     AppleNative,
+    Custom(CustomOcrConfig),
 }
 
 impl Default for OcrEngine {

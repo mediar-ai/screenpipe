@@ -16,6 +16,7 @@
     "core:menu:default",
     "core:tray:default",
     "shell:default",
+    "shell:allow-open",
     "store:default",
     "shell:allow-open",
     "fs:allow-watch",
