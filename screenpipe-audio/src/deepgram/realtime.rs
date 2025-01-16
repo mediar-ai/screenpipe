@@ -68,6 +68,7 @@ async fn start_deepgram_stream(
         .keep_alive()
         .channels(1)
         .sample_rate(sample_rate)
+        .interim_results(true)
         .encoding(Encoding::Linear16);
 
     let mut handle = req.clone().handle().await?;
@@ -93,17 +94,19 @@ async fn start_deepgram_stream(
                     let text = res.transcript.clone();
                     let is_input = stream.device.device_type == DeviceType::Input;
 
-                    match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
-                        timestamp: chrono::Utc::now(),
-                        device: stream.device.to_string(),
-                        transcription: text.to_string(),
-                        is_final,
-                        is_input,
-                    }) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            if !e.to_string().contains("channel closed") {
-                                error!("Error sending transcription event: {}", e);
+                    if !text.is_empty() {
+                        match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
+                            timestamp: chrono::Utc::now(),
+                            device: stream.device.to_string(),
+                            transcription: text.to_string(),
+                            is_final,
+                            is_input,
+                        }) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                if !e.to_string().contains("channel closed") {
+                                    error!("Error sending transcription event: {}", e);
+                                }
                             }
                         }
                     }
