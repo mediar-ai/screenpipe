@@ -144,7 +144,7 @@ export SCREENPIPE_CUSTOM_OCR_CONFIG='{
 }'
 
 # 3. run screenpipe with custom ocr
-screenpipe index \
+screenpipe add \
   path/to/videos \
   --ocr-engine custom \
   --data-dir /tmp/sp
@@ -232,15 +232,15 @@ screenpipe pipe delete <ID> [-y] [--port <PORT>]
 screenpipe pipe purge [-y] [--port <PORT>]
 ```
 
-#### indexing
+#### add external data to screenpipe (OCR only)
 
-indexing allows you to add external screen recordings to screenpipe, for example it could be your iphone screen recordings, your physical journal photos, etc.
+allows you to add external screen recordings to screenpipe, for example it could be your iphone screen recordings, your physical journal photos, etc.
 
 companies use this to index their product's screen recordings, for example.
 
 ```bash
-# index video files
-screenpipe index <PATH> [--data-dir <DIR>] [--output <FORMAT>] [--pattern <REGEX>] [--ocr-engine <ENGINE>] [--metadata-override <PATH>]
+# add video files
+screenpipe add <PATH> [--data-dir <DIR>] [--output <FORMAT>] [--pattern <REGEX>] [--ocr-engine <ENGINE>] [--metadata-override <PATH>]
 ```
 
 by default, screenpipe extracts metadata (fps, duration, creation time) directly from video files. however, you can override these with a metadata file:
@@ -302,7 +302,7 @@ cat > metadata.json << EOF
 EOF
 
 # 3. run screenpipe with metadata override
-screenpipe index \
+screenpipe add \
   $HOME/Downloads/tmpvideos \
   --metadata-override metadata.json \
   --data-dir /tmp/sp

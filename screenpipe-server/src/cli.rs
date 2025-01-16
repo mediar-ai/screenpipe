@@ -298,8 +298,8 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    /// Index video files for search - DOES NOT SUPPORT AUDIO
-    Index {
+    /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
+    Add {
         /// Path to folder containing video files
         path: String,
         /// Data directory. Default to $HOME/.screenpipe
