@@ -33,6 +33,7 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
+import { pipe } from "@screenpipe/browser";
 
 export interface MeetingSegment {
   timestamp: string;
@@ -65,14 +66,11 @@ export default function IdentifySpeakers({
   showIdentifySpeakers,
   setShowIdentifySpeakers,
   segments,
-  className,
 }: {
   showIdentifySpeakers: boolean;
   setShowIdentifySpeakers: (show: boolean) => void;
   segments?: MeetingSegment[];
-  className?: string;
 }) {
-  const { settings } = useSettings();
   const [unnamedSpeakers, setUnnamedSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +322,10 @@ export default function IdentifySpeakers({
   };
 
   const handleUpdateSpeakerName = async (newName: string) => {
+    pipe.captureMainFeatureEvent("identify-speakers", {
+      action: "update-speaker-name",
+      newName: newName,
+    });
     // use the endpoint /speakers/update to update the name
     try {
       await fetch(`http://localhost:3030/speakers/update`, {

@@ -30,13 +30,19 @@ mod pipes {
     use once_cell::sync::Lazy;
 
     // Add near other imports
+    use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
     use rand::distributions::Alphanumeric;
     use rand::{thread_rng, Rng};
-    use std::str::FromStr;
-    use reqwest_middleware::reqwest::Client;
     use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+    use reqwest_middleware::reqwest::Client;
     use reqwest_middleware::ClientBuilder;
-    use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache, HttpCacheOptions};
+    use std::str::FromStr;
+
+    #[derive(Clone, Debug, Copy)]
+    pub enum PipeState {
+        Port(u16),
+        Pid(i32),
+    }
 
     pub struct CronHandle {
         shutdown: watch::Sender<bool>,
@@ -73,7 +79,10 @@ mod pipes {
             .to_string()
     }
 
-    pub async fn run_pipe(pipe: &str, screenpipe_dir: PathBuf) -> Result<tokio::process::Child> {
+    pub async fn run_pipe(
+        pipe: &str,
+        screenpipe_dir: PathBuf,
+    ) -> Result<(tokio::process::Child, PipeState)> {
         let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
@@ -131,15 +140,36 @@ mod pipes {
                 "setting up next.js specific configuration for pipe: {}",
                 pipe
             );
+
+            let mut assigned_port = None;
+
             // Handle Next.js specific setup including crons
             if pipe_json_path.exists() {
                 debug!("reading pipe.json for next.js configuration");
                 let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
                 let pipe_config: Value = serde_json::from_str(&pipe_json)?;
 
-                // Update pipe.json with the port
-                let port = pick_unused_port().expect("No ports free");
-                debug!("picked unused port {} for next.js pipe", port);
+                // Try to use user-configured port first
+                if let Some(user_port) = pipe_config.get("port").and_then(|p| p.as_u64()) {
+                    debug!("found user-configured port: {}", user_port);
+                    // Verify port is available
+                    if is_port_available(user_port as u16) {
+                        assigned_port = Some(user_port as u16);
+                        debug!("user-configured port {} is available", user_port);
+                    } else {
+                        debug!(
+                            "user-configured port {} is in use, will assign random port",
+                            user_port
+                        );
+                    }
+                }
+
+                // Fallback to random port if needed
+                let port =
+                    assigned_port.unwrap_or_else(|| pick_unused_port().expect("No ports free"));
+                info!("using port {} for next.js pipe", port);
+
+                // Update pipe.json with the actual port being used
                 let mut updated_config = pipe_config.clone();
                 updated_config["port"] = json!(port);
                 let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
@@ -200,9 +230,12 @@ mod pipes {
 
                 // Install dependencies using bun
                 info!("installing dependencies for next.js pipe [{}]", pipe);
+
                 let install_output = Command::new(&bun_path)
                     .arg("install")
                     .current_dir(&pipe_dir)
+                    .env("NPM_CONFIG_REGISTRY", "https://registry.npmjs.org")
+                    .env("BUN_CONFIG_REGISTRY", "https://registry.npmjs.org")
                     .output()
                     .await?;
 
@@ -216,30 +249,36 @@ mod pipes {
                 debug!("successfully installed dependencies for next.js pipe");
             } else {
                 let port = pick_unused_port().expect("No ports free");
-                debug!("no pipe.json found, using port {} for next.js pipe", port);
+                debug!(
+                    "no pipe.json found, using random port {} for next.js pipe",
+                    port
+                );
                 env_vars.push(("PORT".to_string(), port.to_string()));
             }
 
             // Try to build the Next.js project
             let build_success = try_build_nextjs(&pipe_dir, &bun_path).await?;
-            
+
             let port = env_vars
                 .iter()
                 .find(|(k, _)| k == "PORT")
                 .map(|(_, v)| v)
                 .unwrap()
-                .clone();
+                .parse::<u16>()
+                .expect("Invalid port number");
 
             // Run the Next.js project
             info!(
                 "starting next.js project in {} mode",
-                if build_success { "production" } else { "development" }
+                if build_success {
+                    "production"
+                } else {
+                    "development"
+                }
             );
-            
+
             let mut command = Command::new(&bun_path);
-            command
-                .arg("run")
-                .arg("--bun");
+            command.arg("run").arg("--bun");
 
             if build_success {
                 command.arg("start");
@@ -250,7 +289,7 @@ mod pipes {
 
             command
                 .arg("--port")
-                .arg(port)
+                .arg(port.to_string())
                 .current_dir(&pipe_dir)
                 .envs(env_vars)
                 .stdout(std::process::Stdio::piped())
@@ -261,7 +300,7 @@ mod pipes {
             debug!("streaming logs for next.js pipe");
             stream_logs(pipe, &mut child).await?;
 
-            return Ok(child);
+            return Ok((child, PipeState::Port(port)));
         }
 
         // If it's not a Next.js project, run as regular pipe
@@ -285,7 +324,8 @@ mod pipes {
         // Stream logs
         stream_logs(pipe, &mut child).await?;
 
-        Ok(child)
+        let child_id = child.id().unwrap();
+        Ok((child, PipeState::Pid(child_id as i32))) // Return 0 or handle port differently for non-Next.js projects
     }
 
     async fn stream_logs(pipe: &str, child: &mut tokio::process::Child) -> Result<()> {
@@ -593,7 +633,10 @@ mod pipes {
                 .with(Cache(HttpCache {
                     mode: CacheMode::Default,
                     manager: CACacheManager {
-                        path: home_dir().unwrap().join(".screenpipe").join(".http-cacache"),
+                        path: home_dir()
+                            .unwrap()
+                            .join(".screenpipe")
+                            .join(".http-cacache"),
                     },
                     options: HttpCacheOptions::default(),
                 }))
@@ -609,7 +652,10 @@ mod pipes {
                 .send()
                 .await?;
 
-            debug!("GitHub API cache hit: {:?}", response.headers().get("x-cache"));
+            debug!(
+                "GitHub API cache hit: {:?}",
+                response.headers().get("x-cache")
+            );
 
             let contents: Value = response.text().await?.parse()?;
             let tree = contents["tree"]
@@ -626,7 +672,8 @@ mod pipes {
             );
 
             // Extract the base path for subfolder downloads
-            let base_path = url.path_segments()
+            let base_path = url
+                .path_segments()
                 .and_then(|segments| {
                     let segments: Vec<_> = segments.collect();
                     if segments.len() >= 5 && segments[2] == "tree" {
@@ -765,25 +812,7 @@ mod pipes {
     fn find_bun_path_internal() -> Option<PathBuf> {
         debug!("starting search for bun executable");
 
-        // Check if bun is in PATH
-        if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
-            debug!("found bun in PATH: {:?}", path);
-            return Some(path);
-        }
-        debug!("bun not found in PATH");
-
-        // Check in current working directory
-        if let Ok(cwd) = std::env::current_dir() {
-            debug!("current working directory: {:?}", cwd);
-            let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
-            if bun_in_cwd.is_file() && bun_in_cwd.exists() {
-                debug!("found bun in current working directory: {:?}", bun_in_cwd);
-                return Some(bun_in_cwd);
-            }
-            debug!("bun not found in current working directory");
-        }
-
-        // Check in executable directory
+        // Check in executable directory (eg tauri etc.)
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_folder) = exe_path.parent() {
                 debug!("executable folder: {:?}", exe_folder);
@@ -819,6 +848,24 @@ mod pipes {
                     debug!("bun not found in lib folder");
                 }
             }
+        }
+
+        // Check if bun is in PATH
+        if let Ok(path) = which(BUN_EXECUTABLE_NAME) {
+            debug!("found bun in PATH: {:?}", path);
+            return Some(path);
+        }
+        debug!("bun not found in PATH");
+
+        // Check in current working directory
+        if let Ok(cwd) = std::env::current_dir() {
+            debug!("current working directory: {:?}", cwd);
+            let bun_in_cwd = cwd.join(BUN_EXECUTABLE_NAME);
+            if bun_in_cwd.is_file() && bun_in_cwd.exists() {
+                debug!("found bun in current working directory: {:?}", bun_in_cwd);
+                return Some(bun_in_cwd);
+            }
+            debug!("bun not found in current working directory");
         }
 
         error!("bun not found");
@@ -997,8 +1044,8 @@ mod pipes {
     }
 
     async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
-        debug!("attempting to build next.js project in: {:?}", pipe_dir);
-        
+        info!("attempting to build next.js project in: {:?}", pipe_dir);
+
         // Check if build already exists and is valid
         let build_dir = pipe_dir.join(".next");
         if build_dir.exists() {
@@ -1031,6 +1078,12 @@ mod pipes {
             );
             Ok(false)
         }
+    }
+
+    // Add this helper function to check if a port is available
+    fn is_port_available(port: u16) -> bool {
+        use std::net::TcpListener;
+        TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 }
 

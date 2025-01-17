@@ -10,6 +10,11 @@ import type {
   VisionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
+import {
+  captureEvent,
+  captureMainFeatureEvent,
+  identifyUser,
+} from "../../common/analytics";
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -49,13 +54,41 @@ export interface BrowserPipe {
   streamVision(
     includeImages?: boolean
   ): AsyncGenerator<VisionStreamResponse, void, unknown>;
+  captureEvent: (
+    event: string,
+    properties?: Record<string, any>
+  ) => Promise<void>;
+  captureMainFeatureEvent: (
+    name: string,
+    properties?: Record<string, any>
+  ) => Promise<void>;
 }
 
-// Browser-only implementations
-export const pipe: BrowserPipe = {
+class BrowserPipeImpl implements BrowserPipe {
+  private analyticsInitialized = false;
+  private analyticsEnabled = false;
+  private userId?: string;
+  private userProperties?: Record<string, any>;
+
+  private async initAnalyticsIfNeeded() {
+    if (this.analyticsInitialized || !this.userId) return;
+
+    try {
+      const settings = { analyticsEnabled: false }; // TODO: impl settings browser side somehow ...
+      this.analyticsEnabled = settings.analyticsEnabled;
+      if (settings.analyticsEnabled) {
+        await identifyUser(this.userId, this.userProperties);
+        this.analyticsInitialized = true;
+      }
+    } catch (error) {
+      console.error("failed to fetch settings:", error);
+    }
+  }
+
   async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {
+    await this.initAnalyticsIfNeeded();
     const notificationApiUrl = "http://localhost:11435";
     try {
       await fetch(`${notificationApiUrl}/notify`, {
@@ -63,16 +96,21 @@ export const pipe: BrowserPipe = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
+      await this.captureEvent("notification_sent", { success: true });
       return true;
     } catch (error) {
-      console.error("failed to send notification:", error);
+      await this.captureEvent("error_occurred", {
+        feature: "notification",
+        error: "send_failed",
+      });
       return false;
     }
-  },
+  }
 
   async queryScreenpipe(
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {
+    await this.initAnalyticsIfNeeded();
     const queryParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== "") {
@@ -108,21 +146,34 @@ export const pipe: BrowserPipe = {
         throw new Error(`http error! status: ${response.status}`);
       }
       const data = await response.json();
+      await captureEvent("search_performed", {
+        content_type: params.contentType,
+        result_count: data.pagination.total,
+      });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
+      await captureEvent("error_occurred", {
+        feature: "search",
+        error: "query_failed",
+      });
       console.error("error querying screenpipe:", error);
       return null;
     }
-  },
+  }
 
   input: {
+    type: (text: string) => Promise<boolean>;
+    press: (key: string) => Promise<boolean>;
+    moveMouse: (x: number, y: number) => Promise<boolean>;
+    click: (button: "left" | "right" | "middle") => Promise<boolean>;
+  } = {
     type: (text: string) => sendInputControl({ type: "WriteText", data: text }),
     press: (key: string) => sendInputControl({ type: "KeyPress", data: key }),
     moveMouse: (x: number, y: number) =>
       sendInputControl({ type: "MouseMove", data: { x, y } }),
     click: (button: "left" | "right" | "middle") =>
       sendInputControl({ type: "MouseClick", data: button }),
-  },
+  };
 
   async *streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
@@ -134,6 +185,10 @@ export const pipe: BrowserPipe = {
     );
 
     try {
+      await this.captureEvent("stream_started", {
+        feature: "transcription",
+      });
+
       while (true) {
         const chunk: TranscriptionChunk = await new Promise(
           (resolve, reject) => {
@@ -169,9 +224,12 @@ export const pipe: BrowserPipe = {
         };
       }
     } finally {
+      await this.captureEvent("stream_ended", {
+        feature: "transcription",
+      });
       eventSource.close();
     }
-  },
+  }
 
   async *streamVision(
     includeImages: boolean = false
@@ -179,8 +237,11 @@ export const pipe: BrowserPipe = {
     const eventSource = new EventSource(
       `http://localhost:3030/sse/vision?images=${includeImages}`
     );
-
     try {
+      await this.captureEvent("stream_started", {
+        feature: "vision",
+      });
+
       while (true) {
         const event: VisionEvent = await new Promise((resolve, reject) => {
           eventSource.onmessage = (event) => {
@@ -197,19 +258,33 @@ export const pipe: BrowserPipe = {
         };
       }
     } finally {
+      await this.captureEvent("stream_ended", {
+        feature: "vision",
+      });
       eventSource.close();
     }
-  },
-};
+  }
 
-const sendDesktopNotification = pipe.sendDesktopNotification;
-const queryScreenpipe = pipe.queryScreenpipe;
-const input = pipe.input;
+  public async captureEvent(
+    eventName: string,
+    properties?: Record<string, any>
+  ) {
+    if (!this.analyticsEnabled) return;
+    await this.initAnalyticsIfNeeded();
+    return captureEvent(eventName, properties);
+  }
 
-export { sendDesktopNotification, queryScreenpipe, input };
-export {
-  toCamelCase,
-  toSnakeCase,
-  convertToCamelCase,
-} from "../../common/utils";
+  public async captureMainFeatureEvent(
+    featureName: string,
+    properties?: Record<string, any>
+  ) {
+    if (!this.analyticsEnabled) return;
+    await this.initAnalyticsIfNeeded();
+    return captureMainFeatureEvent(featureName, properties);
+  }
+}
+
+const pipeImpl = new BrowserPipeImpl();
+export const pipe = pipeImpl;
+
 export * from "../../common/types";

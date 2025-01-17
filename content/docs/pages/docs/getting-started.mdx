@@ -210,11 +210,23 @@ bun tauri build
 
 1. install dependencies with the following commands:
 ```bash copy
-sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+sudo apt-get update
+sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake pkg-config \
+    libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libavutil-dev libswscale-dev \
+    libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev \
+    libxtst-dev build-essential libasound2-dev libdbus-1-dev \
+    libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+    libx11-dev libxi-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+    clang llvm-dev
+
+# set libclang path (for ubuntu/debian with llvm-14)
+export LIBCLANG_PATH=/usr/lib/llvm-14/lib
+
+# install rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-2. install bun cli (required for building):
+2. install bun cli (required for pipes & building desktop app):
 ```bash copy
 curl -fsSL https://bun.sh/install | bash
 ```
@@ -254,7 +266,6 @@ to enable cuda support, add the `--features cuda` flag when building:
 ```bash copy
 cargo build --release --features cuda
 ```
-
 ##### intel mkl support
 for intel cpu optimization, add the `--features mkl` flag:
 ```bash copy
@@ -295,4 +306,5 @@ you can use screenpipe in your business either by:
 - using our Microsoft Remote Desktop integration 
 
 [book a demo with our team](https://cal.com/louis030195/screenpipe-for-businesses)
+
 

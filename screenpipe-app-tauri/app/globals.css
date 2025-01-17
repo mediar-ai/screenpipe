@@ -113,3 +113,30 @@
     @apply bg-background text-foreground !pointer-events-auto;
   }
 }
+
+.pf-v6-c-text-input-group__text-input {
+  overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    position: relative;
+    width: 100%;
+  padding-block-end: 8px!important;
+  padding-block-start: 8px!important;
+  padding-bottom: 8px!important;
+  padding-inline-end: 16px!important;
+  padding-inline-start: 38px!important;
+  padding-left: 38px!important;
+  padding-right: 16px!important;
+  padding-top: 8px!important;
+}
+.pf-v6-c-text-input-group__text-input::placeholder {
+  padding-left: 20px!important;
+}
+.pf-v6-c-text-input-group__icon {
+  inset-block-start: 18.5px!important;
+  inset-inline-start: 16px!important;
+  line-height: 21px!important;
+  position: absolute!important;
+}
+
+

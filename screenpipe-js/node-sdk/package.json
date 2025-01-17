@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/js",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -26,7 +26,8 @@
     "@types/uuid": "^10.0.0",
     "eventsource": "^3.0.2",
     "express": "^4.21.1",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "posthog-js": "^1.205.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"

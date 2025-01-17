@@ -34,7 +34,7 @@ mod tests {
         let app_state = Arc::new(AppState {
             db: db.clone(),
             vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_control: Arc::new(SegQueue::new()),
+            audio_devices_tx: Arc::new(tokio::sync::broadcast::channel(1000).0),
             devices_status: HashMap::new(),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),

@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
 use screenpipe_audio::{AudioDevice, DeviceType};
@@ -6,11 +7,11 @@ use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
-use sqlx::Column;
 use sqlx::Error as SqlxError;
 use sqlx::Row;
 use sqlx::TypeInfo;
 use sqlx::ValueRef;
+use sqlx::{Column, QueryBuilder};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -26,6 +27,7 @@ use crate::db_types::{
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
+use crate::video_utils::VideoMetadata;
 
 use futures::future::try_join_all;
 
@@ -1819,6 +1821,97 @@ impl DatabaseManager {
             .bind(id)
             .execute(&self.pool)
             .await?;
+
+        Ok(())
+    }
+
+    pub async fn batch_insert_ocr(
+        &self,
+        frames: Vec<(i64, String, String, String, String, Arc<OcrEngine>, bool)>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Prepare batch insert statement
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO ocr_text (frame_id, text, text_json, app_name, window_name, ocr_engine, focused) "
+        );
+
+        query_builder.push_values(
+            &frames,
+            |mut b, (frame_id, text, text_json, app_name, window_name, engine, focused)| {
+                b.push_bind(frame_id)
+                    .push_bind(text)
+                    .push_bind(text_json)
+                    .push_bind(app_name)
+                    .push_bind(window_name)
+                    .push_bind(format!("{:?}", *engine))
+                    .push_bind(focused);
+            },
+        );
+
+        query_builder.build().execute(&mut *tx).await?;
+
+        // Also update FTS table in batch
+        let mut fts_query_builder = QueryBuilder::new("INSERT INTO ocr_text_fts (frame_id, text) ");
+
+        fts_query_builder.push_values(&frames, |mut b, (frame_id, text, ..)| {
+            b.push_bind(frame_id).push_bind(text);
+        });
+
+        fts_query_builder.build().execute(&mut *tx).await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn process_video_frames(
+        &self,
+        file_path: &str,
+        frames: Vec<DynamicImage>,
+        metadata: VideoMetadata,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // 1. Create new video chunk - REMOVE timestamp from INSERT
+        let video_chunk_id =
+            sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
+                .bind(metadata.device_name)
+                .bind(file_path)
+                .execute(&mut *tx)
+                .await?
+                .last_insert_rowid();
+
+        debug!("created video chunk: {} for {}", video_chunk_id, file_path);
+
+        // 2. Create frames with correct timestamps
+        let mut frame_ids = Vec::with_capacity(frames.len());
+
+        for (i, _frame) in frames.iter().enumerate() {
+            // Calculate timestamp for this frame based on creation time and frame number
+            let frame_timestamp = metadata.creation_time
+                + chrono::Duration::milliseconds((i as f64 * (1000.0 / metadata.fps)) as i64);
+
+            debug!("frame timestamp: {}", frame_timestamp);
+
+            let frame_id = sqlx::query(
+                "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
+            )
+            .bind(video_chunk_id)
+            .bind(i as i64)
+            .bind(frame_timestamp)
+            .execute(&mut *tx)
+            .await?
+            .last_insert_rowid();
+
+            frame_ids.push(frame_id);
+        }
+
+        tx.commit().await?;
+        debug!(
+            "created {} frames for video chunk {}",
+            frames.len(),
+            video_chunk_id
+        );
 
         Ok(())
     }

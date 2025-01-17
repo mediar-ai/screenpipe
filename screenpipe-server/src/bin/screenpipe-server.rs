@@ -1,7 +1,7 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
-use crossbeam::queue::SegQueue;
+use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
@@ -12,6 +12,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    handle_index_command,
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -19,6 +20,7 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use sentry;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -133,6 +135,19 @@ async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
+    // Initialize Sentry only if telemetry is enabled
+    let _sentry_guard = if !cli.disable_telemetry {
+        Some(sentry::init((
+            "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+            sentry::ClientOptions {
+                release: sentry::release_name!(),
+                ..Default::default()
+            }
+        )))
+    } else {
+        None
+    };
+
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -142,9 +157,6 @@ async fn main() -> anyhow::Result<()> {
             matches!(
                 subcommand,
                 PipeCommand::List {
-                    output: OutputFormat::Text,
-                    ..
-                } | PipeCommand::Download {
                     output: OutputFormat::Text,
                     ..
                 } | PipeCommand::Install {
@@ -160,6 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
+        Some(Command::Add {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -263,6 +279,40 @@ async fn main() -> anyhow::Result<()> {
                 info!("database migrations completed successfully");
                 return Ok(());
             }
+            Command::Add {
+                path,
+                output,
+                data_dir,
+                pattern,
+                ocr_engine,
+                metadata_override,
+                copy_videos,
+            } => {
+                let local_data_dir = get_base_dir(&data_dir)?;
+                let db = Arc::new(
+                    DatabaseManager::new(&format!(
+                        "{}/db.sqlite",
+                        local_data_dir.to_string_lossy()
+                    ))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?,
+                );
+                handle_index_command(
+                    local_data_dir,
+                    path,
+                    pattern,
+                    db,
+                    output,
+                    ocr_engine,
+                    metadata_override,
+                    copy_videos,
+                )
+                .await?;
+                return Ok(());
+            }
         }
     }
 
@@ -306,9 +356,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut audio_devices = Vec::new();
 
-    let audio_devices_control = Arc::new(SegQueue::new());
-
-    let audio_devices_control_server = audio_devices_control.clone();
+    let audio_devices_control = Arc::new(DashMap::new());
+    let audio_devices_control_recording = audio_devices_control.clone();
 
     let mut realtime_audio_devices = Vec::new();
 
@@ -368,7 +417,7 @@ async fn main() -> anyhow::Result<()> {
                 // send signal after everything started
                 tokio::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(15)).await;
-                    sender_clone.push((device_clone, device_control));
+                    sender_clone.insert(device_clone, device_control);
                 });
             }
         }
@@ -418,8 +467,6 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let warning_realtime_audio_transcription_engine_clone =
-        cli.realtime_audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
         all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
     } else {
@@ -470,15 +517,15 @@ async fn main() -> anyhow::Result<()> {
                 let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone(); // Clone inside the loop
+                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
                     fps,
-                    audio_chunk_duration, // use the new setting
+                    audio_chunk_duration,
                     Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
-                    audio_devices_control.clone(),
+                    audio_devices_control_recording.clone(),
                     cli.disable_audio,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
@@ -496,7 +543,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
                     Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
                 );
@@ -539,13 +585,16 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    let (audio_devices_tx, _) = broadcast::channel(100);
+    let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
+
     let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         vision_control_server_clone,
-        audio_devices_control_server,
+        audio_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -555,6 +604,46 @@ async fn main() -> anyhow::Result<()> {
         realtime_transcription_sender_clone,
         realtime_vision_sender_clone.clone(),
     );
+
+    let mut rx = audio_devices_tx.subscribe();
+    let audio_devices_control_for_spawn = audio_devices_control.clone();
+    tokio::spawn(async move {
+        while let Ok((device, control)) = rx.recv().await {
+            if let Err(e) =
+                handle_device_update(&device, control, &audio_devices_control_for_spawn).await
+            {
+                error!("Device update failed: {}", e);
+                continue;
+            }
+        }
+        info!("Device monitoring task completed");
+    });
+
+    async fn handle_device_update(
+        device: &AudioDevice,
+        control: DeviceControl,
+        devices_control: &DashMap<AudioDevice, DeviceControl>,
+    ) -> anyhow::Result<()> {
+        match list_audio_devices().await {
+            Ok(available_devices) => {
+                if !available_devices.contains(&device) {
+                    return Err(anyhow::anyhow!(
+                        "attempted to control non-existent device: {}",
+                        device.name
+                    ));
+                }
+
+                // Update the device state
+                devices_control.insert(device.clone(), control.clone());
+                info!(
+                    "Device state changed: {} - running: {}",
+                    device.name, control.is_running
+                );
+                Ok(())
+            }
+            Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
+        }
+    }
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -591,10 +680,6 @@ async fn main() -> anyhow::Result<()> {
     println!(
         "│ audio engine           │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
-    );
-    println!(
-        "│ realtime audio engine  │ {:<34} │",
-        format!("{:?}", warning_realtime_audio_transcription_engine_clone)
     );
     println!(
         "│ ocr engine             │ {:<34} │",

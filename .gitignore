@@ -45,3 +45,17 @@ node_modules/
 cn 
 
 
+# Python stuff
+venv/
+app.py
+*.pyc
+*.pyo
+*.pyd
+*.py
+*.pyw
+*.pyz
+*.py3
+*.py3w
+*.py3z
+__pycache__/
+

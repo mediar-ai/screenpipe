@@ -5430,6 +5430,41 @@
           "const": "process:deny-restart"
         },
         {
+          "description": "Allows all required permissions (envelope, breadcrumb)",
+          "type": "string",
+          "const": "sentry:default"
+        },
+        {
+          "description": "Enables the breadcrumb command.",
+          "type": "string",
+          "const": "sentry:allow-breadcrumb"
+        },
+        {
+          "description": "Enables the envelope command.",
+          "type": "string",
+          "const": "sentry:allow-envelope"
+        },
+        {
+          "description": "Enables the event command without any pre-configured scope.",
+          "type": "string",
+          "const": "sentry:allow-event"
+        },
+        {
+          "description": "Denies the breadcrumb command.",
+          "type": "string",
+          "const": "sentry:deny-breadcrumb"
+        },
+        {
+          "description": "Denies the envelope command.",
+          "type": "string",
+          "const": "sentry:deny-envelope"
+        },
+        {
+          "description": "Denies the event command without any pre-configured scope.",
+          "type": "string",
+          "const": "sentry:deny-event"
+        },
+        {
           "description": "This permission set configures which\nshell functionality is exposed by default.\n\n#### Granted Permissions\n\nIt allows to use the `open` functionality without any specific\nscope pre-configured. It will allow opening `http(s)://`,\n`tel:` and `mailto:` links.\n",
           "type": "string",
           "const": "shell:default"
