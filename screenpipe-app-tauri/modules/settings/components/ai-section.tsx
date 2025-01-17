@@ -48,6 +48,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import posthog from "posthog-js";
+import { Select } from "@/components/ui/select";
+import { AiProviderSelect } from "../fields/select";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -68,7 +70,7 @@ interface OllamaModel {
   modified_at: string;
 }
 
-const AIProviderCard = ({
+export const AIProviderCard = ({
   type,
   title,
   description,
@@ -76,38 +78,39 @@ const AIProviderCard = ({
   selected,
   onClick,
   disabled,
-  warningText,
   imageClassName,
 }: AIProviderCardProps) => {
   return (
-    <Card
+    <div
       onClick={onClick}
+      data-selected={selected}
+      data-disabled={disabled}
       className={cn(
-        "flex py-4 px-4 rounded-lg hover:bg-accent transition-colors h-[145px] w-full cursor-pointer",
-        selected ? "border-black/60 border-[1.5px]" : "",
-        disabled && "opacity-50 cursor-not-allowed"
+        "flex p-4 rounded-lg hover:bg-accent transition-colors cursor-pointer"
       )}
     >
-      <CardContent className="flex flex-col p-0 w-full">
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2">
           <img
             src={imageSrc}
             alt={title}
+            data-type={type}
             className={cn(
-              "rounded-lg shrink-0 size-8",
-              type === "native-ollama" &&
-                "outline outline-gray-300 outline-1 outline-offset-2",
+              "rounded-lg shrink-0 size-12 data-[type=native-ollama]:outline data-[type=native-ollama]:outline-gray-300 data-[type=native-ollama]:outline-1 data-[type=native-ollama]:outline-offset-2",
               imageClassName
             )}
           />
-          <span className="text-lg font-medium truncate">{title}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-1 items-center">
+              <h1 className="text-md leading-none text-left font-medium truncate">
+                {title}
+              </h1>
+            </div>
+            <p className="text-[10px] leading-[12px] text-left text-muted-foreground line-clamp-3">
+              {description}
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground line-clamp-3">
-          {description}
-        </p>
-        {warningText && <Badge className="w-fit mt-2">{warningText}</Badge>}
-      </CardContent>
-    </Card>
+    </div>
   );
 };
 
@@ -303,7 +306,6 @@ const AISection = () => {
         return [];
     }
   };
-  console.log(getModelSuggestions(settings.aiProviderType));
 
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
 
@@ -328,66 +330,11 @@ const AISection = () => {
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">ai settings</h1>
-      <div className="w-full">
+      <div className="w-full flex flex-col gap-3">
         <Label htmlFor="aiUrl" className="min-w-[80px]">
           ai provider
         </Label>
-        <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
-          <AIProviderCard
-            type="openai"
-            title="openai"
-            description="use your own openai api key for gpt-4 and other models"
-            imageSrc="/images/openai.png"
-            selected={settings.aiProviderType === "openai"}
-            onClick={() => handleAiProviderChange("openai")}
-          />
-
-          <AIProviderCard
-            type="screenpipe-cloud"
-            title="screenpipe cloud"
-            description="use openai, anthropic and google models without worrying about api keys or usage"
-            imageSrc="/images/screenpipe.png"
-            selected={settings.aiProviderType === "screenpipe-cloud"}
-            onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            disabled={!user}
-            warningText={
-              !user
-                ? "login required"
-                : !credits?.amount
-                ? "requires credits"
-                : undefined
-            }
-          />
-
-          <AIProviderCard
-            type="native-ollama"
-            title="ollama"
-            description="run ai models locally using your existing ollama installation"
-            imageSrc="/images/ollama.png"
-            selected={settings.aiProviderType === "native-ollama"}
-            onClick={() => handleAiProviderChange("native-ollama")}
-          />
-
-          <AIProviderCard
-            type="custom"
-            title="custom"
-            description="connect to your own ai provider or self-hosted models"
-            imageSrc="/images/custom.png"
-            selected={settings.aiProviderType === "custom"}
-            onClick={() => handleAiProviderChange("custom")}
-          />
-
-          {embeddedAIStatus === "running" && (
-            <AIProviderCard
-              type="embedded"
-              title="embedded ai"
-              description="use the built-in ai engine for offline processing"
-              imageSrc="/images/embedded.png"
-              selected={settings.aiProviderType === "embedded"}
-              onClick={() => handleAiProviderChange("embedded")}
-            />
-          )}
-        </div>
+        <AiProviderSelect/>
       </div>
       {settings.aiProviderType === "custom" && (
         <div className="w-full">
