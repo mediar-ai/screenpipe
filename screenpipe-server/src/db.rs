@@ -299,18 +299,18 @@ impl DatabaseManager {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
 
-        // Get the most recent video_chunk_id
-        let video_chunk_id: Option<i64> = sqlx::query_scalar(
-            "SELECT id FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
+        // Get the most recent video_chunk_id and file_path
+        let video_chunk: Option<(i64, String)> = sqlx::query_as(
+            "SELECT id, file_path FROM video_chunks WHERE device_name = ?1 ORDER BY id DESC LIMIT 1",
         )
         .bind(device_name)
         .fetch_optional(&mut *tx)
         .await?;
-        debug!("Fetched most recent video_chunk_id: {:?}", video_chunk_id);
+        debug!("Fetched most recent video_chunk: {:?}", video_chunk);
 
         // If no video chunk is found, return 0
-        let video_chunk_id = match video_chunk_id {
-            Some(id) => id,
+        let (video_chunk_id, file_path) = match video_chunk {
+            Some((id, path)) => (id, path),
             None => {
                 debug!("No video chunk found, rolling back transaction");
                 tx.rollback().await?;
@@ -329,13 +329,14 @@ impl DatabaseManager {
 
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
-        // Insert the new frame
+        // Insert the new frame with file_path as name
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name) VALUES (?1, ?2, ?3, ?4)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(timestamp)
+        .bind(file_path)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -343,7 +344,6 @@ impl DatabaseManager {
 
         // Commit the transaction
         tx.commit().await?;
-        // debug!("insert_frame Transaction committed");
 
         Ok(id)
     }
@@ -469,13 +469,14 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
+        frame_name: Option<&str>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
         match content_type {
             ContentType::All => {
                 let (ocr_results, audio_results, ui_results) =
-                    if app_name.is_none() && window_name.is_none() {
+                    if app_name.is_none() && window_name.is_none() && frame_name.is_none() {
                         // Run all three queries in parallel
                         let (ocr, audio, ui) = tokio::try_join!(
                             self.search_ocr(
@@ -488,6 +489,7 @@ impl DatabaseManager {
                                 window_name,
                                 min_length,
                                 max_length,
+                                frame_name,
                             ),
                             self.search_audio(
                                 query,
@@ -507,6 +509,7 @@ impl DatabaseManager {
                                 end_time,
                                 limit,
                                 offset,
+                                frame_name,
                             )
                         )?;
                         (ocr, Some(audio), ui)
@@ -523,6 +526,7 @@ impl DatabaseManager {
                                 window_name,
                                 min_length,
                                 max_length,
+                                frame_name,
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -532,6 +536,7 @@ impl DatabaseManager {
                                 end_time,
                                 limit,
                                 offset,
+                                frame_name,
                             )
                         )?;
                         (ocr, None, ui)
@@ -555,6 +560,7 @@ impl DatabaseManager {
                         window_name,
                         min_length,
                         max_length,
+                        frame_name,
                     )
                     .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
@@ -586,6 +592,7 @@ impl DatabaseManager {
                         end_time,
                         limit,
                         offset,
+                        frame_name,
                     )
                     .await?;
                 results.extend(ui_results.into_iter().map(SearchResult::UI));
@@ -612,6 +619,7 @@ impl DatabaseManager {
                         end_time,
                         limit / 2,
                         offset,
+                        frame_name,
                     )
                     .await?;
 
@@ -630,6 +638,7 @@ impl DatabaseManager {
                         window_name,
                         min_length,
                         max_length,
+                        frame_name,
                     )
                     .await?;
                 let ui_results = self
@@ -641,6 +650,7 @@ impl DatabaseManager {
                         end_time,
                         limit / 2,
                         offset,
+                        frame_name,
                     )
                     .await?;
 
@@ -671,6 +681,7 @@ impl DatabaseManager {
                         window_name,
                         min_length,
                         max_length,
+                        frame_name,
                     )
                     .await?;
 
@@ -715,6 +726,7 @@ impl DatabaseManager {
         window_name: Option<&str>,
         min_length: Option<usize>,
         max_length: Option<usize>,
+        frame_name: Option<&str>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let base_sql = if query.is_empty() {
             "ocr_text"
@@ -735,6 +747,7 @@ impl DatabaseManager {
                 ocr_text.text as ocr_text,
                 ocr_text.text_json,
                 frames.timestamp,
+                frames.name as frame_name,
                 video_chunks.file_path,
                 frames.offset_index,
                 ocr_text.app_name,
@@ -754,6 +767,7 @@ impl DatabaseManager {
                 AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
                 AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
                 AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
+                AND (?10 IS NULL OR frames.name LIKE '%' || ?10 || '%' COLLATE NOCASE)
             GROUP BY ocr_text.frame_id
             ORDER BY frames.timestamp DESC
             LIMIT ?8 OFFSET ?9
@@ -771,6 +785,7 @@ impl DatabaseManager {
             .bind(window_name)
             .bind(limit)
             .bind(offset)
+            .bind(frame_name)
             .fetch_all(&self.pool)
             .await?;
 
@@ -781,6 +796,7 @@ impl DatabaseManager {
                 ocr_text: raw.ocr_text,
                 text_json: raw.text_json,
                 timestamp: raw.timestamp,
+                frame_name: raw.frame_name,
                 file_path: raw.file_path,
                 offset_index: raw.offset_index,
                 app_name: raw.app_name,
@@ -936,6 +952,7 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
+        frame_name: Option<&str>,
     ) -> Result<usize, sqlx::Error> {
         let mut json_array: String = "[]".to_string();
         if let Some(ids) = speaker_ids {
@@ -959,6 +976,7 @@ impl DatabaseManager {
                         AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
                         AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
                         AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
+                        AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     if query.is_empty() {
                         "1=1"
@@ -1000,6 +1018,7 @@ impl DatabaseManager {
                         AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
                         AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
                         AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
+                        AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     if query.is_empty() {
                         "1=1"
@@ -1022,6 +1041,7 @@ impl DatabaseManager {
                             AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
                             AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
                             AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
+                            AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                             AND ocr_text.text != 'No text found'
 
                         UNION ALL
@@ -1048,6 +1068,7 @@ impl DatabaseManager {
                             AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
                             AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
                             AND ui_monitoring.text_output != ''
+                            AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     )"#,
                     if query.is_empty() {
                         "ocr_text"
@@ -1090,6 +1111,7 @@ impl DatabaseManager {
             .bind(end_time)
             .bind(app_name)
             .bind(window_name)
+            .bind(frame_name)
             .bind(min_length.map(|len| len as i64))
             .bind(max_length.map(|len| len as i64))
             .bind(json_array)
@@ -1462,6 +1484,7 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         limit: u32,
         offset: u32,
+        frame_name: Option<&str>,
     ) -> Result<Vec<UiContent>, sqlx::Error> {
         let base_sql = if query.is_empty() {
             "ui_monitoring"
@@ -1485,7 +1508,8 @@ impl DatabaseManager {
                 ui_monitoring.window,
                 ui_monitoring.initial_traversal_at,
                 video_chunks.file_path,
-                frames.offset_index
+                frames.offset_index,
+                frames.name
             FROM {}
             LEFT JOIN frames ON
                 frames.timestamp BETWEEN
@@ -1497,8 +1521,9 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                 AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                 AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
+                AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')
             ORDER BY ui_monitoring.timestamp DESC
-            LIMIT ?6 OFFSET ?7
+            LIMIT ?7 OFFSET ?8
             "#,
             base_sql, where_clause
         );
@@ -1509,6 +1534,7 @@ impl DatabaseManager {
             .bind(end_time)
             .bind(app_name)
             .bind(window_name)
+            .bind(frame_name)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
@@ -1864,7 +1890,7 @@ impl DatabaseManager {
         Ok(())
     }
 
-    pub async fn process_video_frames(
+    pub async fn create_video_with_frames(
         &self,
         file_path: &str,
         frames: Vec<DynamicImage>,
@@ -1886,22 +1912,22 @@ impl DatabaseManager {
 
         debug!("created video chunk: {} for {}", video_chunk_id, file_path);
 
-        // 2. Create frames with correct timestamps
+        // 2. Create frames with correct timestamps and default name
         let mut frame_ids = Vec::with_capacity(frames.len());
 
         for (i, _frame) in frames.iter().enumerate() {
-            // Calculate timestamp for this frame based on creation time and frame number
             let frame_timestamp = metadata.creation_time
                 + chrono::Duration::milliseconds((i as f64 * (1000.0 / metadata.fps)) as i64);
 
             debug!("frame timestamp: {}", frame_timestamp);
 
             let frame_id = sqlx::query(
-                "INSERT INTO frames (video_chunk_id, offset_index, timestamp) VALUES (?1, ?2, ?3)",
+                "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name) VALUES (?1, ?2, ?3, ?4)",
             )
             .bind(video_chunk_id)
             .bind(i as i64)
             .bind(frame_timestamp)
+            .bind(metadata.name.as_deref().unwrap_or(file_path))  // Use reference instead of clone
             .execute(&mut *tx)
             .await?
             .last_insert_rowid();
@@ -2007,5 +2033,29 @@ impl DatabaseManager {
                     .unwrap_or_default(),
             })
             .collect())
+    }
+
+    // Add method to update frame names
+    pub async fn update_frame_name(&self, frame_id: i64, name: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE frames SET name = ?1 WHERE id = ?2")
+            .bind(name)
+            .bind(frame_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // Add method to update all frames in a video chunk
+    pub async fn update_video_chunk_frames_names(
+        &self,
+        video_chunk_id: i64,
+        name: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE frames SET name = ?1 WHERE video_chunk_id = ?2")
+            .bind(name)
+            .bind(video_chunk_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }

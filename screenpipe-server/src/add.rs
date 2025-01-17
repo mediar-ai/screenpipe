@@ -9,6 +9,7 @@ use screenpipe_vision::perform_ocr_apple;
 #[cfg(target_os = "windows")]
 use screenpipe_vision::perform_ocr_windows;
 
+#[allow(unused)]
 use screenpipe_vision::perform_ocr_tesseract;
 
 use serde_json::json;
@@ -120,7 +121,7 @@ pub async fn handle_index_command(
         let frames = extract_frames_from_video(&video_path, None).await?;
 
         // Create video chunk and frames first
-        db.process_video_frames(
+        db.create_video_with_frames(
             video_path.to_str().unwrap(),
             frames.clone(),
             metadata.clone(),

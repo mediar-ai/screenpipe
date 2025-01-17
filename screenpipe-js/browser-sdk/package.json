@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/browser",
-  "version": "0.1.17",
+  "version": "0.1.18-beta.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -37,8 +37,12 @@
   },
   "typesVersions": {
     "*": {
-      "node": ["./dist/node.d.ts"],
-      "browser": ["./dist/browser.d.ts"]
+      "node": [
+        "./dist/node.d.ts"
+      ],
+      "browser": [
+        "./dist/browser.d.ts"
+      ]
     }
   }
 }
