@@ -97,6 +97,15 @@ windows = { version = "0.58", features = [
   "Storage_Streams",
 ] }
 xcap = "0.0.12"
+# RDP screenshot deps
+ironrdp = { version = "0.7.3", features = ["connector", "session"] }
+ironrdp-blocking = "0.2.1"
+ironrdp-pdu = "0.1.2"
+ironrdp-graphics = "0.1.1"
+tokio-rustls = "=0.26.1"
+x509-cert = "0.2.5"
+sspi = { version = "=0.15.0", features = ["network_client"] }
+image = { version = "0.25.5", default-features = false, features = ["png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
