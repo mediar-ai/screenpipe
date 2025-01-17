@@ -1008,11 +1008,18 @@ export function RecordingSettings() {
                 enable realtime audio transcription
               </h4>
               <p className="text-sm text-muted-foreground">
-                transcribe audio in real-time as you speak (experimental)
+                transcribe audio in real-time as you speak (dev preview) -{" "}
+                <a
+                  href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/examples/basic-transcription/index.ts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  view example
+                </a>
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">experimental</Badge>
               <Switch
                 id="enableRealtimeAudio"
                 checked={settings.enableRealtimeAudioTranscription}
@@ -1064,11 +1071,6 @@ export function RecordingSettings() {
                       <span>deepgram</span>
                       <Badge variant="secondary">cloud</Badge>
                     </div>
-                  </SelectItem>
-                  <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
-                  <SelectItem value="whisper-large">whisper-large</SelectItem>
-                  <SelectItem value="whisper-large-v3-turbo">
-                    whisper-large-turbo
                   </SelectItem>
                 </SelectContent>
               </Select>

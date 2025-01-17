@@ -51,9 +51,6 @@ below is the detailed cli reference for screenpipe's core functionality.
     - `whisper-large-v3-turbo`: local, highest quality
   - default: `whisper-large-v3-turbo`
 
-- **realtime-audio-transcription-engine** (`--realtime-audio-transcription-engine <ENGINE>`): realtime engine
-  - same options as audio-transcription-engine
-  - default: `whisper-tiny`
 
 - **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
   - default: `false`
@@ -201,7 +198,6 @@ rm -rf venv app.py
 - **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
   - default: `false`
   - requires: at least one `--realtime-audio-device`
-  - uses: `--realtime-audio-transcription-engine` (default: whisper-tiny)
   - note: experimental feature, may impact system performance
 
 </MotionDiv>
