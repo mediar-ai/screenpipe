@@ -773,216 +773,248 @@ export function RecordingSettings() {
         )}
       >
         <h4 className="text-lg font-semibold my-4">video</h4>
-        <div className="flex flex-col space-y-6">
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="monitorIds" className="flex items-center space-x-2">
-              <Monitor className="h-4 w-4" />
-              <span>monitors</span>
-            </Label>
-            <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openMonitors}
-                  className="w-full justify-between"
-                >
-                  {settings.monitorIds.length > 0
-                    ? `${settings.monitorIds.length} monitor(s) selected`
-                    : "select monitors"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="search monitors..." />
-                  <CommandList>
-                    <CommandEmpty>no monitor found.</CommandEmpty>
-                    <CommandGroup>
-                      {availableMonitors.map((monitor) => (
-                        <CommandItem
-                          key={monitor.id}
-                          value={monitor.id}
-                          onSelect={() =>
-                            handleMonitorChange(monitor.id.toString())
-                          }
-                        >
-                          <div className="flex items-center">
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                settings.monitorIds.includes(
-                                  monitor.id.toString()
-                                )
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            {/* not selectable */}
-                            <span
-                              style={{
-                                userSelect: "none",
-                                WebkitUserSelect: "none",
-                                MozUserSelect: "none",
-                                msUserSelect: "none",
-                              }}
-                            >
-                              {monitor.id}. {monitor.name}{" "}
-                              {monitor.is_default ? "(default)" : ""} -{" "}
-                              {monitor.width}x{monitor.height}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h4 className="font-medium">disable video recording</h4>
+              <p className="text-sm text-muted-foreground">
+                useful if you don&apos;t need screen recording or if you have
+                memory/cpu issues
+              </p>
+            </div>
+            <Switch
+              id="disableVision"
+              checked={settings.disableVision}
+              onCheckedChange={(checked) =>
+                handleSettingsChange({ disableVision: checked })
+              }
+            />
           </div>
 
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="ocrModel" className="flex items-center space-x-2">
-              <Eye className="h-4 w-4" />
-              <span>ocr model</span>
-            </Label>
-            <Select
-              onValueChange={handleOcrModelChange}
-              defaultValue={settings.ocrEngine}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  className="capitalize"
-                  placeholder="select ocr engine"
-                />
-              </SelectTrigger>
-              <SelectContent className="capitalize">
-                {renderOcrEngineOptions()}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="fps" className="flex items-center space-x-2">
-              <span>frames per second (fps)</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      adjust the recording frame rate. lower values save
-                      <br />
-                      resources, higher values provide smoother recordings, less
-                      likely to miss activity.
-                      <br />
-                      (we do not use resources if your screen does not change
-                      much)
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <div className="flex items-center space-x-4">
-              <Slider
-                id="fps"
-                min={0.1}
-                max={10}
-                step={0.1}
-                value={[settings.fps]}
-                onValueChange={handleFpsChange}
-                className="flex-grow"
-              />
-              <span className="w-12 text-right">{settings.fps.toFixed(1)}</span>
-            </div>
-          </div>
-          <div className="space-y-6">
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="ignoredWindows"
-                className="flex items-center space-x-2"
-              >
-                <span>ignored windows</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>
-                        windows to ignore during screen recording
-                        (case-insensitive), example:
-                        <br />
-                        - &quot;bit&quot; will ignore &quot;Bitwarden&quot; and
-                        &quot;bittorrent&quot;
-                        <br />- &quot;incognito&quot; will ignore tabs, windows
-                        that contains the word &quot;incognito&quot;
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <MultiSelect
-                options={createWindowOptions(
-                  windowItems,
-                  settings.ignoredWindows
-                )}
-                defaultValue={settings.ignoredWindows}
-                onValueChange={handleIgnoredWindowsChange}
-                placeholder="add windows to ignore"
-                variant="default"
-                modalPopover={true}
-                animation={2}
-                allowCustomValues={true}
-                validateCustomValue={(value) => value.length >= 2}
-              />
-            </div>
+          {!settings.disableVision && (
+            <>
+              <div className="flex flex-col space-y-6">
+                <div className="flex flex-col space-y-2">
+                  <Label
+                    htmlFor="monitorIds"
+                    className="flex items-center space-x-2"
+                  >
+                    <Monitor className="h-4 w-4" />
+                    <span>monitors</span>
+                  </Label>
+                  <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openMonitors}
+                        className="w-full justify-between"
+                      >
+                        {settings.monitorIds.length > 0
+                          ? `${settings.monitorIds.length} monitor(s) selected`
+                          : "select monitors"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      <Command>
+                        <CommandInput placeholder="search monitors..." />
+                        <CommandList>
+                          <CommandEmpty>no monitor found.</CommandEmpty>
+                          <CommandGroup>
+                            {availableMonitors.map((monitor) => (
+                              <CommandItem
+                                key={monitor.id}
+                                value={monitor.id}
+                                onSelect={() =>
+                                  handleMonitorChange(monitor.id.toString())
+                                }
+                              >
+                                <div className="flex items-center">
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      settings.monitorIds.includes(
+                                        monitor.id.toString()
+                                      )
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  {/* not selectable */}
+                                  <span
+                                    style={{
+                                      userSelect: "none",
+                                      WebkitUserSelect: "none",
+                                      MozUserSelect: "none",
+                                      msUserSelect: "none",
+                                    }}
+                                  >
+                                    {monitor.id}. {monitor.name}{" "}
+                                    {monitor.is_default ? "(default)" : ""} -{" "}
+                                    {monitor.width}x{monitor.height}
+                                  </span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="includedWindows"
-                className="flex items-center space-x-2"
-              >
-                <span>included windows</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>
-                        windows to include during screen recording
-                        (case-insensitive), example:
-                        <br />
-                        - &quot;chrome&quot; will match &quot;Google
-                        Chrome&quot;
-                        <br />- &quot;bitwarden&quot; will match
-                        &quot;Bitwarden&quot; and &quot;bittorrent&quot;
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <MultiSelect
-                options={createWindowOptions(
-                  windowItems,
-                  settings.includedWindows
-                )}
-                defaultValue={settings.includedWindows}
-                onValueChange={handleIncludedWindowsChange}
-                placeholder="add window to include"
-                variant="default"
-                modalPopover={true}
-                animation={2}
-                allowCustomValues={true}
-                validateCustomValue={(value) => value.length >= 2}
-              />
-            </div>
-          </div>
+                <div className="flex flex-col space-y-2">
+                  <Label
+                    htmlFor="ocrModel"
+                    className="flex items-center space-x-2"
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span>ocr model</span>
+                  </Label>
+                  <Select
+                    onValueChange={handleOcrModelChange}
+                    defaultValue={settings.ocrEngine}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        className="capitalize"
+                        placeholder="select ocr engine"
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="capitalize">
+                      {renderOcrEngineOptions()}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col space-y-2">
+                  <Label htmlFor="fps" className="flex items-center space-x-2">
+                    <span>frames per second (fps)</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle className="h-4 w-4 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>
+                            adjust the recording frame rate. lower values save
+                            <br />
+                            resources, higher values provide smoother
+                            recordings, less likely to miss activity.
+                            <br />
+                            (we do not use resources if your screen does not
+                            change much)
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <div className="flex items-center space-x-4">
+                    <Slider
+                      id="fps"
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      value={[settings.fps]}
+                      onValueChange={handleFpsChange}
+                      className="flex-grow"
+                    />
+                    <span className="w-12 text-right">
+                      {settings.fps.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="flex flex-col space-y-2">
+                    <Label
+                      htmlFor="ignoredWindows"
+                      className="flex items-center space-x-2"
+                    >
+                      <span>ignored windows</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <HelpCircle className="h-4 w-4 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>
+                              windows to ignore during screen recording
+                              (case-insensitive), example:
+                              <br />
+                              - &quot;bit&quot; will ignore
+                              &quot;Bitwarden&quot; and &quot;bittorrent&quot;
+                              <br />- &quot;incognito&quot; will ignore tabs,
+                              windows that contains the word
+                              &quot;incognito&quot;
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <MultiSelect
+                      options={createWindowOptions(
+                        windowItems,
+                        settings.ignoredWindows
+                      )}
+                      defaultValue={settings.ignoredWindows}
+                      onValueChange={handleIgnoredWindowsChange}
+                      placeholder="add windows to ignore"
+                      variant="default"
+                      modalPopover={true}
+                      animation={2}
+                      allowCustomValues={true}
+                      validateCustomValue={(value) => value.length >= 2}
+                    />
+                  </div>
 
-          {/*  */}
+                  <div className="flex flex-col space-y-2">
+                    <Label
+                      htmlFor="includedWindows"
+                      className="flex items-center space-x-2"
+                    >
+                      <span>included windows</span>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <HelpCircle className="h-4 w-4 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            <p>
+                              windows to include during screen recording
+                              (case-insensitive), example:
+                              <br />
+                              - &quot;chrome&quot; will match &quot;Google
+                              Chrome&quot;
+                              <br />- &quot;bitwarden&quot; will match
+                              &quot;Bitwarden&quot; and &quot;bittorrent&quot;
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <MultiSelect
+                      options={createWindowOptions(
+                        windowItems,
+                        settings.includedWindows
+                      )}
+                      defaultValue={settings.includedWindows}
+                      onValueChange={handleIncludedWindowsChange}
+                      placeholder="add window to include"
+                      variant="default"
+                      modalPopover={true}
+                      animation={2}
+                      allowCustomValues={true}
+                      validateCustomValue={(value) => value.length >= 2}
+                    />
+                  </div>
+                </div>
+
+                {/*  */}
+              </div>
+              <Separator className="my-6" />
+            </>
+          )}
         </div>
-        <Separator className="my-6" />
 
         <h4 className="text-lg font-semibold my-4">audio</h4>
 
@@ -1002,398 +1034,410 @@ export function RecordingSettings() {
             />
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <h4 className="font-medium">
-                enable realtime audio transcription
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                transcribe audio in real-time as you speak (dev preview) -{" "}
-                <a
-                  href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/examples/basic-transcription/index.ts"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  view example
-                </a>
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="enableRealtimeAudio"
-                checked={settings.enableRealtimeAudioTranscription}
-                onCheckedChange={(checked) =>
-                  handleSettingsChange({
-                    enableRealtimeAudioTranscription: checked,
-                  })
-                }
-              />
-            </div>
-          </div>
-
-          {settings.enableRealtimeAudioTranscription && (
-            <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="realtimeAudioTranscriptionEngine"
-                className="flex items-center space-x-2"
-              >
-                <Mic className="h-4 w-4" />
-                <span>realtime transcription model</span>
-              </Label>
-              <Select
-                onValueChange={(value) =>
-                  handleSettingsChange({
-                    realtimeAudioTranscriptionEngine: value,
-                  })
-                }
-                value={settings.realtimeAudioTranscriptionEngine}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="select realtime transcription engine" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="screenpipe-cloud">
-                    <div className="flex items-center justify-between w-full space-x-2">
-                      <span>screenpipe cloud</span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">cloud</Badge>
-                        {!credits?.amount && (
-                          <Badge variant="outline" className="text-xs">
-                            get credits
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="deepgram">
-                    <div className="flex items-center justify-between w-full space-x-2">
-                      <span>deepgram</span>
-                      <Badge variant="secondary">cloud</Badge>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="flex flex-col space-y-2">
-            <Label
-              htmlFor="audioTranscriptionModel"
-              className="flex items-center space-x-2"
-            >
-              <Mic className="h-4 w-4" />
-              <span>audio transcription model</span>
-            </Label>
-            <Select
-              onValueChange={handleAudioTranscriptionModelChange}
-              value={settings.audioTranscriptionEngine}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="select audio transcription engine" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="screenpipe-cloud">
-                  <div className="flex items-center justify-between w-full space-x-2">
-                    <span>screenpipe cloud</span>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">cloud</Badge>
-                      {!credits?.amount && (
-                        <Badge variant="outline" className="text-xs">
-                          get credits
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </SelectItem>
-                <SelectItem value="deepgram">
-                  <div className="flex items-center justify-between w-full space-x-2">
-                    <span>deepgram</span>
-                    <Badge variant="secondary">cloud</Badge>
-                  </div>
-                </SelectItem>
-                <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
-                <SelectItem value="whisper-large">whisper-large</SelectItem>
-                <SelectItem value="whisper-large-v3-turbo">
-                  whisper-large-turbo
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {settings.audioTranscriptionEngine === "deepgram" && (
-            <div className="mt-2">
-              <div className="flex flex-col space-y-2">
-                <Label
-                  htmlFor="deepgramApiKey"
-                  className="flex items-center gap-2"
-                >
-                  <Key className="h-4 w-4" />
-                  <span>api key</span>
-                </Label>
-                <div className="flex-grow relative">
-                  <Input
-                    id="deepgramApiKey"
-                    type={showApiKey ? "text" : "password"}
-                    value={settings.deepgramApiKey}
-                    onChange={(e) => {
-                      const newValue = e.target.value;
+          {!settings.disableAudio && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h4 className="font-medium">
+                    enable realtime audio transcription
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    transcribe audio in real-time as you speak (dev preview) -{" "}
+                    <a
+                      href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/examples/basic-transcription/index.ts"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      view example
+                    </a>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="enableRealtimeAudio"
+                    checked={settings.enableRealtimeAudioTranscription}
+                    onCheckedChange={(checked) =>
                       handleSettingsChange({
-                        deepgramApiKey: newValue,
-                      });
-                    }}
-                    className="pr-10 w-full"
-                    placeholder="enter your Deepgram API key"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    autoComplete="off"
+                        enableRealtimeAudioTranscription: checked,
+                      })
+                    }
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground text-left mt-1">
-                don&apos;t have an api key? get one from{" "}
-                <a
-                  href="https://console.deepgram.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+
+              {settings.enableRealtimeAudioTranscription && (
+                <div className="flex flex-col space-y-2">
+                  <Label
+                    htmlFor="realtimeAudioTranscriptionEngine"
+                    className="flex items-center space-x-2"
+                  >
+                    <Mic className="h-4 w-4" />
+                    <span>realtime transcription model</span>
+                  </Label>
+                  <Select
+                    onValueChange={(value) =>
+                      handleSettingsChange({
+                        realtimeAudioTranscriptionEngine: value,
+                      })
+                    }
+                    value={settings.realtimeAudioTranscriptionEngine}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="select realtime transcription engine" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="screenpipe-cloud">
+                        <div className="flex items-center justify-between w-full space-x-2">
+                          <span>screenpipe cloud</span>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">cloud</Badge>
+                            {!credits?.amount && (
+                              <Badge variant="outline" className="text-xs">
+                                get credits
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="deepgram">
+                        <div className="flex items-center justify-between w-full space-x-2">
+                          <span>deepgram</span>
+                          <Badge variant="secondary">cloud</Badge>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="audioTranscriptionModel"
+                  className="flex items-center space-x-2"
                 >
-                  deepgram&apos;s website
-                </a>{" "}
-                or use screenpipe cloud
-              </p>
-            </div>
+                  <Mic className="h-4 w-4" />
+                  <span>audio transcription model</span>
+                </Label>
+                <Select
+                  onValueChange={handleAudioTranscriptionModelChange}
+                  value={settings.audioTranscriptionEngine}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="select audio transcription engine" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="screenpipe-cloud">
+                      <div className="flex items-center justify-between w-full space-x-2">
+                        <span>screenpipe cloud</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">cloud</Badge>
+                          {!credits?.amount && (
+                            <Badge variant="outline" className="text-xs">
+                              get credits
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="deepgram">
+                      <div className="flex items-center justify-between w-full space-x-2">
+                        <span>deepgram</span>
+                        <Badge variant="secondary">cloud</Badge>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="whisper-tiny">whisper-tiny</SelectItem>
+                    <SelectItem value="whisper-large">whisper-large</SelectItem>
+                    <SelectItem value="whisper-large-v3-turbo">
+                      whisper-large-turbo
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {settings.audioTranscriptionEngine === "deepgram" && (
+                <div className="mt-2">
+                  <div className="flex flex-col space-y-2">
+                    <Label
+                      htmlFor="deepgramApiKey"
+                      className="flex items-center gap-2"
+                    >
+                      <Key className="h-4 w-4" />
+                      <span>api key</span>
+                    </Label>
+                    <div className="flex-grow relative">
+                      <Input
+                        id="deepgramApiKey"
+                        type={showApiKey ? "text" : "password"}
+                        value={settings.deepgramApiKey}
+                        onChange={(e) => {
+                          const newValue = e.target.value;
+                          handleSettingsChange({
+                            deepgramApiKey: newValue,
+                          });
+                        }}
+                        className="pr-10 w-full"
+                        placeholder="enter your Deepgram API key"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        autoComplete="off"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground text-left mt-1">
+                    don&apos;t have an api key? get one from{" "}
+                    <a
+                      href="https://console.deepgram.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      deepgram&apos;s website
+                    </a>{" "}
+                    or use screenpipe cloud
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="audioDevices"
+                  className="flex items-center space-x-2"
+                >
+                  <Mic className="h-4 w-4" />
+                  <span>audio devices</span>
+                </Label>
+                <Popover
+                  open={openAudioDevices}
+                  onOpenChange={setOpenAudioDevices}
+                  modal={true}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openAudioDevices}
+                      className="w-full justify-between"
+                    >
+                      {settings.audioDevices.length > 0
+                        ? `${settings.audioDevices.length} device(s) selected`
+                        : "select audio devices"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="search audio devices..." />
+                      <CommandList>
+                        <CommandEmpty>no audio device found.</CommandEmpty>
+                        <CommandGroup>
+                          {availableAudioDevices.map((device) => (
+                            <CommandItem
+                              key={device.name}
+                              value={device.name}
+                              onSelect={() =>
+                                handleAudioDeviceChange(device.name)
+                              }
+                            >
+                              <div className="flex items-center">
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    settings.audioDevices.includes(device.name)
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                <span
+                                  style={{
+                                    userSelect: "none",
+                                    WebkitUserSelect: "none",
+                                    MozUserSelect: "none",
+                                    msUserSelect: "none",
+                                  }}
+                                >
+                                  {device.name}{" "}
+                                  {device.is_default ? "(default)" : ""}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="languages"
+                  className="flex items-center space-x-2"
+                >
+                  <Languages className="h-4 w-4" />
+                  <span>languages</span>
+                </Label>
+                <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openLanguages}
+                      className="w-full justify-between"
+                    >
+                      {settings.languages.length > 0
+                        ? `${settings.languages.join(", ")}`
+                        : "select languages"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="search languages..." />
+                      <CommandList>
+                        <CommandEmpty>no language found.</CommandEmpty>
+                        <CommandGroup>
+                          {Object.entries(Language).map(([language, id]) => (
+                            <CommandItem
+                              key={language}
+                              value={language}
+                              onSelect={() => handleLanguageChange(id)}
+                            >
+                              <div className="flex items-center">
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    settings.languages.includes(id)
+                                      ? "opacity-100"
+                                      : "opacity-0"
+                                  )}
+                                />
+                                {/* not selectable */}
+                                <span
+                                  style={{
+                                    userSelect: "none",
+                                    WebkitUserSelect: "none",
+                                    MozUserSelect: "none",
+                                    msUserSelect: "none",
+                                  }}
+                                >
+                                  {language}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="vadSensitivity"
+                  className="flex items-center space-x-2"
+                >
+                  <span>voice activity detection sensitivity</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          adjust the voice activity detection sensitivity.
+                          <br />
+                          low: more sensitive, catches most speech but may have
+                          more false positives.
+                          <br />
+                          medium: balanced sensitivity.
+                          <br />
+                          high (recommended): less sensitive, may miss some
+                          speech but reduces false positives.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex items-center space-x-4">
+                  <Slider
+                    id="vadSensitivity"
+                    min={0}
+                    max={2}
+                    step={1}
+                    value={[vadSensitivityToNumber(settings.vadSensitivity)]}
+                    onValueChange={handleVadSensitivityChange}
+                    className="flex-grow"
+                  />
+                  <span className="w-16 text-right">
+                    {settings.vadSensitivity}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>low</span>
+                  <span>medium</span>
+                  <span>high</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <Label
+                  htmlFor="audioChunkDuration"
+                  className="flex items-center space-x-2"
+                >
+                  <span>audio chunk duration (seconds)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          adjust the duration of each audio chunk.
+                          <br />
+                          shorter durations may lower resource usage spikes,
+                          <br />
+                          while longer durations may increase transcription
+                          quality.
+                          <br />
+                          deepgram in general works better than whisper if you
+                          want higher quality transcription.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <div className="flex items-center space-x-4">
+                  <Slider
+                    id="audioChunkDuration"
+                    min={5}
+                    max={3000}
+                    step={1}
+                    value={[settings.audioChunkDuration]}
+                    onValueChange={handleAudioChunkDurationChange}
+                    className="flex-grow"
+                  />
+                  <span className="w-12 text-right">
+                    {settings.audioChunkDuration} s
+                  </span>
+                </div>
+              </div>
+            </>
           )}
-
-          <div className="flex flex-col space-y-2">
-            <Label
-              htmlFor="audioDevices"
-              className="flex items-center space-x-2"
-            >
-              <Mic className="h-4 w-4" />
-              <span>audio devices</span>
-            </Label>
-            <Popover
-              open={openAudioDevices}
-              onOpenChange={setOpenAudioDevices}
-              modal={true}
-            >
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openAudioDevices}
-                  className="w-full justify-between"
-                >
-                  {settings.audioDevices.length > 0
-                    ? `${settings.audioDevices.length} device(s) selected`
-                    : "select audio devices"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="search audio devices..." />
-                  <CommandList>
-                    <CommandEmpty>no audio device found.</CommandEmpty>
-                    <CommandGroup>
-                      {availableAudioDevices.map((device) => (
-                        <CommandItem
-                          key={device.name}
-                          value={device.name}
-                          onSelect={() => handleAudioDeviceChange(device.name)}
-                        >
-                          <div className="flex items-center">
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                settings.audioDevices.includes(device.name)
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            <span
-                              style={{
-                                userSelect: "none",
-                                WebkitUserSelect: "none",
-                                MozUserSelect: "none",
-                                msUserSelect: "none",
-                              }}
-                            >
-                              {device.name}{" "}
-                              {device.is_default ? "(default)" : ""}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="flex flex-col space-y-2">
-            <Label htmlFor="languages" className="flex items-center space-x-2">
-              <Languages className="h-4 w-4" />
-              <span>languages</span>
-            </Label>
-            <Popover open={openLanguages} onOpenChange={setOpenLanguages}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openLanguages}
-                  className="w-full justify-between"
-                >
-                  {settings.languages.length > 0
-                    ? `${settings.languages.join(", ")}`
-                    : "select languages"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput placeholder="search languages..." />
-                  <CommandList>
-                    <CommandEmpty>no language found.</CommandEmpty>
-                    <CommandGroup>
-                      {Object.entries(Language).map(([language, id]) => (
-                        <CommandItem
-                          key={language}
-                          value={language}
-                          onSelect={() => handleLanguageChange(id)}
-                        >
-                          <div className="flex items-center">
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                settings.languages.includes(id)
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            {/* not selectable */}
-                            <span
-                              style={{
-                                userSelect: "none",
-                                WebkitUserSelect: "none",
-                                MozUserSelect: "none",
-                                msUserSelect: "none",
-                              }}
-                            >
-                              {language}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          <div className="flex flex-col space-y-2">
-            <Label
-              htmlFor="vadSensitivity"
-              className="flex items-center space-x-2"
-            >
-              <span>voice activity detection sensitivity</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      adjust the voice activity detection sensitivity.
-                      <br />
-                      low: more sensitive, catches most speech but may have more
-                      false positives.
-                      <br />
-                      medium: balanced sensitivity.
-                      <br />
-                      high (recommended): less sensitive, may miss some speech
-                      but reduces false positives.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <div className="flex items-center space-x-4">
-              <Slider
-                id="vadSensitivity"
-                min={0}
-                max={2}
-                step={1}
-                value={[vadSensitivityToNumber(settings.vadSensitivity)]}
-                onValueChange={handleVadSensitivityChange}
-                className="flex-grow"
-              />
-              <span className="w-16 text-right">{settings.vadSensitivity}</span>
-            </div>
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>low</span>
-              <span>medium</span>
-              <span>high</span>
-            </div>
-          </div>
-
-          <div className="flex flex-col space-y-2">
-            <Label
-              htmlFor="audioChunkDuration"
-              className="flex items-center space-x-2"
-            >
-              <span>audio chunk duration (seconds)</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className="h-4 w-4 cursor-default" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>
-                      adjust the duration of each audio chunk.
-                      <br />
-                      shorter durations may lower resource usage spikes,
-                      <br />
-                      while longer durations may increase transcription quality.
-                      <br />
-                      deepgram in general works better than whisper if you want
-                      higher quality transcription.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </Label>
-            <div className="flex items-center space-x-4">
-              <Slider
-                id="audioChunkDuration"
-                min={5}
-                max={3000}
-                step={1}
-                value={[settings.audioChunkDuration]}
-                onValueChange={handleAudioChunkDurationChange}
-                className="flex-grow"
-              />
-              <span className="w-12 text-right">
-                {settings.audioChunkDuration} s
-              </span>
-            </div>
-          </div>
         </div>
 
         <Separator className="my-6" />

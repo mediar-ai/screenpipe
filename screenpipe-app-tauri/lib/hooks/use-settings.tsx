@@ -45,7 +45,7 @@ export type User = {
     amount: number;
   };
   stripe_connected?: boolean;
-}
+};
 
 export type Settings = {
   openaiApiKey: string;
@@ -92,6 +92,7 @@ export type Settings = {
   pipeShortcuts: Record<string, string>;
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -149,6 +150,7 @@ const DEFAULT_SETTINGS: Settings = {
   pipeShortcuts: {},
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
+  disableVision: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -221,7 +223,7 @@ export function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
-/** 
+/**
  * @warning Do not change autoSave to true, it causes race conditions
  */
 export const getStore = async () => {
@@ -231,8 +233,12 @@ export const getStore = async () => {
       const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
         autoSave: false,
       });
-      const activeProfile = await profilesStore.get("activeProfile") || "default";
-      const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
+      const activeProfile =
+        (await profilesStore.get("activeProfile")) || "default";
+      const file =
+        activeProfile === "default"
+          ? `store.bin`
+          : `store-${activeProfile}.bin`;
       console.log("activeProfile", activeProfile, file);
       return new TauriStore(`${dir}/screenpipe/${file}`, {
         autoSave: false,
@@ -310,7 +316,9 @@ export const store = createContextStore<StoreModel>(
 export function useSettings() {
   const settings = store.useStoreState((state) => state.settings);
   const setSettings = store.useStoreActions((actions) => actions.setSettings);
-  const resetSettings = store.useStoreActions((actions) => actions.resetSettings);
+  const resetSettings = store.useStoreActions(
+    (actions) => actions.resetSettings
+  );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
   const getDataDir = async () => {
