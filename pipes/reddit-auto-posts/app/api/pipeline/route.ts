@@ -83,11 +83,12 @@ export async function GET() {
     try {
       fs.mkdirSync(logsDir);
     } catch (_error) {
-      console.warn("failed to create logs directory, probably already exists:", logsDir);
+      console.warn("creating logs directory, probably already exists:", logsDir);
     }
 
     const fileContent = fs.readFileSync(pipeConfigPath, 'utf-8');
     const configData = JSON.parse(fileContent);
+
     if (emailEnabled && !configData?.welcomeEmailSent) {
       const welcomeEmail = `
         Welcome to the daily reddit questions pipeline!
@@ -150,13 +151,19 @@ export async function GET() {
       await saveDailyLog(logEntry);
     } else {
       return NextResponse.json(
-        { message: "no screenpipe data is found, is screenpipe running?" },
+        { message: "query is empty please wait & and try again!" },
         { status: 200 }
       );
     }
 
-    let lastEmailSent = new Date(0);
+    let lastEmailSent;
     let shouldSendSummary = false;
+
+    if (configData.lastEmailSent){
+      lastEmailSent = new Date(configData.lastEmailSent);
+    } else{
+      lastEmailSent = new Date(0);
+    }
 
     if (summaryFrequency === "daily") {
       const [emailHour, emailMinute] = emailTime.split(":").map(Number);
@@ -250,7 +257,8 @@ export async function GET() {
             { status: 500 }
           );
         }
-        lastEmailSent = now;
+        configData.lastEmailSent = new Date().toISOString()
+        fs.writeFileSync(pipeConfigPath, JSON.stringify(configData, null, 2));
         return NextResponse.json(
           { message: "pipe executed successfully", suggestedQuestions: redditQuestions },
           { status: 200 }

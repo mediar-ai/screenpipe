@@ -7,11 +7,18 @@ import { Label } from "@/components/ui/label";
 import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
+import { useHealthCheck } from "@/lib/hooks/use-health";
 import { MemoizedReactMarkdown } from "./markdown";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -23,13 +30,15 @@ import {
 const Pipe: React.FC = () => {
 
   const { settings, updateSettings } = useSettings();
+  const { isServerDown } = useHealthCheck();
   const { toast } = useToast();
   const [showKey, setShowKey] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>();
   const [lastLog, setLastLog] = useState<any>(null);
   const [appName, setAppName] = useState("");
   const [contentType, setContentType] = useState("");
 
+  const aiDisabled = settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
 
   const defaultDailylogPrompt = 
 `- Analyze user activities and summarize them into a structured daily log.
@@ -164,12 +173,12 @@ const Pipe: React.FC = () => {
             id="summaryFrequency"
             name="summaryFrequency"
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.summaryFrequency || "daily"}
-            placeholder="frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
+            placeholder="frequency of summary emails: 'daily' for once a day at email time, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="emailTime">email time </Label>
-          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summaryFrequency is &apos;daily&apos;)</span>
+          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summary frequency is &apos;daily&apos;)</span>
           <Input
             id="emailTime"
             name="emailTime"
@@ -278,16 +287,34 @@ const Pipe: React.FC = () => {
           save settings
         </Button>
       </form>
-      <div className="space-y-4 w-full flex flex-col">
-        <Button
-          onClick={testPipe}
-          variant="outline"
-          disabled={loading}
-          className="w-full"
-        >
-          {loading ? "generating..." : "generate reddit questions"}
-        </Button>
-
+      <div className="space-y-4 pb-[30px] w-full flex flex-col">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={testPipe}
+                  className="w-full border-[1.4px] shadow-sm"
+                  variant={"outline"}
+                  disabled={loading || aiDisabled || isServerDown}
+                >
+                {loading ? "generating..." : "generate reddit questions"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {(aiDisabled || isServerDown) && (
+              <TooltipContent>
+                <p>{`${(aiDisabled && isServerDown) ? 
+                  "you don't have access of screenpipe-cloud and screenpipe is down!" 
+                  : isServerDown ? "screenpipe is not running..."
+                  : aiDisabled ? "you don't have access to screenpipe-cloud :( please consider login"
+                  : ""
+                  }
+                `}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         {lastLog && (
         <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
           <MemoizedReactMarkdown
