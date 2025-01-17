@@ -172,7 +172,7 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
-        Some(Command::Index {
+        Some(Command::Add {
             output: OutputFormat::Text,
             ..
         }) => true,
@@ -279,7 +279,7 @@ async fn main() -> anyhow::Result<()> {
                 info!("database migrations completed successfully");
                 return Ok(());
             }
-            Command::Index {
+            Command::Add {
                 path,
                 output,
                 data_dir,
