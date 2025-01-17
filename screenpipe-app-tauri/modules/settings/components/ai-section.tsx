@@ -24,16 +24,15 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import React, { useState, useEffect } from "react";
-import { LogFileButton } from "../log-file-button";
-import { Input } from "../ui/input";
-import { Textarea } from "../ui/textarea";
-import { toast } from "../ui/use-toast";
+import { LogFileButton } from "@/components/log-file-button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { useUser } from "@/lib/hooks/use-user";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Card, CardContent } from "../ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Command,
   CommandEmpty,

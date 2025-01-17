@@ -8,9 +8,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Check,
   ChevronsUpDown,
@@ -34,7 +34,7 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
-} from "./ui/command";
+} from "../../../components/ui/command";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Settings,
@@ -44,16 +44,16 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
-import { Badge } from "./ui/badge";
+import { Badge } from "../../../components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "./ui/tooltip";
-import { Switch } from "./ui/switch";
-import { Input } from "./ui/input";
-import { Slider } from "./ui/slider";
+} from "../../../components/ui/tooltip";
+import { Switch } from "../../../components/ui/switch";
+import { Input } from "../../../components/ui/input";
+import { Slider } from "../../../components/ui/slider";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { trace } from "@opentelemetry/api";
@@ -65,9 +65,9 @@ import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { ToastAction } from "@/components/ui/toast";
 import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Separator } from "./ui/separator";
+import { Separator } from "../../../components/ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import { relaunch } from "@tauri-apps/plugin-process";
 

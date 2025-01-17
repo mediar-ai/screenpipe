@@ -14,22 +14,22 @@ import {
   HardDrive,
   FolderInput,
 } from "lucide-react";
-import { DialogHeader, DialogTitle } from "./ui/dialog";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { RecordingSettings } from "./recording-settings";
-import { AccountSection } from "./settings/account-section";
-import ShortcutSection from "./settings/shortcut-section";
-import DiskUsage from "./settings/disk-usage";
-import AISection from "./settings/ai-section";
+import { RecordingSettings } from "@/modules/settings/components/recording-settings";
+import { AccountSection } from "@/modules/settings/components/account-section";
+import ShortcutSection from "@/modules/settings/components/shortcut-section";
+import DiskUsage from "@/modules/settings/components/disk-usage";
+import AISection from "@/modules/settings/components//ai-section";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";

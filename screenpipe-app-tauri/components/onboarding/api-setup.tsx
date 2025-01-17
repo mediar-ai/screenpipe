@@ -8,7 +8,7 @@ import { open } from "@tauri-apps/plugin-shell";
 
 import OnboardingNavigation from "@/components/onboarding/navigation";
 
-import AISection from "../settings/ai-section";
+import AISection from "@/modules/settings/components/ai-section";
 
 interface OnboardingAPISetupProps {
   className?: string;

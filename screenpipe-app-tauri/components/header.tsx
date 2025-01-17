@@ -1,9 +1,8 @@
 "use client";
-import { Button } from "@/components/ui/button";
-import { Settings } from "@/components/settings";
-import HealthStatus from "@/components/screenpipe-status";
-
 import React from "react";
+import { Button } from "@/components/ui/button";
+import { Settings } from "@/modules/settings/settings";
+import HealthStatus from "@/components/screenpipe-status";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +20,6 @@ import {
   Folder,
   Book,
   User,
-  Fingerprint,
   Settings2,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
