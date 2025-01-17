@@ -183,7 +183,7 @@ pub async fn handle_index_command(
                     #[cfg(target_os = "macos")]
                     OcrEngine::AppleNative => perform_ocr_apple(&frame, &[]),
                     #[cfg(target_os = "windows")]
-                    OcrEngine::WindowsNative => perform_ocr_windows(&frame).await?,
+                    OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                     _ => {
                         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                         return perform_ocr_tesseract(&frame, vec![]);
