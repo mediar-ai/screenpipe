@@ -1,6 +1,8 @@
 mod process_chunk;
 mod realtime;
 use lazy_static::lazy_static;
+#[doc(hidden)]
+pub use realtime::start_deepgram_stream;
 pub use realtime::stream_transcription_deepgram;
 use std::env;
 

@@ -378,6 +378,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push(realtime_audio_transcription_engine.as_str());
     }
 
+    let disable_vision = store
+        .get("disableVision")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if disable_vision {
+        args.push("--disable-vision");
+    }
+
     // args.push("--debug");
 
     if cfg!(windows) {

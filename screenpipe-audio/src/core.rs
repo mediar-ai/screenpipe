@@ -204,7 +204,6 @@ pub async fn record_and_transcribe(
 
 pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
-    realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
@@ -213,7 +212,6 @@ pub async fn start_realtime_recording(
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
             audio_stream.clone(),
-            realtime_transcription_engine.clone(),
             languages.clone(),
             realtime_transcription_sender.clone(),
             is_running.clone(),
