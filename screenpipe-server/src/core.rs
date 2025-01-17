@@ -50,7 +50,6 @@ pub async fn start_continuous_recording(
     capture_unfocused_windows: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     realtime_audio_enabled: bool,
-    realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
@@ -138,7 +137,6 @@ pub async fn start_continuous_recording(
                 audio_transcription_engine,
                 realtime_audio_enabled,
                 realtime_audio_devices,
-                realtime_transcription_engine,
                 languages,
                 realtime_transcription_sender,
                 deepgram_api_key,
@@ -297,7 +295,6 @@ async fn record_audio(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_audio_enabled: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
-    realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     languages: Vec<Language>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     deepgram_api_key: Option<String>,
@@ -337,7 +334,6 @@ async fn record_audio(
             let device_control = Arc::new(device_control);
 
             let realtime_audio_devices_clone = realtime_audio_devices.clone();
-            let realtime_transcription_engine_clone = realtime_transcription_engine.clone();
             let languages_clone = languages.clone();
             let realtime_transcription_sender_clone = realtime_transcription_sender_clone.clone();
             let deepgram_api_key_clone = deepgram_api_key.clone();
@@ -399,8 +395,6 @@ async fn record_audio(
 
                     let audio_device_clone = audio_device_clone.clone();
                     let realtime_audio_devices_clone = realtime_audio_devices_clone.clone();
-                    let realtime_transcription_engine_clone =
-                        realtime_transcription_engine_clone.clone();
                     let languages_clone = languages_clone.clone();
                     let is_running_loop = is_running_loop.clone();
                     let realtime_transcription_sender_clone =
@@ -411,7 +405,6 @@ async fn record_audio(
                         {
                             let _ = start_realtime_recording(
                                 audio_stream_clone,
-                                realtime_transcription_engine_clone.clone(),
                                 languages_clone.clone(),
                                 is_running_loop.clone(),
                                 realtime_transcription_sender_clone.clone(),
