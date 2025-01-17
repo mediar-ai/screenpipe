@@ -10,7 +10,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"
+} from "@/components/ui/accordion";
 
 interface DiskUsageData {
   media: {
@@ -27,15 +27,26 @@ interface DiskUsageData {
   avaiable_space: string;
 }
 
-const BadgeItem = ({ label, value, description}: {label: string, value: string, description?: string}) => (
+const BadgeItem = ({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description?: string;
+}) => (
   <div className="flex flex-row items-center justify-between">
     <div className="flex flex-col !float-left items-start">
       <span className="font-semibold">{label}</span>
-      <span className="text-[14px] !font-normal text-muted-foreground">{description}</span>
+      <span className="text-[14px] !font-normal text-muted-foreground">
+        {description}
+      </span>
     </div>
-    <Badge 
-      variant={"outline"} 
-      className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+    <Badge
+      variant={"outline"}
+      className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center"
+    >
       {value}
     </Badge>
   </div>
@@ -55,10 +66,13 @@ export default function DiskUsage() {
   const getDisk = async () => {
     setLoading(true);
     try {
-      const cachedData = await localforage.getItem<{diskData: DiskUsageData, lastUpdated: number}>("diskUsage");
+      const cachedData = await localforage.getItem<{
+        diskData: DiskUsageData;
+        lastUpdated: number;
+      }>("diskUsage");
       const now = Date.now();
       const twoDaysInMillis = 2 * 24 * 60 * 60 * 1000;
-      if (cachedData && (now - cachedData.lastUpdated) < twoDaysInMillis) {
+      if (cachedData && now - cachedData.lastUpdated < twoDaysInMillis) {
         setDiskUsage(cachedData.diskData);
         setLoading(false);
       } else {
@@ -66,7 +80,10 @@ export default function DiskUsage() {
         await new Promise<DiskUsageData>((resolve) => {
           setTimeout(() => resolve(result), 3000);
         });
-        await localforage.setItem("diskUsage", { diskData: result, lastUpdated: now });
+        await localforage.setItem("diskUsage", {
+          diskData: result,
+          lastUpdated: now,
+        });
         setDiskUsage(result);
         setLoading(false);
       }
@@ -75,7 +92,7 @@ export default function DiskUsage() {
       toast({
         title: "error",
         description: "failed to fetch disk usage, please try again!",
-        variant: "destructive"
+        variant: "destructive",
       });
     }
   };
@@ -86,43 +103,60 @@ export default function DiskUsage() {
 
   return (
     <div className="w-full space-y-6 py-4">
-      <h1 className="text-2xl font-bold">disk usage
-        {loading && !diskUsage ? 
-          <span className="text-sm ml-2 !font-normal text-muted-foreground">loading...</span>
-          : ""}
+      <h1 className="text-2xl font-bold">
+        disk usage
+        {loading && !diskUsage ? (
+          <span className="text-sm ml-2 !font-normal text-muted-foreground">
+            loading...
+          </span>
+        ) : (
+          ""
+        )}
       </h1>
       <div className="flex flex-col items-center justify-center space-y-4">
-        {loading && !diskUsage ? 
+        {loading && !diskUsage ? (
           <div className="w-full space-y-4">
             <Skeleton className="h-[80px] w-[90%] mx-auto" />
             <Skeleton className="h-[80px] w-[90%] mx-auto" />
             <Skeleton className="h-[200px] w-[90%] mx-auto" />
           </div>
-          : ""}
+        ) : (
+          ""
+        )}
         {diskUsage && diskUsage.pipes && (
-          <Accordion type="single" collapsible 
-            className="w-[90%] border rounded-lg">
+          <Accordion
+            type="single"
+            collapsible
+            className="w-[90%] border rounded-lg"
+          >
             <AccordionItem value="total-pipes-size">
               <AccordionTrigger className="mx-4 h-[80px] hover:no-underline">
                 <div className="w-full flex items-center justify-between">
                   <div className="flex flex-col !float-left items-start">
                     <span className="font-semibold">disk used by pipes</span>
-                    <span className="text-[14px] !font-normal text-muted-foreground">total space used by installed pipes</span>
+                    <span className="text-[14px] !font-normal text-muted-foreground">
+                      total space used by installed pipes
+                    </span>
                   </div>
-                  <Badge 
-                    variant={"outline"} 
-                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                  <Badge
+                    variant={"outline"}
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center"
+                  >
                     {diskUsage.pipes.total_pipes_size}
                   </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="w-full">
                 {diskUsage.pipes.pipes.map(([name, size], index) => (
-                  <div key={index} className="flex items-center justify-between px-1 py-1">
+                  <div
+                    key={index}
+                    className="flex items-center justify-between px-1 py-1"
+                  >
                     <span className="text-base ml-8">{name}</span>
-                    <Badge 
+                    <Badge
                       variant={"outline"}
-                      className="mr-10 min-w-[5.5rem] flex flex-row justify-center">
+                      className="mr-10 min-w-[5.5rem] flex flex-row justify-center"
+                    >
                       {size}
                     </Badge>
                   </div>
@@ -132,8 +166,11 @@ export default function DiskUsage() {
           </Accordion>
         )}
         {diskUsage && diskUsage.media && (
-          <Accordion type="single" collapsible 
-            className="w-[90%] border rounded-lg">
+          <Accordion
+            type="single"
+            collapsible
+            className="w-[90%] border rounded-lg"
+          >
             <AccordionItem value="total-pipes-size">
               <AccordionTrigger className="mx-4 h-[80px] hover:no-underline">
                 <div className="w-full flex items-center justify-between">
@@ -143,27 +180,36 @@ export default function DiskUsage() {
                       amount of data captured by screenpipe over the time
                     </span>
                   </div>
-                  <Badge 
-                    variant={"outline"} 
-                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center">
+                  <Badge
+                    variant={"outline"}
+                    className="mr-4 font-semibold min-w-[5.5rem] flex flex-row justify-center"
+                  >
                     {diskUsage.media.total_media_size}
                   </Badge>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="w-full">
-                <div key={"video"} className="flex items-center justify-between px-1 py-1">
+                <div
+                  key={"video"}
+                  className="flex items-center justify-between px-1 py-1"
+                >
                   <span className="text-base ml-8">video data</span>
-                  <Badge 
-                    variant={"outline"} 
-                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center">
+                  <Badge
+                    variant={"outline"}
+                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center"
+                  >
                     {diskUsage.media.videos_size}
                   </Badge>
                 </div>
-                <div key={"audio"} className="flex items-center justify-between px-1 py-1">
+                <div
+                  key={"audio"}
+                  className="flex items-center justify-between px-1 py-1"
+                >
                   <span className="text-base ml-8">audio data</span>
-                  <Badge 
-                    variant={"outline"} 
-                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center ">
+                  <Badge
+                    variant={"outline"}
+                    className="mr-10 min-w-[5.5rem] flex flex-row justify-center "
+                  >
                     {diskUsage.media.audios_size}
                   </Badge>
                 </div>
@@ -172,33 +218,29 @@ export default function DiskUsage() {
           </Accordion>
         )}
         {diskUsage && diskUsage.total_data_size && diskUsage.avaiable_space && (
-          <Accordion type="single" 
-            className="w-[90%] border rounded-lg">
-            <AccordionItem value="total-pipes-size">
-              <AccordionTrigger className="mx-4 h-[200px] flex hover:no-underline">
-                <div className="w-full">
-                  <BadgeItem 
-                    label="screenpipe cache size" 
-                    description="disk space used for models, frames..."
-                    value={diskUsage.total_cache_size} />
-                  <Divider />
-                  <BadgeItem 
-                    label="disk space used by screenpipe" 
-                    description="total disk space utilized by the screenpipe application"
-                    value={diskUsage.total_data_size} />
-                  <Divider />
-                  <BadgeItem 
-                    label="available disk space" 
-                    description="remaining free disk space on your device"
-                    value={diskUsage.avaiable_space} 
-                  />
-                </div>
-              </AccordionTrigger>
-            </AccordionItem>
-          </Accordion>
+          <div className="w-[90%] border rounded-lg p-8">
+            <div className="w-full space-y-6">
+              <BadgeItem
+                label="screenpipe cache size"
+                description="disk space used for models, frames..."
+                value={diskUsage.total_cache_size}
+              />
+              <Divider />
+              <BadgeItem
+                label="disk space used by screenpipe"
+                description="total disk space utilized by the screenpipe application"
+                value={diskUsage.total_data_size}
+              />
+              <Divider />
+              <BadgeItem
+                label="available disk space"
+                description="remaining free disk space on your device"
+                value={diskUsage.avaiable_space}
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
-
