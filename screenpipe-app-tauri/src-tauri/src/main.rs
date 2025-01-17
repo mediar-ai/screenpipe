@@ -29,7 +29,7 @@ use tauri_plugin_store::StoreBuilder;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
@@ -62,7 +62,6 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-use tauri_plugin_sentry::sentry;
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -1079,7 +1078,7 @@ async fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle).await {
-                    error!("Failed to initialize global shortcuts: {}", e);
+                    warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });
             Ok(())
