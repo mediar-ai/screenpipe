@@ -58,7 +58,7 @@ const Pipe: React.FC = () => {
   const testPipe = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/pipeline");
+      const res = await fetch("/api/test-pipeline");
       if (res.status === 500 || res.status === 400) {
         toast({
           title: "failed to intialize daily log",

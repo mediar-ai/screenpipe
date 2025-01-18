@@ -118,51 +118,17 @@ export async function GET() {
           { status: 500 }
         );
       }
-    }
+    };
 
     const now = new Date();
     const startTime = new Date(now.getTime() - interval);
-
-    const screenData = await retry(() => pipe.queryScreenpipe({
-      startTime: startTime.toISOString(),
-      endTime: now.toISOString(),
-      windowName: windowName,
-      limit: pageSize,
-      contentType: contentType,
-    }));
-
-    let logEntry: DailyLog | undefined;
-    if (screenData && screenData.data && screenData.data.length > 0) {
-      if (aiProvider === "screenpipe-cloud" && !userToken) {
-        return NextResponse.json(
-          { error: `seems like you don't have screenpipe-cloud access :(` },
-          { status: 500 }
-        );
-      }
-      logEntry = await generateDailyLog(
-        screenData.data,
-        dailylogPrompt,
-        aiProvider,
-        aiModel,
-        aiUrl,
-        openaiApiKey,
-        userToken as string,
-      );
-      await saveDailyLog(logEntry);
-    } else {
-      return NextResponse.json(
-        { message: "query is empty please wait & and try again!" },
-        { status: 200 }
-      );
-    }
-
     let lastEmailSent;
     let shouldSendSummary = false;
 
     if (configData.lastEmailSent){
       lastEmailSent = new Date(configData.lastEmailSent);
-    } else{
-      lastEmailSent = new Date(0);
+    } else {
+      lastEmailSent = new Date(now);
     }
 
     if (summaryFrequency === "daily") {
@@ -174,9 +140,7 @@ export async function GET() {
         emailHour,
         emailMinute
       );
-      shouldSendSummary =
-        now >= emailTimeToday &&
-          now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
+      shouldSendSummary = now >= emailTimeToday && now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
     } else if (summaryFrequency.startsWith("hourly:")) {
       const hours = parseInt(summaryFrequency.split(":")[1], 10);
       shouldSendSummary =
@@ -199,6 +163,19 @@ export async function GET() {
             { status: 500 }
           );
         }
+
+        let logEntry: DailyLog | undefined;
+          logEntry = await generateDailyLog(
+            screenData.data,
+            dailylogPrompt,
+            aiProvider,
+            aiModel,
+            aiUrl,
+            openaiApiKey,
+            userToken as string,
+          );
+          await saveDailyLog(logEntry);
+        
         const redditQuestions = await generateRedditQuestions(
           screenData.data,
           customPrompt,
@@ -265,10 +242,10 @@ export async function GET() {
         );
       } else {
         return NextResponse.json(
-          { message: "no screenpipe data is found, is screenpipe running?" },
+          { message: "query is empty please wait & and try again!" },
           { status: 200 }
         );
-      }
+      };
     } else {
       return NextResponse.json(
         { message: "pipe executed successfully, but its not that time to send questions!" },
