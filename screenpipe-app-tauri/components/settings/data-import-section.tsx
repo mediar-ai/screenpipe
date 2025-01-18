@@ -139,7 +139,10 @@ export function DataImportSection() {
       const configFileName = `metadata-override-${Date.now()}.json`;
       const configData = { overrides: metadataConfig };
       console.log("writing metadata config:", configData);
-
+      console.log(
+        "writing metadata config with paths:",
+        metadataConfig.map((m) => m.file_path)
+      );
       await writeTextFile(configFileName, JSON.stringify(configData), {
         baseDir: BaseDirectory.AppLocalData,
       });
@@ -152,6 +155,8 @@ export function DataImportSection() {
         path.trim(),
         "--metadata-override",
         configPath,
+        "--output",
+        "json",
       ]);
       console.log("executing command:", command);
 
@@ -264,6 +269,9 @@ export function DataImportSection() {
                             <Input
                               placeholder="enter a custom name for this video"
                               value={metadataConfig[index]?.metadata.name || ""}
+                              autoCorrect="off"
+                              autoComplete="off"
+                              autoCapitalize="off"
                               onChange={(e) =>
                                 handleMetadataChange(
                                   index,
@@ -281,6 +289,9 @@ export function DataImportSection() {
                                 metadataConfig[index]?.metadata.device_name ||
                                 ""
                               }
+                              autoCorrect="off"
+                              autoComplete="off"
+                              autoCapitalize="off"
                               onChange={(e) =>
                                 handleMetadataChange(
                                   index,
