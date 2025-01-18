@@ -1872,14 +1872,17 @@ impl DatabaseManager {
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
-        // 1. Create new video chunk - REMOVE timestamp from INSERT
-        let video_chunk_id =
-            sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
-                .bind(metadata.device_name)
-                .bind(file_path)
-                .execute(&mut *tx)
-                .await?
-                .last_insert_rowid();
+        // Use metadata.device_name or default to "imported_files"
+        let device_name = metadata.device_name.unwrap_or_else(|| "imported_files".to_string());
+
+        let video_chunk_id = sqlx::query(
+            "INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)"
+        )
+        .bind(device_name)
+        .bind(file_path)
+        .execute(&mut *tx)
+        .await?
+        .last_insert_rowid();
 
         debug!("created video chunk: {} for {}", video_chunk_id, file_path);
 
@@ -1913,6 +1916,28 @@ impl DatabaseManager {
             video_chunk_id
         );
 
+        Ok(())
+    }
+
+    pub async fn batch_insert_embeddings(
+        &self,
+        embeddings: Vec<(i64, String)>, // (frame_id, embedding_json)
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Using query builder for batch insert
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO ocr_text_embeddings (frame_id, embedding) "
+        );
+
+        query_builder.push_values(embeddings, |mut b, (frame_id, embedding)| {
+            b.push_bind(frame_id)
+                .push_bind(embedding);
+        });
+
+        query_builder.build().execute(&mut *tx).await?;
+
+        tx.commit().await?;
         Ok(())
     }
 }
