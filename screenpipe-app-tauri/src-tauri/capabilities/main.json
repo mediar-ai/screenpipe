@@ -5,6 +5,11 @@
   "windows": [
     "*"
   ],
+  "remote": {
+    "urls": [
+      "http://localhost:*"
+    ]
+  },
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",

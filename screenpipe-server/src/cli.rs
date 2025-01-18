@@ -165,14 +165,6 @@ pub struct Cli {
     #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
 
-        /// Realtime Audio transcription engine to use.
-    /// Deepgram is a very high quality cloud-based transcription service (free of charge on us for now), recommended for high quality audio.
-    /// WhisperTiny is a local, lightweight transcription model, recommended for high data privacy.
-    /// WhisperDistilLargeV3 is a local, lightweight transcription model (-a whisper-large), recommended for higher quality audio than tiny.
-    /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
-    #[arg(long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperTiny)]
-    pub realtime_audio_transcription_engine: CliAudioTranscriptionEngine,
-
     /// Enable realtime audio transcription
     #[arg(long, default_value_t = false)]
     pub enable_realtime_audio_transcription: bool,
@@ -298,8 +290,8 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
-    /// Index video files for search
-    Index {
+    /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
+    Add {
         /// Path to folder containing video files
         path: String,
         /// Data directory. Default to $HOME/.screenpipe
@@ -317,6 +309,9 @@ pub enum Command {
         /// Path to JSON file containing metadata overrides
         #[arg(long)]
         metadata_override: Option<PathBuf>,
+        /// Copy videos to screenpipe data directory
+        #[arg(long, default_value_t = true)]
+        copy_videos: bool,
     },
     /// Setup screenpipe environment
     Setup {
