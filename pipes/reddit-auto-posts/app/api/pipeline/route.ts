@@ -1,4 +1,5 @@
 "use server";
+// requestion on this route will send mail (use it only in cron) 
 import fs from "node:fs";
 import path from "node:path";
 import { DailyLog } from "@/lib/types";
@@ -122,32 +123,6 @@ export async function GET() {
 
     const now = new Date();
     const startTime = new Date(now.getTime() - interval);
-    let lastEmailSent;
-    let shouldSendSummary = false;
-
-    if (configData.lastEmailSent){
-      lastEmailSent = new Date(configData.lastEmailSent);
-    } else {
-      lastEmailSent = new Date(now);
-    }
-
-    if (summaryFrequency === "daily") {
-      const [emailHour, emailMinute] = emailTime.split(":").map(Number);
-      const emailTimeToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        emailHour,
-        emailMinute
-      );
-      shouldSendSummary = now >= emailTimeToday && now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
-    } else if (summaryFrequency.startsWith("hourly:")) {
-      const hours = parseInt(summaryFrequency.split(":")[1], 10);
-      shouldSendSummary =
-        now.getTime() - lastEmailSent.getTime() >= hours * 60 * 60 * 1000;
-    }
-
-    if (shouldSendSummary) {
       const screenData = await retry(() => pipe.queryScreenpipe({
         startTime: startTime.toISOString(),
         endTime: now.toISOString(),
@@ -234,8 +209,6 @@ export async function GET() {
             { status: 500 }
           );
         }
-        configData.lastEmailSent = new Date().toISOString()
-        fs.writeFileSync(pipeConfigPath, JSON.stringify(configData, null, 2));
         return NextResponse.json(
           { message: "pipe executed successfully", suggestedQuestions: redditQuestions },
           { status: 200 }
@@ -246,12 +219,6 @@ export async function GET() {
           { status: 200 }
         );
       };
-    } else {
-      return NextResponse.json(
-        { message: "pipe executed successfully, but its not that time to send questions!" },
-        { status: 200 }
-      );
-    }
   } catch (error) {
     console.error("error in GET handler:", error);
     return NextResponse.json(

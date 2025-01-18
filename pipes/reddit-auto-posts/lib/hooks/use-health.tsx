@@ -59,7 +59,6 @@ export function useHealthCheck() {
         },
       });
 
-      console.log("RESPONSE",response)
       if (!response.ok) {
         setIsServerDown(true);
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -79,7 +78,6 @@ export function useHealthCheck() {
         return;
       }
 
-      // console.error("Health check error:", error);
       if (!isServerDown) {
         setIsServerDown(true);
         const errorHealth: HealthCheckResponse = {
@@ -107,7 +105,7 @@ export function useHealthCheck() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000);
+    const interval = setInterval(fetchHealth, 2000);
 
     return () => {
       clearInterval(interval);

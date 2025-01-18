@@ -35,7 +35,7 @@ const Pipe: React.FC = () => {
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState<boolean>();
   const [lastLog, setLastLog] = useState<any>(null);
-  const [appName, setAppName] = useState("");
+  const [windowName, setWindowName] = useState("");
   const [contentType, setContentType] = useState("");
 
   const aiDisabled = settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
@@ -84,17 +84,6 @@ const Pipe: React.FC = () => {
     }
   };
 
-  const getNextCronTime = (lastIntervalChangeTime: string, interval: number) => {
-    const lastChangeDate = new Date(lastIntervalChangeTime) || new Date().toISOString();
-    const now = new Date();
-    let nextCronTime = new Date(lastChangeDate.getTime());
-    nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
-    while (nextCronTime < now) {
-      nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
-    }
-    return nextCronTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   const isMacOS = () => {
     return navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   };
@@ -112,7 +101,7 @@ const Pipe: React.FC = () => {
       emailTime: (formData).get("emailTime") as string,
       customPrompt: formData.get("customPrompt") as string,
       dailylogPrompt: formData.get("dailylogPrompt") as string,
-      windowName: formData.get("windowName") as string,
+      windowName: formData.get("windowName") as string || windowName,
       contentType: contentType as string,
       lastIntervalChangeTime: new Date().toISOString()
     }
@@ -148,10 +137,6 @@ const Pipe: React.FC = () => {
               placeholder="value in seconds"
               className="flex-1"
             />
-          </div>
-          <div className="text-sm text-muted-foreground">
-            next cron will run at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.lastIntervalChangeTime,
-              settings.customSettings?.["reddit-auto-posts"]?.interval / 60)} 
           </div>
         </div>
         <div className="space-y-3">
@@ -257,7 +242,7 @@ const Pipe: React.FC = () => {
             type="window"
             icon={<Laptop className="h-4 w-4" />}
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.windowName}
-            onChange={setAppName}
+            onChange={(v) => setWindowName(v)}
             placeholder="window name to filter the screen data"
             className="flex-grow"
           />

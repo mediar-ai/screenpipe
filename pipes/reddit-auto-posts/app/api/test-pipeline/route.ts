@@ -53,16 +53,12 @@ export async function GET() {
     const emailEnabled = !!(emailAddress && emailPassword);
     const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
     const logsDir = path.join(screenpipeDir, "pipes", "reddit-auto-posts", "logs");
-    const pipeConfigPath = path.join(screenpipeDir, "pipes", "reddit-auto-posts", "pipe.json");
 
     try {
       fs.mkdirSync(logsDir);
     } catch (_error) {
       console.warn("creating logs directory, probably already exists:", logsDir);
     }
-
-    const fileContent = fs.readFileSync(pipeConfigPath, 'utf-8');
-    const configData = JSON.parse(fileContent);
 
     const now = new Date();
     const startTime = new Date(now.getTime() - interval);
@@ -139,8 +135,6 @@ export async function GET() {
           { status: 500 }
         );
       }
-      configData.lastEmailSent = new Date().toISOString()
-      fs.writeFileSync(pipeConfigPath, JSON.stringify(configData, null, 2));
       return NextResponse.json(
         { message: "pipe executed successfully", suggestedQuestions: redditQuestions },
         { status: 200 }
