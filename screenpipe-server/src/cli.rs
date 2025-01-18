@@ -267,6 +267,10 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
 
+    /// Record all monitors (default: false)
+    #[arg(long, default_value_t = false)]
+    pub record_all_monitors: bool,
+
 }
 
 

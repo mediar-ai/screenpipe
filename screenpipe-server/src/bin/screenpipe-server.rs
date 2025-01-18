@@ -467,7 +467,7 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let monitor_ids = if cli.monitor_id.is_empty() {
+    let monitor_ids = if cli.monitor_id.is_empty() || cli.record_all_monitors {
         all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
     } else {
         cli.monitor_id.clone()
