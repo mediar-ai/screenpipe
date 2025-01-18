@@ -24,9 +24,9 @@ use walkdir::WalkDir;
 
 use crate::{
     cli::CliOcrEngine,
+    text_embeds::generate_embedding,
     video_utils::{extract_frames_from_video, get_video_metadata, VideoMetadataOverrides},
     DatabaseManager,
-    text_embeds::generate_embedding,
 };
 
 pub async fn handle_index_command(
@@ -148,14 +148,8 @@ pub async fn handle_index_command(
         for (idx, frame) in frames.iter().enumerate() {
             // Compare with previous frame to skip similar ones
             let current_average = if let Some(prev) = &previous_image {
-                compare_with_previous_image(
-                    Some(prev),
-                    &frame,
-                    &mut None,
-                    frame_counter as u64,
-                    &mut 0.0,
-                )
-                .await?
+                compare_with_previous_image(Some(prev), &frame, &mut None, idx as u64, &mut 0.0)
+                    .await?
             } else {
                 1.0
             };
@@ -202,33 +196,30 @@ pub async fn handle_index_command(
                 }
             };
 
-                if let Ok(()) = tx.send((frame_num, text, confidence.unwrap_or(0.0))).await {
-                    debug!("processed frame {}", frame_num);
-                } else {
-                    error!("error sending ocr result for frame {}", frame_num);
-                }
-            });
-
             // Handle OCR results
-            while let Ok((frame_num, text, confidence)) = rx.try_recv() {
-                total_frames += 1;
-                total_text += text.len();
+            total_frames += 1;
+            total_text += text.len();
 
-                // Only generate embeddings if flag is enabled
-                if use_embedding && !text.is_empty() {
-                    match generate_embedding(&text, frame_num).await {
-                        Ok(emb) => {
-                            debug!("generated embedding for frame {}", frame_num);
-                            embed_batch.push((
-                                frame_num as i64,
-                                serde_json::to_string(&emb)?,
-                            ));
-                        }
-                        Err(e) => {
-                            error!("failed to generate embedding for frame {}: {}", frame_num, e);
+            // Only generate embeddings if flag is enabled
+            if use_embedding && !text.is_empty() {
+                match generate_embedding(&text, frame_ids[idx]).await {
+                    Ok(emb) => {
+                        debug!("generated embedding for frame {}", frame_ids[idx]);
+                        if let Err(e) = db
+                            .insert_embeddings(frame_ids[idx], serde_json::to_string(&emb)?)
+                            .await
+                        {
+                            error!("error batch inserting embeddings: {}", e);
                         }
                     }
+                    Err(e) => {
+                        error!(
+                            "failed to generate embedding for frame {}: {}",
+                            frame_ids[idx], e
+                        );
+                    }
                 }
+            }
 
             // Process OCR directly instead of batching
             if let Err(e) = db
@@ -240,33 +231,12 @@ pub async fn handle_index_command(
                     "",   // no window name
                     engine_arc.clone(),
                     true, // focused
-                ));
-
-                // Process OCR batch when it reaches size 100
-                if ocr_batch.len() >= 100 {
-                    if let Err(e) = db.batch_insert_ocr(ocr_batch).await {
-                        error!("error batch inserting ocr text: {}", e);
-                    }
-                    ocr_batch = Vec::new();
-                }
-
-                // Process embeddings batch when it reaches size 100
-                if embed_batch.len() >= 100 {
-                    // TODO: We'll implement db.batch_insert_embeddings next
-                    if let Err(e) = db.batch_insert_embeddings(embed_batch).await {
-                        error!("error batch inserting embeddings: {}", e);
-                    }
-                    embed_batch = Vec::new();
-                }
-
-                match output_format {
-                    crate::cli::OutputFormat::Json => {
-                        println!(
                 )
                 .await
             {
                 error!("error inserting ocr text: {}", e);
             }
+
             info!("inserted ocr text for frame {}", frame_ids[idx]);
 
             // Handle output formatting
@@ -298,19 +268,6 @@ pub async fn handle_index_command(
             }
 
             frame_counter += 1;
-        }
-
-        // Process remaining batches
-        if !ocr_batch.is_empty() {
-            if let Err(e) = db.batch_insert_ocr(ocr_batch).await {
-                error!("error batch inserting remaining ocr text: {}", e);
-            }
-        }
-
-        if !embed_batch.is_empty() {
-            if let Err(e) = db.batch_insert_embeddings(embed_batch).await {
-                error!("error batch inserting remaining embeddings: {}", e);
-            }
         }
     }
 

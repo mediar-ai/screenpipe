@@ -1848,16 +1848,17 @@ impl DatabaseManager {
         );
 
         // Use metadata.device_name or default to "imported_files"
-        let device_name = metadata.device_name.unwrap_or_else(|| "imported_files".to_string());
+        let device_name = metadata
+            .device_name
+            .unwrap_or_else(|| "imported_files".to_string());
 
-        let video_chunk_id = sqlx::query(
-            "INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)"
-        )
-        .bind(device_name)
-        .bind(file_path)
-        .execute(&mut *tx)
-        .await?
-        .last_insert_rowid();
+        let video_chunk_id =
+            sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
+                .bind(device_name)
+                .bind(file_path)
+                .execute(&mut *tx)
+                .await?
+                .last_insert_rowid();
 
         // 2. Create frames with correct timestamps and default name
         let mut frame_ids = Vec::with_capacity(frames.len());
@@ -1892,25 +1893,16 @@ impl DatabaseManager {
         Ok(frame_ids)
     }
 
-    pub async fn batch_insert_embeddings(
+    pub async fn insert_embeddings(
         &self,
-        embeddings: Vec<(i64, String)>, // (frame_id, embedding_json)
+        frame_id: i64,
+        embedding: String,
     ) -> Result<(), sqlx::Error> {
-        let mut tx = self.pool.begin().await?;
-
-        // Using query builder for batch insert
-        let mut query_builder = QueryBuilder::new(
-            "INSERT INTO ocr_text_embeddings (frame_id, embedding) "
-        );
-
-        query_builder.push_values(embeddings, |mut b, (frame_id, embedding)| {
-            b.push_bind(frame_id)
-                .push_bind(embedding);
-        });
-
-        query_builder.build().execute(&mut *tx).await?;
-
-        tx.commit().await?;
+        sqlx::query("INSERT INTO ocr_text_embeddings (frame_id, embedding) VALUES (?1, ?2)")
+            .bind(frame_id)
+            .bind(embedding)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -1954,7 +1946,7 @@ impl DatabaseManager {
         "#;
 
         let bytes = embedding.as_bytes();
-        
+
         let raw_results: Vec<OCRResultRaw> = sqlx::query_as(sql)
             .bind(bytes)
             .bind(threshold)
@@ -1974,6 +1966,7 @@ impl DatabaseManager {
                 app_name: raw.app_name,
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
+                frame_name: raw.frame_name,
                 tags: raw
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
