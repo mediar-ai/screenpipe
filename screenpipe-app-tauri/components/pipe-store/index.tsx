@@ -11,7 +11,6 @@ import { PipeCard } from './pipe-card';
 import { AddPipeForm } from './add-pipe-form';
 import { PipeDetails } from './pipe-details';
 import { InstalledPipe, PipeWithStatus, BrokenPipe } from './types';
-import localforage from 'localforage';
 
 
 export const PipeStore: React.FC = () => {
