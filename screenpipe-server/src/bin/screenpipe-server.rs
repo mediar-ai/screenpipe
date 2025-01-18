@@ -287,6 +287,7 @@ async fn main() -> anyhow::Result<()> {
                 ocr_engine,
                 metadata_override,
                 copy_videos,
+                use_embedding,
             } => {
                 let local_data_dir = get_base_dir(&data_dir)?;
                 let db = Arc::new(
@@ -309,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
                     ocr_engine,
                     metadata_override,
                     copy_videos,
+                    use_embedding,
                 )
                 .await?;
                 return Ok(());
