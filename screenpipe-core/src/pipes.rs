@@ -963,10 +963,10 @@ mod pipes {
                 }
             };
 
-            let now = chrono::Utc::now();
+            let now = chrono::Local::now();
             let next = if let Some(last) = last_run {
                 // Get next occurrence after the last execution
-                let last_chrono = chrono::DateTime::<chrono::Utc>::from(last);
+                let last_chrono = chrono::DateTime::<chrono::Local>::from(last);
                 schedule.after(&last_chrono).next()
             } else {
                 schedule.after(&now).next()
@@ -980,11 +980,15 @@ mod pipes {
                 }
             };
 
+            if next <= now {
+                info!("next execution time is before or equal to the current time, recalculating...");
+                continue;
+            }
             let duration = match (next - now).to_std() {
                 Ok(duration) => duration,
                 Err(e) => {
                     error!("invalid duration: {}", e);
-                    tokio::time::Duration::from_secs(60) // fallback to 1 minute
+                    continue; // falling back to minute is messing with cron schedule
                 }
             };
 

@@ -1,4 +1,5 @@
 "use server";
+// requestion on this route will send mail (use it only in cron) 
 import fs from "node:fs";
 import path from "node:path";
 import { DailyLog } from "@/lib/types";
@@ -83,11 +84,12 @@ export async function GET() {
     try {
       fs.mkdirSync(logsDir);
     } catch (_error) {
-      console.warn("failed to create logs directory, probably already exists:", logsDir);
+      console.warn("creating logs directory, probably already exists:", logsDir);
     }
 
     const fileContent = fs.readFileSync(pipeConfigPath, 'utf-8');
     const configData = JSON.parse(fileContent);
+
     if (emailEnabled && !configData?.welcomeEmailSent) {
       const welcomeEmail = `
         Welcome to the daily reddit questions pipeline!
@@ -117,66 +119,10 @@ export async function GET() {
           { status: 500 }
         );
       }
-    }
+    };
 
     const now = new Date();
     const startTime = new Date(now.getTime() - interval);
-
-    const screenData = await retry(() => pipe.queryScreenpipe({
-      startTime: startTime.toISOString(),
-      endTime: now.toISOString(),
-      windowName: windowName,
-      limit: pageSize,
-      contentType: contentType,
-    }));
-
-    let logEntry: DailyLog | undefined;
-    if (screenData && screenData.data && screenData.data.length > 0) {
-      if (aiProvider === "screenpipe-cloud" && !userToken) {
-        return NextResponse.json(
-          { error: `seems like you don't have screenpipe-cloud access :(` },
-          { status: 500 }
-        );
-      }
-      logEntry = await generateDailyLog(
-        screenData.data,
-        dailylogPrompt,
-        aiProvider,
-        aiModel,
-        aiUrl,
-        openaiApiKey,
-        userToken as string,
-      );
-      await saveDailyLog(logEntry);
-    } else {
-      return NextResponse.json(
-        { message: "no screenpipe data is found, is screenpipe running?" },
-        { status: 200 }
-      );
-    }
-
-    let lastEmailSent = new Date(0);
-    let shouldSendSummary = false;
-
-    if (summaryFrequency === "daily") {
-      const [emailHour, emailMinute] = emailTime.split(":").map(Number);
-      const emailTimeToday = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        emailHour,
-        emailMinute
-      );
-      shouldSendSummary =
-        now >= emailTimeToday &&
-          now.getTime() - lastEmailSent.getTime() > 24 * 60 * 60 * 1000;
-    } else if (summaryFrequency.startsWith("hourly:")) {
-      const hours = parseInt(summaryFrequency.split(":")[1], 10);
-      shouldSendSummary =
-        now.getTime() - lastEmailSent.getTime() >= hours * 60 * 60 * 1000;
-    }
-
-    if (shouldSendSummary) {
       const screenData = await retry(() => pipe.queryScreenpipe({
         startTime: startTime.toISOString(),
         endTime: now.toISOString(),
@@ -192,6 +138,19 @@ export async function GET() {
             { status: 500 }
           );
         }
+
+        let logEntry: DailyLog | undefined;
+          logEntry = await generateDailyLog(
+            screenData.data,
+            dailylogPrompt,
+            aiProvider,
+            aiModel,
+            aiUrl,
+            openaiApiKey,
+            userToken as string,
+          );
+          await saveDailyLog(logEntry);
+        
         const redditQuestions = await generateRedditQuestions(
           screenData.data,
           customPrompt,
@@ -250,23 +209,16 @@ export async function GET() {
             { status: 500 }
           );
         }
-        lastEmailSent = now;
         return NextResponse.json(
           { message: "pipe executed successfully", suggestedQuestions: redditQuestions },
           { status: 200 }
         );
       } else {
         return NextResponse.json(
-          { message: "no screenpipe data is found, is screenpipe running?" },
+          { message: "query is empty please wait & and try again!" },
           { status: 200 }
         );
-      }
-    } else {
-      return NextResponse.json(
-        { message: "pipe executed successfully, but its not that time to send questions!" },
-        { status: 200 }
-      );
-    }
+      };
   } catch (error) {
     console.error("error in GET handler:", error);
     return NextResponse.json(
