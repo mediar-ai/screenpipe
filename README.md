@@ -61,7 +61,7 @@
 ---
 
 *news* 🔥
-- [2025/01] we're partnering with [Different AI](https://github.com/different-ai/hypr-v0) to bring you financial automations based on your screen and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
+- [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
 - [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, LinkedIn agent, Timeline ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
