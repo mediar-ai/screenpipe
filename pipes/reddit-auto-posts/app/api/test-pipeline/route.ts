@@ -1,6 +1,6 @@
+"use server";
 // this route is only for getting reddit post reccomendation, explicitly by clickin the 
 // `generate button` it won't send any mails
-"use server";
 import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";

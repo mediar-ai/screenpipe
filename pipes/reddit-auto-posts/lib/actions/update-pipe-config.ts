@@ -21,10 +21,10 @@ export default async function updatePipeConfig(
 
   if (redditSettings.summaryFrequency === "daily") {
     const [emailHour, emailMinute] = redditSettings.emailTime.split(":").map(Number);
-    cronSchedule = `${emailMinute} ${emailHour} * * *`;
+    cronSchedule = `0 ${emailMinute} ${emailHour} * * * *`;
   } else if (redditSettings.summaryFrequency.startsWith("hourly:")) {
     const hours = parseInt(redditSettings.summaryFrequency.split(":")[1], 10);
-    cronSchedule = `0 */${hours} * * *`;
+    cronSchedule = `0 0 */${hours} * * * *`;
   }
 
   try {
