@@ -54,7 +54,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
           </Button>
           <h2 className="text-lg font-medium">{pipe.name}</h2>
           <Badge variant={"outline"} className="font-mono text-xs">
-            by {pipe.status}
+            by {pipe.developer_accounts.developer_name}
           </Badge>
         </div>
       </div>

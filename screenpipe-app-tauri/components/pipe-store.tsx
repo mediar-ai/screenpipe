@@ -1,27 +1,33 @@
-import React, { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Search, Trash2 } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
-import { useHealthCheck } from '@/lib/hooks/use-health-check';
-import { Command } from '@tauri-apps/plugin-shell';
-import { PipeApi, PipeStorePlugin } from '@/lib/api/store';
+import React, { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Search, Trash2 } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { Command } from "@tauri-apps/plugin-shell";
+import { PipeApi, PipeDownloadError, PipeStorePlugin } from "@/lib/api/store";
 
-import localforage from 'localforage';
-import { BrokenPipe, InstalledPipe, PipeWithStatus } from './pipe-store/types';
-import { PipeDetails } from './pipe-store/pipe-details';
-import { PipeCard } from './pipe-store/pipe-card';
-import { AddPipeForm } from './pipe-store/add-pipe-form';
+import localforage from "localforage";
+import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
+import { PipeDetails } from "./pipe-store/pipe-details";
+import { PipeCard } from "./pipe-store/pipe-card";
+import { AddPipeForm } from "./pipe-store/add-pipe-form";
 
-const BROKEN_PIPES_KEY = 'broken_pipes';
-const DEFAULT_PIPES = ['memories', 'data-table', 'search', 'timeline', 'identify-speakers'];
+const BROKEN_PIPES_KEY = "broken_pipes";
+const DEFAULT_PIPES = [
+  "memories",
+  "data-table",
+  "search",
+  "timeline",
+  "identify-speakers",
+];
 
 export const PipeStore: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const { health } = useHealthCheck();
@@ -31,19 +37,19 @@ export const PipeStore: React.FC = () => {
       try {
         const pipeApi = await PipeApi.create();
         const plugins = await pipeApi.listStorePlugins();
-        const withStatus = plugins.map(plugin => ({
+        const withStatus = plugins.map((plugin) => ({
           ...plugin,
-          isInstalled: installedPipes.some(p => p.id === plugin.id),
+          isInstalled: installedPipes.some((p) => p.id === plugin.id),
           isRunning: false,
-          installedConfig: installedPipes.find(p => p.id === plugin.id),
+          installedConfig: installedPipes.find((p) => p.id === plugin.id),
         }));
         setPipes(withStatus);
       } catch (error) {
-        console.error('Failed to fetch store plugins:', error);
+        console.error("Failed to fetch store plugins:", error);
         toast({
-          title: 'error loading store',
-          description: 'failed to fetch available pipes',
-          variant: 'destructive'
+          title: "error loading store",
+          description: "failed to fetch available pipes",
+          variant: "destructive",
         });
       }
     };
@@ -51,83 +57,97 @@ export const PipeStore: React.FC = () => {
     fetchStorePlugins();
   }, [installedPipes]);
 
-  const handleInstallPipe = async (id: string) => {
+  const handleInstallPipe = async (pipe: PipeWithStatus) => {
     try {
-      const response = await fetch('http://localhost:3030/pipes/download', {
+      const pipeApi = await PipeApi.create();
+      const response = await pipeApi.downloadPipe(pipe.id, "latest");
+
+      const downloadResponse = await fetch('http://localhost:3030/pipes/download-private', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ pipe_id: id }),
+        body: JSON.stringify({ download_url: response.download_url }),
       });
-      
-      const data = await response.json();
+
+      const data = await downloadResponse.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to download pipe');
       }
 
       await fetchInstalledPipes();
       toast({
-        title: 'pipe installed',
-        description: 'installation completed successfully',
+        title: "pipe installed",
+        description: "installation completed successfully",
       });
     } catch (error) {
-      console.error('Failed to install pipe:', error);
+      if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
+        return toast({
+          title: "paid pipe",
+          description:
+            "this pipe requires purchase. please visit screenpi.pe to buy credits.",
+          variant: "destructive",
+        });
+      }
       toast({
-        title: 'error installing pipe',
-        description: 'please try again or check the logs',
-        variant: 'destructive',
+        title: "error installing pipe",
+        description: (error as Error).message,
+        variant: "destructive",
       });
     }
   };
 
   const fetchInstalledPipes = async () => {
-    if (!health || health?.status === 'error') return;
+    if (!health || health?.status === "error") return;
     try {
-      const response = await fetch('http://localhost:3030/pipes/list');
-      const data = await response.json() as { data: InstalledPipe[], success: boolean };
+      const response = await fetch("http://localhost:3030/pipes/list");
+      const data = (await response.json()) as {
+        data: InstalledPipe[];
+        success: boolean;
+      };
 
-      if (!data.success) throw new Error('Failed to fetch installed pipes');
+      if (!data.success) throw new Error("Failed to fetch installed pipes");
 
       setInstalledPipes(data.data);
       return data.data;
     } catch (error) {
-      console.error('Error fetching installed pipes:', error);
+      console.error("Error fetching installed pipes:", error);
       toast({
-        title: 'error fetching installed pipes',
-        description: 'please try again or check the logs',
-        variant: 'destructive',
+        title: "error fetching installed pipes",
+        description: "please try again or check the logs",
+        variant: "destructive",
       });
     }
   };
 
   const handleResetAllPipes = async () => {
     try {
-      const cmd = Command.sidecar('screenpipe', ['pipe', 'purge', '-y']);
+      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
       await fetchInstalledPipes();
       toast({
-        title: 'all pipes deleted',
-        description: 'the pipes folder has been reset.',
+        title: "all pipes deleted",
+        description: "the pipes folder has been reset.",
       });
     } catch (error) {
-      console.error('failed to reset pipes:', error);
+      console.error("failed to reset pipes:", error);
       toast({
-        title: 'error resetting pipes',
-        description: 'please try again or check the logs',
-        variant: 'destructive',
+        title: "error resetting pipes",
+        description: "please try again or check the logs",
+        variant: "destructive",
       });
     }
   };
 
   const filteredPipes = pipes
-    .filter(pipe =>
-      pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (!showInstalledOnly || pipe.isInstalled)
+    .filter(
+      (pipe) =>
+        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (!showInstalledOnly || pipe.isInstalled)
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
-  if (health?.status === 'error') {
+  if (health?.status === "error") {
     return (
       <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
         <div className="text-center space-y-2">
@@ -141,7 +161,9 @@ export const PipeStore: React.FC = () => {
   }
 
   if (selectedPipe) {
-    return <PipeDetails pipe={selectedPipe} onClose={() => setSelectedPipe(null)} />;
+    return (
+      <PipeDetails pipe={selectedPipe} onClose={() => setSelectedPipe(null)} />
+    );
   }
 
   return (
@@ -193,10 +215,10 @@ export const PipeStore: React.FC = () => {
 
         <AddPipeForm
           onAddPipe={handleInstallPipe}
-          isHealthy={health?.status !== 'error'}
+          isHealthy={health?.status !== "error"}
           selectedPipe={selectedPipe}
         />
       </div>
     </div>
   );
-}; 
+};

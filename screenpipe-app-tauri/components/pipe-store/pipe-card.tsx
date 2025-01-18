@@ -8,7 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
-  onInstall: (id: string) => Promise<void>;
+  onInstall: (pipe: PipeWithStatus) => Promise<void>;
   onClick: (pipe: PipeWithStatus) => void;
 }
 
@@ -82,7 +82,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({ pipe, onInstall, onClick }) 
           <div className="flex-1 min-w-0">
             <h3 className="font-medium truncate">{pipe.name}</h3>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate">by {pipe.name}</span>
+              <span className="truncate">by {pipe.developer_accounts.developer_name}</span>
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -104,7 +104,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({ pipe, onInstall, onClick }) 
                 variant="outline"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onInstall(pipe.id);
+                  onInstall(pipe);
                 }}
               >
                 <Download className="h-3.5 w-3.5" />
