@@ -1872,14 +1872,17 @@ impl DatabaseManager {
     ) -> Result<(), sqlx::Error> {
         let mut tx = self.pool.begin().await?;
 
-        // 1. Create new video chunk - REMOVE timestamp from INSERT
-        let video_chunk_id =
-            sqlx::query("INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)")
-                .bind(metadata.device_name)
-                .bind(file_path)
-                .execute(&mut *tx)
-                .await?
-                .last_insert_rowid();
+        // Use metadata.device_name or default to "imported_files"
+        let device_name = metadata.device_name.unwrap_or_else(|| "imported_files".to_string());
+
+        let video_chunk_id = sqlx::query(
+            "INSERT INTO video_chunks (device_name, file_path) VALUES (?1, ?2)"
+        )
+        .bind(device_name)
+        .bind(file_path)
+        .execute(&mut *tx)
+        .await?
+        .last_insert_rowid();
 
         debug!("created video chunk: {} for {}", video_chunk_id, file_path);
 
@@ -1914,5 +1917,95 @@ impl DatabaseManager {
         );
 
         Ok(())
+    }
+
+    pub async fn batch_insert_embeddings(
+        &self,
+        embeddings: Vec<(i64, String)>, // (frame_id, embedding_json)
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        // Using query builder for batch insert
+        let mut query_builder = QueryBuilder::new(
+            "INSERT INTO ocr_text_embeddings (frame_id, embedding) "
+        );
+
+        query_builder.push_values(embeddings, |mut b, (frame_id, embedding)| {
+            b.push_bind(frame_id)
+                .push_bind(embedding);
+        });
+
+        query_builder.build().execute(&mut *tx).await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn search_similar_embeddings(
+        &self,
+        embedding: Vec<f32>,
+        limit: u32,
+        threshold: f32,
+    ) -> Result<Vec<OCRResult>, sqlx::Error> {
+        debug!("searching similar embeddings with threshold {}", threshold);
+
+        let sql = r#"
+            WITH embedding_matches AS (
+                SELECT 
+                    frame_id,
+                    vec_distance_cosine(embedding, vec_f32(?1)) as similarity
+                FROM ocr_text_embeddings
+                WHERE vec_distance_cosine(embedding, vec_f32(?1)) < ?2
+                ORDER BY similarity ASC
+                LIMIT ?3
+            )
+            SELECT
+                ocr_text.frame_id,
+                ocr_text.text as ocr_text,
+                ocr_text.text_json,
+                frames.timestamp,
+                video_chunks.file_path,
+                frames.offset_index,
+                ocr_text.app_name,
+                ocr_text.ocr_engine,
+                ocr_text.window_name,
+                GROUP_CONCAT(tags.name, ',') as tags
+            FROM embedding_matches
+            JOIN ocr_text ON embedding_matches.frame_id = ocr_text.frame_id
+            JOIN frames ON ocr_text.frame_id = frames.id
+            JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
+            LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
+            LEFT JOIN tags ON vision_tags.tag_id = tags.id
+            GROUP BY ocr_text.frame_id
+            ORDER BY embedding_matches.similarity ASC
+        "#;
+
+        let bytes = embedding.as_bytes();
+        
+        let raw_results: Vec<OCRResultRaw> = sqlx::query_as(sql)
+            .bind(bytes)
+            .bind(threshold)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(raw_results
+            .into_iter()
+            .map(|raw| OCRResult {
+                frame_id: raw.frame_id,
+                ocr_text: raw.ocr_text,
+                text_json: raw.text_json,
+                timestamp: raw.timestamp,
+                file_path: raw.file_path,
+                offset_index: raw.offset_index,
+                app_name: raw.app_name,
+                ocr_engine: raw.ocr_engine,
+                window_name: raw.window_name,
+                tags: raw
+                    .tags
+                    .map(|t| t.split(',').map(String::from).collect())
+                    .unwrap_or_default(),
+            })
+            .collect())
     }
 }
