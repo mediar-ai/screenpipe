@@ -15,6 +15,7 @@ mod video;
 pub mod video_cache;
 mod video_db;
 pub mod video_utils;
+pub mod text_embeds;
 
 pub use auto_destruct::watch_pid;
 pub use cli::Cli;
