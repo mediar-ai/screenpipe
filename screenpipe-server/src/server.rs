@@ -57,6 +57,8 @@ use screenpipe_audio::LAST_AUDIO_CAPTURE;
 
 use std::str::FromStr;
 
+use crate::text_embeds::generate_embedding;
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub vision_control: Arc<AtomicBool>,
@@ -1748,7 +1750,50 @@ async fn sse_vision_handler(
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
     ))
+}
 
+#[derive(Debug, Deserialize)]
+struct SemanticSearchQuery {
+    text: String,
+    limit: Option<u32>,
+    threshold: Option<f32>,
+}
+
+async fn semantic_search_handler(
+    Query(query): Query<SemanticSearchQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Vec<crate::db_types::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
+    let limit = query.limit.unwrap_or(10);
+    let threshold = query.threshold.unwrap_or(0.3);
+
+    debug!("semantic search for '{}' with limit {} and threshold {}", query.text, limit, threshold);
+
+    // Generate embedding for search text
+    let embedding = match generate_embedding(&query.text, 0).await {
+        Ok(emb) => emb,
+        Err(e) => {
+            error!("failed to generate embedding: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("failed to generate embedding: {}", e)})),
+            ));
+        }
+    };
+
+    // Search database for similar embeddings
+    match state.db.search_similar_embeddings(embedding, limit, threshold).await {
+        Ok(results) => {
+            debug!("found {} similar results", results.len());
+            Ok(JsonResponse(results))
+        }
+        Err(e) => {
+            error!("failed to search embeddings: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("failed to search embeddings: {}", e)})),
+            ))
+        }
+    }
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
@@ -1796,6 +1841,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
+        .route("/semantic-search", get(semantic_search_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1929,7 +1975,6 @@ struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
 }
-
 /*
 
 Curl commands for reference:
@@ -2148,3 +2193,4 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
+
