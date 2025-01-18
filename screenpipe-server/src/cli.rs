@@ -312,6 +312,9 @@ pub enum Command {
         /// Copy videos to screenpipe data directory
         #[arg(long, default_value_t = true)]
         copy_videos: bool,
+        /// Enable embedding generation for OCR text
+        #[arg(long, default_value_t = false)]
+        use_embedding: bool,
     },
     /// Setup screenpipe environment
     Setup {
