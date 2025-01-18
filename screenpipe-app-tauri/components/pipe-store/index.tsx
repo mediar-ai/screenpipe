@@ -7,15 +7,12 @@ import { toast } from '@/components/ui/use-toast';
 import { useHealthCheck } from '@/lib/hooks/use-health-check';
 import { Command } from '@tauri-apps/plugin-shell';
 import { PipeApi, PipeStorePlugin } from '@/lib/api/store';
-
+import { PipeCard } from './pipe-card';
+import { AddPipeForm } from './add-pipe-form';
+import { PipeDetails } from './pipe-details';
+import { InstalledPipe, PipeWithStatus, BrokenPipe } from './types';
 import localforage from 'localforage';
-import { BrokenPipe, InstalledPipe, PipeWithStatus } from './pipe-store/types';
-import { PipeDetails } from './pipe-store/pipe-details';
-import { PipeCard } from './pipe-store/pipe-card';
-import { AddPipeForm } from './pipe-store/add-pipe-form';
 
-const BROKEN_PIPES_KEY = 'broken_pipes';
-const DEFAULT_PIPES = ['memories', 'data-table', 'search', 'timeline', 'identify-speakers'];
 
 export const PipeStore: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
@@ -25,7 +22,6 @@ export const PipeStore: React.FC = () => {
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const { health } = useHealthCheck();
-
   useEffect(() => {
     const fetchStorePlugins = async () => {
       try {
@@ -193,7 +189,8 @@ export const PipeStore: React.FC = () => {
 
         <AddPipeForm
           onAddPipe={handleInstallPipe}
-          isHealthy={health?.status !== 'error'}
+          isHealthy={true}
+        //   isHealthy={health?.status !== 'error'}
           selectedPipe={selectedPipe}
         />
       </div>

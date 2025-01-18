@@ -13,7 +13,7 @@ import { ChangelogDialog } from "@/components/changelog-dialog";
 import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
 
 import { platform } from "@tauri-apps/plugin-os";
-import PipeStore from "@/components/pipe-store";
+import {PipeStore} from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
