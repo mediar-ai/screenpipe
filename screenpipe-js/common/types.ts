@@ -28,6 +28,7 @@ export interface ScreenpipeQueryParams {
   minLength?: number;
   maxLength?: number;
   speakerIds?: number[];
+  frameName?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export interface OCRContent {
   windowName: string;
   tags: string[];
   frame?: string;
+  frameName?: string;
 }
 
 /**

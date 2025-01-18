@@ -287,9 +287,25 @@ async fn main() -> anyhow::Result<()> {
                 ocr_engine,
                 metadata_override,
                 copy_videos,
+                debug,
                 use_embedding,
             } => {
                 let local_data_dir = get_base_dir(&data_dir)?;
+
+                // Update logging filter if debug is enabled
+                if debug {
+                    tracing::subscriber::set_global_default(
+                        tracing_subscriber::registry()
+                            .with(
+                                EnvFilter::from_default_env()
+                                    .add_directive("screenpipe=debug".parse().unwrap()),
+                            )
+                            .with(fmt::layer().with_writer(std::io::stdout)),
+                    )
+                    .ok();
+                    debug!("debug logging enabled");
+                }
+
                 let db = Arc::new(
                     DatabaseManager::new(&format!(
                         "{}/db.sqlite",

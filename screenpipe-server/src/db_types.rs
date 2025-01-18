@@ -28,6 +28,7 @@ pub struct OCRResultRaw {
     pub frame_id: i64,
     pub ocr_text: String,
     pub text_json: String,
+    pub frame_name: String,
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -40,6 +41,7 @@ pub struct OCRResultRaw {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OCRResult {
     pub frame_id: i64,
+    pub frame_name: String,
     pub ocr_text: String,
     pub text_json: String,
     pub timestamp: DateTime<Utc>,
@@ -129,6 +131,7 @@ pub struct UiContent {
     pub initial_traversal_at: Option<DateTime<Utc>>,
     pub file_path: String,
     pub offset_index: i64,
+    pub frame_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]

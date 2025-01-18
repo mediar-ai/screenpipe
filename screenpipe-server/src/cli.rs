@@ -298,7 +298,7 @@ pub enum Command {
         #[arg(long)]
         data_dir: Option<String>,
         /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
         output: OutputFormat,
         /// Regex pattern to filter files (e.g. "monitor.*\.mp4$")
         #[arg(long)]
@@ -312,6 +312,9 @@ pub enum Command {
         /// Copy videos to screenpipe data directory
         #[arg(long, default_value_t = true)]
         copy_videos: bool,
+        /// Enable debug logging for screenpipe modules
+        #[arg(long)]
+        debug: bool,
         /// Enable embedding generation for OCR text
         #[arg(long, default_value_t = false)]
         use_embedding: bool,
