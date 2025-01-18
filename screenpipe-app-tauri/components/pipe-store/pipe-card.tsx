@@ -8,7 +8,7 @@ import { toast } from '@/components/ui/use-toast';
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
-  onInstall: (pipe: PipeWithStatus) => Promise<void>;
+  onInstall: (pipe: PipeWithStatus) => Promise<any>;
   onClick: (pipe: PipeWithStatus) => void;
 }
 

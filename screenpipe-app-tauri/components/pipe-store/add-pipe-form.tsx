@@ -7,7 +7,7 @@ import { PublishDialog } from '../publish-dialog';
 import { PipeStorePlugin } from '@/lib/api/store';
 
 interface AddPipeFormProps {
-  onAddPipe: (url: string) => Promise<void>;
+  onAddPipe: (url: string) => Promise<any>;
   isHealthy: boolean;
   selectedPipe: PipeStorePlugin | null;
 }

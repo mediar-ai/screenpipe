@@ -13,6 +13,8 @@ import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { useUser } from "@/lib/hooks/use-user";
 
 const BROKEN_PIPES_KEY = "broken_pipes";
 const DEFAULT_PIPES = [
@@ -25,6 +27,8 @@ const DEFAULT_PIPES = [
 
 export const PipeStore: React.FC = () => {
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
+  const { settings } = useSettings();
+  const { user } = useUser();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -35,7 +39,7 @@ export const PipeStore: React.FC = () => {
   useEffect(() => {
     const fetchStorePlugins = async () => {
       try {
-        const pipeApi = await PipeApi.create();
+        const pipeApi = await PipeApi.create(user?.token ?? "");
         const plugins = await pipeApi.listStorePlugins();
         const withStatus = plugins.map((plugin) => ({
           ...plugin,
@@ -59,15 +63,23 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (pipe: PipeWithStatus) => {
     try {
-      const pipeApi = await PipeApi.create();
-      const response = await pipeApi.downloadPipe(pipe.id, "latest");
+
+      if (!user?.token) {
+        return toast({
+          title: "error installing pipe",
+          description: "please login to install pipes by going to the settings page account section",
+          variant: "destructive",
+        });
+      }
+      const pipeApi = await PipeApi.create(user.token);
+      const response = await pipeApi.downloadPipe(pipe.id);
 
       const downloadResponse = await fetch('http://localhost:3030/pipes/download-private', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ download_url: response.download_url }),
+        body: JSON.stringify({ pipe_name: pipe.id, url: response.download_url }),
       });
 
       const data = await downloadResponse.json();

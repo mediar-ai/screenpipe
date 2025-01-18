@@ -1,3 +1,4 @@
+import { useUser } from "@/lib/hooks/use-user";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface PipeStorePlugin {
@@ -29,23 +30,26 @@ export enum PipeDownloadError {
 
 export class PipeApi {
   private baseUrl: string;
+  private authToken: string;
 
-  private constructor() {
+  private constructor(authToken: string) {
     this.baseUrl = "https://screenpi.pe";
+    this.authToken = authToken;
   }
 
-  static async create(): Promise<PipeApi> {
-    const api = new PipeApi();
-    await api.initBaseUrl();
+  static async create(authToken: string): Promise<PipeApi> {
+    const api = new PipeApi(authToken);
+    await api.init(authToken);
     return api;
   }
 
-  private async initBaseUrl() {
+  private async init(authToken: string) {
     try {
       const BASE_URL = await invoke("get_env", { name: "BASE_URL_PRIVATE" });
       if (BASE_URL) {
         this.baseUrl = BASE_URL as string;
       }
+      this.authToken = authToken;
     } catch (error) {
       console.error("error initializing base url:", error);
     }
@@ -53,7 +57,11 @@ export class PipeApi {
 
   async listStorePlugins(): Promise<PipeStorePlugin[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/plugins/registry`);
+      const response = await fetch(`${this.baseUrl}/api/plugins/registry`, {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+      });
       if (!response.ok) {
         const { error } = await response.json();
         throw new Error(`failed to fetch plugins: ${error}`);
@@ -68,15 +76,15 @@ export class PipeApi {
 
   async downloadPipe(
     pipeId: string,
-    version: string
   ): Promise<PipeDownloadResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/api/plugins/download`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${this.authToken}`,
         },
-        body: JSON.stringify({ pipe_id: pipeId, version }),
+        body: JSON.stringify({ pipe_id: pipeId }),
       });
 
       if (!response.ok) {
