@@ -93,6 +93,7 @@ export type Settings = {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  recordAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -151,6 +152,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
   disableVision: false,
+  recordAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
