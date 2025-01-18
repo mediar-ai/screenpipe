@@ -6,8 +6,8 @@ import { Search, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Command } from "@tauri-apps/plugin-shell";
-import { PipeApi, PipeDownloadError, PipeStorePlugin } from "@/lib/api/store";
-
+import { PipeApi, PipeDownloadError, PipeStorePlugin, PurchaseHistoryItem } from "@/lib/api/store";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
 import localforage from "localforage";
 import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
@@ -35,17 +35,20 @@ export const PipeStore: React.FC = () => {
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const { health } = useHealthCheck();
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
 
   useEffect(() => {
     const fetchStorePlugins = async () => {
       try {
         const pipeApi = await PipeApi.create(user?.token ?? "");
         const plugins = await pipeApi.listStorePlugins();
+        console.log(plugins);
         const withStatus = plugins.map((plugin) => ({
           ...plugin,
           isInstalled: installedPipes.some((p) => p.id === plugin.id),
           isRunning: false,
           installedConfig: installedPipes.find((p) => p.id === plugin.id),
+          hasPurchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
         }));
         setPipes(withStatus);
       } catch (error) {
@@ -59,7 +62,34 @@ export const PipeStore: React.FC = () => {
     };
 
     fetchStorePlugins();
-  }, [installedPipes]);
+  }, [installedPipes, purchaseHistory]);
+
+  useEffect(() => {
+    const fetchPurchaseHistory = async () => {
+      if (!user?.token) return;
+      const pipeApi = await PipeApi.create(user.token);
+      const purchaseHistory = await pipeApi.getUserPurchaseHistory();
+      console.log(purchaseHistory);
+      setPurchaseHistory(purchaseHistory);
+    };
+
+    fetchPurchaseHistory();
+  }, [user]);
+
+  const handlePurchasePipe = async (pipe: PipeWithStatus) => {
+    try {
+      const pipeApi = await PipeApi.create(user?.token ?? "");
+      const response = await pipeApi.purchasePipe(pipe.id);
+      openUrl(response.data.checkout_url);
+    } catch (error) {
+      console.error("error purchasing pipe:", error);
+      toast({
+        title: "error purchasing pipe",
+        description: "please try again or check the logs",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleInstallPipe = async (pipe: PipeWithStatus) => {
     try {
@@ -220,6 +250,7 @@ export const PipeStore: React.FC = () => {
                 pipe={pipe}
                 onInstall={handleInstallPipe}
                 onClick={setSelectedPipe}
+                onPurchase={handlePurchasePipe}
               />
             ))}
           </div>

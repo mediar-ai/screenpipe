@@ -28,6 +28,37 @@ export enum PipeDownloadError {
   DOWNLOAD_FAILED = "failed to download pipe",
 }
 
+type PurchaseHistoryResponse = PurchaseHistoryItem[];
+
+export interface PurchaseHistoryItem {
+    id: string;
+    amount_paid: number;
+    currency: string;
+    stripe_payment_status: string;
+    created_at: string;
+    refunded_at: null;
+    plugins: Plugins;
+}
+interface Plugins {
+    id: string;
+    name: string;
+    description: string;
+    developer_accounts: Developer_accounts;
+}
+interface Developer_accounts {
+    developer_name: string;
+}
+
+
+interface PurchaseUrlResponse {
+  data: {
+    checkout_url: string;
+  };
+}
+
+
+
+
 export class PipeApi {
   private baseUrl: string;
   private authToken: string;
@@ -55,6 +86,25 @@ export class PipeApi {
     }
   }
 
+  async getUserPurchaseHistory(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/plugins/user-purchase-history`, {
+        headers: {
+          Authorization: `Bearer ${this.authToken}`,
+        },
+      });
+      if (!response.ok) {
+        const { error } = await response.json() as { error: string };
+        throw new Error(`failed to fetch purchase history: ${error}`);
+      }
+      const data = await response.json() as PurchaseHistoryResponse;
+      return data;
+    } catch (error) {
+      console.error("error getting purchase history:", error);
+      throw error;
+    }
+  }
+
   async listStorePlugins(): Promise<PipeStorePlugin[]> {
     try {
       const response = await fetch(`${this.baseUrl}/api/plugins/registry`, {
@@ -70,6 +120,28 @@ export class PipeApi {
       return data;
     } catch (error) {
       console.error("error listing pipes:", error);
+      throw error;
+    }
+  }
+
+  async purchasePipe(pipeId: string): Promise<PurchaseUrlResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/plugins/purchase`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ pipe_id: pipeId }),
+      });
+      if (!response.ok) {
+        const { error } = await response.json();
+        throw new Error(`failed to purchase pipe: ${error}`);
+      }
+      const data = await response.json() as PurchaseUrlResponse;
+      return data;
+    } catch (error) {
+      console.error("error purchasing pipe:", error);
       throw error;
     }
   }
