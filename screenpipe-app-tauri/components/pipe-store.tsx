@@ -406,7 +406,7 @@ export const PipeStore: React.FC = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.id }),
+        body: JSON.stringify({ pipe_id: pipe.name }),
       });
 
       const data = await response.json();
@@ -421,6 +421,8 @@ export const PipeStore: React.FC = () => {
         title: "pipe deleted",
         description: "the pipe has been successfully removed",
       });
+
+      setSelectedPipe(null);
     } catch (error) {
       console.error("failed to delete pipe:", error);
       toast({
@@ -472,6 +474,7 @@ export const PipeStore: React.FC = () => {
         onClose={() => setSelectedPipe(null)}
         onToggle={handleTogglePipe}
         onUpdate={handleConfigSave}
+        onDelete={handleDeletePipe}
       />
     );
   }

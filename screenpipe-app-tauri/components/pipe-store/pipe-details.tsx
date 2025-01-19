@@ -28,6 +28,7 @@ interface PipeDetailsProps {
   onClose: () => void;
   onToggle: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onUpdate: (config: Record<string, any>, onComplete: () => void) => void;
+  onDelete: (pipe: PipeWithStatus, onComplete: () => void) => void;
 }
 
 export const PipeDetails: React.FC<PipeDetailsProps> = ({
@@ -35,6 +36,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   onClose,
   onToggle,
   onUpdate,
+  onDelete,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   return (
@@ -141,6 +143,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                           <Button
                             onClick={() => {
                               // TODO: delete pipe
+                              onDelete(pipe, () => setIsLoading(true));
                             }}
                             variant="outline"
                             size="icon"
