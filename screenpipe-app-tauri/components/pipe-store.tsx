@@ -47,8 +47,8 @@ export const PipeStore: React.FC = () => {
         const plugins = await pipeApi.listStorePlugins();
         const withStatus = plugins.map((plugin) => ({
           ...plugin,
-          is_installed: installedPipes.some((p) => p.config.id === plugin.id),
-          installed_config: installedPipes.find((p) => p.config.id === plugin.id)?.config,
+          is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
+          installed_config: installedPipes.find((p) => p.config?.id === plugin.id)?.config,
           has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
           is_core_pipe: corePipes.includes(plugin.name),
         }));
@@ -77,13 +77,14 @@ export const PipeStore: React.FC = () => {
     fetchPurchaseHistory();
   }, [settings.user]);
 
-  const handlePurchasePipe = async (pipe: PipeWithStatus) => {
+  const handlePurchasePipe = async (pipe: PipeWithStatus, onComplete?: () => void) => {
     try {
       if (!checkLogin(settings.user)) return;
       
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
       openUrl(response.data.checkout_url);
+      onComplete?.();
     } catch (error) {
       console.error('error purchasing pipe:', error);
       toast({
@@ -166,17 +167,35 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleInstallPipe = async (pipe: PipeWithStatus) => {
+  const handleInstallPipe = async (pipe: PipeWithStatus, onComplete?: () => void) => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      toast({
-        title: 'downloading pipe',
-        description: 'downloading pipe from server',
+      const t = toast({
+        title: "downloading pipe",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">downloading from server...</p>
+          </div>
+        ),
+        duration: 100000,
       });
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.downloadPipe(pipe.id);
+
+      t.update({
+        id: t.id,
+        title: "installing pipe",
+        description: (
+          <div className="space-y-2">
+            <Progress value={50} className="h-1" />
+            <p className="text-xs">installing dependencies...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
 
       const downloadResponse = await fetch(
         "http://localhost:3030/pipes/download-private",
@@ -199,10 +218,20 @@ export const PipeStore: React.FC = () => {
       }
 
       await fetchInstalledPipes();
-      toast({
+
+      t.update({
+        id: t.id,
         title: "pipe installed",
-        description: "installation completed successfully",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
       });
+
+      onComplete?.();
     } catch (error) {
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({

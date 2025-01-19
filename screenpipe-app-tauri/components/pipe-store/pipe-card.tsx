@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download, Puzzle, UserIcon } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
@@ -8,8 +8,8 @@ import { toast } from "@/components/ui/use-toast";
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
-  onInstall: (pipe: PipeWithStatus) => Promise<any>;
-  onPurchase: (pipe: PipeWithStatus) => Promise<any>;
+  onInstall: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
+  onPurchase: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
   onClick: (pipe: PipeWithStatus) => void;
 }
 
@@ -59,6 +59,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
   onPurchase,
   onClick,
 }) => {
+  const [isLoading, setIsLoading] = useState(false);
   const handleOpenWindow = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -118,9 +119,11 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (pipe.is_paid && !pipe.has_purchased) {
-                    onPurchase(pipe);
+                    setIsLoading(true);
+                    onPurchase(pipe, () => setIsLoading(false));
                   } else {
-                    onInstall(pipe);
+                    setIsLoading(true);
+                    onInstall(pipe, () => setIsLoading(false));
                   }
                 }}
                 className="font-medium"
