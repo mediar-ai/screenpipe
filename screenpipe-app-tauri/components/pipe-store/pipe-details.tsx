@@ -27,7 +27,8 @@ interface PipeDetailsProps {
   pipe: PipeWithStatus;
   onClose: () => void;
   onToggle: (pipe: PipeWithStatus, onComplete: () => void) => void;
-  onUpdate: (config: Record<string, any>, onComplete: () => void) => void;
+  onConfigSave: (config: Record<string, any>, onComplete: () => void) => void;
+  onUpdate: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onDelete: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onRefreshFromDisk: (pipe: PipeWithStatus, onComplete: () => void) => void;
 }
@@ -53,6 +54,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   pipe,
   onClose,
   onToggle,
+  onConfigSave,
   onUpdate,
   onDelete,
   onRefreshFromDisk,
@@ -141,7 +143,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         <TooltipTrigger asChild>
                           <Button
                             onClick={() => {
-                              // TODO: update pipe
+                              onUpdate(pipe, () => setIsLoading(false));
                             }}
                             variant="outline"
                             size="icon"
@@ -159,27 +161,27 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
 
                   <div className="flex items-center gap-2">
                     {/* Only show delete button for non-core pipes */}
-                    {/* {!corePipes.some((cp) => cp.id === pipe.id) && ( */}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() => {
-                              onDelete(pipe, () => setIsLoading(false));
-                            }}
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>delete pipe</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    {/* )} */}
+                    {!pipe.is_core_pipe && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() => {
+                                onDelete(pipe, () => setIsLoading(false));
+                              }}
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>delete pipe</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                   </div>
                 </div>
               </div>
@@ -190,7 +192,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                 <PipeConfigForm
                   pipe={pipe}
                   onConfigSave={(config) => {
-                    onUpdate(config, () => setIsLoading(false));
+                    onConfigSave(config, () => setIsLoading(false));
                   }}
                 />
               </div>

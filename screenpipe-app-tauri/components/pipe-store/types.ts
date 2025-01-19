@@ -22,6 +22,7 @@ export interface PipeWithStatus extends PipeStorePlugin {
   is_installed: boolean;
   installed_config?: InstalledPipe['config'];
   has_purchased: boolean;
+  is_core_pipe: boolean;
 }
 
 export interface BrokenPipe {

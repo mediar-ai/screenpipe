@@ -23,6 +23,9 @@ import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
 
 
+const corePipes: string[] = ["auto-pay","linkedin-ai-assistant","memories","data-table","search","timeline","identify-speakers","obsidian","meeting","pipe-for-loom","pipe-simple-nextjs","reddit-auto-posts",];
+
+
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
@@ -48,6 +51,7 @@ export const PipeStore: React.FC = () => {
           is_installed: installedPipes.some((p) => p.id === plugin.name),
           installed_config: installedPipes.find((p) => p.id === plugin.name)?.config,
           has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
+          is_core_pipe: corePipes.includes(plugin.name),
         }));
         setPipes(withStatus);
       } catch (error) {
@@ -474,6 +478,72 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  const handleUpdatePipe = async (pipe: PipeWithStatus) => {
+    try {
+      posthog.capture("update_pipe", {
+        pipe_id: pipe.name,
+      });
+
+      // TODO: check if an update is available
+
+      // Create initial toast with progress bar
+      const t = toast({
+        title: "updating pipe",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">deleting old version...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+
+      // First delete the pipe
+      await handleDeletePipe(pipe);
+
+      // Then download the new version
+      if (pipe.installed_config?.source) {
+        t.update({
+          id: t.id,
+          title: "updating pipe",
+          description: (
+            <div className="space-y-2">
+              <Progress value={50} className="h-1" />
+              <p className="text-xs">downloading new version...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+
+        await handleInstallPipe(pipe);
+      }
+
+      t.update({
+        id: t.id,
+        title: "pipe updated",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
+      });
+
+      // Refresh the pipe list
+      await fetchInstalledPipes();
+
+      t.dismiss();
+    } catch (error) {
+      console.error("failed to update pipe:", error);
+      toast({
+        title: "error updating pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const filteredPipes = pipes
     .filter(
@@ -514,9 +584,10 @@ export const PipeStore: React.FC = () => {
         pipe={selectedPipe}
         onClose={() => setSelectedPipe(null)}
         onToggle={handleTogglePipe}
-        onUpdate={handleConfigSave}
+        onConfigSave={handleConfigSave}
         onDelete={handleDeletePipe}
         onRefreshFromDisk={handleRefreshFromDisk}
+        onUpdate={handleUpdatePipe}
       />
     );
   }
