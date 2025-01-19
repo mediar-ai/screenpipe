@@ -1046,10 +1046,9 @@ async fn main() {
                         error!("Failed to start health check service: {}", e);
                     }
                 });
-            }
 
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                app.set_activation_policy(tauri::ActivationPolicy::Regular);
+            }
 
             // LLM Sidecar setup
             let embedded_llm: EmbeddedLLMSettings = store
