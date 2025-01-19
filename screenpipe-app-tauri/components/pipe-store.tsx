@@ -22,9 +22,20 @@ import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
 import { LoginDialog, useLoginCheck } from "./login-dialog";
 
-
-const corePipes: string[] = ["auto-pay","linkedin-ai-assistant","memories","data-table","search","timeline","identify-speakers","obsidian","meeting","pipe-for-loom","pipe-simple-nextjs","reddit-auto-posts",];
-
+const corePipes: string[] = [
+  "auto-pay",
+  "linkedin-ai-assistant",
+  "memories",
+  "data-table",
+  "search",
+  "timeline",
+  "identify-speakers",
+  "obsidian",
+  "meeting",
+  "pipe-for-loom",
+  "pipe-simple-nextjs",
+  "reddit-auto-posts",
+];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
@@ -40,57 +51,42 @@ export const PipeStore: React.FC = () => {
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
 
-  useEffect(() => {
-    const fetchStorePlugins = async () => {
-      try {
-        const pipeApi = await PipeApi.create(settings.user?.token!);
-        const plugins = await pipeApi.listStorePlugins();
-        const withStatus = plugins.map((plugin) => ({
-          ...plugin,
-          is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
-          installed_config: installedPipes.find((p) => p.config?.id === plugin.id)?.config,
-          has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
-          is_core_pipe: corePipes.includes(plugin.name),
-        }));
-        setPipes(withStatus);
-      } catch (error) {
-        console.error("Failed to fetch store plugins:", error);
-        toast({
-          title: "error loading store",
-          description: "failed to fetch available pipes",
-          variant: "destructive",
-        });
-      }
-    };
+  const filteredPipes = pipes
+    .filter(
+      (pipe) =>
+        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (!showInstalledOnly || pipe.is_installed)
+    )
+    .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
-    fetchStorePlugins();
-  }, [installedPipes, purchaseHistory]);
+  // TODO: replace with actual IDs once published on the new store
+  const installDefaultPipes = async () => {
+    const DEFAULT_PIPES = [
+      "memories",
+      "data-table",
+      "search",
+      "timeline",
+      "identify-speakers",
+    ];
+  };
 
-  useEffect(() => {
-    const fetchPurchaseHistory = async () => {
-      if (!settings.user?.token) return;
-      const pipeApi = await PipeApi.create(settings.user!.token!);
-      const purchaseHistory = await pipeApi.getUserPurchaseHistory();
-      setPurchaseHistory(purchaseHistory);
-    };
-
-    fetchPurchaseHistory();
-  }, [settings.user]);
-
-  const handlePurchasePipe = async (pipe: PipeWithStatus, onComplete?: () => void) => {
+  const handlePurchasePipe = async (
+    pipe: PipeWithStatus,
+    onComplete?: () => void
+  ) => {
     try {
       if (!checkLogin(settings.user)) return;
-      
+
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
       openUrl(response.data.checkout_url);
       onComplete?.();
     } catch (error) {
-      console.error('error purchasing pipe:', error);
+      console.error("error purchasing pipe:", error);
       toast({
-        title: 'error purchasing pipe',
-        description: 'please try again or check the logs',
-        variant: 'destructive',
+        title: "error purchasing pipe",
+        description: "please try again or check the logs",
+        variant: "destructive",
       });
     }
   };
@@ -167,7 +163,10 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleInstallPipe = async (pipe: PipeWithStatus, onComplete?: () => void) => {
+  const handleInstallPipe = async (
+    pipe: PipeWithStatus,
+    onComplete?: () => void
+  ) => {
     try {
       if (!checkLogin(settings.user)) return;
 
@@ -291,7 +290,10 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleTogglePipe = async (pipe: PipeWithStatus, onComplete: () => void) => {
+  const handleTogglePipe = async (
+    pipe: PipeWithStatus,
+    onComplete: () => void
+  ) => {
     try {
       posthog.capture("toggle_pipe", {
         pipe_id: pipe.id,
@@ -328,14 +330,14 @@ export const PipeStore: React.FC = () => {
       toast({
         title: `pipe ${endpoint}d`,
       });
-      setSelectedPipe(prev => {
+      setSelectedPipe((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           installed_config: {
             ...prev.installed_config!,
             enabled: !pipe.installed_config?.enabled,
-          }
+          },
         };
       });
       onComplete();
@@ -352,9 +354,10 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleLoadFromLocalFolder = async (setNewRepoUrl: (url: string) => void) => {
+  const handleLoadFromLocalFolder = async (
+    setNewRepoUrl: (url: string) => void
+  ) => {
     try {
-      
       const selectedFolder = await open({
         directory: true,
         multiple: false,
@@ -399,10 +402,13 @@ export const PipeStore: React.FC = () => {
           description: "The pipe configuration has been updated.",
         });
 
-        setSelectedPipe({ ...selectedPipe, installed_config: {
-          ...selectedPipe.installed_config!,
-          ...config,
-         } });
+        setSelectedPipe({
+          ...selectedPipe,
+          installed_config: {
+            ...selectedPipe.installed_config!,
+            ...config,
+          },
+        });
       } catch (error) {
         console.error("Failed to save config:", error);
         toast({
@@ -573,14 +579,46 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const fetchStorePlugins = async () => {
+      try {
+        const pipeApi = await PipeApi.create(settings.user?.token!);
+        const plugins = await pipeApi.listStorePlugins();
+        const withStatus = plugins.map((plugin) => ({
+          ...plugin,
+          is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
+          installed_config: installedPipes.find(
+            (p) => p.config?.id === plugin.id
+          )?.config,
+          has_purchased: purchaseHistory.some(
+            (p) => p.plugins.id === plugin.id
+          ),
+          is_core_pipe: corePipes.includes(plugin.name),
+        }));
+        setPipes(withStatus);
+      } catch (error) {
+        console.error("Failed to fetch store plugins:", error);
+        toast({
+          title: "error loading store",
+          description: "failed to fetch available pipes",
+          variant: "destructive",
+        });
+      }
+    };
 
-  const filteredPipes = pipes
-    .filter(
-      (pipe) =>
-        pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (!showInstalledOnly || pipe.is_installed)
-    )
-    .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+    fetchStorePlugins();
+  }, [installedPipes, purchaseHistory]);
+
+  useEffect(() => {
+    const fetchPurchaseHistory = async () => {
+      if (!settings.user?.token) return;
+      const pipeApi = await PipeApi.create(settings.user!.token!);
+      const purchaseHistory = await pipeApi.getUserPurchaseHistory();
+      setPurchaseHistory(purchaseHistory);
+    };
+
+    fetchPurchaseHistory();
+  }, [settings.user]);
 
   useEffect(() => {
     fetchInstalledPipes();
