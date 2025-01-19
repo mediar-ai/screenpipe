@@ -62,9 +62,9 @@ export const PipeCard: React.FC<PipeCardProps> = ({
   const handleOpenWindow = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      if (pipe.installedConfig?.port) {
+      if (pipe.installed_config?.port) {
         await invoke("open_pipe_window", {
-          port: pipe.installedConfig.port,
+          port: pipe.installed_config.port,
           title: pipe.id,
         });
       }
@@ -99,25 +99,22 @@ export const PipeCard: React.FC<PipeCardProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {pipe.isInstalled ? (
-              pipe.installedConfig?.port && pipe.installedConfig.enabled ? (
+            {pipe.is_installed ?  (
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={handleOpenWindow}
-                  disabled={!pipe.isRunning}
                   className="hover:bg-muted font-medium"
                 >
-                  Open
+                  Installed
                 </Button>
-              ) : null
             ) : (
               <Button
                 size="sm"
                 variant={pipe.is_paid ? "default" : "outline"}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (pipe.is_paid  && !pipe.hasPurchased) {
+                  if (pipe.is_paid  && !pipe.has_purchased) {
                     onPurchase(pipe);
                   } else {
                     onInstall(pipe);
@@ -125,7 +122,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 }}
                 className="font-medium"
               >
-                {pipe.is_paid && !pipe.hasPurchased ? (
+                {pipe.is_paid && !pipe.has_purchased ? (
                   `$${pipe.price}`
                 ) : (
                   <>

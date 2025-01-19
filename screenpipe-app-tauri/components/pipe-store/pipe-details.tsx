@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ExternalLink,
@@ -26,22 +26,19 @@ import { Badge } from "../ui/badge";
 interface PipeDetailsProps {
   pipe: PipeWithStatus;
   onClose: () => void;
+  onToggle: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onUpdate: (config: Record<string, any>, onComplete: () => void) => void;
 }
 
-export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
+export const PipeDetails: React.FC<PipeDetailsProps> = ({
+  pipe,
+  onClose,
+  onToggle,
+  onUpdate,
+}) => {
+  const [isLoading, setIsLoading] = useState(false);
   return (
     <div className="fixed inset-0 bg-background transform transition-transform duration-200 ease-in-out flex flex-col">
-      {/* <CreditPurchaseDialog
-        open={showCreditDialog}
-        onOpenChange={setShowCreditDialog}
-        requiredCredits={
-          pipe !== null
-            ? corePipes.find((cp) => cp.id === pipe.id)?.credits || 0
-            : 0
-        }
-        currentCredits={user?.credits?.amount || 0}
-        onCreditsUpdated={refreshUser}
-      /> */}
       <div className="flex items-center justify-between p-4 border-b bg-muted/30 flex-shrink-0">
         <div className="flex items-center gap-3">
           <Button
@@ -70,10 +67,10 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
                       <TooltipTrigger asChild>
                         <Button
                           onClick={() => {
-                            // TODO: toggle enabled
+                            onToggle(pipe, () => setIsLoading(true));
                           }}
                           variant={
-                            pipe.installedConfig?.enabled
+                            pipe.installed_config?.enabled
                               ? "default"
                               : "outline"
                           }
@@ -85,7 +82,9 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>
-                          {pipe.installedConfig?.enabled ? "disable" : "enable"}{" "}
+                          {pipe.installed_config?.enabled
+                            ? "disable"
+                            : "enable"}{" "}
                           pipe
                         </p>
                       </TooltipContent>
@@ -161,12 +160,12 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
               </div>
             </div>
 
-            {pipe.installedConfig?.enabled && (
+            {pipe.installed_config?.enabled && (
               <div className="space-y-3 pt-4 border-t">
                 <PipeConfigForm
-                  pipe={pipe.installedConfig}
-                  onConfigSave={() => {
-                    // TODO: save config
+                  pipe={pipe}
+                  onConfigSave={(config) => {
+                    onUpdate(config, () => setIsLoading(true));
                   }}
                 />
               </div>
@@ -176,7 +175,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-8 ">
-            {pipe.installedConfig?.enabled && pipe.installedConfig?.port && (
+            {pipe.installed_config?.enabled && pipe.installed_config?.port && (
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex gap-2">
@@ -184,10 +183,10 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
                       variant="outline"
                       onClick={() =>
                         openUrl(
-                          `http://localhost:${pipe.installedConfig?.port}`
+                          `http://localhost:${pipe.installed_config?.port}`
                         )
                       }
-                      disabled={!pipe.isRunning}
+                      disabled={!pipe.installed_config?.enabled}
                     >
                       <ExternalLink className="mr-2 h-3.5 w-3.5" />
                       open in browser
@@ -197,7 +196,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
                       onClick={async () => {
                         try {
                           await invoke("open_pipe_window", {
-                            port: pipe.installedConfig!.port,
+                            port: pipe.installed_config!.port,
                             title: pipe.id,
                           });
                         } catch (err) {
@@ -209,7 +208,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({ pipe, onClose }) => {
                           });
                         }
                       }}
-                      disabled={!pipe.isRunning}
+                      disabled={!pipe.installed_config.enabled}
                     >
                       <Puzzle className="mr-2 h-3.5 w-3.5" />
                       open as app

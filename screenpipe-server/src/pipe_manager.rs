@@ -217,15 +217,13 @@ impl PipeManager {
     }
 
     pub async fn download_pipe_private(&self, url: &str, pipe_name: &str) -> Result<String> {
-        // Remove any surrounding quotes and normalize backslashes
-        let normalized_url = url.trim_matches('"').replace("\\", "/");
         let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
 
         // update the config with the source url
         self.update_config(
             &pipe_dir.file_name().unwrap().to_string_lossy(),
             serde_json::json!({
-                "source": normalized_url,
+                "source": "store",
             }),
         )
         .await?;

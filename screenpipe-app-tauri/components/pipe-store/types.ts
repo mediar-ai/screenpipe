@@ -10,6 +10,7 @@ export interface InstalledPipe {
       path: string;
       schedule: string;
     }[];
+    fields?: Record<string, any>;
   };
   enabled: boolean;
   id: string;
@@ -18,10 +19,9 @@ export interface InstalledPipe {
 }
 
 export interface PipeWithStatus extends PipeStorePlugin {
-  isInstalled: boolean;
-  isRunning: boolean;
-  installedConfig?: InstalledPipe;
-  hasPurchased: boolean;
+  is_installed: boolean;
+  installed_config?: InstalledPipe['config'];
+  has_purchased: boolean;
 }
 
 export interface BrokenPipe {

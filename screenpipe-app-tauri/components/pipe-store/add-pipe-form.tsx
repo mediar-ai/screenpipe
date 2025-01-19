@@ -8,31 +8,16 @@ import { PipeStorePlugin } from '@/lib/api/store';
 
 interface AddPipeFormProps {
   onAddPipe: (url: string) => Promise<any>;
+  onLoadFromLocalFolder: (setNewRepoUrl: (url: string) => void) => Promise<any>;
   isHealthy: boolean;
-  selectedPipe: PipeStorePlugin | null;
 }
 
 export const AddPipeForm: React.FC<AddPipeFormProps> = ({
   onAddPipe,
+  onLoadFromLocalFolder,
   isHealthy,
-  selectedPipe,
 }) => {
   const [newRepoUrl, setNewRepoUrl] = useState('');
-
-  const handleLoadFromLocalFolder = async () => {
-    try {
-      const selectedFolder = await open({
-        directory: true,
-        multiple: false,
-      });
-
-      if (selectedFolder) {
-        setNewRepoUrl(selectedFolder as string);
-      }
-    } catch (error) {
-      console.error('failed to load pipe from local folder:', error);
-    }
-  };
 
   return (
     <div className="border rounded-lg p-4 space-y-3 w-[50%] mx-auto">
@@ -61,7 +46,7 @@ export const AddPipeForm: React.FC<AddPipeFormProps> = ({
           <Plus className="h-4 w-4" />
         </Button>
         <Button
-          onClick={handleLoadFromLocalFolder}
+          onClick={() => onLoadFromLocalFolder(setNewRepoUrl)}
           variant="outline"
           size="icon"
           className="h-10 w-10"

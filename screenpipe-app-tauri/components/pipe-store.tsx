@@ -2,30 +2,29 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Search, Trash2 } from "lucide-react";
+import { Loader2, Search, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Command } from "@tauri-apps/plugin-shell";
-import { PipeApi, PipeDownloadError, PipeStorePlugin, PurchaseHistoryItem } from "@/lib/api/store";
+import {
+  PipeApi,
+  PipeDownloadError,
+  PurchaseHistoryItem,
+} from "@/lib/api/store";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import localforage from "localforage";
 import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useUser } from "@/lib/hooks/use-user";
+import posthog from "posthog-js";
+import { Progress } from "./ui/progress";
+import { open } from "@tauri-apps/plugin-dialog";
 
-const BROKEN_PIPES_KEY = "broken_pipes";
-const DEFAULT_PIPES = [
-  "memories",
-  "data-table",
-  "search",
-  "timeline",
-  "identify-speakers",
-];
 
 export const PipeStore: React.FC = () => {
+  const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
   const { settings } = useSettings();
   const { user } = useUser();
@@ -34,21 +33,21 @@ export const PipeStore: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
-  const { health } = useHealthCheck();
-  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
+    []
+  );
 
   useEffect(() => {
     const fetchStorePlugins = async () => {
       try {
         const pipeApi = await PipeApi.create(user?.token ?? "");
         const plugins = await pipeApi.listStorePlugins();
-        console.log(plugins);
+        console.log(installedPipes, "installedPipes");
         const withStatus = plugins.map((plugin) => ({
           ...plugin,
-          isInstalled: installedPipes.some((p) => p.id === plugin.id),
-          isRunning: false,
-          installedConfig: installedPipes.find((p) => p.id === plugin.id),
-          hasPurchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
+          is_installed: installedPipes.some((p) => p.id === plugin.name),
+          installed_config: installedPipes.find((p) => p.id === plugin.name)?.config,
+          has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
         }));
         setPipes(withStatus);
       } catch (error) {
@@ -91,30 +90,114 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  const handleInstallSideload = async (url: string) => {
+    posthog.capture("add_own_pipe", {
+      newRepoUrl: url,
+    });
+    try {
+      const t = toast({
+        title: "adding custom pipe",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">starting installation...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+      let value = 0;
+
+      const progressInterval = setInterval(() => {
+        value += 3;
+        t.update({
+          id: t.id,
+          title: "adding custom pipe",
+          description: (
+            <div className="space-y-2">
+              <Progress value={value} className="h-1" />
+              <p className="text-xs">installing dependencies...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }, 500);
+
+      const response = await fetch("http://localhost:3030/pipes/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: url }),
+      });
+
+      const data = await response.json();
+
+      clearInterval(progressInterval);
+
+      if (!data.success) {
+        throw new Error(data.error || "Failed to download pipe");
+      }
+
+      t.update({
+        id: t.id,
+        title: "pipe added",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
+      });
+
+      await fetchInstalledPipes();
+      t.dismiss();
+    } catch (error) {
+      console.error("failed to add custom pipe:", error);
+      toast({
+        title: "error adding custom pipe",
+        description: "please check the url and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleInstallPipe = async (pipe: PipeWithStatus) => {
     try {
-
       if (!user?.token) {
         return toast({
           title: "error installing pipe",
-          description: "please login to install pipes by going to the settings page account section",
+          description:
+            "please login to install pipes by going to the settings page account section",
           variant: "destructive",
         });
       }
+
+      toast({
+        title: "downloading pipe",
+        description: "downloading pipe from server",
+      });
+
       const pipeApi = await PipeApi.create(user.token);
       const response = await pipeApi.downloadPipe(pipe.id);
 
-      const downloadResponse = await fetch('http://localhost:3030/pipes/download-private', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ pipe_name: pipe.id, url: response.download_url }),
-      });
+      const downloadResponse = await fetch(
+        "http://localhost:3030/pipes/download-private",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pipe_name: pipe.name,
+            url: response.download_url,
+          }),
+        }
+      );
 
       const data = await downloadResponse.json();
       if (!data.success) {
-        throw new Error(data.error || 'Failed to download pipe');
+        throw new Error(data.error || "Failed to download pipe");
       }
 
       await fetchInstalledPipes();
@@ -140,6 +223,8 @@ export const PipeStore: React.FC = () => {
   };
 
   const fetchInstalledPipes = async () => {
+    console.log(health, "health");
+
     if (!health || health?.status === "error") return;
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
@@ -149,6 +234,7 @@ export const PipeStore: React.FC = () => {
       };
 
       if (!data.success) throw new Error("Failed to fetch installed pipes");
+      console.log(data.data, "data.data");
 
       setInstalledPipes(data.data);
       return data.data;
@@ -181,13 +267,190 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  const handleTogglePipe = async (pipe: PipeWithStatus, onComplete: () => void) => {
+    try {
+      posthog.capture("toggle_pipe", {
+        pipe_id: pipe.id,
+        enabled: !pipe.installed_config?.enabled,
+      });
+
+      const t = toast({
+        title: "loading pipe",
+        description: "please wait...",
+        action: (
+          <div className="flex items-center">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </div>
+        ),
+        duration: 4000,
+      });
+
+      const endpoint = pipe.installed_config?.enabled ? "disable" : "enable";
+
+      const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipe.name }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      toast({
+        title: `pipe ${endpoint}d`,
+      });
+      setSelectedPipe(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          installed_config: {
+            ...prev.installed_config!,
+            enabled: !pipe.installed_config?.enabled,
+          }
+        };
+      });
+      onComplete();
+    } catch (error) {
+      console.error(
+        `Failed to ${pipe.installed_config?.enabled ? "disable" : "enable"} pipe:`,
+        error
+      );
+      toast({
+        title: "error toggling pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleLoadFromLocalFolder = async (setNewRepoUrl: (url: string) => void) => {
+    try {
+      const selectedFolder = await open({
+        directory: true,
+        multiple: false,
+      });
+
+      if (selectedFolder) {
+        // set in the bar
+        setNewRepoUrl(selectedFolder);
+      }
+    } catch (error) {
+      console.error("failed to load pipe from local folder:", error);
+      toast({
+        title: "error loading pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConfigSave = async (config: Record<string, any>) => {
+    if (selectedPipe) {
+      try {
+        console.log(config, "new config");
+        
+        const response = await fetch("http://localhost:3030/pipes/update", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pipe_id: selectedPipe.name,
+            config: config,
+          }),
+        });
+
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || "Failed to update pipe configuration");
+        }
+
+        toast({
+          title: "Configuration saved",
+          description: "The pipe configuration has been updated.",
+        });
+
+        setSelectedPipe({ ...selectedPipe, installed_config: {
+          ...selectedPipe.installed_config!,
+          ...config,
+         } });
+      } catch (error) {
+        console.error("Failed to save config:", error);
+        toast({
+          title: "error saving configuration",
+          description:
+            "please try again or check the logs for more information.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+  const handleDeletePipe = async (pipe: PipeWithStatus) => {
+    try {
+      posthog.capture("delete_pipe", {
+        pipe_id: pipe.id,
+      });
+      toast({
+        title: "deleting pipe",
+        description: "please wait...",
+      });
+      setSelectedPipe(null);
+
+      const response = await fetch("http://localhost:3030/pipes/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ pipe_id: pipe.id }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+
+      // First unselect the pipe, then fetch the updated list
+      await fetchInstalledPipes();
+
+      toast({
+        title: "pipe deleted",
+        description: "the pipe has been successfully removed",
+      });
+    } catch (error) {
+      console.error("failed to delete pipe:", error);
+      toast({
+        title: "error deleting pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    }
+  };
+
+
   const filteredPipes = pipes
     .filter(
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (!showInstalledOnly || pipe.isInstalled)
+        (!showInstalledOnly || pipe.is_installed)
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+
+  useEffect(() => {
+    fetchInstalledPipes();
+  }, [health]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchInstalledPipes();
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (health?.status === "error") {
     return (
@@ -204,7 +467,12 @@ export const PipeStore: React.FC = () => {
 
   if (selectedPipe) {
     return (
-      <PipeDetails pipe={selectedPipe} onClose={() => setSelectedPipe(null)} />
+      <PipeDetails
+        pipe={selectedPipe}
+        onClose={() => setSelectedPipe(null)}
+        onToggle={handleTogglePipe}
+        onUpdate={handleConfigSave}
+      />
     );
   }
 
@@ -257,9 +525,9 @@ export const PipeStore: React.FC = () => {
         </div>
 
         <AddPipeForm
-          onAddPipe={handleInstallPipe}
+          onAddPipe={handleInstallSideload}
           isHealthy={health?.status !== "error"}
-          selectedPipe={selectedPipe}
+          onLoadFromLocalFolder={handleLoadFromLocalFolder}
         />
       </div>
     </div>
