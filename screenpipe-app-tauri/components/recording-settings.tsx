@@ -63,7 +63,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { ToastAction } from "@/components/ui/toast";
-import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -142,8 +141,7 @@ export function RecordingSettings() {
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const { user } = useUser();
-  const { credits } = user || {};
+  const { credits } = settings.user || {};
   // Add new state to track if settings have changed
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 

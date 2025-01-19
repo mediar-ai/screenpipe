@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Puzzle } from "lucide-react";
+import { Download, Puzzle, UserIcon } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -94,27 +94,30 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 {pipe.name}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {pipe.developer_accounts.developer_name}
+                <PipeStoreMarkdown
+                  content={pipe.description?.substring(0, 90) || "" + "..."}
+                  variant="compact"
+                />
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {pipe.is_installed ?  (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleOpenWindow}
-                  className="hover:bg-muted font-medium"
-                >
-                  Installed
-                </Button>
+            {pipe.is_installed ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleOpenWindow}
+                className="hover:bg-muted font-medium"
+              >
+                Installed
+              </Button>
             ) : (
               <Button
                 size="sm"
                 variant={pipe.is_paid ? "default" : "outline"}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (pipe.is_paid  && !pipe.has_purchased) {
+                  if (pipe.is_paid && !pipe.has_purchased) {
                     onPurchase(pipe);
                   } else {
                     onInstall(pipe);
@@ -135,23 +138,17 @@ export const PipeCard: React.FC<PipeCardProps> = ({
           </div>
         </div>
 
-        <div className="text-sm text-muted-foreground">
-          <PipeStoreMarkdown
-            content={truncateDescription(pipe.description || "")}
-            variant="compact"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-muted-foreground pt-2 border-t">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <div className="size-6 rounded-full bg-muted flex items-center justify-center">
+              <UserIcon className="size-3" />
+            </div>
+            {pipe.developer_accounts.developer_name}
+          </div>
           {pipe.plugin_analytics.downloads_count != null && (
             <span className="flex items-center gap-1">
               <Download className="h-3 w-3" />
               {pipe.plugin_analytics.downloads_count}
-            </span>
-          )}
-          {pipe.created_at && (
-            <span>
-              Updated {new Date(pipe.created_at).toLocaleDateString()}
             </span>
           )}
         </div>

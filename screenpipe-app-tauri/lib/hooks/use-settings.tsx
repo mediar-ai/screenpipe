@@ -12,6 +12,7 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { invoke } from "@tauri-apps/api/core";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -342,10 +343,42 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
+  const loadUser = async (token: string) => {
+    try {
+      const BASE_URL = await invoke("get_env", { name: "BASE_URL_PRIVATE" }) ?? "https://screenpi.pe";
+
+      const response = await fetch(`${BASE_URL}/api/tauri`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("failed to verify token");
+      }
+
+      const data = await response.json();
+      const userData = {
+        ...data.user,
+        stripe_connected: data.user.stripe_connected ?? false,
+      } as User;
+
+      setSettings({ 
+        user: userData
+      });
+
+    } catch (err) {
+      console.error("failed to load user:", err);
+    }
+  };
+
   return {
     settings,
     updateSettings: setSettings,
     resetSettings,
+    loadUser,
     resetSetting,
     getDataDir,
   };

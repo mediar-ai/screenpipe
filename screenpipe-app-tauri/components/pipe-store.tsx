@@ -17,7 +17,6 @@ import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@/lib/hooks/use-user";
 import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";

@@ -1,4 +1,3 @@
-import { useUser } from "@/lib/hooks/use-user";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface PipeStorePlugin {
