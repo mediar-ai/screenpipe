@@ -584,7 +584,9 @@ export const PipeStore: React.FC = () => {
       try {
         const pipeApi = await PipeApi.create(settings.user?.token!);
         const plugins = await pipeApi.listStorePlugins();
-        const withStatus = plugins.map((plugin) => ({
+        
+        // Create PipeWithStatus objects for store plugins
+        const storePluginsWithStatus = plugins.map((plugin) => ({
           ...plugin,
           is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
           installed_config: installedPipes.find(
@@ -595,7 +597,32 @@ export const PipeStore: React.FC = () => {
           ),
           is_core_pipe: corePipes.includes(plugin.name),
         }));
-        setPipes(withStatus);
+
+        const customPipes = installedPipes
+          .filter((p) => !plugins.some(plugin => plugin.id === p.config?.id))
+          .map((p) => {
+            console.log(p.config);
+            
+            const pluginName = p.config?.source?.split("/").pop();
+            return {
+              id: p.config?.id || "",
+              name: pluginName || "",
+              description: "",
+              version: p.config?.version || "0.0.0",
+              is_paid: false,
+              price: 0,
+            status: 'active',
+            created_at: new Date().toISOString(),
+            developer_accounts: { developer_name: 'You' },
+            plugin_analytics: { downloads_count: 0 },
+            is_installed: true,
+            installed_config: p.config,
+            has_purchased: true,
+            is_core_pipe: false,
+          };
+        });
+
+        setPipes([...storePluginsWithStatus, ...customPipes]);
       } catch (error) {
         console.error("Failed to fetch store plugins:", error);
         toast({
