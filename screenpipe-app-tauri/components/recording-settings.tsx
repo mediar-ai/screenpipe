@@ -752,6 +752,10 @@ export function RecordingSettings() {
     }
   };
 
+  const handleRecordAllMonitorsChange = (checked: boolean) => {
+    handleSettingsChange({ recordAllMonitors: checked });
+  };
+
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold mb-4">recording</h1>
@@ -802,15 +806,23 @@ export function RecordingSettings() {
                     <Monitor className="h-4 w-4" />
                     <span>monitors</span>
                   </Label>
-                  <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
+                  <Popover
+                    open={openMonitors && !settings.recordAllMonitors}
+                    onOpenChange={(open) =>
+                      !settings.recordAllMonitors && setOpenMonitors(open)
+                    }
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
                         aria-expanded={openMonitors}
                         className="w-full justify-between"
+                        disabled={settings.recordAllMonitors}
                       >
-                        {settings.monitorIds.length > 0
+                        {settings.recordAllMonitors
+                          ? "all monitors selected"
+                          : settings.monitorIds.length > 0
                           ? `${settings.monitorIds.length} monitor(s) selected`
                           : "select monitors"}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -862,6 +874,17 @@ export function RecordingSettings() {
                       </Command>
                     </PopoverContent>
                   </Popover>
+                  <Label
+                    className="flex items-center space-x-2"
+                    htmlFor="recordAllMonitors"
+                  >
+                    <Switch
+                      id="recordAllMonitors"
+                      checked={settings.recordAllMonitors}
+                      onCheckedChange={handleRecordAllMonitorsChange}
+                    />
+                    <span>record all monitors</span>
+                  </Label>
                 </div>
 
                 <div className="flex flex-col space-y-2">
