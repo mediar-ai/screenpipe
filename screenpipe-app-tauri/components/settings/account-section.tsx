@@ -24,6 +24,8 @@ import {
   Key,
   EyeOff,
   Eye,
+  ArrowUpRight,
+  BookOpen,
 } from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
@@ -101,7 +103,10 @@ export function AccountSection() {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
               if (settings.user) {
-                const updatedUser = { ...settings.user, stripe_connected: true };
+                const updatedUser = {
+                  ...settings.user,
+                  stripe_connected: true,
+                };
                 updateSettings({ user: updatedUser });
               }
               toast({
@@ -300,7 +305,7 @@ export function AccountSection() {
                   updateSettings({
                     user: { token: e.target.value },
                   });
-                  loadUser(e.target.value); 
+                  loadUser(e.target.value);
                 }}
                 placeholder="enter your api key"
                 className="font-mono text-sm bg-secondary/30"
@@ -431,7 +436,7 @@ export function AccountSection() {
                       <div className="flex items-center gap-2">
                         <div className="text-sm font-medium">api key</div>
                         <Button
-                          variant="ghost" 
+                          variant="ghost"
                           size="icon"
                           className="h-4 w-4 hover:bg-transparent"
                           onClick={() => setShowApiKey(!showApiKey)}
@@ -471,35 +476,29 @@ export function AccountSection() {
                 </div>
               </div>
             )}
-
             <div className="space-y-4">
-              <div className="p-4 border border-border/50 rounded-lg bg-secondary/5">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">
-                    estimated earnings
-                  </span>
-                  <span className="text-lg font-mono">$1,385.00</span>
-                </div>
-                <div className="h-[60px] w-full flex items-end gap-1">
-                  {[40, 35, 55, 45, 60, 75, 65].map((height, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-gray-900/20"
-                      style={{ height: `${height}%` }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 text-xs text-center text-muted-foreground">
-                  pending payout - coming soon
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  publish your pipe with cli
-                </Label>
-                <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
-                  $ screenpipe publish my-awesome-pipe
+              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                      <BookOpen className="w-4 h-4 text-gray-900/60" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">documentation</div>
+                      <p className="text-xs text-muted-foreground">
+                        learn how to build and publish custom pipes
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://docs.screenpi.pe/docs/plugins"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"
+                  >
+                    read docs
+                    <ArrowUpRight className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
             </div>
