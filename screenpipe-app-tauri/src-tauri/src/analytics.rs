@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{error, info, warn};
 use reqwest::Client;
 use serde_derive::Deserialize;
 use serde_json::json;
@@ -90,7 +90,7 @@ impl AnalyticsManager {
 
                 // Track enabled pipes
                 if let Err(e) = self.track_enabled_pipes().await {
-                    error!("failed to track enabled pipes: {}", e);
+                    warn!("failed to track enabled pipes: {}, is screenpipe up?", e);
                 }
             }
         }

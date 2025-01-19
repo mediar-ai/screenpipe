@@ -5,7 +5,9 @@ import { PipeApi } from "@/lib/api";
 import ShortcutRow from "./shortcut-row";
 
 const ShortcutSection = () => {
-  const [pipes, setPipes] = useState<{ id: string; source: string }[]>([]);
+  const [pipes, setPipes] = useState<
+    { id: string; source: string; enabled: boolean }[]
+  >([]);
   const { settings } = useSettings();
   const { profiles, profileShortcuts } = useProfiles();
 
@@ -14,7 +16,13 @@ const ShortcutSection = () => {
       try {
         const pipeApi = new PipeApi();
         const pipeList = await pipeApi.listPipes();
-        setPipes(pipeList.map((p) => ({ id: p.id, source: p.source })));
+        setPipes(
+          pipeList.map((p) => ({
+            id: p.id,
+            source: p.source,
+            enabled: p.enabled,
+          }))
+        );
       } catch (error) {
         console.error("failed to load pipes:", error);
       }
@@ -89,7 +97,7 @@ const ShortcutSection = () => {
           </>
         )}
 
-        {pipes.length > 0 && (
+        {pipes.filter((p) => p.enabled).length > 0 && (
           <>
             <div className="mt-8 mb-4">
               <h2 className="text-lg font-semibold">pipe shortcuts</h2>
@@ -98,16 +106,18 @@ const ShortcutSection = () => {
               </p>
             </div>
 
-            {pipes.map((pipe) => (
-              <ShortcutRow
-                key={pipe.id}
-                type="pipe"
-                shortcut={`pipe_${pipe.id}`}
-                title={`trigger ${pipe.id} pipe`}
-                description={`run pipe ${pipe.id}`}
-                value={settings.pipeShortcuts[pipe.id]}
-              />
-            ))}
+            {pipes
+              .filter((p) => p.enabled)
+              .map((pipe) => (
+                <ShortcutRow
+                  key={pipe.id}
+                  type="pipe"
+                  shortcut={`pipe_${pipe.id}`}
+                  title={`trigger ${pipe.id} pipe`}
+                  description={`run pipe ${pipe.id}`}
+                  value={settings.pipeShortcuts[pipe.id]}
+                />
+              ))}
           </>
         )}
       </div>

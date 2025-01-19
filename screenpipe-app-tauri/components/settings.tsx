@@ -11,7 +11,8 @@ import {
   Plus,
   Trash2,
   Check,
-  HardDrive
+  HardDrive,
+  FolderInput,
 } from "lucide-react";
 import { DialogHeader, DialogTitle } from "./ui/dialog";
 import { cn } from "@/lib/utils";
@@ -33,8 +34,15 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { toast } from "./ui/use-toast";
+import { DataImportSection } from "./settings/data-import-section";
 
-type SettingsSection = "ai" | "shortcuts" | "recording" | "account" | "diskUsage";
+type SettingsSection =
+  | "ai"
+  | "shortcuts"
+  | "recording"
+  | "account"
+  | "diskUsage"
+  | "dataImport";
 
 export function Settings() {
   // const { settings, switchProfile, deleteProfile } = useSettings();
@@ -104,6 +112,8 @@ export function Settings() {
         return <ShortcutSection />;
       case "diskUsage":
         return <DiskUsage />;
+      case "dataImport":
+        return <DataImportSection />;
     }
   };
 
@@ -220,6 +230,11 @@ export function Settings() {
               id: "diskUsage",
               label: "disk usage",
               icon: <HardDrive className="h-4 w-4" />,
+            },
+            {
+              id: "dataImport",
+              label: "data import",
+              icon: <FolderInput className="h-4 w-4" />,
             },
           ].map((section) => (
             <button

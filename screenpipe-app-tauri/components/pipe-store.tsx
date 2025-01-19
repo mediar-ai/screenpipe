@@ -1458,6 +1458,25 @@ const PipeStore: React.FC = () => {
     }
   };
 
+  // Add this empty state render function
+  const renderEmptyState = () => {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
+        <div className="text-center space-y-2">
+          <h3 className="text-lg font-medium">screenpipe is not running</h3>
+          <p className="text-sm text-muted-foreground">
+            please start the screenpipe service to browse and manage pipes
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  // Add this check at the start of the component render
+  if (health?.status === "error") {
+    return renderEmptyState();
+  }
+
   if (selectedPipe) {
     return renderPipeDetails();
   }

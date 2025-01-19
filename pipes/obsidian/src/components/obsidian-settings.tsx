@@ -13,8 +13,10 @@ import {
   LineChart,
   Clock,
   ExternalLink,
+  LoaderIcon,
+  Loader2,
 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { OllamaModelsList } from "./ollama-models-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,11 +37,30 @@ export function ObsidianSettings() {
   >(null);
 
   const handleSave = async (e: React.FormEvent) => {
-    pipe.captureMainFeatureEvent("obsidian", {
-      action: "save-settings",
-    });
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
+    const path = formData.get("path") as string;
+
+    if (!path?.trim()) {
+      toast({
+        variant: "destructive",
+        title: "error",
+        description: "please set an obsidian vault path",
+      });
+      return;
+    }
+
+    // show loading toast
+    const loadingToast = toast({
+      title: "saving settings...",
+      description: (
+        <div>
+          <p>please wait while we update your configuration</p>
+          <p>this may take a few minutes</p>
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ),
+    });
 
     try {
       await updateSettings(
@@ -54,13 +75,16 @@ export function ObsidianSettings() {
         "obsidian"
       );
 
-      toast({
+      // dismiss loading toast and show success
+      loadingToast.update({
+        id: loadingToast.id,
         title: "settings saved",
         description: "your obsidian settings have been updated",
       });
     } catch (err) {
-      toast({
-        variant: "destructive",
+      // dismiss loading toast and show error
+      loadingToast.update({
+        id: loadingToast.id,
         title: "error",
         description: "failed to save settings",
       });
@@ -117,7 +141,7 @@ export function ObsidianSettings() {
         description: "obsidian vault path has been set",
       });
     } catch (err) {
-      console.error("failed to open directory picker:", err);
+      console.warn("failed to open directory picker:", err);
       toast({
         variant: "destructive",
         title: "error",
@@ -220,11 +244,13 @@ export function ObsidianSettings() {
       <Tabs defaultValue="logs">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="logs">logs</TabsTrigger>
-          <TabsTrigger value="intelligence">intelligence</TabsTrigger>
+          <TabsTrigger disabled value="intelligence">
+            intelligence (soon)
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="logs">
-          <form onSubmit={handleSave} className="space-y-4 w-full">
+          <form onSubmit={handleSave} className="space-y-4 w-full my-2">
             <div className="space-y-2">
               <Label htmlFor="path">obsidian vault path</Label>
               <div className="flex gap-2">
@@ -339,7 +365,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
               />
             </div>
 
-            <Button type="submit">
+            <Button className="w-full" type="submit">
               <FileCheck className="mr-2 h-4 w-4" />
               save settings
             </Button>
