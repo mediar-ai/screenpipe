@@ -211,6 +211,12 @@ export interface Settings {
   analyticsEnabled: boolean;
   user: User;
   customSettings?: Record<string, any>;
+  monitorIds: string[];
+  audioDevices: string[];
+  audioTranscriptionEngine: string;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
 }
 
 /**

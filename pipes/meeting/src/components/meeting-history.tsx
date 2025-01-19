@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 
 import { OpenAI } from "openai";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useToast } from "./ui/use-toast";
 import ReactMarkdown from "react-markdown";
 import {
   X,
@@ -28,7 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "./ui/input";
-import { cn, keysToCamelCase } from "@/lib/utils";
+import { keysToCamelCase } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -44,6 +43,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "./ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { Color } from "@tiptap/extension-color";
+import ListItem from "@tiptap/extension-list-item";
+import TextStyle from "@tiptap/extension-text-style";
+import { EditorProvider } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
@@ -62,7 +67,11 @@ function formatDate(date: string): string {
 async function setItem(key: string, value: any): Promise<void> {
   try {
     if (typeof window !== "undefined") {
+      console.log("storing to localforage:", key, value);
       await localforage.setItem(key, value);
+      // Verify the save worked
+      const saved = await localforage.getItem(key);
+      console.log("verified save:", key, saved);
     }
   } catch (error) {
     console.error("error setting item in storage:", error);
@@ -102,7 +111,6 @@ interface Meeting {
   selectedDevices: Set<string>;
   deviceNames: Set<string>;
   segments: MeetingSegment[];
-  isEditing?: boolean;
 }
 
 interface Speaker {
@@ -133,21 +141,27 @@ interface LiveMeeting {
   transcription: string;
 }
 
-export default function MeetingHistory({
-  showMeetingHistory,
-  setShowMeetingHistory,
-  className,
-}: {
-  showMeetingHistory: boolean;
-  setShowMeetingHistory: (show: boolean) => void;
-  className?: string;
-}) {
+const extensions = [
+  Color.configure({ types: [TextStyle.name, ListItem.name] }),
+  // TextStyle.configure({ types: [ListItem.name] }),
+  StarterKit.configure({
+    bulletList: {
+      keepMarks: true,
+      keepAttributes: false,
+    },
+    orderedList: {
+      keepMarks: true,
+      keepAttributes: false,
+    },
+  }),
+];
+
+export default function MeetingHistory() {
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  const [isIdentifying, setIsIdentifying] = useState(false);
   const { toast } = useToast();
   const [showError, setShowError] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
@@ -158,31 +172,53 @@ export default function MeetingHistory({
   const [isClearing, setIsClearing] = useState(false);
   const [liveMeeting, setLiveMeeting] = useState<LiveMeeting | null>(null);
   const [isStartingRecording, setIsStartingRecording] = useState(false);
-  const [editedTranscriptions, setEditedTranscriptions] = useState<{
-    [key: number]: string;
-  }>({});
+  const [isStreamingAvailable, setIsStreamingAvailable] =
+    useState<boolean>(false);
 
   useEffect(() => {
-    if (showMeetingHistory) {
-      loadMeetings();
-    }
-  }, [showMeetingHistory]);
+    loadMeetings();
+  }, []);
 
   useEffect(() => {
     setShowError(!!error);
   }, [error]);
 
   useEffect(() => {
-    console.log("Dialog state changed:", showMeetingHistory);
-  }, [showMeetingHistory]);
+    const checkStreamingAvailability = async () => {
+      try {
+        const response = await fetch(
+          "http://localhost:3030/sse/transcriptions",
+          {
+            method: "HEAD",
+          }
+        );
+        setIsStreamingAvailable(response.ok);
+      } catch (error) {
+        setIsStreamingAvailable(false);
+      }
+    };
+
+    // Initial check
+    checkStreamingAvailability();
+
+    // Poll every 5 seconds
+    const interval = setInterval(checkStreamingAvailability, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   async function loadMeetings() {
     setLoading(true);
     try {
-      const storedMeetings = (await getItem("meetings")) || [];
-      setMeetings(storedMeetings);
+      console.log("loading meetings from storage");
+      const storedMeetings = await getItem("meetings");
+      console.log("loaded meetings:", storedMeetings);
+      if (storedMeetings) {
+        setMeetings(storedMeetings);
+      }
       await fetchMeetings();
     } catch (err) {
+      console.error("failed to load meetings:", err);
       setError("failed to load meetings");
     } finally {
       setLoading(false);
@@ -226,8 +262,27 @@ export default function MeetingHistory({
       const newMeetings = processMeetings(camelCaseResult.data);
       console.log("processed new meetings:", newMeetings);
 
-      // Combine live recordings with fetched meetings
-      const updatedMeetings = [...liveRecordings, ...newMeetings];
+      // Merge new meetings with stored meetings, preserving edited content
+      const mergedMeetings = newMeetings.map((newMeeting) => {
+        const existingMeeting = uniqueMeetings.find(
+          (m) => m.meetingGroup === newMeeting.meetingGroup
+        );
+        // If meeting exists and has edited content, preserve it
+        if (existingMeeting) {
+          return {
+            ...newMeeting,
+            segments: existingMeeting.segments,
+            fullTranscription: existingMeeting.fullTranscription,
+            summary: existingMeeting.summary,
+            name: existingMeeting.name,
+            participants: existingMeeting.participants,
+          };
+        }
+        return newMeeting;
+      });
+
+      // Combine live recordings with merged meetings
+      const updatedMeetings = [...liveRecordings, ...mergedMeetings];
 
       // Sort meetings by start time (descending)
       updatedMeetings.sort(
@@ -622,21 +677,43 @@ export default function MeetingHistory({
       });
 
       // Start streaming transcriptions
-      for await (const chunk of pipe.streamTranscriptions()) {
-        console.log("chunk", chunk);
-        setLiveMeeting((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            transcription: prev.transcription + (chunk.choices[0]?.text || ""),
-          };
+      try {
+        for await (const chunk of pipe.streamTranscriptions()) {
+          console.log("chunk", chunk);
+          setLiveMeeting((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              transcription:
+                prev.transcription + (chunk.choices[0]?.text || ""),
+            };
+          });
+        }
+      } catch (error: any) {
+        // Handle specific error cases
+        let errorMessage = "failed to start recording. ";
+
+        if (error?.message?.includes("403") || error?.status === 403) {
+          errorMessage +=
+            "please enable real-time transcription in your backend settings.";
+        } else {
+          errorMessage += "please check your connection and try again.";
+        }
+
+        setLiveMeeting(null);
+        toast({
+          title: "error",
+          description: errorMessage,
+          variant: "destructive",
         });
       }
     } catch (error) {
       console.error("error starting recording:", error);
+      setLiveMeeting(null);
       toast({
         title: "error",
-        description: "failed to start recording. please try again.",
+        description:
+          "unexpected error occurred while recording. please try again.",
         variant: "destructive",
       });
     } finally {
@@ -694,52 +771,35 @@ export default function MeetingHistory({
     }
   };
 
-  const startEditing = (meetingGroup: number) => {
-    setMeetings(
-      meetings.map((m) =>
-        m.meetingGroup === meetingGroup ? { ...m, isEditing: true } : m
-      )
-    );
-
-    const meeting = meetings.find((m) => m.meetingGroup === meetingGroup);
-    if (meeting) {
-      setEditedTranscriptions({
-        ...editedTranscriptions,
-        [meetingGroup]: meeting.segments
-          .filter((s) => meeting.selectedDevices.has(s.deviceName))
-          .map((s) => s.transcription)
-          .join("\n"),
-      });
-    }
-  };
-
-  const saveEdits = async (meetingGroup: number) => {
-    const meeting = meetings.find((m) => m.meetingGroup === meetingGroup);
-    if (!meeting) return;
-
-    const updatedMeetings = meetings.map((m) =>
-      m.meetingGroup === meetingGroup
-        ? {
-            ...m,
-            isEditing: false,
-            segments: [
-              {
-                ...m.segments[0], // Keep original metadata
-                transcription: editedTranscriptions[meetingGroup],
-              },
-            ],
-          }
-        : m
-    );
-
-    setMeetings(updatedMeetings);
-    await setItem("meetings", updatedMeetings);
-
-    toast({
-      title: "changes saved",
-      description: "your edits have been saved successfully.",
-    });
-  };
+  const recordingButton = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div>
+            <Button
+              onClick={startRecording}
+              disabled={isStartingRecording || !isStreamingAvailable}
+              variant="outline"
+              size="sm"
+              className="ml-4"
+            >
+              {isStartingRecording ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              start recording
+            </Button>
+          </div>
+        </TooltipTrigger>
+        {!isStreamingAvailable && (
+          <TooltipContent>
+            <p>streaming service not available</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
 
   return (
     <Card>
@@ -756,20 +816,7 @@ export default function MeetingHistory({
                 meeting and conversation history
               </h2>
               {!liveMeeting ? (
-                <Button
-                  onClick={startRecording}
-                  disabled={isStartingRecording}
-                  variant="outline"
-                  size="sm"
-                  className="ml-4"
-                >
-                  {isStartingRecording ? (
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4 mr-2" />
-                  )}
-                  start recording
-                </Button>
+                recordingButton
               ) : (
                 <div className="flex items-center gap-2">
                   <Popover>
@@ -958,17 +1005,103 @@ export default function MeetingHistory({
                         <div className="mb-4 relative">
                           <h4 className="font-semibold mb-2">transcription:</h4>
                           <div className="flex gap-2 absolute top-0 right-0">
-                            {!meeting.isEditing ? (
-                              <>
-                                <Button
-                                  onClick={() =>
-                                    copyWithToast(
-                                      meeting.segments
-                                        .filter((s) =>
-                                          meeting.selectedDevices.has(
-                                            s.deviceName
-                                          )
-                                        )
+                            <Button
+                              onClick={() =>
+                                copyWithToast(
+                                  meeting.segments
+                                    .filter((s) =>
+                                      meeting.selectedDevices.has(s.deviceName)
+                                    )
+                                    .map(
+                                      (s) =>
+                                        `${formatTimestamp(s.timestamp)} [${
+                                          s.speaker
+                                            ? s.speaker.name
+                                            : s.deviceType?.toLowerCase() ===
+                                              "input"
+                                            ? "you"
+                                            : "others"
+                                        }] ${s.transcription}`
+                                    )
+                                    .join("\n"),
+                                  "transcription"
+                                )
+                              }
+                              className="p-1 h-6 w-6"
+                              variant="outline"
+                              size="icon"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <EditorProvider
+                            extensions={extensions}
+                            content={meeting.segments
+                              .filter((s) =>
+                                meeting.selectedDevices.has(s.deviceName)
+                              )
+                              .map(
+                                (s) =>
+                                  `<p><span class="select-none text-gray-500"><strong>${formatTimestamp(
+                                    s.timestamp
+                                  )} [${
+                                    s.speaker
+                                      ? s.speaker.name
+                                      : s.deviceType?.toLowerCase() === "input"
+                                      ? "you"
+                                      : "others"
+                                  }]</strong></span> ${s.transcription}</p>`
+                              )
+                              .join("")}
+                            onUpdate={({ editor }) => {
+                              console.log("editor update triggered");
+                              const content = editor.getHTML();
+
+                              // Parse the HTML content to extract timestamps and transcriptions
+                              const parser = new DOMParser();
+                              const doc = parser.parseFromString(
+                                content,
+                                "text/html"
+                              );
+                              const paragraphs = doc.querySelectorAll("p");
+
+                              // Update segments with new transcriptions while preserving timestamps and speakers
+                              const updatedSegments = meeting.segments.map(
+                                (segment, index) => {
+                                  if (
+                                    index < paragraphs.length &&
+                                    meeting.selectedDevices.has(
+                                      segment.deviceName
+                                    )
+                                  ) {
+                                    const paragraph = paragraphs[index];
+                                    // Extract everything after the timestamp and speaker info
+                                    const text = paragraph.textContent || "";
+                                    const timestampMatch =
+                                      text.match(/\[(.*?)\]/);
+                                    if (timestampMatch) {
+                                      const transcription = text
+                                        .substring(text.indexOf("]") + 1)
+                                        .trim();
+                                      return {
+                                        ...segment,
+                                        transcription,
+                                      };
+                                    }
+                                  }
+                                  return segment;
+                                }
+                              );
+
+                              console.log("updated segments:", updatedSegments);
+
+                              // Update meetings state with new content
+                              const updatedMeetings = meetings.map((m) =>
+                                m.meetingGroup === meeting.meetingGroup
+                                  ? {
+                                      ...m,
+                                      segments: updatedSegments,
+                                      fullTranscription: updatedSegments
                                         .map(
                                           (s) =>
                                             `${formatTimestamp(s.timestamp)} [${
@@ -981,79 +1114,36 @@ export default function MeetingHistory({
                                             }] ${s.transcription}`
                                         )
                                         .join("\n"),
-                                      "transcription"
-                                    )
-                                  }
-                                  className="p-1 h-6 w-6"
-                                  variant="outline"
-                                  size="icon"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  onClick={() =>
-                                    startEditing(meeting.meetingGroup)
-                                  }
-                                  className="p-1 h-6 w-6"
-                                  variant="outline"
-                                  size="icon"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <Button
-                                onClick={() => saveEdits(meeting.meetingGroup)}
-                                className="p-1 h-6 w-6"
-                                variant="outline"
-                                size="icon"
-                              >
-                                <Save className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                          {!meeting.isEditing ? (
-                            <pre className="whitespace-pre-wrap bg-gray-100 p-3 rounded text-sm max-h-40 overflow-y-auto">
-                              {meeting.segments
-                                .filter((s) =>
-                                  meeting.selectedDevices.has(s.deviceName)
-                                )
-                                .sort(
-                                  (a, b) =>
-                                    new Date(a.timestamp).getTime() -
-                                    new Date(b.timestamp).getTime()
-                                )
-                                .map((s, i) => (
-                                  <React.Fragment key={i}>
-                                    <span className="font-bold">
-                                      {`${formatTimestamp(s.timestamp)} [${
-                                        s.speaker
-                                          ? s.speaker.name
-                                          : s.deviceType?.toLowerCase() ===
-                                            "input"
-                                          ? "you"
-                                          : "others"
-                                      }]`}
-                                    </span>{" "}
-                                    {s.transcription}
-                                    {"\n"}
-                                  </React.Fragment>
-                                ))}
-                            </pre>
-                          ) : (
-                            <Textarea
-                              value={
-                                editedTranscriptions[meeting.meetingGroup] || ""
-                              }
-                              onChange={(e) =>
-                                setEditedTranscriptions({
-                                  ...editedTranscriptions,
-                                  [meeting.meetingGroup]: e.target.value,
-                                })
-                              }
-                              className="min-h-[10rem] font-mono text-sm"
-                            />
-                          )}
+                                    }
+                                  : m
+                              );
+
+                              console.log(
+                                "saving updated meetings:",
+                                updatedMeetings
+                              );
+
+                              // Use Promise to ensure storage completes
+                              (async () => {
+                                try {
+                                  await setItem("meetings", updatedMeetings);
+                                  setMeetings(updatedMeetings);
+                                  console.log("save completed successfully");
+                                } catch (err) {
+                                  console.error(
+                                    "failed to save meetings:",
+                                    err
+                                  );
+                                }
+                              })();
+                            }}
+                            editorProps={{
+                              attributes: {
+                                class:
+                                  "prose-sm p-3 rounded min-h-[10rem] max-h-[30rem] overflow-y-auto whitespace-pre-wrap break-words border shadow-sm",
+                              },
+                            }}
+                          />
                         </div>
                         <div className="relative">
                           <h4 className="font-semibold mb-2">summary:</h4>
@@ -1102,19 +1192,6 @@ export default function MeetingHistory({
                         </div>
                       </CardContent>
                     </Card>
-                    {index < sortedMeetings.length - 1 && (
-                      <div className="flex justify-center my-2">
-                        <Button
-                          onClick={() => mergeMeetings(index)}
-                          size="sm"
-                          variant="outline"
-                          className="text-xs"
-                        >
-                          <ChevronDown className="h-4 w-4 mr-2" />
-                          merge with next meeting
-                        </Button>
-                      </div>
-                    )}
                   </React.Fragment>
                 ))}
               </div>
