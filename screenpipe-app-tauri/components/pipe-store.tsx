@@ -21,6 +21,7 @@ import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
 import { LoginDialog, useLoginCheck } from "./login-dialog";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 const corePipes: string[] = [
   "auto-pay",
@@ -58,6 +59,63 @@ export const PipeStore: React.FC = () => {
         (!showInstalledOnly || pipe.is_installed)
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+
+  const fetchStorePlugins = async () => {
+    try {
+      const pipeApi = await PipeApi.create(settings.user?.token!);
+      const plugins = await pipeApi.listStorePlugins();
+
+      // Create PipeWithStatus objects for store plugins
+      const storePluginsWithStatus = plugins.map((plugin) => ({
+        ...plugin,
+        is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
+        installed_config: installedPipes.find((p) => p.config?.id === plugin.id)
+          ?.config,
+        has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
+        is_core_pipe: corePipes.includes(plugin.name),
+      }));
+
+      const customPipes = installedPipes
+        .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
+        .map((p) => {
+          console.log(p.config);
+
+          const pluginName = p.config?.source?.split("/").pop();
+          return {
+            id: p.config?.id || "",
+            name: pluginName || "",
+            description: "",
+            version: p.config?.version || "0.0.0",
+            is_paid: false,
+            price: 0,
+            status: "active",
+            created_at: new Date().toISOString(),
+            developer_accounts: { developer_name: "You" },
+            plugin_analytics: { downloads_count: 0 },
+            is_installed: true,
+            installed_config: p.config,
+            has_purchased: true,
+            is_core_pipe: false,
+          };
+        });
+
+      setPipes([...storePluginsWithStatus, ...customPipes]);
+    } catch (error) {
+      console.error("Failed to fetch store plugins:", error);
+      toast({
+        title: "error loading store",
+        description: "failed to fetch available pipes",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchPurchaseHistory = async () => {
+    if (!settings.user?.token) return;
+    const pipeApi = await PipeApi.create(settings.user!.token!);
+    const purchaseHistory = await pipeApi.getUserPurchaseHistory();
+    setPurchaseHistory(purchaseHistory);
+  };
 
   // TODO: replace with actual IDs once published on the new store
   const installDefaultPipes = async () => {
@@ -580,70 +638,10 @@ export const PipeStore: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchStorePlugins = async () => {
-      try {
-        const pipeApi = await PipeApi.create(settings.user?.token!);
-        const plugins = await pipeApi.listStorePlugins();
-        
-        // Create PipeWithStatus objects for store plugins
-        const storePluginsWithStatus = plugins.map((plugin) => ({
-          ...plugin,
-          is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
-          installed_config: installedPipes.find(
-            (p) => p.config?.id === plugin.id
-          )?.config,
-          has_purchased: purchaseHistory.some(
-            (p) => p.plugins.id === plugin.id
-          ),
-          is_core_pipe: corePipes.includes(plugin.name),
-        }));
-
-        const customPipes = installedPipes
-          .filter((p) => !plugins.some(plugin => plugin.id === p.config?.id))
-          .map((p) => {
-            console.log(p.config);
-            
-            const pluginName = p.config?.source?.split("/").pop();
-            return {
-              id: p.config?.id || "",
-              name: pluginName || "",
-              description: "",
-              version: p.config?.version || "0.0.0",
-              is_paid: false,
-              price: 0,
-            status: 'active',
-            created_at: new Date().toISOString(),
-            developer_accounts: { developer_name: 'You' },
-            plugin_analytics: { downloads_count: 0 },
-            is_installed: true,
-            installed_config: p.config,
-            has_purchased: true,
-            is_core_pipe: false,
-          };
-        });
-
-        setPipes([...storePluginsWithStatus, ...customPipes]);
-      } catch (error) {
-        console.error("Failed to fetch store plugins:", error);
-        toast({
-          title: "error loading store",
-          description: "failed to fetch available pipes",
-          variant: "destructive",
-        });
-      }
-    };
-
     fetchStorePlugins();
   }, [installedPipes, purchaseHistory]);
 
   useEffect(() => {
-    const fetchPurchaseHistory = async () => {
-      if (!settings.user?.token) return;
-      const pipeApi = await PipeApi.create(settings.user!.token!);
-      const purchaseHistory = await pipeApi.getUserPurchaseHistory();
-      setPurchaseHistory(purchaseHistory);
-    };
-
     fetchPurchaseHistory();
   }, [settings.user]);
 
@@ -655,8 +653,34 @@ export const PipeStore: React.FC = () => {
     const interval = setInterval(() => {
       fetchInstalledPipes();
     }, 1000);
-
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const setupDeepLink = async () => {
+      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
+        console.log("received deep link urls:", urls);
+        for (const url of urls) {
+          if (url.includes("purchase-successful")) {
+            fetchPurchaseHistory();
+            toast({
+              title: "purchase successful",
+              description: "your purchase has been successful",
+            });
+          }
+        }
+      });
+      return unsubscribeDeepLink;
+    };
+
+    let deepLinkUnsubscribe: (() => void) | undefined;
+
+    setupDeepLink().then((unsubscribe) => {
+      deepLinkUnsubscribe = unsubscribe;
+    });
+    return () => {
+      if (deepLinkUnsubscribe) deepLinkUnsubscribe();
+    };
   }, []);
 
   if (health?.status === "error") {
