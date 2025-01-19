@@ -330,12 +330,14 @@ export const PipeStore: React.FC = () => {
 
   const handleLoadFromLocalFolder = async (setNewRepoUrl: (url: string) => void) => {
     try {
+      
       const selectedFolder = await open({
         directory: true,
         multiple: false,
       });
 
       if (selectedFolder) {
+        console.log("loading from local folder", selectedFolder);
         // set in the bar
         setNewRepoUrl(selectedFolder);
       }
@@ -433,6 +435,45 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  const handleRefreshFromDisk = async (pipe: PipeWithStatus) => {
+    try {
+      posthog.capture("refresh_pipe_from_disk", {
+        pipe_id: pipe.name,
+      });
+
+      toast({
+        title: "refreshing pipe",
+        description: "please wait...",
+      });
+
+      const response = await fetch(`http://localhost:3030/pipes/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: pipe.installed_config?.source }),
+      });
+      if (!response.ok) {
+        throw new Error("failed to refresh pipe");
+      }
+
+      await fetchInstalledPipes();
+      toast({
+        title: "pipe refreshed",
+        description: "the pipe has been successfully refreshed from disk.",
+      });
+    } catch (error) {
+      console.error("failed to refresh pipe from disk:", error);
+      toast({
+        title: "error refreshing pipe",
+        description: "please try again or check the logs for more information.",
+        variant: "destructive",
+      });
+    } finally {
+      setSelectedPipe(null);
+    }
+  };
+
 
   const filteredPipes = pipes
     .filter(
@@ -475,6 +516,7 @@ export const PipeStore: React.FC = () => {
         onToggle={handleTogglePipe}
         onUpdate={handleConfigSave}
         onDelete={handleDeletePipe}
+        onRefreshFromDisk={handleRefreshFromDisk}
       />
     );
   }

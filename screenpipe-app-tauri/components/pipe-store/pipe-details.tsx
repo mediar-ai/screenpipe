@@ -29,7 +29,25 @@ interface PipeDetailsProps {
   onToggle: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onUpdate: (config: Record<string, any>, onComplete: () => void) => void;
   onDelete: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onRefreshFromDisk: (pipe: PipeWithStatus, onComplete: () => void) => void;
 }
+
+const isValidSource = (source?: string): boolean => {
+  if (!source) return false;
+
+  // github url pattern
+  const githubPattern = /^https?:\/\/(?:www\.)?github\.com\/.+\/.+/i;
+
+  // filesystem path patterns (unix and windows)
+  const unixPattern = /^(?:\/|~\/)/;
+  const windowsPattern = /^[a-zA-Z]:\\|^\\\\/;
+
+  return (
+    githubPattern.test(source) ||
+    unixPattern.test(source) ||
+    windowsPattern.test(source)
+  );
+};
 
 export const PipeDetails: React.FC<PipeDetailsProps> = ({
   pipe,
@@ -37,6 +55,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   onToggle,
   onUpdate,
   onDelete,
+  onRefreshFromDisk,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   return (
@@ -69,7 +88,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                       <TooltipTrigger asChild>
                         <Button
                           onClick={() => {
-                            onToggle(pipe, () => setIsLoading(true));
+                            onToggle(pipe, () => setIsLoading(false));
                           }}
                           variant={
                             pipe.installed_config?.enabled
@@ -95,32 +114,15 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
 
                   <LogFileButton className="text-xs" />
 
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => {
-                            // TODO: update pipe
-                          }}
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>update pipe</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-
-                  {/* TODO: add refresh from disk */}
-                  {/* <TooltipProvider>
+                  {pipe.installed_config?.source &&
+                  isValidSource(pipe.installed_config.source) ? (
+                    <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
-                            onClick={() => handleRefreshFromDisk(pipe)}
+                            onClick={() =>
+                              onRefreshFromDisk(pipe, () => setIsLoading(false))
+                            }
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
@@ -132,7 +134,28 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                           <p>refresh the code from your local disk</p>
                         </TooltipContent>
                       </Tooltip>
-                    </TooltipProvider> */}
+                    </TooltipProvider>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={() => {
+                              // TODO: update pipe
+                            }}
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>update pipe</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
 
                   <div className="flex items-center gap-2">
                     {/* Only show delete button for non-core pipes */}
@@ -142,8 +165,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         <TooltipTrigger asChild>
                           <Button
                             onClick={() => {
-                              // TODO: delete pipe
-                              onDelete(pipe, () => setIsLoading(true));
+                              onDelete(pipe, () => setIsLoading(false));
                             }}
                             variant="outline"
                             size="icon"
@@ -168,7 +190,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                 <PipeConfigForm
                   pipe={pipe}
                   onConfigSave={(config) => {
-                    onUpdate(config, () => setIsLoading(true));
+                    onUpdate(config, () => setIsLoading(false));
                   }}
                 />
               </div>
