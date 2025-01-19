@@ -21,6 +21,7 @@ import { useUser } from "@/lib/hooks/use-user";
 import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
+import { LoginDialog, useLoginCheck } from "./login-dialog";
 
 
 const corePipes: string[] = ["auto-pay","linkedin-ai-assistant","memories","data-table","search","timeline","identify-speakers","obsidian","meeting","pipe-for-loom","pipe-simple-nextjs","reddit-auto-posts",];
@@ -30,7 +31,6 @@ export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
   const { settings } = useSettings();
-  const { user } = useUser();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,11 +39,12 @@ export const PipeStore: React.FC = () => {
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
     []
   );
+  const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
 
   useEffect(() => {
     const fetchStorePlugins = async () => {
       try {
-        const pipeApi = await PipeApi.create(user?.token ?? "");
+        const pipeApi = await PipeApi.create(settings.user?.token!);
         const plugins = await pipeApi.listStorePlugins();
         console.log(installedPipes, "installedPipes");
         const withStatus = plugins.map((plugin) => ({
@@ -69,35 +70,29 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     const fetchPurchaseHistory = async () => {
-      if (!user?.token) return;
-      const pipeApi = await PipeApi.create(user.token);
+      if (!settings.user?.token) return;
+      const pipeApi = await PipeApi.create(settings.user!.token!);
       const purchaseHistory = await pipeApi.getUserPurchaseHistory();
       console.log(purchaseHistory);
       setPurchaseHistory(purchaseHistory);
     };
 
     fetchPurchaseHistory();
-  }, [user]);
+  }, [settings.user]);
 
   const handlePurchasePipe = async (pipe: PipeWithStatus) => {
     try {
-      if (!user?.token) {
-        return toast({
-          title: "error installing pipe",
-          description:
-            "please login to install pipes by going to the settings page account section",
-          variant: "destructive",
-        });
-      }
-      const pipeApi = await PipeApi.create(user?.token ?? "");
+      if (!checkLogin(settings.user)) return;
+      
+      const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
       openUrl(response.data.checkout_url);
     } catch (error) {
-      console.error("error purchasing pipe:", error);
+      console.error('error purchasing pipe:', error);
       toast({
-        title: "error purchasing pipe",
-        description: "please try again or check the logs",
-        variant: "destructive",
+        title: 'error purchasing pipe',
+        description: 'please try again or check the logs',
+        variant: 'destructive',
       });
     }
   };
@@ -176,21 +171,14 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (pipe: PipeWithStatus) => {
     try {
-      if (!user?.token) {
-        return toast({
-          title: "error installing pipe",
-          description:
-            "please login to install pipes by going to the settings page account section",
-          variant: "destructive",
-        });
-      }
+      if (!checkLogin(settings.user)) return;
 
       toast({
-        title: "downloading pipe",
-        description: "downloading pipe from server",
+        title: 'downloading pipe',
+        description: 'downloading pipe from server',
       });
 
-      const pipeApi = await PipeApi.create(user.token);
+      const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.downloadPipe(pipe.id);
 
       const downloadResponse = await fetch(
@@ -654,6 +642,7 @@ export const PipeStore: React.FC = () => {
           onLoadFromLocalFolder={handleLoadFromLocalFolder}
         />
       </div>
+      <LoginDialog open={showLoginDialog} onOpenChange={setShowLoginDialog} />
     </div>
   );
 };

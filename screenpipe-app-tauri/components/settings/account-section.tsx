@@ -96,16 +96,6 @@ export function AccountSection() {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
-          if (url.includes("api_key=")) {
-            const apiKey = new URL(url).searchParams.get("api_key");
-            if (apiKey) {
-              updateSettings({ user: { token: apiKey } });
-              toast({
-                title: "logged in!",
-                description: "your api key has been set",
-              });
-            }
-          }
           if (url.includes("return") || url.includes("refresh")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
