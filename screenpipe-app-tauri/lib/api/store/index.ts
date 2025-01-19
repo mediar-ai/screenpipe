@@ -30,24 +30,23 @@ export enum PipeDownloadError {
 type PurchaseHistoryResponse = PurchaseHistoryItem[];
 
 export interface PurchaseHistoryItem {
-    id: string;
-    amount_paid: number;
-    currency: string;
-    stripe_payment_status: string;
-    created_at: string;
-    refunded_at: null;
-    plugins: Plugins;
+  id: string;
+  amount_paid: number;
+  currency: string;
+  stripe_payment_status: string;
+  created_at: string;
+  refunded_at: null;
+  plugins: Plugins;
 }
 interface Plugins {
-    id: string;
-    name: string;
-    description: string;
-    developer_accounts: Developer_accounts;
+  id: string;
+  name: string;
+  description: string;
+  developer_accounts: Developer_accounts;
 }
 interface Developer_accounts {
-    developer_name: string;
+  developer_name: string;
 }
-
 
 interface PurchaseUrlResponse {
   data: {
@@ -55,8 +54,13 @@ interface PurchaseUrlResponse {
   };
 }
 
-
-
+export interface CheckUpdateResponse {
+  has_update: boolean;
+  current_version: string;
+  latest_version: string;
+  latest_file_hash: string;
+  latest_file_size: number;
+}
 
 export class PipeApi {
   private baseUrl: string;
@@ -87,16 +91,19 @@ export class PipeApi {
 
   async getUserPurchaseHistory(): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/plugins/user-purchase-history`, {
-        headers: {
-          Authorization: `Bearer ${this.authToken}`,
-        },
-      });
+      const response = await fetch(
+        `${this.baseUrl}/api/plugins/user-purchase-history`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.authToken}`,
+          },
+        }
+      );
       if (!response.ok) {
-        const { error } = await response.json() as { error: string };
+        const { error } = (await response.json()) as { error: string };
         throw new Error(`failed to fetch purchase history: ${error}`);
       }
-      const data = await response.json() as PurchaseHistoryResponse;
+      const data = (await response.json()) as PurchaseHistoryResponse;
       return data;
     } catch (error) {
       console.error("error getting purchase history:", error);
@@ -137,7 +144,7 @@ export class PipeApi {
         const { error } = await response.json();
         throw new Error(`failed to purchase pipe: ${error}`);
       }
-      const data = await response.json() as PurchaseUrlResponse;
+      const data = (await response.json()) as PurchaseUrlResponse;
       return data;
     } catch (error) {
       console.error("error purchasing pipe:", error);
@@ -145,9 +152,7 @@ export class PipeApi {
     }
   }
 
-  async downloadPipe(
-    pipeId: string,
-  ): Promise<PipeDownloadResponse> {
+  async downloadPipe(pipeId: string): Promise<PipeDownloadResponse> {
     try {
       const response = await fetch(`${this.baseUrl}/api/plugins/download`, {
         method: "POST",
@@ -171,6 +176,33 @@ export class PipeApi {
       return data;
     } catch (error) {
       console.error("error downloading pipe:", error);
+      throw error;
+    }
+  }
+
+  async checkUpdate(
+    pipeId: string,
+    version: string
+  ): Promise<CheckUpdateResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/plugins/check-update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ pipe_id: pipeId, version }),
+      });
+
+      if (!response.ok) {
+        const { error } = await response.json();
+        throw new Error(`failed to check for updates: ${error}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error("error checking for updates:", error);
       throw error;
     }
   }

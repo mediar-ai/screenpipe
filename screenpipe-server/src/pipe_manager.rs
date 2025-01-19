@@ -216,14 +216,25 @@ impl PipeManager {
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 
-    pub async fn download_pipe_private(&self, url: &str, pipe_name: &str) -> Result<String> {
+    pub async fn download_pipe_private(&self, url: &str, pipe_name: &str, pipe_id: &str) -> Result<String> {
         let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
 
-        // update the config with the source url
+        let package_json_path = pipe_dir.join("package.json");
+        let version = if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            package_data["version"].as_str().unwrap_or("1.0.0").to_string()
+        } else {
+            "1.0.0".to_string()
+        };
+
+        // update the config with the source url and version
         self.update_config(
             &pipe_dir.file_name().unwrap().to_string_lossy(),
             serde_json::json!({
                 "source": "store",
+                "version": version,
+                "id": pipe_id,
             }),
         )
         .await?;

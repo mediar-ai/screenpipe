@@ -641,6 +641,7 @@ struct DownloadPipeRequest {
 struct DownloadPipePrivateRequest {
     url: String,
     pipe_name: String,
+    pipe_id: String,
 }
 
 #[derive(Deserialize)]
@@ -685,7 +686,7 @@ async fn download_pipe_private_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
-    match state.pipe_manager.download_pipe_private(&payload.url, &payload.pipe_name).await {
+    match state.pipe_manager.download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id).await {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
             "data": {
                 "pipe_id": pipe_dir,

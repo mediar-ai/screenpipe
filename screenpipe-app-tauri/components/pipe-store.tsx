@@ -45,11 +45,10 @@ export const PipeStore: React.FC = () => {
       try {
         const pipeApi = await PipeApi.create(settings.user?.token!);
         const plugins = await pipeApi.listStorePlugins();
-        console.log(installedPipes, "installedPipes");
         const withStatus = plugins.map((plugin) => ({
           ...plugin,
-          is_installed: installedPipes.some((p) => p.id === plugin.name),
-          installed_config: installedPipes.find((p) => p.id === plugin.name)?.config,
+          is_installed: installedPipes.some((p) => p.config.id === plugin.id),
+          installed_config: installedPipes.find((p) => p.config.id === plugin.id)?.config,
           has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
           is_core_pipe: corePipes.includes(plugin.name),
         }));
@@ -72,7 +71,6 @@ export const PipeStore: React.FC = () => {
       if (!settings.user?.token) return;
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const purchaseHistory = await pipeApi.getUserPurchaseHistory();
-      console.log(purchaseHistory);
       setPurchaseHistory(purchaseHistory);
     };
 
@@ -189,6 +187,7 @@ export const PipeStore: React.FC = () => {
           },
           body: JSON.stringify({
             pipe_name: pipe.name,
+            pipe_id: pipe.id,
             url: response.download_url,
           }),
         }
@@ -222,8 +221,6 @@ export const PipeStore: React.FC = () => {
   };
 
   const fetchInstalledPipes = async () => {
-    console.log(health, "health");
-
     if (!health || health?.status === "error") return;
     try {
       const response = await fetch("http://localhost:3030/pipes/list");
@@ -233,7 +230,6 @@ export const PipeStore: React.FC = () => {
       };
 
       if (!data.success) throw new Error("Failed to fetch installed pipes");
-      console.log(data.data, "data.data");
 
       setInstalledPipes(data.data);
       return data.data;
@@ -353,8 +349,6 @@ export const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
-        console.log(config, "new config");
-        
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
           headers: {
@@ -475,11 +469,22 @@ export const PipeStore: React.FC = () => {
 
   const handleUpdatePipe = async (pipe: PipeWithStatus) => {
     try {
+      if (!checkLogin(settings.user)) return;
+
       posthog.capture("update_pipe", {
         pipe_id: pipe.name,
       });
 
-      // TODO: check if an update is available
+      const currentVersion = pipe.installed_config?.version!;
+      const storeApi = await PipeApi.create(settings.user!.token!);
+      const update = await storeApi.checkUpdate(pipe.id, currentVersion);
+      if (!update.has_update) {
+        toast({
+          title: "no update available",
+          description: "the pipe is already up to date",
+        });
+        return;
+      }
 
       // Create initial toast with progress bar
       const t = toast({

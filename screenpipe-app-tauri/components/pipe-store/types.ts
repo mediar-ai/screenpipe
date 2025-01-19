@@ -2,6 +2,7 @@ import { PipeStorePlugin } from "@/lib/api/store";
 
 export interface InstalledPipe {
   config: {
+    id?: string;
     enabled?: boolean;
     is_nextjs: boolean;
     port?: number;
@@ -11,11 +12,8 @@ export interface InstalledPipe {
       schedule: string;
     }[];
     fields?: Record<string, any>;
+    version?: string;
   };
-  enabled: boolean;
-  id: string;
-  port: number | null;
-  source: string;
 }
 
 export interface PipeWithStatus extends PipeStorePlugin {
