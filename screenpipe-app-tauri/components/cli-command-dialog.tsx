@@ -29,7 +29,10 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     let args = [];
     let envVars = [];
 
-    if (settings.user?.credits && !settings.audioTranscriptionEngine.includes("whisper")) {
+    if (
+      settings.user?.credits &&
+      !settings.audioTranscriptionEngine.includes("whisper")
+    ) {
       envVars.push(
         'DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"'
       );
@@ -112,10 +115,6 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
 
     if (settings.enableRealtimeAudioTranscription) {
       args.push("--enable-realtime-audio-transcription");
-      args.push("--realtime-audio-transcription-engine");
-      args.push(
-        settings.realtimeAudioTranscriptionEngine || "whisper-large-v3-turbo"
-      );
     }
 
     const envString = envVars.length > 0 ? `${envVars.join(" ")} ` : "";

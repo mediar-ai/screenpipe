@@ -299,6 +299,8 @@ export function SearchChat() {
 
   const [speakerSearchQuery, setSpeakerSearchQuery] = useState("");
 
+  const [frameName, setFrameName] = useState<string>("");
+
   useEffect(() => {
     if (Object.keys(selectedSpeakers).length > 0) {
       setSelectedTypes({
@@ -769,6 +771,7 @@ export function SearchChat() {
         speakerIds: Object.values(selectedSpeakers).map(
           (speaker) => speaker.id
         ),
+        ...(frameName && { frame_name: frameName }),
       };
 
       const response = await pipe.queryScreenpipe(searchParams);
@@ -814,9 +817,10 @@ export function SearchChat() {
   const handleBadgeClick = (value: string, type: "app" | "window") => {
     if (type === "app") {
       setAppName(value);
-    } else {
+    } else if (type === "window") {
       setWindowName(value);
     }
+    handleSearch(0);
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -1393,14 +1397,6 @@ export function SearchChat() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Remove the query section */}
-            {/* <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="query" className="text-right">
-                query
-              </Label>
-              ... query input ...
-            </div> */}
-
             {/* Keep other advanced search options */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
@@ -1515,6 +1511,102 @@ export function SearchChat() {
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="speakers" className="text-right">
+              speakers
+            </Label>
+            <div className="col-span-3 flex items-center">
+              <Popover open={openSpeakers} onOpenChange={setOpenSpeakers}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openSpeakers}
+                    className="w-full justify-between"
+                  >
+                    {Object.values(selectedSpeakers).length > 0
+                      ? `${Object.values(selectedSpeakers)
+                          .map((s) => s.name)
+                          .join(", ")}`
+                      : "select speakers"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[350px] p-0">
+                  <Command>
+                    <CommandInput
+                      placeholder="search speakers..."
+                      value={speakerSearchQuery}
+                      onValueChange={setSpeakerSearchQuery}
+                    />
+                    <CommandList>
+                      <CommandEmpty>no speakers found.</CommandEmpty>
+                      <CommandGroup>
+                        {[...new Set(speakers)].map((speaker: Speaker) => (
+                          <CommandItem
+                            key={speaker.id}
+                            value={speaker.name}
+                            onSelect={() => handleSpeakerChange(speaker)}
+                          >
+                            <div className="flex items-center">
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedSpeakers[speaker.id]
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              <span
+                                style={{
+                                  userSelect: "none",
+                                  WebkitUserSelect: "none",
+                                  MozUserSelect: "none",
+                                  msUserSelect: "none",
+                                }}
+                              >
+                                {speaker.name}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          {/* Add frame name input after app name */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="frame-name" className="text-right">
+              frame name
+            </Label>
+            <div className="col-span-3 flex items-center">
+              <Input
+                id="frame-name"
+                type="text"
+                value={frameName}
+                onChange={(e) => setFrameName(e.target.value)}
+                placeholder="filter by frame name"
+                className="flex-grow"
+              />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      filter results by specific frame names (by default frame
+                      name is mp4 video file path)
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
           <div className="flex items-center justify-center space-x-2">
             <Switch
               id="include-frames"
@@ -1536,85 +1628,6 @@ export function SearchChat() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </div>
-          <div className="flex items-center justify-center space-x-2">
-            <Label htmlFor="speakers" className="flex items-center space-x-2">
-              <SpeechIcon className="h-4 w-4" />
-              <span>speakers</span>
-            </Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    select the speakers to include in the search results. this
-                    will only show results from the selected speakers. note:
-                    only audio results can be returned
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <Popover open={openSpeakers} onOpenChange={setOpenSpeakers}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={openSpeakers}
-                  className="w-full justify-between"
-                >
-                  {Object.values(selectedSpeakers).length > 0
-                    ? `${Object.values(selectedSpeakers)
-                        .map((s) => s.name)
-                        .join(", ")}`
-                    : "select speakers"}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-full p-0">
-                <Command>
-                  <CommandInput
-                    placeholder="search speakers..."
-                    value={speakerSearchQuery}
-                    onValueChange={setSpeakerSearchQuery}
-                  />
-                  <CommandList>
-                    <CommandEmpty>no speakers found.</CommandEmpty>
-                    <CommandGroup>
-                      {[...new Set(speakers)].map((speaker: Speaker) => (
-                        <CommandItem
-                          key={speaker.id}
-                          value={speaker.name}
-                          onSelect={() => handleSpeakerChange(speaker)}
-                        >
-                          <div className="flex items-center">
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedSpeakers[speaker.id]
-                                  ? "opacity-100"
-                                  : "opacity-0"
-                              )}
-                            />
-                            <span
-                              style={{
-                                userSelect: "none",
-                                WebkitUserSelect: "none",
-                                MozUserSelect: "none",
-                                msUserSelect: "none",
-                              }}
-                            >
-                              {speaker.name}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
           </div>
           <DialogFooter>
             <Button onClick={() => setIsQueryParamsDialogOpen(false)}>

@@ -13,6 +13,7 @@
     "@radix-ui/react-select": "^2.1.1",
     "@radix-ui/react-toast": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "@types/lodash": "^4.17.13",
     "@screenpipe/js": "1.0.0",
     "@screenpipe/browser": "0.1.12",
     "@types/nodemailer": "^6.4.17",

@@ -288,3 +288,4 @@ const pipeImpl = new BrowserPipeImpl();
 export const pipe = pipeImpl;
 
 export * from "../../common/types";
+export { getDefaultSettings } from "../../common/utils";
