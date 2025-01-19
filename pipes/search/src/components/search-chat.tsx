@@ -34,10 +34,11 @@ import {
   Clock,
   Check,
   Plus,
+  AlertCircle,
   SpeechIcon,
   ChevronsUpDown,
 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/lib/use-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { generateId, Message } from "ai";
 import { OpenAI } from "openai";
@@ -222,7 +223,7 @@ export function SearchChat() {
     toggleCollapse,
   } = useSearchHistory();
   // Search state
-  const { health } = useHealthCheck();
+  const { health, isServerDown } = useHealthCheck();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ContentItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -425,7 +426,18 @@ export function SearchChat() {
     };
   }, []);
 
+  const isAiDisabled =
+    !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
+
   const handleExampleSelect = async (example: ExampleSearch) => {
+    if (isAiDisabled){
+      toast({
+        title: "error",
+        description: "your selected ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
+        variant: "destructive",
+      });
+      return;
+    }
     const newWindowName = example.windowName || "";
     const newAppName = example.appName || "";
     const newLimit = example.limit || limit;
@@ -738,6 +750,15 @@ export function SearchChat() {
   };
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
+    if (isAiDisabled){
+      toast({
+        title: "error",
+        description: "your ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
+        duration: 3000,
+        variant: "destructive",
+      });
+      return;
+    }
     await pipe.captureMainFeatureEvent("search", {
       contentType: overrides.contentType || contentType,
       limit: overrides.limit || limit,
@@ -1113,8 +1134,6 @@ export function SearchChat() {
     // Add any other reset logic you need
   };
 
-  const isAiDisabled =
-    !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
@@ -1273,7 +1292,9 @@ export function SearchChat() {
               <span>
                 <Button
                   onClick={() => handleSearch(0)}
-                  disabled={isLoading || !health || health?.status === "error"}
+                  disabled={(isLoading || isAiDisabled || !health 
+                    || health?.status === "error")}
+                  className="disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <>
@@ -1289,9 +1310,28 @@ export function SearchChat() {
                 </Button>
               </span>
             </TooltipTrigger>
-            {health?.status === "error" && (
+            {(!health || health?.status === "error" || isAiDisabled) && (
               <TooltipContent>
-                <p>screenpipe is not running...</p>
+                <p>
+                  {(isAiDisabled && isServerDown) ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      you don't have access to screenpipe-cloud <br /> and screenpipe server is down!
+                    </>
+                  ) : isServerDown ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      screenpipe is not running...
+                    </>
+                  ) : isAiDisabled ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      you don't have access to screenpipe-cloud :( <br/> please consider login!
+                    </>
+                  ) : (
+                    ""
+                  )}
+                </p>
               </TooltipContent>
             )}
           </Tooltip>
@@ -1768,7 +1808,7 @@ export function SearchChat() {
                   placeholder="ask a question about the results..."
                   value={floatingInput}
                   disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH
+                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH || isAiDisabled
                   }
                   onChange={(e) => setFloatingInput(e.target.value)}
                   className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
