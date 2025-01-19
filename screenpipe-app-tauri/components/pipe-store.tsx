@@ -81,6 +81,14 @@ export const PipeStore: React.FC = () => {
 
   const handlePurchasePipe = async (pipe: PipeWithStatus) => {
     try {
+      if (!user?.token) {
+        return toast({
+          title: "error installing pipe",
+          description:
+            "please login to install pipes by going to the settings page account section",
+          variant: "destructive",
+        });
+      }
       const pipeApi = await PipeApi.create(user?.token ?? "");
       const response = await pipeApi.purchasePipe(pipe.id);
       openUrl(response.data.checkout_url);
