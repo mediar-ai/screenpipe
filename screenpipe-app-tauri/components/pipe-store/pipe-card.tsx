@@ -140,10 +140,10 @@ export const PipeCard: React.FC<PipeCardProps> = ({
             )}
           </div>
         </div>
-
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <div className="size-6 rounded-full bg-muted flex items-center justify-center">
+        {pipe.installed_config?.source === 'store' && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <div className="size-6 rounded-full bg-muted flex items-center justify-center">
               <UserIcon className="size-3" />
             </div>
             {pipe.developer_accounts.developer_name}
@@ -153,8 +153,9 @@ export const PipeCard: React.FC<PipeCardProps> = ({
               <Download className="h-3 w-3" />
               {pipe.plugin_analytics.downloads_count}
             </span>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
