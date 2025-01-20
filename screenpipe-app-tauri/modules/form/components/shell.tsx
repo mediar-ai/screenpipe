@@ -31,7 +31,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
   ref: React.ForwardedRef<FormRendererHandles<FormValues>>
 ) => {
   const form = useForm<FormValues>({
-    resolver: zodResolver(props.formZodSchema),
+    // resolver: zodResolver(props.formZodSchema),
     defaultValues: props.defaultValues,
   });
 
@@ -54,13 +54,18 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
           form
             .handleSubmit(props.onSubmit)(event)
         }}
-        className="flex w-[100%] min-h-[100%] flex-col space-y-8"
+        className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[50px]"
       >
         <div className="text-center">
-          <h1 className="text-lg font-[300]">{props.title}</h1>
-          <h3 className="text-xs font-[200]">{props.description}</h3>
+          <h1 className="text-lg font-[300]">
+            {props.title}
+          </h1>
+          <h3 className="text-xs font-[200]">
+            {props.description}
+          </h3>
         </div>
         {props.fields.map((element, index, { length }) => {
+          console.log({element})
           return (
           <FormField
            key={index}
