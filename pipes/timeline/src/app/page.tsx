@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { useSettings } from "@/lib/hooks/use-settings";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
@@ -55,13 +54,10 @@ export default function Timeline() {
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const retryCount = useRef(0);
   const [loadedTimeRange, setLoadedTimeRange] = useState<TimeRange | null>(
     null
   );
-  const { settings } = useSettings();
   const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
-  const aiPanelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({
     x: 0,
@@ -356,9 +352,19 @@ export default function Timeline() {
           )}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-destructive/10 p-5 border-destructive/20 border rounded-lg text-destructive">
-                <AlertCircle className="h-4 w-4 mb-2 mx-auto" />
-                <p>{error}</p>
+              <div className="bg-destructive/10 p-5 border-destructive/20 border rounded-lg text-destructive flex flex-col items-center">
+                <AlertCircle className="h-4 w-4 mb-2" />
+                <p className="mb-4">
+                  i cannot reach your screenpipe data, did you enable the
+                  timeline feature?
+                </p>
+                <button
+                  onClick={handleRefresh}
+                  className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-muted transition-colors rounded-md border border-input"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  reload
+                </button>
               </div>
             </div>
           )}
@@ -420,7 +426,6 @@ export default function Timeline() {
             }}
             frames={frames}
             agents={AGENTS}
-            settings={settings}
             isExpanded={isAiPanelExpanded}
             onExpandedChange={setIsAiPanelExpanded}
           />
