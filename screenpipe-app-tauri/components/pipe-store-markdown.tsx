@@ -6,6 +6,7 @@ import remarkMath from "remark-math";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { Button } from "@/components/ui/button";
 import { Copy, Check } from "lucide-react";
+import { convertHtmlToMarkdown } from "@/lib/utils";
 
 interface MarkdownProps {
   content: string;
@@ -19,6 +20,7 @@ export function PipeStoreMarkdown({
   variant = "default",
 }: MarkdownProps) {
   const { isCopied, copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
+  const processedContent = convertHtmlToMarkdown(content);
 
   return (
     <div className={`prose prose-sm dark:prose-invert max-w-none ${className}`}>
@@ -97,9 +99,18 @@ export function PipeStoreMarkdown({
               </a>
             );
           },
+          img({ node, ...props }) {
+            return (
+              <img 
+                {...props} 
+                className="max-w-full h-auto rounded-lg"
+                style={{ maxHeight: '600px' }}
+              />
+            );
+          },
         }}
       >
-        {content.replace(/Â/g, "")}
+        {processedContent.replace(/Â/g, "")}
       </MemoizedReactMarkdown>
     </div>
   );

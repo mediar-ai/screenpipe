@@ -21,12 +21,16 @@ import {
   Coins,
   UserCog,
   ExternalLinkIcon,
+  Key,
+  EyeOff,
+  Eye,
+  ArrowUpRight,
+  BookOpen,
 } from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 
-import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
 import {
@@ -84,32 +88,25 @@ function PlanCard({
 }
 
 export function AccountSection() {
-  const { user, loadUser } = useUser();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loadUser } = useSettings();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
-
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [userToken, setUserToken] = useState<string | null>(null);
   useEffect(() => {
     const setupDeepLink = async () => {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
-          if (url.includes("api_key=")) {
-            const apiKey = new URL(url).searchParams.get("api_key");
-            if (apiKey) {
-              updateSettings({ user: { token: apiKey } });
-              toast({
-                title: "logged in!",
-                description: "your api key has been set",
-              });
-            }
-          }
           if (url.includes("return") || url.includes("refresh")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
-              if (user) {
-                const updatedUser = { ...user, stripe_connected: true };
+              if (settings.user) {
+                const updatedUser = {
+                  ...settings.user,
+                  stripe_connected: true,
+                };
                 updateSettings({ user: updatedUser });
               }
               toast({
@@ -136,14 +133,13 @@ export function AccountSection() {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, [settings.user?.token, loadUser, updateSettings]);
+  }, [settings.user?.token, updateSettings]);
 
   const handleRefreshCredits = async () => {
     if (!settings.user?.token) return;
 
     setIsRefreshing(true);
     try {
-      await loadUser(settings.user.token);
       toast({
         title: "credits refreshed",
         description: "your credit balance has been updated",
@@ -159,8 +155,8 @@ export function AccountSection() {
     }
   };
 
-  const clientRefId = `${user?.id}&customer_email=${encodeURIComponent(
-    user?.email ?? ""
+  const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(
+    settings.user?.email ?? ""
   )}`;
 
   const plans = [
@@ -196,14 +192,17 @@ export function AccountSection() {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const host = "https://screenpi.pe/api/dev-stripe";
+      const BASE_URL =
+        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+        "https://screenpi.pe";
+      const host = `${BASE_URL}/api/dev-stripe`;
       const response = await fetch(host, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          user_id: user?.id,
+          user_id: settings.user?.id,
         }),
       });
 
@@ -219,6 +218,13 @@ export function AccountSection() {
       setIsConnectingStripe(false);
     }
   };
+
+  useEffect(() => {
+    console.log("document visibility state:", document.visibilityState);
+
+    const updatedUser = { ...settings.user, stripe_connected: true };
+    updateSettings({ user: updatedUser });
+  }, []);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -253,7 +259,7 @@ export function AccountSection() {
               <Coins className="w-4 h-4 text-muted-foreground" />
               <h4 className="text-sm font-medium">credits & usage</h4>
               <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                {user?.credits?.amount || 0} available
+                {settings.user?.credits?.amount || 0} available
               </Badge>
             </div>
             <Button
@@ -299,6 +305,7 @@ export function AccountSection() {
                   updateSettings({
                     user: { token: e.target.value },
                   });
+                  loadUser(e.target.value);
                 }}
                 placeholder="enter your api key"
                 className="font-mono text-sm bg-secondary/30"
@@ -307,7 +314,6 @@ export function AccountSection() {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  loadUser(settings.user?.token || "");
                   toast({ title: "key updated" });
                 }}
               >
@@ -393,53 +399,106 @@ export function AccountSection() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleConnectStripe}
-                  className="h-9"
-                  // disabled={true} // for now
-                  disabled={isConnectingStripe || user?.stripe_connected}
-                >
-                  {isConnectingStripe ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : user?.stripe_connected ? (
-                    "connected ✓"
-                  ) : (
-                    "connect"
-                  )}
-                </Button>
+                {settings.user?.stripe_connected ? (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => openUrl("https://dashboard.stripe.com/")}
+                  >
+                    manage
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleConnectStripe}
+                    className="h-9"
+                    disabled={isConnectingStripe}
+                  >
+                    {isConnectingStripe ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "connect"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
-
-            <div className="space-y-4">
-              <div className="p-4 border border-border/50 rounded-lg bg-secondary/5">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">
-                    estimated earnings
-                  </span>
-                  <span className="text-lg font-mono">$1,385.00</span>
-                </div>
-                <div className="h-[60px] w-full flex items-end gap-1">
-                  {[40, 35, 55, 45, 60, 75, 65].map((height, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-gray-900/20"
-                      style={{ height: `${height}%` }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 text-xs text-center text-muted-foreground">
-                  pending payout - coming soon
+            {settings.user?.api_key && (
+              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                      <Key className="w-4 h-4 text-gray-900/60" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium">api key</div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 hover:bg-transparent"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-3 w-3" />
+                          ) : (
+                            <Eye className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground">
+                        {showApiKey
+                          ? settings.user?.api_key
+                          : settings.user?.api_key?.replace(/./g, "*")}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => {
+                      if (settings.user?.api_key) {
+                        navigator.clipboard.writeText(settings.user.api_key);
+                        toast({
+                          title: "copied to clipboard",
+                          description:
+                            "your api key has been copied to your clipboard",
+                        });
+                      }
+                    }}
+                    disabled={!settings.user?.api_key}
+                  >
+                    copy
+                  </Button>
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  publish your pipe with cli
-                </Label>
-                <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
-                  $ screenpipe publish my-awesome-pipe
+            )}
+            <div className="space-y-4">
+              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                      <BookOpen className="w-4 h-4 text-gray-900/60" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">documentation</div>
+                      <p className="text-xs text-muted-foreground">
+                        learn how to build and publish custom pipes
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://docs.screenpi.pe/docs/plugins"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"
+                  >
+                    read docs
+                    <ArrowUpRight className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
             </div>

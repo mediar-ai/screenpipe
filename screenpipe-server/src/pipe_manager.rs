@@ -2,7 +2,7 @@ use anyhow::Result;
 use killport::cli::Mode;
 use killport::killport::{Killport, KillportOperations};
 use killport::signal::KillportSignal;
-use screenpipe_core::{download_pipe, PipeState};
+use screenpipe_core::{download_pipe, download_pipe_private, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -85,11 +85,12 @@ impl PipeManager {
             if let Value::Object(updates) = new_config {
                 // Update top-level properties
                 for (key, value) in updates.iter() {
-                    if key != "fields" {  // Handle non-fields properties directly
+                    if key != "fields" {
+                        // Handle non-fields properties directly
                         existing_config.insert(key.clone(), value.clone());
                     }
                 }
-                
+
                 // Handle fields separately if they exist
                 if let Some(Value::Array(new_fields)) = updates.get("fields") {
                     existing_config.insert("fields".to_string(), Value::Array(new_fields.clone()));
@@ -215,6 +216,37 @@ impl PipeManager {
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 
+    pub async fn download_pipe_private(&self, url: &str, pipe_name: &str, pipe_id: &str) -> Result<String> {
+        let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
+
+        let package_json_path = pipe_dir.join("package.json");
+        let version = if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            package_data["version"].as_str().unwrap_or("1.0.0").to_string()
+        } else {
+            "1.0.0".to_string()
+        };
+
+        // update the config with the source url and version
+        self.update_config(
+            &pipe_dir.file_name().unwrap().to_string_lossy(),
+            serde_json::json!({
+                "source": "store",
+                "version": version,
+                "id": pipe_id,
+            }),
+        )
+        .await?;
+
+        info!(
+            "pipe {} downloaded",
+            pipe_dir.file_name().unwrap().to_string_lossy()
+        );
+
+        Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
+    }
+
     pub async fn purge_pipes(&self) -> Result<()> {
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
@@ -256,7 +288,8 @@ impl PipeManager {
                         let killport = Killport;
                         let signal: KillportSignal = "SIGKILL".parse().unwrap();
 
-                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false) {
+                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                        {
                             Ok(killed_services) => {
                                 if killed_services.is_empty() {
                                     debug!("no services found using port {}", port);
@@ -273,7 +306,9 @@ impl PipeManager {
                                 warn!("error killing port {}: {}", port, e);
                             }
                         }
-                    }).await.map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                    })
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
                 }
                 PipeState::Pid(pid) => {
                     // Force kill the process if it's still running

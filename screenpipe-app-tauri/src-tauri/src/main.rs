@@ -334,6 +334,11 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     Ok(())
 }
 
+#[tauri::command]
+fn get_env(name: &str) -> String {
+    std::env::var(String::from(name)).unwrap_or(String::from(""))
+}
+
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
     // Fetch pipe config from API
     let client = reqwest::Client::new();
@@ -672,6 +677,7 @@ async fn main() {
             commands::open_pipe_window,
             get_log_files,
             update_global_shortcuts,
+            get_env
         ])
         .setup(|app| {
             // Logging setup

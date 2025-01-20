@@ -8,8 +8,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { useUser } from "@/lib/hooks/use-user";
 import { Loader2 } from "lucide-react";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 interface CreditPurchaseDialogProps {
   open: boolean;
@@ -26,17 +26,17 @@ export function CreditPurchaseDialog({
   currentCredits,
   onCreditsUpdated,
 }: CreditPurchaseDialogProps) {
-  const { refreshUser, user } = useUser();
+  const { settings, loadUser } = useSettings();
   const [showRefreshHint, setShowRefreshHint] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePurchase = async (url: string) => {
     setIsLoading(true);
     await openUrl(
-      `${url}?client_reference_id=${user?.id}&metadata[user_id]=${user?.id}`
+      `${url}?client_reference_id=${settings.user?.id}&metadata[user_id]=${settings.user?.id}`
     );
     setTimeout(async () => {
-      await refreshUser();
+      await loadUser(settings.user?.token!);
       onCreditsUpdated?.();
       setShowRefreshHint(true);
       setIsLoading(false);
@@ -71,7 +71,7 @@ export function CreditPurchaseDialog({
                     variant="outline"
                     onClick={() =>
                       handlePurchase(
-                        `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(user?.email ?? '')}`
+                        `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? '')}`
                       )
                     }
                     disabled={isLoading}
@@ -99,7 +99,7 @@ export function CreditPurchaseDialog({
                     variant="outline"
                     onClick={() =>
                       handlePurchase(
-                        `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${user?.id}&customer_email=${encodeURIComponent(user?.email ?? '')}`
+                        `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${settings.user?.id}&customer_email=${encodeURIComponent(settings.user?.email ?? '')}`
                       )
                     }
                     disabled={isLoading}

@@ -12,7 +12,7 @@ import {
 } from "./ui/tooltip";
 import { Layers, Layout, RefreshCw } from "lucide-react";
 import { toast } from "./ui/use-toast";
-import { Pipe } from "./pipe-store";
+import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import {
   Select,
@@ -30,7 +30,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen } from "lucide-react";
 
 type PipeConfigFormProps = {
-  pipe: Pipe;
+  pipe: PipeWithStatus;
   onConfigSave: (config: Record<string, any>) => void;
 };
 
@@ -46,20 +46,23 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   pipe,
   onConfigSave,
 }) => {
-  const [config, setConfig] = useState(pipe.config);
+  const [config, setConfig] = useState(pipe.installed_config);
 
   useEffect(() => {
-    setConfig(pipe.config);
+    setConfig(pipe.installed_config);
   }, [pipe]);
 
   const handleInputChange = (name: string, value: any) => {
     if (!config) return;
-    setConfig((prevConfig) => ({
-      ...prevConfig,
-      fields: prevConfig?.fields?.map((field: FieldConfig) =>
-        field.name === name ? { ...field, value } : field
-      ),
-    }));
+    setConfig((prevConfig) => {
+      if (!prevConfig) return prevConfig;
+      return {
+        ...prevConfig,
+        fields: prevConfig.fields?.map((field: FieldConfig) =>
+          field.name === name ? { ...field, value } : field
+        ),
+      };
+    });
   };
 
   const renderConfigInput = (field: FieldConfig) => {

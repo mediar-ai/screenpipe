@@ -63,6 +63,12 @@
           "pathPrefix": [
             "/stripe-connect"
           ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/purchase-successful"
+          ]
         }
       ]
     }

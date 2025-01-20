@@ -20,10 +20,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Pipe } from "./pipe-store";
+import { PipeWithStatus } from "./pipe-store/types";
 
 interface PublishDialogProps {
-  app: Pipe | null;
+  app: PipeWithStatus | null;
 }
 
 export const PublishDialog: React.FC<PublishDialogProps> = ({ app }) => {
