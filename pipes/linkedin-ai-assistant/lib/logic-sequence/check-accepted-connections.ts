@@ -4,6 +4,7 @@ import { updateWorkflowStep } from '../../app/api/workflow/status/state';
 import { loadConnections, saveConnection, saveProfile } from '../storage/storage';
 import { extractProfileText } from '../simple-actions/extract-profile-details-from-page';
 import { cleanProfileUrl } from '../simple-actions/extract-profiles-from-search-results';
+import { shouldStop } from './withdraw-connections';
 
 const port = process.env.PORT!;
 const BASE_URL = `http://127.0.0.1:${port}`;
@@ -47,6 +48,11 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
         console.log(`found ${pendingConnections.length} pending connections older than 14 days to check`);
 
         for (const connection of pendingConnections) {
+            if (shouldStop) {
+                console.log('check accepted connections stopped by user');
+                return;
+            }
+
             try {
                 console.log(`checking connection status for ${connection.profileUrl}`);
                 
