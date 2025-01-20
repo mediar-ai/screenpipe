@@ -411,6 +411,7 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
         fps,
         duration,
         device_name: None,
+        name: Some(video_path.to_string()),
     })
 }
 
@@ -464,6 +465,7 @@ pub struct VideoMetadata {
     pub fps: f64,
     pub duration: f64,
     pub device_name: Option<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -483,6 +485,7 @@ pub struct VideoMetadataOverride {
     pub fps: Option<f64>,
     pub duration: Option<f64>,
     pub device_name: Option<String>,
+    pub name: Option<String>,
 }
 
 impl VideoMetadataOverride {
@@ -498,6 +501,9 @@ impl VideoMetadataOverride {
         }
         if let Some(ref device_name) = self.device_name {
             metadata.device_name = Some(device_name.clone());
+        }
+        if let Some(ref name) = self.name {
+            metadata.name = Some(name.clone());
         }
     }
 }

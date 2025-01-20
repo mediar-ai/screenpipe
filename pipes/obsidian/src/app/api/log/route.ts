@@ -33,7 +33,10 @@ async function generateWorkLog(
     - change start and end time according to the difference between the current time and the time of the screen data
 
     User custom prompt: ${customPrompt}
-    Current time: ${now.toLocaleString()} (${timeZone})
+    todays date: ${new Date().toISOString().split("T")[0]}
+    local time: ${new Date().toLocaleTimeString()}
+    timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
+    
     Screen data: ${JSON.stringify(screenData)}
 
     Return a JSON object with:

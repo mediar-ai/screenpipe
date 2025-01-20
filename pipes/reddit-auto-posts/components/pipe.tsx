@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,18 @@ import { Label } from "@/components/ui/label";
 import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import updatePipeConfig from "@/lib/actions/update-pipe-config";
+import { useHealthCheck } from "@/lib/hooks/use-health";
 import { MemoizedReactMarkdown } from "./markdown";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -23,13 +30,18 @@ import {
 const Pipe: React.FC = () => {
 
   const { settings, updateSettings } = useSettings();
+  const { isServerDown } = useHealthCheck();
   const { toast } = useToast();
   const [showKey, setShowKey] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>();
   const [lastLog, setLastLog] = useState<any>(null);
-  const [appName, setAppName] = useState("");
+  const [windowName, setWindowName] = useState("");
   const [contentType, setContentType] = useState("");
+  const [frequency, setFrequency] = useState("");
+  const [emailTime, setEmailTime] = useState("");
+  const [hourlyRepetance, setHourlyRepetance] = useState("1");
 
+  const aiDisabled = settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
 
   const defaultDailylogPrompt = 
 `- Analyze user activities and summarize them into a structured daily log.
@@ -46,10 +58,22 @@ const Pipe: React.FC = () => {
 - Ensure posts are well-structured, starting with a clear title, followed by a detailed body, and end with relevant subreddit recommendations.
 `;
 
+  // little hack :D
+  useEffect(() => {
+    if (!contentType || !frequency) {
+      const timer = setTimeout(() => {
+        setContentType(settings.customSettings?.["reddit-auto-posts"]?.contentType || "all");
+        setFrequency(settings.customSettings?.["reddit-auto-posts"]?.summaryFrequency || "daily")
+        setEmailTime(settings.customSettings?.["reddit-auto-posts"]?.emailTime || "11:00")
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [settings, contentType, frequency]);
+
   const testPipe = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/pipeline");
+      const res = await fetch("/api/pipeline?fromButton=true");
       if (res.status === 500 || res.status === 400) {
         toast({
           title: "failed to intialize daily log",
@@ -75,17 +99,6 @@ const Pipe: React.FC = () => {
     }
   };
 
-  const getNextCronTime = (lastIntervalChangeTime: string, interval: number) => {
-    const lastChangeDate = new Date(lastIntervalChangeTime) || new Date().toISOString();
-    const now = new Date();
-    let nextCronTime = new Date(lastChangeDate.getTime());
-    nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
-    while (nextCronTime < now) {
-      nextCronTime.setMinutes(nextCronTime.getMinutes() + interval);
-    }
-    return nextCronTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   const isMacOS = () => {
     return navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   };
@@ -94,18 +107,21 @@ const Pipe: React.FC = () => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
 
+    let finalFrequency = frequency;
+    if(frequency.startsWith("hourly")) {
+      finalFrequency = `hourly:${hourlyRepetance}`;
+    }
     const newRedditSettings = {
       interval: parseInt(formData.get("interval") as string),
       pageSize: parseInt(formData.get("pageSize") as string),
-      summaryFrequency: formData.get("summaryFrequency") as string,
+      summaryFrequency: finalFrequency || formData.get("summaryFrequency") as string,
       emailAddress: formData.get("emailAddress") as string,
       emailPassword: formData.get("emailPassword") as string,
-      emailTime: (formData).get("emailTime") as string,
+      emailTime: emailTime || (formData).get("emailTime") as string,
       customPrompt: formData.get("customPrompt") as string,
       dailylogPrompt: formData.get("dailylogPrompt") as string,
-      windowName: formData.get("windowName") as string,
+      windowName: formData.get("windowName") as string || windowName,
       contentType: contentType as string,
-      lastIntervalChangeTime: new Date().toISOString()
     }
 
     try {
@@ -140,10 +156,6 @@ const Pipe: React.FC = () => {
               className="flex-1"
             />
           </div>
-          <div className="text-sm text-muted-foreground">
-            next cron will run at: {getNextCronTime(settings.customSettings?.["reddit-auto-posts"]?.lastIntervalChangeTime,
-              settings.customSettings?.["reddit-auto-posts"]?.interval / 60)} 
-          </div>
         </div>
         <div className="space-y-3">
           <Label htmlFor="pageSize">page size </Label>
@@ -160,24 +172,54 @@ const Pipe: React.FC = () => {
           <Label htmlFor="summaryFrequency">summary frequency </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email frequency: &apos;daily&apos; at email time or &apos;hourly:X&apos;(e.g.
             &apos;hourly:4&apos; for every 4 hrs).</span>
-          <Input
-            id="summaryFrequency"
+          <Select
             name="summaryFrequency"
-            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.summaryFrequency || "daily"}
-            placeholder="frequency of summary emails: 'daily' for once a day at emailTime, or 'hourly:X' for every X hours (e.g., 'hourly:4' for every 4 hours)"
-          />
+            value={frequency}
+            onValueChange={(v) => { setFrequency(v)}}
+          >
+          <SelectTrigger>
+            <SelectValue placeholder="select the summary frequency type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="daily">daily</SelectItem>
+            <SelectItem value="hourly">hourly</SelectItem>
+          </SelectContent>
+          </Select>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="emailTime">email time </Label>
-          <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summaryFrequency is &apos;daily&apos;)</span>
-          <Input
-            id="emailTime"
-            name="emailTime"
-            type="time"
-            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.emailTime || "11:00"}
-            placeholder="time to send daily summary email (used only if summaryFrequency is 'daily')"
-          />
-        </div>
+        {frequency === "daily" && (
+          <div className="space-y-2">
+            <Label htmlFor="emailTime">email time</Label>
+            <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;time to send daily summary email (used only if summary frequency is &apos;daily&apos;)</span>
+            <Input
+              id="emailTime"
+              name="emailTime"
+              type="time"
+              value={emailTime}
+              onChange={(e) => {
+                setEmailTime(e.target.value);
+              }}
+              placeholder="time to send daily summary email (used only if summaryFrequency is 'daily')"
+            />
+          </div>
+        )}
+        {frequency.startsWith("hourly") && (
+          <div className="space-y-2">
+            <Label htmlFor="hourlyRepetance">hourly repetance</Label>
+            <span className="text-[13px] text-muted-foreground">
+              &nbsp;&nbsp;specify the number of hours for hourly repetition (e.g., &apos;4&apos; for every 4 hours)
+            </span>
+            <Input
+              id="hourlyRepetance"
+              name="hourlyRepetance"
+              type="number"
+              min="1"
+              max="24"
+              value={hourlyRepetance}
+              placeholder="specify the number of hours for hourly repetition"
+              onChange={(e) => setHourlyRepetance(e.target.value)}
+            />
+          </div>
+        )}
         <div className="space-y-2">
           <Label htmlFor="emailAddress">email address </Label>
           <span className="text-[13px] text-muted-foreground">&nbsp;&nbsp;email address to send the daily summary to: (eg. me@mail.com)</span>
@@ -222,7 +264,7 @@ const Pipe: React.FC = () => {
             <span className="text-[13px] text-muted-foreground !font-normal">&nbsp;&nbsp;type of content to analyze &apos;ocr&apos;, &apos;audio&apos;, or &apos;all&apos;. &apos;ocr&apos; is recommended due to more content</span>
           </Label>
           <Select
-            defaultValue={settings.customSettings?.["reddit-auto-posts"]?.contentType || "all"}
+            value={contentType}
             onValueChange={(value) => {
                 setContentType(value);
             }}
@@ -231,9 +273,9 @@ const Pipe: React.FC = () => {
               <SelectValue placeholder="select content type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">all</SelectItem>
-              <SelectItem value="ocr">ocr</SelectItem>
-              <SelectItem value="audio">audio</SelectItem>
+              <SelectItem textValue="all" value="all">all</SelectItem>
+              <SelectItem textValue="ocr" value="ocr">ocr</SelectItem>
+              <SelectItem textValue="audio" value="audio">audio</SelectItem>
               {isMacOS() && <SelectItem value="ui">ui</SelectItem>}
             </SelectContent>
           </Select>
@@ -248,7 +290,7 @@ const Pipe: React.FC = () => {
             type="window"
             icon={<Laptop className="h-4 w-4" />}
             defaultValue={settings.customSettings?.["reddit-auto-posts"]?.windowName}
-            onChange={setAppName}
+            onChange={(v) => setWindowName(v)}
             placeholder="window name to filter the screen data"
             className="flex-grow"
           />
@@ -278,16 +320,34 @@ const Pipe: React.FC = () => {
           save settings
         </Button>
       </form>
-      <div className="space-y-4 w-full flex flex-col">
-        <Button
-          onClick={testPipe}
-          variant="outline"
-          disabled={loading}
-          className="w-full"
-        >
-          {loading ? "generating..." : "generate reddit questions"}
-        </Button>
-
+      <div className="space-y-4 pb-[30px] w-full flex flex-col">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  onClick={testPipe}
+                  className="w-full border-[1.4px] shadow-sm"
+                  variant={"outline"}
+                  disabled={loading || aiDisabled || isServerDown}
+                >
+                {loading ? "generating..." : "generate reddit questions"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {(aiDisabled || isServerDown) && (
+              <TooltipContent>
+                <p>{`${(aiDisabled && isServerDown) ? 
+                  "you don't have access of screenpipe-cloud and screenpipe is down!" 
+                  : isServerDown ? "screenpipe is not running..."
+                  : aiDisabled ? "you don't have access to screenpipe-cloud :( please consider login"
+                  : ""
+                  }
+                `}</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
         {lastLog && (
         <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
           <MemoizedReactMarkdown

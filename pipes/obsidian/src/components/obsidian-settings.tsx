@@ -155,6 +155,7 @@ export function ObsidianSettings() {
     try {
       const res = await fetch("/api/intelligence");
       const data = await res.json();
+      console.log("data", data);
       setIntelligence(data.intelligence);
       setIntelligenceDeepLink(data.deepLink);
 
@@ -172,7 +173,7 @@ export function ObsidianSettings() {
         description: `analyzed ${data.summary.logsAnalyzed} logs, found ${data.summary.contacts} contacts`,
       });
     } catch (err) {
-      console.error("error testing intelligence:", err);
+      console.warn("error testing intelligence:", err);
       toast({
         variant: "destructive",
         title: "error",
@@ -244,9 +245,7 @@ export function ObsidianSettings() {
       <Tabs defaultValue="logs">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="logs">logs</TabsTrigger>
-          <TabsTrigger disabled value="intelligence">
-            intelligence (soon)
-          </TabsTrigger>
+          <TabsTrigger value="intelligence">intelligence (beta)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="logs">
@@ -395,7 +394,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
                 variant="outline"
                 size="sm"
                 onClick={() => window.open(logDeepLink, "_blank")}
-                className="ml-2"
+                className="ml-2 my-2"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 open in obsidian
@@ -410,7 +409,9 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
             <Button
               onClick={testIntelligence}
               variant="outline"
-              disabled={intelligenceLoading}
+              disabled={
+                intelligenceLoading || !settings.customSettings?.obsidian?.path
+              }
             >
               <Brain className="mr-2 h-4 w-4" />
               {intelligenceLoading ? "analyzing..." : "analyze relationships"}
@@ -534,6 +535,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
               open in obsidian
             </Button>
           )}
+          <div className="my-4 h-16"/>
         </TabsContent>
       </Tabs>
     </div>
