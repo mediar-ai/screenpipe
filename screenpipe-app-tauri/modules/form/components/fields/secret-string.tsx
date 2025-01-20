@@ -11,7 +11,7 @@ export default function FormSecretStringField({
 }) {
     const [visibility, setVisibility] = useState(false)
     return (
-      <div className="col-span-4 col-start-2 row-start-3 flex flex-row items-end space-x-2">
+      <div className="flex flex-row space-x-2">
         <Input
           type={visibility ? "text" : "password"}
           className="mb-0"
