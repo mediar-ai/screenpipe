@@ -3,6 +3,16 @@ import { ChevronDown } from "lucide-react";
 import { AIProviderCard } from "../../../settings/components/ai-section";
 import { SelectContent } from "@/components/ui/select";
 
+
+export const AvailableAiProviders = {
+    OPENAI: "OPENAI",
+    SCREENPIPE_CLOUD: "SCREENPIPE_CLOUD",
+    NATIVE_OLLAMA: "NATIVE_OLLAMA",
+    CUSTOM: "CUSTOM",
+    EMBEDDED: "EMBEDDED"
+} as const
+export type AvailableAiProviders = keyof typeof AvailableAiProviders;
+
 export function AiProviderSelect() {
     return (
         <Select.Root defaultValue="screenpipe-cloud">
