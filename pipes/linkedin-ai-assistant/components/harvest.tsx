@@ -426,7 +426,6 @@ export function HarvestClosestConnections() {
             onClick={() => updateConnectionsStatus()}
             className="ml-2 p-2 rounded-md bg-red-100 hover:bg-red-200 transition-all"
             aria-label="stop withdrawing"
-            aria-label="stop withdrawing"
           >
             <span className="text-red-600 text-sm">stop</span>
           </button>
