@@ -7,6 +7,8 @@ import Select from "@/components/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 export interface FormFieldRendererProps {
   placeholder?: string,
@@ -28,12 +30,14 @@ export const FormFieldRenderer = ({
 }: FormFieldRendererProps) => {
   switch (element.typeMeta.type) {
     case FormFieldTypes.STRING: {
-      console.log({field})
       return (
         <Input
           {...field}
           placeholder={element.placeholder}
-          className="mb-0"
+          autoCorrect="off"
+          autoCapitalize="off"
+          autoComplete="off"
+          type="text"
         />
       );
     }
@@ -55,14 +59,26 @@ export const FormFieldRenderer = ({
     }
     case FormFieldTypes.TEXTAREA: {
       return (
-        <Textarea
-            className="resize-none"
-            {...field}
-            autoCorrect="off"
-            autoCapitalize="off"
-            autoComplete="off"
-            placeholder={element.placeholder}
-        />
+        <div className="relative w-full h-[200px]">
+          <Textarea
+              className="resize-none h-full"
+              {...field}
+              autoCorrect="off"
+              autoCapitalize="off"
+              autoComplete="off"
+              placeholder={element.placeholder}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute right-2 top-2"
+            onClick={()=>console.log('ha')}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            reset
+          </Button>
+        </div>
       )
     }
     case FormFieldTypes.SLIDER: {
