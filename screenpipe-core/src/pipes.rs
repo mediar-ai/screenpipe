@@ -17,7 +17,7 @@ mod pipes {
     use std::fs;
     use std::path::Path;
     use tokio::io::{AsyncBufReadExt, BufReader};
-    use tracing::{debug, error, info};
+    use tracing::{debug, error, info, warn};
     use url::Url;
     use which::which;
 
@@ -36,6 +36,7 @@ mod pipes {
     use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use reqwest_middleware::reqwest::Client;
     use reqwest_middleware::ClientBuilder;
+    use std::collections::HashSet;
     use std::str::FromStr;
 
     #[derive(Clone, Debug, Copy)]
@@ -353,37 +354,91 @@ mod pipes {
         let pipe_clone = pipe.to_string();
 
         let _stderr_handle = tokio::spawn(async move {
+            // Create static HashMaps for efficient lookups
+            static INFO_PATTERNS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+                let mut set = HashSet::new();
+                // Development related
+                set.insert("Download");
+                set.insert("Task dev");
+                set.insert("$ next dev");
+                set.insert("ready started server");
+                set.insert("Local:");
+                set.insert("Webpack is configured");
+                set.insert("See instructions");
+                set.insert("https://nextjs.org");
+                set.insert("⚠ See instructions");
+                set.insert("$ next start");
+                set.insert("[bun install]");
+                set.insert("Saved lockfile");
+                set.insert("Resolved, downloaded");
+                set.insert("Installing");
+                set.insert("Successfully installed");
+                set.insert("packages installed");
+                set.insert("Fetching");
+                set.insert("Resolving");
+                // Frontend console patterns
+                set.insert("[LOG]");
+                set.insert("console.log");
+                set.insert("] ");
+                set.insert("›");
+                set.insert("<");
+                set.insert("Warning:");
+                set.insert("render@");
+                set.insert("webpack");
+                set.insert("HMR");
+                set.insert("[HMR]");
+                set
+            });
+
+            static ERROR_PATTERNS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+                let mut set = HashSet::new();
+                set.insert("TypeError:");
+                set.insert("ReferenceError:");
+                set.insert("SyntaxError:");
+                set.insert("Error:");
+                set.insert("Uncaught");
+                set.insert("Failed to compile");
+                set.insert("ENOENT");
+                set.insert("FATAL");
+                set
+            });
+
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                // List of patterns that should be treated as info logs
-                let info_patterns = [
-                    "Download",
-                    "Task dev ",
-                    "$ next dev",
-                    "ready started server",
-                    "Local:",
-                    "Webpack is configured",
-                    "See instructions",
-                    "https://nextjs.org",
-                    "⚠ See instructions",
-                    "$ next start",
-                    "[bun install]",
-                    "Saved lockfile",
-                ];
 
-                if info_patterns.iter().any(|pattern| line.contains(pattern))
-                    || line.trim().is_empty()
-                {
+            while let Ok(Some(line)) = lines.next_line().await {
+                let line_lower = line.to_lowercase(); // Convert once for case-insensitive matching
+
+                // Quick checks first
+                if line.trim().is_empty() || line.contains("console.") {
                     info!("[{}] {}", pipe_clone, line);
-                } else {
+                    continue;
+                }
+
+                // Check for error patterns first (higher priority)
+                if ERROR_PATTERNS
+                    .iter()
+                    .any(|&pattern| line_lower.contains(&pattern.to_lowercase()))
+                {
                     error!("[{}] {}", pipe_clone, line);
-                    // Capture error in Sentry
                     sentry::capture_message(
                         &format!("[{}] {}", pipe_clone, line),
                         sentry::Level::Error,
                     );
+                    continue;
                 }
+
+                // Then check for info patterns
+                if INFO_PATTERNS
+                    .iter()
+                    .any(|&pattern| line_lower.contains(&pattern.to_lowercase()))
+                {
+                    info!("[{}] {}", pipe_clone, line);
+                    continue;
+                }
+
+                // Default to warning for unknown patterns
+                warn!("[{}] {}", pipe_clone, line);
             }
         });
 
