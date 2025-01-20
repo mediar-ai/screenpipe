@@ -20,6 +20,7 @@ import { useProfiles } from "@/lib/hooks/use-profiles";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { PipeApi } from "@/lib/api";
 import localforage from "localforage";
+import { SettingsDialog } from "@/components/dialog";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -173,6 +174,7 @@ export default function Home() {
         <Onboarding />
       ) : (
         <>
+          <SettingsDialog/>
           <ChangelogDialog />
           {/* <BreakingChangesInstructionsDialog /> */}
           <Header />
