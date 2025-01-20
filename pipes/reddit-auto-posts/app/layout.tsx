@@ -4,8 +4,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Reddit post pipe • Screenpipe",
-  description: "Make reddit post using your Screenpipe data",
+  title: "Reddit • Screenpipe",
+  description: "Advertise your content, or learn, automatically",
 };
 
 const inter = Inter({ subsets: ["latin"] });
