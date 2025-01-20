@@ -138,13 +138,13 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     paid: false,
   },
   {
-    id: "timeline",
-    name: "timeline",
+    id: "rewind",
+    name: "rewind",
     description:
-      "visualize your day with a beautiful AI-powered timeline of your activities, perfect for time tracking and productivity analysis",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
-    credits: 0,
-    paid: false,
+      "rewind-like interface meet cursor-like AI chat interface",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/rewind",
+    credits: 20,
+    paid: true,
   },
   {
     id: "identify-speakers",
