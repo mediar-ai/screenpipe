@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
-
+use tauri::Manager;
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -77,6 +77,13 @@ struct AppIconQuery {
     path: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct WindowSizePayload {
+    title: String,
+    width: f64,
+    height: f64,
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let state = ServerState { app_handle };
 
@@ -92,6 +99,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/log", axum::routing::post(log_message))
         .route("/auth", axum::routing::post(handle_auth))
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
+        .route("/window-size", axum::routing::post(set_window_size))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -242,6 +250,34 @@ async fn get_app_icon_handler(
         Err((
             StatusCode::NOT_IMPLEMENTED,
             "app icon retrieval not supported on this platform".to_string(),
+        ))
+    }
+}
+
+async fn set_window_size(
+    State(state): State<ServerState>,
+    Json(payload): Json<WindowSizePayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received window size request: {:?}", payload);
+
+    if let Some(window) = state.app_handle.get_webview_window(&payload.title) {
+        match window.set_size(tauri::LogicalSize::new(payload.width, payload.height)) {
+            Ok(_) => Ok(Json(ApiResponse {
+                success: true,
+                message: "window size updated successfully".to_string(),
+            })),
+            Err(e) => {
+                error!("failed to set window size: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to set window size: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            format!("window with title '{}' not found", payload.title),
         ))
     }
 }
