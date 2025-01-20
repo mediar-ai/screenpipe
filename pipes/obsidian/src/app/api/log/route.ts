@@ -18,19 +18,95 @@ type WorkLog = z.infer<typeof workLog> & {
   endTime: string;
 };
 
+async function readObsidianFile(filePath: string): Promise<string> {
+  try {
+    const content = await fs.readFile(filePath, "utf8");
+    return content;
+  } catch (err) {
+    console.error(`failed to read file ${filePath}:`, err);
+    return "";
+  }
+}
+
+async function findVaultRoot(startPath: string): Promise<string> {
+  let currentPath = startPath;
+
+  while (currentPath !== "/" && currentPath !== ".") {
+    try {
+      // Check if .obsidian exists in current directory
+      await fs.access(path.join(currentPath, ".obsidian"));
+      return currentPath; // Found the vault root
+    } catch {
+      // Move up one directory
+      currentPath = path.dirname(currentPath);
+    }
+  }
+  throw new Error("could not find obsidian vault root (.obsidian folder)");
+}
+
+async function extractLinkedContent(
+  prompt: string,
+  basePath: string
+): Promise<string> {
+  try {
+    // Find the vault root first
+    const vaultRoot = await findVaultRoot(basePath);
+
+    // Match [[file]] or [[folder/file]] patterns
+    const linkRegex = /\[\[(.*?)\]\]/g;
+    const matches = [...prompt.matchAll(linkRegex)];
+
+    let enrichedPrompt = prompt;
+
+    for (const match of matches) {
+      const relativePath = match[1];
+      // Handle .md extension if not present
+      const fullPath = path.join(
+        vaultRoot,
+        relativePath.endsWith(".md") ? relativePath : `${relativePath}.md`
+      );
+
+      try {
+        const content = await readObsidianFile(fullPath);
+        // Replace the [[link]] with actual content
+        enrichedPrompt = enrichedPrompt.replace(
+          match[0],
+          `\n--- Content of ${relativePath} ---\n${content}\n---\n`
+        );
+      } catch (err) {
+        console.error(`failed to process link ${relativePath}:`, err);
+      }
+    }
+
+    return enrichedPrompt;
+  } catch (err) {
+    console.error("failed to find vault root:", err);
+    return prompt; // Return original prompt if we can't process links
+  }
+}
+
 async function generateWorkLog(
   screenData: ContentItem[],
   model: string,
   startTime: Date,
   endTime: Date,
-  customPrompt?: string
+  customPrompt?: string,
+  obsidianPath?: string
 ): Promise<WorkLog> {
+  let enrichedPrompt = customPrompt || "";
+
+  if (customPrompt && obsidianPath) {
+    enrichedPrompt = await extractLinkedContent(customPrompt, obsidianPath);
+  }
+
   const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
     Rules:
     - use the screen data to generate the log entry
     - focus on describing the activity and tags
-
-    User custom prompt: ${customPrompt}
+    - use the following context to better understand the user's goals and priorities:
+    
+    ${enrichedPrompt}
+    
     Screen data: ${JSON.stringify(screenData)}
 
     Return a JSON object with:
@@ -39,6 +115,8 @@ async function generateWorkLog(
         "description": "Concise description of what was done",
         "tags": ["#tag1", "#tag2", "#tag3"]
     }`;
+
+  console.log("enrichedPrompt prompt:", enrichedPrompt);
 
   const provider = ollama(model);
   const response = await generateObject({
@@ -134,7 +212,8 @@ export async function GET() {
       model,
       oneHourAgo,
       now,
-      customPrompt
+      customPrompt,
+      obsidianPath
     );
     const _ = await syncLogToObsidian(logEntry, obsidianPath);
 

@@ -86,6 +86,7 @@ export async function GET() {
 
       // Merge with current settings
       const rawSettings = await settingsManager.getAll();
+      console.log("rawSettings", rawSettings);
       return NextResponse.json({
         ...rawSettings,
         customSettings: {
