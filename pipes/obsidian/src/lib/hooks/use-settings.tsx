@@ -1,36 +1,40 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Settings } from "@screenpipe/browser";
+import { getDefaultSettings, type Settings } from "@screenpipe/browser";
 
 export function useSettings() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
+  const defaultSettings = getDefaultSettings();
+
+  defaultSettings.customSettings = {
+    ...(defaultSettings.customSettings || {}),
+    obsidian: {
+      prompt: `yo, you're my personal data detective! 🕵️‍♂️
+
+rules for the investigation:
+- extract names of people i interact with and what we discussed
+- identify recurring topics/themes in my convos
+- spot any promises or commitments made (by me or others)
+- catch interesting ideas or insights dropped in casual chat
+- note emotional vibes and energy levels in conversations
+- highlight potential opportunities or connections
+- track project progress and blockers mentioned
+
+style rules:
+- keep it real and conversational
+- use bullet points for clarity
+- include relevant timestamps
+- group related info together
+- max 4 lines per insight
+- no corporate speak, keep it human
+- for tags use hyphen between words, no spaces, eg: #my-tag not #my tag nor #myTag nor #my_tag
+
+remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!`,
     },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-    analyticsEnabled: true,
   };
 
   const [settings, setSettings] = useState<Settings | null>(null);
+  console.log("settings", settings);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
