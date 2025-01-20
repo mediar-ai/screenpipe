@@ -252,6 +252,14 @@ interface ConnectionsStore {
         endDate?: string;
         reason?: string;
     };
+    isWithdrawing: boolean;
+    withdrawStatus?: WithdrawStatus;
+}
+
+interface WithdrawStatus {
+    isWithdrawing: boolean;
+    reason?: string;
+    timestamp?: string;
 }
 
 // Define default values
@@ -262,7 +270,8 @@ const DEFAULT_CONNECTION_STORE: ConnectionsStore = {
   stopRequested: false,
   nextHarvestTime: '',
   lastRefreshDuration: 0,
-  averageProfileCheckDuration: 0
+  averageProfileCheckDuration: 0,
+  isWithdrawing: false
 };
 
 export async function loadConnections(): Promise<ConnectionsStore> {
@@ -469,4 +478,32 @@ export async function loadFromChrome(key: string) {
         console.log('failed to load from chrome storage:', err);
         return null;
     }
+}
+
+export async function setWithdrawingStatus(isWithdrawing: boolean, details?: { reason: string; timestamp: string }) {
+    const store = await loadConnections();
+    store.withdrawStatus = {
+        isWithdrawing,
+        ...(details || {})
+    };
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    console.log('saved withdrawal status:', { isWithdrawing, ...details });
+}
+
+export async function saveRestrictionInfo(info: {
+    isRestricted: boolean;
+    endDate?: string;
+    reason?: string;
+}) {
+    const store = await loadConnections();
+    store.restrictionInfo = info;
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    await saveToChrome('linkedin_assistant_connections', store);
+    console.log('saved restriction info:', info);
 }
