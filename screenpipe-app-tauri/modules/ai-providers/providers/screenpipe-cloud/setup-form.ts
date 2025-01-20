@@ -62,6 +62,7 @@ const fields: FieldSchema[] = [
   {
     key: 'prompt',
     title: 'prompt',
+    placeholder: 'enter your custom prompt here',
     validationMeta: {
       optional: false,
       errorMessage: 'you need to provide a custom prompt'

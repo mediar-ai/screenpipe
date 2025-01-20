@@ -4,6 +4,7 @@ const fields: FieldSchema[] = [
   {
     key: 'endpointUrl',
     title: 'endpoint url',
+    placeholder: 'enter custom ai url',
     validationMeta: {
       errorMessage: 'this field is mandatory',
       min: 1,
@@ -48,6 +49,7 @@ const fields: FieldSchema[] = [
   {
     key: 'prompt',
     title: 'prompt',
+    placeholder: 'enter your custom prompt here',
     validationMeta: {
       optional: false,
       errorMessage: 'you need to provide a custom prompt'
