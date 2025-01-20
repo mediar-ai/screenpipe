@@ -113,7 +113,7 @@ export function ObsidianSettings() {
           variant: "destructive",
           title: "error",
           description:
-            "your browser doesn't support directory selection. please enter the path manually.",
+            "your browser doesn't support directory selection. please enter the path manually or try a different browser.",
         });
         return;
       }

@@ -11,41 +11,33 @@ const workLog = z.object({
   title: z.string(),
   description: z.string(),
   tags: z.array(z.string()),
-  startTime: z.string(),
-  endTime: z.string(),
 });
 
-type WorkLog = z.infer<typeof workLog>;
+type WorkLog = z.infer<typeof workLog> & {
+  startTime: string;
+  endTime: string;
+};
 
 async function generateWorkLog(
   screenData: ContentItem[],
   model: string,
+  startTime: Date,
+  endTime: Date,
   customPrompt?: string
 ): Promise<WorkLog> {
-  const now = new Date();
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
   const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
     Rules:
-    - use the current time to generate the log entry
-    - use the timezone of the user to generate the log entry
     - use the screen data to generate the log entry
-    - change start and end time according to the difference between the current time and the time of the screen data
+    - focus on describing the activity and tags
 
     User custom prompt: ${customPrompt}
-    todays date: ${new Date().toISOString().split("T")[0]}
-    local time: ${new Date().toLocaleTimeString()}
-    timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-    
     Screen data: ${JSON.stringify(screenData)}
 
     Return a JSON object with:
     {
         "title": "Brief title of the activity",
         "description": "Concise description of what was done",
-        "tags": ["#tag1", "#tag2", "#tag3"],
-        "startTime": "12-01-2024 10:00", 
-        "endTime": "12-01-2024 10:05"
+        "tags": ["#tag1", "#tag2", "#tag3"]
     }`;
 
   const provider = ollama(model);
@@ -55,7 +47,22 @@ async function generateWorkLog(
     schema: workLog,
   });
 
-  return response.object;
+  const formatDate = (date: Date) => {
+    return date.toLocaleString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+
+  return {
+    ...response.object,
+    startTime: formatDate(startTime),
+    endTime: formatDate(endTime),
+  };
 }
 
 async function syncLogToObsidian(
@@ -125,6 +132,8 @@ export async function GET() {
     const logEntry = await generateWorkLog(
       screenData.data,
       model,
+      oneHourAgo,
+      now,
       customPrompt
     );
     const _ = await syncLogToObsidian(logEntry, obsidianPath);
