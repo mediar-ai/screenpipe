@@ -17,6 +17,11 @@ interface ConnectionStats {
   cooldown: number;
   total: number;
   averageProfileCheckDuration?: number;
+  withdrawStatus?: {
+    isWithdrawing: boolean;
+    reason?: string;
+    timestamp?: string;
+  };
 }
 
 // Add type for harvesting status
@@ -89,6 +94,7 @@ export function HarvestClosestConnections() {
     endDate?: string;
     reason?: string;
   } | null>(null);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   useEffect(() => {
     // Load initial state with status only
@@ -98,11 +104,20 @@ export function HarvestClosestConnections() {
         if (!res.ok) return;
         
         const data = await res.json();
+        console.log('initial state data:', data);
+        
         setHarvestingStatus(data.harvestingStatus || 'stopped');
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
-        setRestrictionInfo(data.restrictionInfo || null);
+        
+        // Fix: Only set restriction if it exists and is actually restricted
+        if (data.restrictionInfo && data.restrictionInfo.isRestricted === true) {
+          console.log('setting restriction info:', data.restrictionInfo);
+          setRestrictionInfo(data.restrictionInfo);
+        } else {
+          setRestrictionInfo(null);  // Explicitly set to null if no restriction
+        }
         
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
@@ -166,33 +181,39 @@ export function HarvestClosestConnections() {
     };
   }, [isRefreshing]); // Only re-run when isRefreshing changes
 
+  // Add effect to sync withdrawal status
+  useEffect(() => {
+    if (stats.withdrawStatus) {
+      setIsWithdrawing(stats.withdrawStatus.isWithdrawing);
+    }
+  }, [stats.withdrawStatus?.isWithdrawing]);
+
   // Simplify the updateConnectionsStatus function
   const updateConnectionsStatus = async () => {
     try {
-      if (isRefreshing) {
-        await fetch("/api/harvest/connection-status-update/stop", { method: "POST" });
-        setIsRefreshing(false);
-        setRefreshProgress(null);
+      if (isRefreshing || isWithdrawing) {
+        // Stop the current process
+        if (isWithdrawing) {
+          await fetch("/api/harvest/withdraw-connections", { method: "POST" });
+          setIsWithdrawing(false);
+        } else {
+          await fetch("/api/harvest/connection-status-update/stop", { method: "POST" });
+          setIsRefreshing(false);
+          setRefreshProgress(null);
+        }
         return;
       }
       
-      setIsRefreshing(true);
-      // Trigger the update
-      const statusRes = await fetch("/api/harvest/connection-status-update?refresh=true");
-      if (statusRes.ok) {
-        const data = await statusRes.json();
-        setHarvestingStatus(data.harvestingStatus || 'stopped');
-        setConnectionsSent(data.connectionsSent || 0);
-        setDailyLimitReached(data.dailyLimitReached || false);
-        setWeeklyLimitReached(data.weeklyLimitReached || false);
-        setRestrictionInfo(data.restrictionInfo || null);
-        
-        if (data.nextHarvestTime) {
-          setNextHarvestTime(data.nextHarvestTime);
-        }
+      // Start withdrawal process
+      setIsWithdrawing(true);
+      const withdrawRes = await fetch("/api/harvest/withdraw-connections?start=true");
+      if (!withdrawRes.ok) {
+        console.error('failed to start withdrawal');
+        setIsWithdrawing(false);
       }
     } catch (error) {
-      console.error("failed to update connections status:", error);
+      console.error("failed to update/withdraw connections:", error);
+      setIsWithdrawing(false);
     }
   };
 
@@ -330,22 +351,34 @@ export function HarvestClosestConnections() {
               ? 'bg-gray-100 cursor-not-allowed' 
               : 'hover:bg-gray-100'
           }`}
-          aria-label="update connections status"
+          aria-label={stats.withdrawStatus?.isWithdrawing ? "stop withdrawing old invitations" : "withdraw old invitations"}
         >
           <RefreshCw 
             className={`h-5 w-5 transition-all ${
-              isRefreshing ? 'animate-spin text-gray-400' : 'text-gray-500 hover:text-gray-700'
+              isRefreshing || stats.withdrawStatus?.isWithdrawing ? 'animate-spin text-gray-400' : 'text-gray-500 hover:text-gray-700'
             }`}
           />
         </button>
-        {isRefreshing && (
+        {isWithdrawing && (
           <button
             onClick={() => updateConnectionsStatus()}
             className="ml-2 p-2 rounded-md bg-red-100 hover:bg-red-200 transition-all"
-            aria-label="stop refreshing"
+            aria-label="stop withdrawing"
           >
             <span className="text-red-600 text-sm">stop</span>
           </button>
+        )}
+        {(isWithdrawing || 
+          stats.withdrawStatus?.reason?.includes('failed') || 
+          stats.withdrawStatus?.reason?.includes('detected') ||
+          stats.withdrawStatus?.reason?.includes('completed') ||
+          (stats.withdrawStatus?.reason?.includes('finished') && 
+           stats.withdrawStatus?.timestamp && 
+           new Date().getTime() - new Date(stats.withdrawStatus.timestamp).getTime() < 12 * 60 * 60 * 1000)) && 
+          stats.withdrawStatus?.reason && (
+            <span className="ml-2 text-sm text-gray-500">
+              {stats.withdrawStatus.reason}
+            </span>
         )}
         {nextProfileTime && nextProfileTime > Date.now() && (
           <div className="ml-2">
