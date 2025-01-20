@@ -27,7 +27,6 @@ use crate::{
     text_embeds::generate_embedding,
     video_utils::{extract_frames_from_video, get_video_metadata, VideoMetadataOverrides},
     DatabaseManager,
-    text_embeds::generate_embedding,
 };
 
 pub async fn handle_index_command(
