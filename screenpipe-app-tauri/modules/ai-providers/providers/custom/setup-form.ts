@@ -72,7 +72,7 @@ const fields: FieldSchema[] = [
 ]
 
 export const CustomSetupForm = {
-  title: 'openai provider setup',
+  title: 'custom provider setup',
   fields,
   buttonText: 'submit changes',
 }
