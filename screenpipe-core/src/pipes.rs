@@ -368,6 +368,8 @@ mod pipes {
                     "https://nextjs.org",
                     "⚠ See instructions",
                     "$ next start",
+                    "[bun install]",
+                    "Saved lockfile",
                 ];
 
                 if info_patterns.iter().any(|pattern| line.contains(pattern))
@@ -995,7 +997,9 @@ mod pipes {
             };
 
             if next <= now {
-                info!("next execution time is before or equal to the current time, recalculating...");
+                info!(
+                    "next execution time is before or equal to the current time, recalculating..."
+                );
                 continue;
             }
             let duration = match (next - now).to_std() {
