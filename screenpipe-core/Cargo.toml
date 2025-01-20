@@ -48,6 +48,7 @@ once_cell = "1.19.0"
 
 cron = "0.13.0"
 chrono = "0.4.38"
+sentry = { workspace = true }
 
 [features]
 default = ["pipes", "security"]

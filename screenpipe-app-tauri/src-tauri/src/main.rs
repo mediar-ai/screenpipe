@@ -975,12 +975,6 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            // if first time user do t start sidecar yet
-            let mut is_first_time_user = store
-                .get("isFirstTimeUser")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-
             // double-check if they have any files in the data dir
             let data_dir = app
                 .path()
@@ -994,28 +988,21 @@ async fn main() {
 
             info!("has_files: {}", has_files);
 
-            if has_files {
-                is_first_time_user = false;
-                // Update the store with the new value
-                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
-                store.save().unwrap();
-            }
-
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            info!("is_first_time_user: {}", is_first_time_user);
             info!("use_dev_mode: {}", use_dev_mode);
 
             info!(
                 "will start sidecar: {}",
-                !use_dev_mode && !is_first_time_user
+                !use_dev_mode && has_files
             );
 
-            if !use_dev_mode && !is_first_time_user {
+            // if non dev mode and previously started sidecar, start sidecar
+            if !use_dev_mode && has_files {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {

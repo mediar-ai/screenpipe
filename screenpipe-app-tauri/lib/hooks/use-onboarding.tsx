@@ -19,9 +19,10 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const checkFirstTimeUser = async () => {
       // settings unreliable here ... race condition
-      const isFirstTime = await localforage.getItem("showOnboarding");
-      if (isFirstTime) {
+      const showOnboarding = await localforage.getItem("showOnboarding");
+      if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
         setShowOnboarding(true);
+        localforage.setItem("showOnboarding", false);
       }
     };
     checkFirstTimeUser();

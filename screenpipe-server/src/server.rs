@@ -94,6 +94,8 @@ pub(crate) struct SearchQuery {
     #[serde(default)]
     window_name: Option<String>,
     #[serde(default)]
+    frame_name: Option<String>,
+    #[serde(default)]
     include_frames: bool,
     #[serde(default)]
     min_length: Option<usize>,
@@ -179,6 +181,7 @@ pub struct OCRContent {
     pub window_name: String,
     pub tags: Vec<String>,
     pub frame: Option<String>,
+    pub frame_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -206,6 +209,7 @@ pub struct UiContent {
     pub initial_traversal_at: Option<DateTime<Utc>>,
     pub file_path: String,
     pub offset_index: i64,
+    pub frame_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -270,7 +274,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -281,7 +285,8 @@ pub(crate) async fn search(
         query.window_name,
         query.min_length,
         query.max_length,
-        query.speaker_ids
+        query.speaker_ids,
+        query.frame_name,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -301,6 +306,7 @@ pub(crate) async fn search(
             query.min_length,
             query.max_length,
             query.speaker_ids.clone(),
+            query.frame_name.as_deref(),
         ),
         state.db.count_search_results(
             query_str,
@@ -312,6 +318,7 @@ pub(crate) async fn search(
             query.min_length,
             query.max_length,
             query.speaker_ids.clone(),
+            query.frame_name.as_deref(),
         ),
     )
     .await
@@ -336,6 +343,7 @@ pub(crate) async fn search(
                 window_name: ocr.window_name.clone(),
                 tags: ocr.tags.clone(),
                 frame: None,
+                frame_name: Some(ocr.frame_name.clone()),
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -359,6 +367,7 @@ pub(crate) async fn search(
                 initial_traversal_at: ui.initial_traversal_at,
                 file_path: ui.file_path.clone(),
                 offset_index: ui.offset_index,
+                frame_name: ui.frame_name.clone(),
             }),
         })
         .collect();
@@ -1612,7 +1621,6 @@ async fn sse_transcription_handler(
     ))
 }
 
-
 #[derive(Deserialize)]
 pub struct AudioDeviceControlRequest {
     device_name: String,
@@ -1638,26 +1646,30 @@ async fn start_audio_device(
 
     // Validate device exists
     let available_devices = list_audio_devices().await.map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, 
-         JsonResponse(json!({
-             "error": format!("failed to list audio devices: {}", e),
-             "success": false
-         })))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("failed to list audio devices: {}", e),
+                "success": false
+            })),
+        )
     })?;
 
     if !available_devices.contains(&device) {
-        return Err((StatusCode::BAD_REQUEST, 
+        return Err((
+            StatusCode::BAD_REQUEST,
             JsonResponse(json!({
                 "error": format!("device not found: {}", device.name),
                 "success": false
-            }))));
+            })),
+        ));
     }
 
-    let control = DeviceControl { 
-        is_running: true, 
-        is_paused: false 
+    let control = DeviceControl {
+        is_running: true,
+        is_paused: false,
     };
-    
+
     let _ = state.audio_devices_tx.send((device.clone(), control));
 
     Ok(JsonResponse(AudioDeviceControlResponse {
@@ -1677,32 +1689,38 @@ async fn stop_audio_device(
 
     // Validate device exists
     let available_devices = list_audio_devices().await.map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, 
-         JsonResponse(json!({
-             "error": format!("failed to list audio devices: {}", e),
-             "success": false
-         })))
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("failed to list audio devices: {}", e),
+                "success": false
+            })),
+        )
     })?;
 
     if !available_devices.contains(&device) {
-        return Err((StatusCode::BAD_REQUEST, 
+        return Err((
+            StatusCode::BAD_REQUEST,
             JsonResponse(json!({
                 "error": format!("device not found: {}", device.name),
                 "success": false
-            }))));
+            })),
+        ));
     }
-    
-    let _ = state.audio_devices_tx.send((device.clone(), DeviceControl {
-        is_running: false,
-        is_paused: false,
-    }));
+
+    let _ = state.audio_devices_tx.send((
+        device.clone(),
+        DeviceControl {
+            is_running: false,
+            is_paused: false,
+        },
+    ));
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
         message: format!("stopped audio device: {}", device.name),
     }))
 }
-
 
 #[derive(Deserialize)]
 struct VisionSSEQuery {

@@ -250,11 +250,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let realtime_audio_transcription_engine = store
-        .get("realtimeAudioTranscriptionEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("whisper-large-v3-turbo"));
-
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -374,8 +369,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if enable_realtime_audio_transcription {
         args.push("--enable-realtime-audio-transcription");
-        args.push("--realtime-audio-transcription-engine");
-        args.push(realtime_audio_transcription_engine.as_str());
     }
 
     let disable_vision = store

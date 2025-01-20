@@ -135,37 +135,7 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": [
-            "pipe",
-            "purge",
-            "-y"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "screenpipe",
-          "cmd": "screenpipe",
-          "args": [
-            "setup"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "screenpipe",
-          "cmd": "screenpipe",
-          "args": [
-            "migrate"
-          ],
+          "args": true,
           "sidecar": true
         }
       ]
@@ -366,6 +336,18 @@
         }
       ]
     },
-    "deep-link:default"
+    "deep-link:default",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA"
+        },
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
+    }
   ]
 }
