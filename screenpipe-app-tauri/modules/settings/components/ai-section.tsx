@@ -23,7 +23,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { LogFileButton } from "@/components/log-file-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,16 +48,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import posthog from "posthog-js";
-import { ScreenpipeCloudSetupForm } from "../forms/ai-provider.screenpipe-cloud";
 import Form from "@/modules/form/components/form";
 import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-select";
 import Select from "react-select";
-import { OpenAiSetupForm } from "../forms/ai-provider.openai";
-import { LlamaSetupForm } from "../forms/ai-provider.llama";
-import { CustomSetupForm } from "../forms/ai-provider.custom";
+import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
+import { AiProviders } from "@/modules/ai-providers/providers";
 
 interface AIProviderCardProps {
-  type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
+  type: AvailableAiProviders;
   title: string;
   description: string;
   imageSrc: string;
@@ -332,6 +330,9 @@ const AISection = () => {
     fetchOllamaModels();
   }, [settings.aiProviderType]);
 
+  const [aiProvider, setAiProvider] = useState<AvailableAiProviders>(AvailableAiProviders.OPENAI)
+  const setupForm = useMemo(() => AiProviders[aiProvider].setupForm, [aiProvider])
+
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">ai settings</h1>
@@ -339,10 +340,14 @@ const AISection = () => {
         <Label htmlFor="aiUrl" className="min-w-[80px]">
           ai provider
         </Label>
-        <AiProviderSelect/>
+        <AiProviderSelect
+          setAiProvider={setAiProvider}
+          activeAiProvider={aiProvider}
+        />
       </div>
       <Form
-        form={CustomSetupForm}
+        key={aiProvider}
+        form={setupForm}
       />
        {/* {settings.aiProviderType === "custom" && (
         <div className="w-full">
