@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Info, Loader2 } from "lucide-react";
+import { RefreshCw, Info, Loader2, Clock, Timer } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -14,7 +14,6 @@ interface ConnectionStats {
   accepted: number;
   declined: number;
   email_required: number;
-  cooldown: number;
   total: number;
   averageProfileCheckDuration?: number;
   withdrawStatus?: {
@@ -33,6 +32,17 @@ function formatTimeRemaining(milliseconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+// Add this helper function near your other utility functions
+function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 // Add error type
@@ -68,9 +78,23 @@ function CountdownTimer({ targetTime, prefix = "next profile in:" }: { targetTim
   );
 }
 
+// Add this helper function for status styling
+function getStatusStyle(status: HarvestingStatus): string {
+  switch (status) {
+    case 'running':
+      return 'bg-green-100 text-green-800';
+    case 'cooldown':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'stopped':
+      return 'bg-gray-100 text-gray-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+}
+
 export function HarvestClosestConnections() {
   const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<string | JSX.Element>("");
   const [nextHarvestTime, setNextHarvestTime] = useState<string | null>(null);
   const [connectionsSent, setConnectionsSent] = useState(0);
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
@@ -80,7 +104,6 @@ export function HarvestClosestConnections() {
     accepted: 0,
     declined: 0,
     email_required: 0,
-    cooldown: 0,
     total: 0
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -122,9 +145,18 @@ export function HarvestClosestConnections() {
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
           if (new Date(data.nextHarvestTime) > new Date()) {
+            const formattedTime = formatDateTime(data.nextHarvestTime);
             const message = data.connectionsSent >= 35
-              ? `daily limit of ${data.connectionsSent} connections reached, next harvest at ${new Date(data.nextHarvestTime).toLocaleString()}`
-              : `harvesting cooldown active until ${new Date(data.nextHarvestTime).toLocaleString()}`;
+              ? <span className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-gray-500" />
+                  <span>daily limit of {data.connectionsSent} connections reached</span>
+                  <span className="font-medium">{formattedTime}</span>
+                </span>
+              : <span className="flex items-center gap-2">
+                  <Timer className="h-4 w-4 text-gray-500" />
+                  <span>harvesting cooldown until</span>
+                  <span className="font-medium">{formattedTime}</span>
+                </span>;
             setStatus(message);
           }
         }
@@ -188,23 +220,40 @@ export function HarvestClosestConnections() {
     }
   }, [stats.withdrawStatus?.isWithdrawing]);
 
+  // Add effect to auto-restart after cooldown
+  useEffect(() => {
+    if (!nextHarvestTime || harvestingStatus !== 'cooldown') return;
+
+    const timeUntilNextHarvest = new Date(nextHarvestTime).getTime() - Date.now();
+    if (timeUntilNextHarvest <= 0) return;
+
+    console.log('scheduling auto-restart after cooldown');
+    const timer = setTimeout(() => {
+      console.log('cooldown finished, auto-restarting harvest');
+      startHarvesting();
+    }, timeUntilNextHarvest);
+
+    return () => clearTimeout(timer);
+  }, [nextHarvestTime, harvestingStatus]);
+
   // Simplify the updateConnectionsStatus function
   const updateConnectionsStatus = async () => {
     try {
-      if (isRefreshing || isWithdrawing) {
-        // Stop the current process
-        if (isWithdrawing) {
-          await fetch("/api/harvest/withdraw-connections", { method: "POST" });
-          setIsWithdrawing(false);
-        } else {
-          await fetch("/api/harvest/connection-status-update/stop", { method: "POST" });
-          setIsRefreshing(false);
-          setRefreshProgress(null);
+      if (isWithdrawing) {
+        // Stop withdrawal process
+        const response = await fetch("/api/harvest/withdraw-connections", { 
+          method: "POST"
+        });
+        if (!response.ok) {
+          throw new Error('failed to stop withdrawal');
         }
+        console.log('withdrawal stopped successfully');
+        setIsWithdrawing(false);
         return;
       }
       
       // Start withdrawal process
+      console.log('starting withdrawal process');
       setIsWithdrawing(true);
       const withdrawRes = await fetch("/api/harvest/withdraw-connections?start=true");
       if (!withdrawRes.ok) {
@@ -292,6 +341,9 @@ export function HarvestClosestConnections() {
           <span className="text-lg font-medium">
             farming connections
           </span>
+          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(harvestingStatus)}`}>
+            {harvestingStatus}
+          </span>
           <div className="flex items-center gap-2">
             {harvestingStatus === 'stopped' ? (
               <button
@@ -305,7 +357,9 @@ export function HarvestClosestConnections() {
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                {harvestingStatus === 'running' && (
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                )}
                 <button
                   onClick={stopHarvesting}
                   className="bg-red-600 text-white px-4 py-2 rounded-md text-base hover:bg-red-700"
@@ -321,9 +375,17 @@ export function HarvestClosestConnections() {
             {restrictionInfo?.isRestricted 
               ? `account restricted until ${new Date(restrictionInfo.endDate!).toLocaleString()}`
               : dailyLimitReached && nextHarvestTime 
-                ? `daily limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                ? <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-gray-500" />
+                    <span>daily limit reached, next harvest at</span>
+                    <span className="font-medium">{formatDateTime(nextHarvestTime)}</span>
+                  </span>
                 : weeklyLimitReached && nextHarvestTime 
-                  ? `weekly limit reached, next harvest at ${new Date(nextHarvestTime).toLocaleString()}`
+                  ? <span className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-gray-500" />
+                      <span>weekly limit reached, next harvest at</span>
+                      <span className="font-medium">{formatDateTime(nextHarvestTime)}</span>
+                    </span>
                   : harvestingStatus === 'running'
                     ? connectionsSent > 0 
                       ? `sent ${connectionsSent} connections` 
@@ -364,6 +426,7 @@ export function HarvestClosestConnections() {
             onClick={() => updateConnectionsStatus()}
             className="ml-2 p-2 rounded-md bg-red-100 hover:bg-red-200 transition-all"
             aria-label="stop withdrawing"
+            aria-label="stop withdrawing"
           >
             <span className="text-red-600 text-sm">stop</span>
           </button>
@@ -403,7 +466,7 @@ export function HarvestClosestConnections() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
         <div className="flex flex-col items-center p-3 bg-gray-50 rounded-lg">
           <span className="text-lg font-medium">{stats.total}</span>
           <span className="text-sm text-muted-foreground">total</span>
@@ -433,10 +496,6 @@ export function HarvestClosestConnections() {
         <div className="flex flex-col items-center p-3 bg-yellow-50 rounded-lg">
           <span className="text-lg font-medium">{stats.email_required}</span>
           <span className="text-sm text-muted-foreground">email required</span>
-        </div>
-        <div className="flex flex-col items-center p-3 bg-orange-50 rounded-lg">
-          <span className="text-lg font-medium">{stats.cooldown}</span>
-          <span className="text-sm text-muted-foreground">cooldown</span>
         </div>
       </div>
 

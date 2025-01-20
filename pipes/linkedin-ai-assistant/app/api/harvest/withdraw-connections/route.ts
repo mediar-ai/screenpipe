@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 import { ChromeSession } from '@/lib/chrome-session';
-import { startWithdrawing } from '@/lib/logic-sequence/withdraw-connections';
+import { setShouldStop, startWithdrawing } from '@/lib/logic-sequence/withdraw-connections';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -12,7 +12,12 @@ let isWithdrawing = false;
 export async function POST() {
   console.log('stop withdraw requested');
   isWithdrawing = false;
-  return NextResponse.json({ message: 'withdraw stop requested' });
+  setShouldStop(true);
+  return NextResponse.json({ 
+    success: true,
+    message: 'withdrawal process stopped',
+    isWithdrawing: false
+  });
 }
 
 export async function GET(request: Request) {
@@ -22,6 +27,7 @@ export async function GET(request: Request) {
 
     if (shouldStart && !isWithdrawing) {
       isWithdrawing = true;
+      setShouldStop(false);
 
       // First check if we have an active page in the session
       let page = ChromeSession.getInstance().getActivePage();

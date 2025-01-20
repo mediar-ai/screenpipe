@@ -434,22 +434,19 @@ export async function saveToChrome(key: string, data: unknown) {
     }
     
     try {
-        console.log('current page url:', await page.url());
+        const currentUrl = await page.url();
+        // console.log('current page url:', currentUrl);
         
-        // Navigate to LinkedIn if we're not already there
-        if (!page.url().includes('linkedin.com')) {
-            console.log('navigating to linkedin.com...');
-            await page.goto('https://www.linkedin.com');
-            console.log('navigation complete, new url:', await page.url());
+        // Only save if we're already on LinkedIn
+        if (!currentUrl.includes('linkedin.com')) {
+            console.log('skipping chrome storage: not on linkedin.com');
+            return;
         }
         
-        // console.log(`attempting to save ${key} to chrome storage...`);
         await page.evaluate((key: string, data: unknown) => {
-            console.log('in page context, saving:', key, data);
             localStorage.setItem(key, JSON.stringify(data));
-            console.log('storage after save:', localStorage.getItem(key));
+            console.log('saved to chrome storage:', key);
         }, key, data);
-        // console.log('chrome storage save complete');
     } catch (err) {
         console.log('failed to save to chrome storage:', err);
     }

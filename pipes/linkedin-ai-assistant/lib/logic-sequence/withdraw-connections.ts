@@ -5,11 +5,17 @@ import { showClickAnimation } from '../simple-actions/click-animation';
 import { checkIfRestricted } from '../simple-actions/check-if-restricted';
 import { saveConnection, setWithdrawingStatus } from '../storage/storage';
 import { startCheckingAcceptedConnections } from './check-accepted-connections';
+import { startCheckingRecentlyAddedConnections } from './check-recently-added-connections';
 
 const port = process.env.PORT!;
 const BASE_URL = `http://127.0.0.1:${port}`;
 
 let isCurrentlyWithdrawing = false;
+export let shouldStop = false;
+
+export function setShouldStop(value: boolean) {
+  shouldStop = value;
+}
 
 export async function startWithdrawing(): Promise<void> {
   if (isCurrentlyWithdrawing) {
@@ -22,6 +28,24 @@ export async function startWithdrawing(): Promise<void> {
   console.log('starting withdraw process');
 
   try {
+    // Reset the flag at start
+    await setWithdrawingStatus(true);
+
+    // Check if we should stop frequently during the process
+    if (shouldStop) {
+      console.log('withdraw process stopped by user');
+      await setWithdrawingStatus(false, {
+        reason: 'stopped by user',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // First check recently added connections
+    console.log('checking recently added connections first');
+    if (shouldStop) return;
+    await startCheckingRecentlyAddedConnections();
+
     // Browser setup
     updateWorkflowStep('browser', 'running', 'connecting to chrome');
     const statusResponse = await fetch(`${BASE_URL}/api/chrome/status`);
@@ -39,6 +63,15 @@ export async function startWithdrawing(): Promise<void> {
     await navigateToSentInvitations(page);
 
     while (true) {
+      if (shouldStop) {
+        console.log('withdraw process stopped by user during main loop');
+        await setWithdrawingStatus(false, {
+          reason: 'stopped by user',
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
       const foundProfilesToWithdraw = await withdrawOldInvitations(page);
       if (!foundProfilesToWithdraw) {
         const hasNextPage = await goToNextPage(page);
@@ -87,6 +120,11 @@ async function withdrawOldInvitations(page: Page): Promise<boolean> {
   let foundOldInvitation = false;
 
   for (const card of cards) {
+    if (shouldStop) {
+      console.log('withdraw process stopped by user during card processing');
+      return false;
+    }
+
     try {
       // Re-query elements within each card to ensure fresh references
       const profileLink = await card.$('a[href*="/in/"]');

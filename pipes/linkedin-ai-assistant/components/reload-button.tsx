@@ -10,15 +10,15 @@ export function ReloadButton() {
 
   return (
     <div className="flex items-center gap-1">
-      <Button
+      {/* <Button
         variant="ghost"
         size="icon"
         onClick={handleReload}
         className="hover:bg-gray-100 dark:hover:bg-gray-800"
       >
         <RotateCw className="h-4 w-4" />
-      </Button>
-      <span className="text-sm text-muted-foreground">sometimes you need to refresh page</span>
+      </Button> */}
+      <span className="text-sm text-muted-foreground">if button does not work, right click to Reload</span>
     </div>
   );
 }
