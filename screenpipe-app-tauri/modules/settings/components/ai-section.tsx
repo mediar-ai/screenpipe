@@ -48,8 +48,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import posthog from "posthog-js";
-import { Select } from "@/components/ui/select";
-import { AiProviderSelect } from "../fields/select";
+import { ScreenpipeCloudSetupForm } from "../forms/ai-provider.screenpipe-cloud";
+import Form from "@/modules/form/components/form";
+import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-select";
+import Select from "react-select";
+import { OpenAiSetupForm } from "../forms/ai-provider.openai";
+import { LlamaSetupForm } from "../forms/ai-provider.llama";
+import { CustomSetupForm } from "../forms/ai-provider.custom";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -336,7 +341,10 @@ const AISection = () => {
         </Label>
         <AiProviderSelect/>
       </div>
-      {settings.aiProviderType === "custom" && (
+      <Form
+        form={CustomSetupForm}
+      />
+       {/* {settings.aiProviderType === "custom" && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4">
             <Label htmlFor="customAiUrl">custom url</Label>
@@ -356,7 +364,7 @@ const AISection = () => {
             />
           </div>
         </div>
-      )}
+      )} 
       {isApiKeyRequired && (
         <div className="w-full">
           <div className="flex flex-col gap-4 mb-4 w-full">
@@ -452,9 +460,9 @@ const AISection = () => {
             </Popover>
           </div>
         </div>
-      )}
+      )} */}
 
-      <div className="w-full">
+      {/* <div className="w-full">
         <div className="flex flex-col gap-4 mb-4 w-full">
           <Label htmlFor="customPrompt">prompt</Label>
           <div className="flex-grow relative">
@@ -568,9 +576,9 @@ const AISection = () => {
             )}
           </div>
         </div>
-      </div>
+      </div>  */}
 
-      {settings.embeddedLLM.enabled && (
+      {/* {settings.embeddedLLM.enabled && (
         <>
           <div className="w-full">
             <div className="flex items-center gap-4 mb-4">
@@ -624,7 +632,7 @@ const AISection = () => {
             </div>
           </div>
         </>
-      )}
+      )} */}
     </div>
   );
 };
