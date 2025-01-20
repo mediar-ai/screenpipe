@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh, saveHarvestingState, saveNextHarvestTime } from '@/lib/storage/storage';
+import { loadConnections, saveConnection, saveRefreshStats, setShouldStopRefresh, getShouldStopRefresh, saveHarvestingState, saveNextHarvestTime, saveRestrictionInfo } from '@/lib/storage/storage';
 import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
 import { ChromeSession } from '@/lib/chrome-session';
 import { clickCancelConnectionRequest } from '@/lib/simple-actions/click-cancel-connection-request';
@@ -56,8 +56,16 @@ async function checkConnectionStatus(page: Page, profileUrl: string, connection:
           if (restrictionStatus.restrictionEndDate) {
             await saveHarvestingState('cooldown');
             await saveNextHarvestTime(restrictionStatus.restrictionEndDate);
+            await saveRestrictionInfo({
+              isRestricted: true,
+              endDate: restrictionStatus.restrictionEndDate,
+              reason: 'linkedin has detected automated activity on your account'
+            });
           } else {
             await saveHarvestingState('stopped');
+            await saveRestrictionInfo({
+              isRestricted: false
+            });
           }
           throw new Error(`account restricted until ${restrictionStatus.restrictionEndDate}`);
         }
@@ -212,11 +220,7 @@ export async function GET(request: Request) {
       refreshError: null,
       rateLimitedUntil: null,
       nextProfileTime: nextDelay ? Date.now() + nextDelay : null,
-      restrictionInfo: {
-        isRestricted: connectionsStore.harvestingStatus === 'cooldown',
-        endDate: connectionsStore.nextHarvestTime,
-        reason: 'linkedin has detected automated activity on your account'
-      }
+      restrictionInfo: connectionsStore.restrictionInfo || null
     });
 
   } catch (error) {
