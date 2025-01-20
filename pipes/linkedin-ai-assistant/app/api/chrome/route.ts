@@ -20,18 +20,14 @@ const execPromise = promisify(exec);
 function getChromePath() {
   switch (os.platform()) {
     case "darwin":
-      // Check if running on ARM Mac
       const isArm = os.arch() === 'arm64';
       addLog(`mac architecture: ${os.arch()}`);
-      // Both paths exist on M1 Macs, but we want the ARM one if available
-      const armPath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-      const intelPath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
       
-      // Check if ARM version exists
-      if (isArm && require('fs').existsSync(armPath)) {
-        return armPath;
+      if (!isArm) {
+        throw new Error("only arm64 macs are supported");
       }
-      return intelPath;
+      return chromePath;
     case "linux":
       return "/usr/bin/google-chrome";
     case "win32":
@@ -59,7 +55,9 @@ export async function POST() {
     addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
 
     addLog("spawning chrome with debugging port 9222...");
-    const chromeProcess = spawn(chromePath, [
+    const chromeProcess = spawn('arch', [
+      '-arm64',
+      chromePath,
       '--remote-debugging-port=9222',
       '--restore-last-session',
       '--no-first-run',
