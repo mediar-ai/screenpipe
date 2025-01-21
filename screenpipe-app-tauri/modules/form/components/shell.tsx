@@ -56,7 +56,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
           form
             .handleSubmit(props.onSubmit)(event)
         }}
-        className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[50px]"
+        className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[10px]"
       >
         {!props.hideTitle &&
           <div className="text-center">
