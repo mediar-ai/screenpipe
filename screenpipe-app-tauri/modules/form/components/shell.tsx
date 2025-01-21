@@ -68,7 +68,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
           console.log({element})
           return (
           <FormField
-           key={index}
+           key={element.key}
            name={element.key as Path<FormValues>}
            control={form.control}
            render={({ field }) => {
