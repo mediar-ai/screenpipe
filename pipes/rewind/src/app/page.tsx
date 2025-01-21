@@ -8,6 +8,7 @@ import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
 import { TimelineSelection } from "@/components/timeline/timeline-selection";
+import { TimelineControls } from "@/components/timeline/timeline-controls";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -63,6 +64,7 @@ export default function Timeline() {
     x: 0,
     y: 0,
   });
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
     setPosition({
@@ -78,8 +80,9 @@ export default function Timeline() {
 
     const endTime = new Date();
     endTime.setMinutes(endTime.getMinutes() - 2);
-    const startTime = new Date();
-    startTime.setHours(0, 1, 0, 0);
+
+    const startTime = new Date(endTime);
+    startTime.setDate(startTime.getDate() - 7);
 
     const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
 
@@ -312,6 +315,98 @@ export default function Timeline() {
     };
   }, [handleScroll]);
 
+  const jumpToDate = (targetDate: Date) => {
+    // Find the closest frame to the target date
+    if (frames.length === 0) return;
+
+    const targetTime = targetDate.getTime();
+    let closestIndex = 0;
+    let closestDiff = Infinity;
+
+    frames.forEach((frame, index) => {
+      const frameTime = new Date(frame.timestamp).getTime();
+      const diff = Math.abs(frameTime - targetTime);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestIndex = index;
+      }
+    });
+
+    // Update cursor position
+    setCurrentIndex(closestIndex);
+    if (frames[closestIndex]) {
+      setCurrentFrame(frames[closestIndex].devices[0]);
+      setCurrentDate(new Date(frames[closestIndex].timestamp));
+    }
+  };
+
+  const handleDateChange = (newDate: Date) => {
+    // Ensure we're comparing dates at start of day
+    const targetStartOfDay = new Date(
+      newDate.getFullYear(),
+      newDate.getMonth(),
+      newDate.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+
+    let closestIndex = 0;
+    let closestDiff = Infinity;
+
+    frames.forEach((frame, index) => {
+      const frameDate = new Date(frame.timestamp);
+      const frameStartOfDay = new Date(
+        frameDate.getFullYear(),
+        frameDate.getMonth(),
+        frameDate.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+
+      const diff = Math.abs(
+        frameStartOfDay.getTime() - targetStartOfDay.getTime()
+      );
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closestIndex = index;
+      }
+    });
+
+    setCurrentIndex(closestIndex);
+    if (frames[closestIndex]) {
+      setCurrentFrame(frames[closestIndex].devices[0]);
+    }
+  };
+
+  const handleJumpToday = () => {
+    jumpToDate(new Date());
+  };
+
+  // More explicit date handling
+  useEffect(() => {
+    if (frames[currentIndex]) {
+      const frameTimestamp = frames[currentIndex].timestamp;
+      const frameDate = new Date(frameTimestamp);
+
+      // Force date to start of day to avoid timezone issues
+      const localDate = new Date(
+        frameDate.getFullYear(),
+        frameDate.getMonth(),
+        frameDate.getDate(),
+        0,
+        0,
+        0,
+        0
+      );
+
+      setCurrentDate(localDate);
+    }
+  }, [currentIndex, frames]);
+
   return (
     <TimelineProvider>
       <div
@@ -326,12 +421,14 @@ export default function Timeline() {
           msUserSelect: "none",
         }}
       >
-        <button
-          onClick={handleRefresh}
-          className="absolute top-4 right-4 p-2 text-foreground hover:text-foreground/70 bg-background rounded border border-muted-foreground hover:border-foreground/50 transition-colors z-50"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </button>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+          <TimelineControls
+            currentDate={currentDate}
+            onDateChange={handleDateChange}
+            onJumpToday={handleJumpToday}
+            className="shadow-lg"
+          />
+        </div>
 
         <div className="flex-1 relative min-h-0">
           {isLoading && (
@@ -371,7 +468,7 @@ export default function Timeline() {
           {currentFrame && (
             <img
               src={`data:image/png;base64,${currentFrame.frame}`}
-              className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-2"
+              className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
               alt="Current frame"
             />
           )}
@@ -435,28 +532,26 @@ export default function Timeline() {
           )}
 
           <div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
-            {Array(7)
+            {Array(8)
               .fill(0)
               .map((_, i) => {
                 if (!loadedTimeRange) return null;
-                const totalMinutes =
-                  (loadedTimeRange.end.getTime() -
-                    loadedTimeRange.start.getTime()) /
-                  (1000 * 60);
-                const minutesPerStep = totalMinutes / 6;
+                const totalDays = 7;
+                const daysPerStep = totalDays / 7;
                 const date = new Date(
                   loadedTimeRange.start.getTime() +
-                    i * minutesPerStep * 60 * 1000
+                    i * daysPerStep * 24 * 60 * 60 * 1000
                 );
                 return (
                   <div
                     key={i}
                     className="absolute transform -translate-x-1/2"
-                    style={{ left: `${(i * 100) / 6}%` }}
+                    style={{ left: `${(i * 100) / 7}%` }}
                   >
-                    {date.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
+                    {date.toLocaleDateString([], {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
                     })}
                   </div>
                 );
