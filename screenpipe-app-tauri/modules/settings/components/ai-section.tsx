@@ -68,7 +68,7 @@ export const AIProviderCard = ({
 
 const AISection = () => {
   const { settings, updateSettings, resetSetting } = useSettings();
-  const [ aiProvider, setAiProvider ] = useState<AvailableAiProviders>(AvailableAiProviders.OPENAI)
+  const [ aiProvider, setAiProvider ] = useState<AvailableAiProviders>(settings.aiProviderType)
 
   const { toast } = useToast();
   const { data } = useQuery({
@@ -85,10 +85,10 @@ const AISection = () => {
 
   const { mutate, isPending } = useMutation({
     mutationFn: async (values: Partial<Settings>) => {
-      console.log({values})
-      // updateSettings({
-      //   ...values
-      // });
+      updateSettings({
+        aiProviderType: aiProvider,
+        ...values
+      });
     },
     onSuccess: () => {
       toast({
@@ -102,6 +102,7 @@ const AISection = () => {
       });
     }
   })
+
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">ai settings</h1>
