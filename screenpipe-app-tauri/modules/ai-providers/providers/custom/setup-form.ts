@@ -1,4 +1,5 @@
 import { FieldSchema } from "@/modules/form/entities/field/field-metadata"
+import { FormSchema } from "@/modules/form/entities/form"
 
 const fields: FieldSchema[] = [
   {
@@ -57,8 +58,9 @@ const fields: FieldSchema[] = [
   }
 ]
 
-export const CustomSetupForm = {
+export const CustomSetupForm: FormSchema = {
   title: 'custom provider setup',
+  hideTitle: true,
   fields,
   buttonText: 'submit changes',
 }
