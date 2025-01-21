@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { z } from 'zod';
 import { FormRenderer, FormRendererHandles } from "./shell";
 import { generateFormSchema } from "../utils/zod-schema-generator";
+import { FormSchema } from '../entities/form';
 
 export default function Form({
   onCreate, 
@@ -13,7 +14,7 @@ export default function Form({
   onCreate?: (values: any) => Promise<void>;
   isLoading?: boolean;
   defaultValues?:any,
-  form: any,
+  form: FormSchema,
 }) {
   const refForm = useRef<FormRendererHandles<FormSchema>>(null);
   
@@ -33,11 +34,12 @@ export default function Form({
   
   return (
     <FormRenderer
-      buttonText={form.button}
+      buttonText={form.buttonText}
       title={form.title}
-      defaultValues={defaultValues}
-      description={form.description}
       fields={form.fields}
+      description={form.description}
+      hideTitle={form.hideTitle}
+      defaultValues={defaultValues}
       formZodSchema={formSchema}
       onSubmit={handleSubmit}
       isLoading={isLoading}

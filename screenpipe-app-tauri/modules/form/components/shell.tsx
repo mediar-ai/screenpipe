@@ -21,6 +21,7 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   defaultValues?: DefaultValues<FormValues>;
   formZodSchema: z.ZodObject<ZodRawShape>;
   showInternalButton?: boolean;
+  hideTitle?: boolean,
   buttonText: string;
   onSubmit: SubmitHandler<FormValues>;
   isLoading?: boolean;
@@ -56,16 +57,17 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
         }}
         className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[50px]"
       >
-        <div className="text-center">
-          <h1 className="text-lg font-[300]">
-            {props.title}
-          </h1>
-          <h3 className="text-xs font-[200]">
-            {props.description}
-          </h3>
-        </div>
+        {!props.hideTitle &&
+          <div className="text-center">
+            <h1 className="text-lg font-[300]">
+              {props.title}
+            </h1>
+            <h3 className="text-xs font-[200]">
+              {props.description}
+            </h3>
+          </div>
+        }
         {props.fields.map((element, index, { length }) => {
-          console.log({element})
           return (
           <FormField
            key={element.key}
