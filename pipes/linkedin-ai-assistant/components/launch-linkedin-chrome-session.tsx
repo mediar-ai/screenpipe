@@ -72,13 +72,20 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
     try {
       await killChrome();
       setStatus('connecting');
-      setError(null);  // Clear any previous errors
+      setError(null);
 
-      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
-      //   status: "started"
-      // });
+      // Get screen dimensions from browser
+      const screenDims = {
+        width: window.screen.availWidth,
+        height: window.screen.availHeight
+      };
+      addLog(`screen dimensions: ${screenDims.width}x${screenDims.height}`);
 
-      const response = await fetch('/api/chrome', { method: 'POST' });
+      const response = await fetch('/api/chrome', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenDims })
+      });
       const data = await response.json();
       if (data.logs) {
         data.logs.forEach((log: string) => addLog(log));
@@ -91,10 +98,6 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       pollDebuggerStatus();
     } catch (error) {
       console.error('failed to launch chrome:', error);
-      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
-      //   status: "error",
-      //   error: error instanceof Error ? error.message : String(error)
-      // });
       setStatus('error');
       setError(error instanceof Error ? error.message : String(error));
     }
