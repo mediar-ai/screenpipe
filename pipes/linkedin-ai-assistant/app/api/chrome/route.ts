@@ -33,6 +33,24 @@ function getChromePath() {
   }
 }
 
+const additionalFlags = [
+    '--remote-debugging-port=9222',
+    '--restore-last-session',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-networking',
+    '--disable-features=TranslateUI',
+    '--disable-features=IsolateOrigins',
+    '--disable-site-isolation-trials',
+];
+
 export async function POST() {
   try {
     addLog('chrome route: starting POST request');
@@ -56,23 +74,9 @@ export async function POST() {
     const spawnArgs = isArmMac ? [
       '-arm64',
       chromePath,
-      '--remote-debugging-port=9222',
-      '--restore-last-session',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
+      ...additionalFlags
     ] : [
-      '--remote-debugging-port=9222',
-      '--restore-last-session',
-      '--no-first-run',
-      '--no-default-browser-check',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
+      ...additionalFlags
     ];
 
     const chromeProcess = spawn(spawnCommand, spawnArgs, { 
