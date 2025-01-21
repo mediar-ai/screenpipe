@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Toaster } from "@/components/toaster";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { WindowSizer } from "@/components/window-sizer";
 
 export const metadata: Metadata = {
   title: "LinkedIn AI Assistant",
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <WindowSizer />
         {children}
         <Toaster />
       </body>
