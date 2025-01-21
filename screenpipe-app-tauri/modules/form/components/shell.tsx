@@ -2,7 +2,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ForwardRefRenderFunction, PropsWithoutRef, useImperativeHandle } from "react";
 import React from "react";
-import { type SubmitHandler, type FieldValues, type DefaultValues, useForm, Path, useFormState } from "react-hook-form";
+import { type SubmitHandler, type FieldValues, type DefaultValues, useForm, Path, useFormState, UseFormReset } from "react-hook-form";
 import { z, ZodRawShape } from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { FieldSchema } from "../entities/field/field-metadata";
@@ -10,6 +10,8 @@ import { FormFieldRenderer } from "./field-renderer";
 import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
 import { Button } from "@/components/ui/button";
 import { Eraser } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { FormStatus } from "../form-status";
 
 export interface FormRendererHandles<FormValues> {
   reset: (values: FormValues) => void;
@@ -27,27 +29,6 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   buttonText: string;
   onSubmit: SubmitHandler<FormValues>;
   isLoading?: boolean;
-}
-
-function FormStatus(){
-  const { isDirty } = useFormState()
-
-  if (!isDirty) return null
-
-  return(
-    <div className="flex items-center space-x-2">
-        <p className="opacity-50 font-[200] font-sans">
-          unsaved edits!
-        </p>
-        <Button 
-          variant={'ghost'} 
-          type='button'
-          size={'icon'}
-        >
-          <Eraser className="h-5 w-5" strokeWidth={1.5}/>
-        </Button>
-    </div>
-  )
 }
 
 export const InternalFormRenderer = <FormValues extends FieldValues>(
@@ -92,7 +73,9 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
                 </h3>
               )}
             </div>
-            <FormStatus/>
+            <FormStatus
+              reset={form.reset}
+            />
           </div>
         }
         {props.fields.map((element, index, { length }) => {
@@ -127,13 +110,16 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
                 )}
               }
             />
-        )})}
+          )
+        })}
 
-        <ButtonWithLoadingState
-          isLoading={props.isLoading}
-          label={props.buttonText}
-          type={"submit"}
-        />
+        { form.formState.isDirty && (
+          <ButtonWithLoadingState
+            isLoading={props.isLoading}
+            label={props.buttonText}
+            type={"submit"}
+          />
+        )}
       </form>
     </Form>
   );
