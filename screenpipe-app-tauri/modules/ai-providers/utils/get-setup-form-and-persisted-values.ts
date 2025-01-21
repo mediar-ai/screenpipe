@@ -23,8 +23,7 @@ export async function getSetupFormAndPersistedValues({
         const formWithoutOptions = AiProviders[selectedAiProvider].setupForm
         const ollamaModels = await getOllamaModels()
 
-        // @ts-ignore
-        formWithoutOptions.fields[0].typeMeta.options = ollamaModels
+        formWithoutOptions.fields[0].typeMeta.options = ollamaModels.models.map((model) => model.name)
         setupForm = {...formWithoutOptions}
     }
 

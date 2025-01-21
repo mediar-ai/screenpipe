@@ -20,7 +20,7 @@ export type FormFieldTypes = (typeof FormFieldTypes)[keyof typeof FormFieldTypes
 const optionsFieldSchema = z.object({
     isRegular: z.literal(false),
     type: z.nativeEnum(FieldTypeWithOptions),
-    options: z.array(z.any()).optional(),
+    options: z.array(z.string()).optional(),
     entity: z.string().optional(),
 })
 export type OptionsField = z.infer<typeof optionsFieldSchema>;
