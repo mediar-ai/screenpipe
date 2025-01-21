@@ -6,6 +6,12 @@ import os from 'os';
 import { ChromeSession } from '@/lib/chrome-session';
 // import { pipe } from "@screenpipe/js";
 
+const logs: string[] = [];
+const addLog = (msg: string) => {
+  console.log(msg);
+  logs.push(`${new Date().toISOString()} - ${msg}`);
+};
+
 export const runtime = 'nodejs'; // specify node runtime
 
 const execPromise = promisify(exec);
@@ -14,7 +20,14 @@ const execPromise = promisify(exec);
 function getChromePath() {
   switch (os.platform()) {
     case "darwin":
-      return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      const isArm = os.arch() === 'arm64';
+      addLog(`mac architecture: ${os.arch()}`);
+      const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      
+      if (!isArm) {
+        throw new Error("only arm64 macs are supported");
+      }
+      return chromePath;
     case "linux":
       return "/usr/bin/google-chrome";
     case "win32":
@@ -25,16 +38,12 @@ function getChromePath() {
 }
 
 export async function POST() {
-  const logs: string[] = [];
-  const addLog = (msg: string) => {
-    console.log(msg);  // keep server-side logging
-    logs.push(`${new Date().toISOString()} - ${msg}`);
-  };
-
   try {
     addLog('chrome route: starting POST request');
     addLog(`environment: ${process.env.NODE_ENV}`);
     addLog(`current platform: ${os.platform()}`);
+    addLog(`system architecture: ${os.arch()}`);
+    addLog(`cpu info: ${JSON.stringify(os.cpus()[0], null, 2)}`);
 
     addLog("attempting to launch chrome");
     addLog("killing existing chrome instances...");
@@ -46,7 +55,9 @@ export async function POST() {
     addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
 
     addLog("spawning chrome with debugging port 9222...");
-    const chromeProcess = spawn(chromePath, [
+    const chromeProcess = spawn('arch', [
+      '-arm64',
+      chromePath,
       '--remote-debugging-port=9222',
       '--restore-last-session',
       '--no-first-run',
@@ -108,12 +119,6 @@ export async function POST() {
 }
 
 export async function DELETE() {
-  const logs: string[] = [];
-  const addLog = (msg: string) => {
-    console.log(msg);
-    logs.push(`${new Date().toISOString()} - ${msg}`);
-  };
-
   try {
     addLog('chrome route: starting DELETE request');
     await quitChrome();
