@@ -33,27 +33,50 @@ function getChromePath() {
   }
 }
 
-const additionalFlags = [
-    '--remote-debugging-port=9222',
-    '--restore-last-session',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--disable-background-networking',
-    '--disable-features=TranslateUI',
-    '--disable-features=IsolateOrigins',
-    '--disable-site-isolation-trials',
-];
+interface ScreenDimensions {
+    width: number;
+    height: number;
+}
 
-export async function POST() {
+function getScreenDimensions(requestDims?: ScreenDimensions) {
+    const defaultDims = { width: 2560, height: 1440 };
+    
+    if (requestDims) {
+        addLog(`using client screen dimensions: ${requestDims.width}x${requestDims.height}`);
+        return requestDims;
+    }
+    
+    addLog(`no dimensions provided, using defaults: ${defaultDims.width}x${defaultDims.height}`);
+    return defaultDims;
+}
+
+export async function POST(request: Request) {
   try {
     addLog('chrome route: starting POST request');
+    
+    // Get dimensions from request first
+    const body = await request.json();
+    const screenDims = getScreenDimensions(body.screenDims);
+    const additionalFlags = [
+      '--remote-debugging-port=9222',
+      '--restore-last-session',
+      '--no-first-run',
+      '--no-default-browser-check',
+      `--window-position=${screenDims.width / 2},0`,
+      `--window-size=${screenDims.width / 2},${screenDims.height}`,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-networking',
+      '--disable-features=TranslateUI',
+      '--disable-features=IsolateOrigins',
+      '--disable-site-isolation-trials',
+    ].flat();
+    // Log environment info
     addLog(`environment: ${process.env.NODE_ENV}`);
     addLog(`current platform: ${os.platform()}`);
     addLog(`system architecture: ${os.arch()}`);
@@ -165,4 +188,6 @@ async function quitChrome() {
     console.log("no chrome process found to kill", error);
   }
 }
+
+
 
