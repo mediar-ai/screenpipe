@@ -11,7 +11,7 @@ export const OpenAiProvider: ProviderMetadata = {
     setupForm: OpenAiSetupForm,
     savedValuesGetter: (settings: Settings) => {
         return {
-            openApiKey: settings.openaiApiKey,
+            openaiApiKey: settings.openaiApiKey,
             aiModel: settings.aiModel,
             customPrompt: settings.customPrompt,
             aiMaxContextChars: settings.aiMaxContextChars 
