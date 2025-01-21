@@ -217,6 +217,12 @@ export async function GET() {
     );
     const _ = await syncLogToObsidian(logEntry, obsidianPath);
 
+    await pipe.captureEvent("obsidian_work_log_synced", {
+      model,
+      interval,
+      pageSize,
+    });
+
     return NextResponse.json({
       message: "work log synced successfully",
       logEntry,
