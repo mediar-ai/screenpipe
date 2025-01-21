@@ -72,7 +72,7 @@ export const FormFieldRenderer = ({
     }
     case FormFieldTypes.TEXTAREA: {
       return (
-        <div className="relative w-full h-[200px]">
+        <div className="relative w-full h-[250px]">
           <Textarea
               className="resize-none h-full"
               {...field}
@@ -107,7 +107,7 @@ export const FormFieldRenderer = ({
             }}
           />
           {!!field.value && 
-            <span className="ml-0 min-w-[60px] text-right">
+            <span className="ml-2 min-w-[60px] text-right">
               {field.value.toLocaleString()}
             </span> 
           }

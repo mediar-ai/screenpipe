@@ -25,11 +25,11 @@ export default function FormSecretStringField({
           onClick={() => setVisibility(!visibility)}
           size={"icon"}
           variant={'ghost'}
-          className="border"
+          className="border min-w-[40px] min-h-[40px]"
         >
           { visibility 
-            ? <EyeIcon className="text-black" strokeWidth={1.5}/>
-            : <EyeOff className="text-black" strokeWidth={1.5}/>
+            ? <EyeIcon className="h-5 w-5" strokeWidth={1.5}/>
+            : <EyeOff className="h-5 w-5" strokeWidth={1.5}/>
           }
         </Button>
         {/* {isLast && showInternalButton && (

@@ -2,12 +2,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ForwardRefRenderFunction, PropsWithoutRef, useImperativeHandle } from "react";
 import React from "react";
-import { type SubmitHandler, type FieldValues, type DefaultValues, useForm, Path } from "react-hook-form";
+import { type SubmitHandler, type FieldValues, type DefaultValues, useForm, Path, useFormState } from "react-hook-form";
 import { z, ZodRawShape } from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { FieldSchema } from "../entities/field/field-metadata";
 import { FormFieldRenderer } from "./field-renderer";
 import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
+import { Button } from "@/components/ui/button";
+import { Eraser } from "lucide-react";
 
 export interface FormRendererHandles<FormValues> {
   reset: (values: FormValues) => void;
@@ -25,6 +27,27 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   buttonText: string;
   onSubmit: SubmitHandler<FormValues>;
   isLoading?: boolean;
+}
+
+function FormStatus(){
+  const { isDirty } = useFormState()
+
+  if (!isDirty) return null
+
+  return(
+    <div className="flex items-center space-x-2">
+        <p className="opacity-50 font-[200] font-sans">
+          unsaved edits!
+        </p>
+        <Button 
+          variant={'ghost'} 
+          type='button'
+          size={'icon'}
+        >
+          <Eraser className="h-5 w-5" strokeWidth={1.5}/>
+        </Button>
+    </div>
+  )
 }
 
 export const InternalFormRenderer = <FormValues extends FieldValues>(
@@ -58,45 +81,51 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
         className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[10px]"
       >
         {!props.hideTitle &&
-          <div className="text-center">
-            <h1 className="text-lg font-[300]">
-              {props.title}
-            </h1>
-            <h3 className="text-xs font-[200]">
-              {props.description}
-            </h3>
+          <div className="flex min-h-[50px] justify-between">
+            <div className="flex flex-col justify-center">
+              <h1 className="text-xl font-bold">
+                {props.title}
+              </h1>
+              {!!props.description && (
+                <h3 className="text-xs font-[200]">
+                  {props.description}
+                </h3>
+              )}
+            </div>
+            <FormStatus/>
           </div>
         }
         {props.fields.map((element, index, { length }) => {
           return (
-          <FormField
-           key={element.key}
-           name={element.key as Path<FormValues>}
-           control={form.control}
-           render={({ field }) => {
-             return (
-               <FormItem className="flex flex-col justify-center space-y-2">
-                  <div className="flex flex-col space-y-1">
-                    <FormLabel>
-                      {element.title}
-                    </FormLabel>
-                    <FormDescription>
-                      {element.description}
-                    </FormDescription>
-                  </div>
-                <FormControl> 
-                  <FormFieldRenderer
-                    element={element}
-                    form={form}
-                    isLast={length - 1 === index}
-                    isLoading={props.isLoading}
-                    showInternalButton={props.showInternalButton}
-                    field={field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-             )}}
+            <FormField
+              key={element.key}
+              name={element.key as Path<FormValues>}
+              control={form.control}
+              render={({ field }) => {
+                return (
+                  <FormItem className="flex flex-col justify-center space-y-2">
+                      <div className="flex flex-col space-y-1">
+                        <FormLabel>
+                          {element.title}
+                        </FormLabel>
+                        <FormDescription>
+                          {element.description}
+                        </FormDescription>
+                      </div>
+                    <FormControl> 
+                      <FormFieldRenderer
+                        element={element}
+                        form={form}
+                        isLast={length - 1 === index}
+                        isLoading={props.isLoading}
+                        showInternalButton={props.showInternalButton}
+                        field={field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              }
             />
         )})}
 
