@@ -44,8 +44,7 @@ const fields: FieldSchema[] = [
 ]
 
 export const LlamaSetupForm: FormSchema = {
-  title: 'llama provider setup',
-  hideTitle: true,
+  title: 'configuration',
   fields,
   buttonText: 'submit changes',
 }

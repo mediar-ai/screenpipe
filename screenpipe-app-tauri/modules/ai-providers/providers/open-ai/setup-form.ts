@@ -63,8 +63,7 @@ const fields: FieldSchema[] = [
 ]
 
 export const OpenAiSetupForm: FormSchema = {
-  title: 'openai provider setup',
-  hideTitle: true,
+  title: 'configuration',
   fields,
   buttonText: 'submit changes',
 }

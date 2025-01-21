@@ -55,8 +55,7 @@ const fields: FieldSchema[] = [
 ]
 
 export const ScreenpipeCloudSetupForm: FormSchema = {
-  title: 'screenpipe cloud provider setup',
-  hideTitle: true,
+  title: 'configuration',
   fields,
   buttonText: 'submit changes',
 }

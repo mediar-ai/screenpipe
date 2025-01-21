@@ -59,8 +59,7 @@ const fields: FieldSchema[] = [
 ]
 
 export const CustomSetupForm: FormSchema = {
-  title: 'custom provider setup',
-  hideTitle: true,
+  title: 'configuration',
   fields,
   buttonText: 'submit changes',
 }
