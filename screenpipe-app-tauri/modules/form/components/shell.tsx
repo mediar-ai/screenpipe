@@ -7,6 +7,7 @@ import { z, ZodRawShape } from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { FieldSchema } from "../entities/field/field-metadata";
 import { FormFieldRenderer } from "./field-renderer";
+import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
 // import { ButtonWithLoadingState } from "./components/action-button";
 
 export interface FormRendererHandles<FormValues> {
@@ -32,7 +33,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
   ref: React.ForwardedRef<FormRendererHandles<FormValues>>
 ) => {
   const form = useForm<FormValues>({
-    // resolver: zodResolver(props.formZodSchema),
+    resolver: zodResolver(props.formZodSchema),
     defaultValues: props.defaultValues,
   });
 
@@ -100,12 +101,12 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
             />
         )})}
 
-        {/* <ButtonWithLoadingState
-          handleClick={props.asDiv ? () => form.handleSubmit(props.onSubmit)() : undefined}
+        <ButtonWithLoadingState
+          handleClick={undefined}
           isLoading={props.isLoading}
           label={props.buttonText}
-          type={props.asDiv ? "button": "submit"}
-        /> */}
+          type={"submit"}
+        />
       </form>
     </Form>
   );
