@@ -50,12 +50,15 @@ export const FormFieldRenderer = ({
       ) 
     }
     case FormFieldTypes.SELECT: {
+      console.log({field})
       return (
         <Select
-        placeholder={element.placeholder}
+          placeholder={element.placeholder}
           className="w-[100%]"
           options={element.typeMeta.options}
           {...field}
+          onChange={(e) => field.onChange(e?.value)}
+          value={{value: field.value, label: field.value}}
         />
       )
     }
@@ -90,11 +93,9 @@ export const FormFieldRenderer = ({
             min={1000}
             max={512000}
             step={1000}
-            // {...field}
-            // value={field.value ? field.value[0] : 0}
-            value={field.value}
+            value={[field.value]}
             onValueChange={(vals) => {
-              field.onChange(vals);
+              field.onChange(vals[0]);
             }}
           />
           {!!field.value && 
