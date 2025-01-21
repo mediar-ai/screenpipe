@@ -1,27 +1,26 @@
 use crate::{get_store, icons::AppIcon};
+use axum::response::sse::{Event, Sse};
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
+use futures::stream::Stream;
 use http::header::HeaderValue;
+use notify::RecursiveMode;
+use notify::Watcher;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use tauri::Emitter;
+use tauri::Manager;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
-use tauri::Manager;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use tokio::sync::broadcast;
-use axum::response::sse::{Event, Sse};
-use futures::stream::Stream;
-use std::pin::Pin;
-use std::convert::Infallible;
-
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -96,10 +95,10 @@ async fn settings_stream(
     State(state): State<ServerState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.settings_tx.subscribe();
-    
+
     let stream = async_stream::stream! {
         let store = get_store(&state.app_handle, None).unwrap();
-        let settings = serde_json::to_string(&store.clone()).unwrap();
+        let settings = serde_json::to_string(&store.entries()).unwrap();
         yield Ok(Event::default().data(settings));
 
         while let Ok(settings) = rx.recv().await {
@@ -110,7 +109,7 @@ async fn settings_stream(
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(std::time::Duration::from_secs(1))
-            .text("keep-alive-text")
+            .text("keep-alive-text"),
     )
 }
 
@@ -118,22 +117,32 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
 
-    let store_path = app_handle.path().app_config_dir().unwrap().join("store.bin");
-    let mut watcher = notify::recommended_watcher(move |res| {
+    let app_handle_clone = app_handle.clone();
+
+    let store_path = app_handle
+        .path()
+        .local_data_dir()
+        .unwrap()
+        .join("store.bin");
+
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(event) = res {
             if event.kind.is_modify() {
-                if let Ok(store) = get_store(&app_handle, None) {
-                    if let Ok(settings) = serde_json::to_string(&store) {
+                if let Ok(store) = get_store(&app_handle_clone, None) {
+                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
                         let _ = settings_tx_clone.send(settings);
                     }
                 }
             }
         }
-    }).unwrap();
+    })
+    .unwrap();
 
-    watcher.watch(&store_path, RecursiveMode::NonRecursive).unwrap();
+    watcher
+        .watch(&store_path, RecursiveMode::NonRecursive)
+        .unwrap();
 
-    let state = ServerState { 
+    let state = ServerState {
         app_handle,
         settings_tx,
     };
