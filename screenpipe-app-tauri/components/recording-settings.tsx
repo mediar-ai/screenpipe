@@ -1497,10 +1497,10 @@ export function RecordingSettings() {
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <h4 className="font-medium">enable timeline ui</h4>
+                <h4 className="font-medium">enable rewind</h4>
                 <p className="text-sm text-muted-foreground">
-                  experimental feature that provides a timeline interface like
-                  rewind.ai
+                  experimental feature that provides a rewind interface for the
+                  rewind pipe
                 </p>
               </div>
               <Switch

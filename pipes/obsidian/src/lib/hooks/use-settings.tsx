@@ -12,8 +12,8 @@ export function useSettings() {
       prompt: `yo, you're my personal data detective! 🕵️‍♂️
 
 rules for the investigation:
-- extract names of people i interact with and what we discussed
-- identify recurring topics/themes in my convos
+- extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
+- identify recurring topics/themes in my convos, use tags or [[Link them]] to my notes
 - spot any promises or commitments made (by me or others)
 - catch interesting ideas or insights dropped in casual chat
 - note emotional vibes and energy levels in conversations
@@ -34,7 +34,6 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
   };
 
   const [settings, setSettings] = useState<Settings | null>(null);
-  console.log("settings", settings);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -62,7 +61,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
     window.addEventListener("focus", onFocus);
 
     // Optional: periodic refresh every 30s
-    const interval = setInterval(loadSettings, 30000);
+    const interval = setInterval(loadSettings, 2000);
 
     return () => {
       window.removeEventListener("focus", onFocus);
