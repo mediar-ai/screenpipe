@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { Settings, useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "@/components/ui/label";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import Form from "@/modules/form/components/form";
 import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-select";
@@ -68,10 +68,10 @@ export const AIProviderCard = ({
 
 const AISection = () => {
   const { settings, updateSettings, resetSetting } = useSettings();
-  const [aiProvider, setAiProvider] = useState<AvailableAiProviders>(AvailableAiProviders.OPENAI)
+  const [ aiProvider, setAiProvider ] = useState<AvailableAiProviders>(AvailableAiProviders.OPENAI)
 
   const { toast } = useToast();
-  const {data} = useQuery({
+  const { data } = useQuery({
     queryKey: ['setupForm', aiProvider],
     queryFn: async () => {
       const result = await getSetupFormAndPersistedValues({
@@ -116,6 +116,7 @@ const AISection = () => {
       </div>
       {data?.setupForm && 
         <Form
+          defaultValues={data.defaultValues}
           isLoading={isPending}
           onCreate={async (values) => mutate(values)}
           key={aiProvider}
