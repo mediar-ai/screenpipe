@@ -44,6 +44,7 @@ export const FormFieldRenderer = ({
     case FormFieldTypes.SECRET_STRING: {
       return (
         <FormSecretStringField
+          placeholder={element.placeholder}
           field={field}
         />
       ) 
@@ -51,6 +52,7 @@ export const FormFieldRenderer = ({
     case FormFieldTypes.SELECT: {
       return (
         <Select
+        placeholder={element.placeholder}
           className="w-[100%]"
           options={element.typeMeta.options}
           {...field}
@@ -73,7 +75,7 @@ export const FormFieldRenderer = ({
             variant="ghost"
             size="sm"
             className="absolute right-2 top-2"
-            onClick={()=>console.log('ha')}
+            onClick={()=>console.log('TODO')}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             reset
@@ -83,14 +85,24 @@ export const FormFieldRenderer = ({
     }
     case FormFieldTypes.SLIDER: {
       return (
-        <Slider
-          min={0}
-          max={100}
-          step={1}
-          onValueChange={(vals) => {
-            field.onChange(vals[0]);
-          }}
-        />
+        <div className="w-full flex">
+          <Slider
+            min={1000}
+            max={512000}
+            step={1000}
+            // {...field}
+            // value={field.value ? field.value[0] : 0}
+            value={field.value}
+            onValueChange={(vals) => {
+              field.onChange(vals);
+            }}
+          />
+          {!!field.value && 
+            <span className="ml-0 min-w-[60px] text-right">
+              {field.value.toLocaleString()}
+            </span> 
+          }
+        </div>
       )
     }
     default:
