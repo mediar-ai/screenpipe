@@ -19,15 +19,11 @@ const execPromise = promisify(exec);
 // helper to get chrome path based on platform
 function getChromePath() {
   switch (os.platform()) {
-    case "darwin":
+    case "darwin": {
       const isArm = os.arch() === 'arm64';
       addLog(`mac architecture: ${os.arch()}`);
-      const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-      
-      if (!isArm) {
-        throw new Error("only arm64 macs are supported");
-      }
-      return chromePath;
+      return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+    }
     case "linux":
       return "/usr/bin/google-chrome";
     case "win32":
@@ -55,7 +51,9 @@ export async function POST() {
     addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
 
     addLog("spawning chrome with debugging port 9222...");
-    const chromeProcess = spawn('arch', [
+    const isArmMac = os.platform() === 'darwin' && os.arch() === 'arm64';
+    const spawnCommand = isArmMac ? 'arch' : chromePath;
+    const spawnArgs = isArmMac ? [
       '-arm64',
       chromePath,
       '--remote-debugging-port=9222',
@@ -66,7 +64,18 @@ export async function POST() {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu'
-    ], { 
+    ] : [
+      '--remote-debugging-port=9222',
+      '--restore-last-session',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ];
+
+    const chromeProcess = spawn(spawnCommand, spawnArgs, { 
       detached: true, 
       stdio: 'ignore' 
     });
