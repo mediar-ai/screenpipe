@@ -25,7 +25,7 @@ export function ReloadButton() {
       >
         <RotateCw className="h-4 w-4" />
       </Button>
-      <span className="text-sm text-muted-foreground">click to reload the app, if button does not work, right click to Reload</span>
+      <span className="text-sm text-muted-foreground">if button does not work, right click to Reload</span>
     </div>
   );
 }
