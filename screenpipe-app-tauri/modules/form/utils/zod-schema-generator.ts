@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { FormFieldTypes } from "../entities/field/type-metadata"
+import { FormFieldTypes } from '../entities/field/type-metadata';
 import { FieldSchema } from "../entities/field/field-metadata"
 
 export function generateFormSchema(
@@ -15,12 +15,26 @@ export function generateFormSchema(
       switch (field.typeMeta.type) {
         case FormFieldTypes.SELECT: 
           fieldSchema = z.object({
-              key: z.number().or(z.string()),
               label: z.string(),
               value: z.string().optional(),
-              color: z.string().optional()
             })
           break
+        case FormFieldTypes.SECRET_STRING:
+          fieldSchema = z.string()
+
+          if (field.validationMeta.min) {
+            fieldSchema = fieldSchema.min(field.validationMeta.min, { message: `Please enter at least ${field.validationMeta.min} characters` })
+          }
+    
+          if (field.validationMeta.max) {
+            fieldSchema = fieldSchema.max(field.validationMeta.max, { message: `The field must not exceed ${field.validationMeta.max} characters` })
+          }
+
+          if(field.validationMeta.optional){
+            fieldSchema.optional()
+          }
+
+          break;
         case FormFieldTypes.STRING:
           fieldSchema = z.string()
 
@@ -36,6 +50,28 @@ export function generateFormSchema(
             fieldSchema.optional()
           }
 
+          break;
+        case FormFieldTypes.TEXTAREA: 
+          fieldSchema = z.string()
+
+          if (field.validationMeta.min) {
+            fieldSchema = fieldSchema.min(field.validationMeta.min, { message: `Please enter at least ${field.validationMeta.min} characters` })
+          }
+    
+          if (field.validationMeta.max) {
+            fieldSchema = fieldSchema.max(field.validationMeta.max, { message: `The field must not exceed ${field.validationMeta.max} characters` })
+          }
+
+          if(field.validationMeta.optional){
+            fieldSchema.optional()
+          }
+          break;
+        case FormFieldTypes.SLIDER: 
+          fieldSchema = z.array(z.number())
+
+          if(field.validationMeta.optional){
+            fieldSchema.optional()
+          }
           break;
         default: 
           fieldSchema = z.any().optional()
