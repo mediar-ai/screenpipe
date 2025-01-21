@@ -1,8 +1,8 @@
 export const AvailableAiProviders = {
-    OPENAI: "OPENAI",
-    SCREENPIPE_CLOUD: "SCREENPIPE_CLOUD",
-    NATIVE_OLLAMA: "NATIVE_OLLAMA",
-    CUSTOM: "CUSTOM",
-    EMBEDDED: "EMBEDDED"
+    OPENAI: "openai",
+    SCREENPIPE_CLOUD: "screenpipe-cloud",
+    NATIVE_OLLAMA: "native-ollama",
+    CUSTOM: "custom",
+    // EMBEDDED: "EMBEDDED"
 } as const
-export type AvailableAiProviders = keyof typeof AvailableAiProviders;
+export type AvailableAiProviders = typeof AvailableAiProviders[keyof typeof AvailableAiProviders];
