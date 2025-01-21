@@ -47,7 +47,7 @@ pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String>
 
     let mut command = Command::new(ffmpeg_path);
     command
-        .args(&[
+        .args([
             "-ss",
             &offset_str,
             "-i",
@@ -111,7 +111,7 @@ pub async fn validate_media(file_path: &str) -> Result<()> {
 
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
     let status = Command::new(ffmpeg_path)
-        .args(&["-v", "error", "-i", file_path, "-f", "null", "-"])
+        .args(["-v", "error", "-i", file_path, "-f", "null", "-"])
         .output()
         .await?;
 
@@ -159,7 +159,7 @@ pub async fn merge_videos(
 
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
     let status = Command::new(ffmpeg_path)
-        .args(&[
+        .args([
             "-f",
             "concat",
             "-safe",
@@ -244,7 +244,7 @@ pub async fn extract_frames_from_video(
 
     // Extract frames using ffmpeg
     let status = Command::new(&ffmpeg_path)
-        .args(&[
+        .args([
             "-i",
             video_path.to_str().unwrap(),
             "-vf",
@@ -303,7 +303,7 @@ pub async fn extract_frames_from_video(
 
 async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
     let output = Command::new(ffmpeg_path)
-        .args(&["-i", video_path])
+        .args(["-i", video_path])
         .output()
         .await?;
 
@@ -349,7 +349,7 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
 
     // Try ffprobe first
     let creation_time = match Command::new(&ffprobe_path)
-        .args(&[
+        .args([
             "-v",
             "quiet",
             "-print_format",
@@ -418,7 +418,7 @@ pub async fn get_video_metadata(video_path: &str) -> Result<VideoMetadata> {
 // Helper function to get fps and duration
 async fn get_video_technical_metadata(ffprobe_path: &Path, video_path: &str) -> Result<(f64, f64)> {
     let output = Command::new(ffprobe_path)
-        .args(&[
+        .args([
             "-v",
             "quiet",
             "-print_format",

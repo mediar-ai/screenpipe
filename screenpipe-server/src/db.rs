@@ -80,9 +80,7 @@ impl DatabaseManager {
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
-        if let Err(e) = Self::run_migrations(&db_manager.pool).await {
-            return Err(e);
-        }
+        Self::run_migrations(&db_manager.pool).await?;
 
         Ok(db_manager)
     }
@@ -124,6 +122,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -343,6 +342,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_ocr_text(
         &self,
         frame_id: i64,
@@ -408,6 +408,7 @@ impl DatabaseManager {
         Err(sqlx::Error::PoolTimedOut)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_ocr_text_old(
         &self,
         frame_id: i64,
@@ -451,6 +452,7 @@ impl DatabaseManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search(
         &self,
         query: &str,
@@ -705,6 +707,7 @@ impl DatabaseManager {
         Ok(results)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn search_ocr(
         &self,
         query: &str,
@@ -800,6 +803,7 @@ impl DatabaseManager {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_audio(
         &self,
         query: &str,
@@ -1463,6 +1467,7 @@ impl DatabaseManager {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_ui_monitoring(
         &self,
         query: &str,

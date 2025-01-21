@@ -85,11 +85,12 @@ impl PipeManager {
             if let Value::Object(updates) = new_config {
                 // Update top-level properties
                 for (key, value) in updates.iter() {
-                    if key != "fields" {  // Handle non-fields properties directly
+                    if key != "fields" {
+                        // Handle non-fields properties directly
                         existing_config.insert(key.clone(), value.clone());
                     }
                 }
-                
+
                 // Handle fields separately if they exist
                 if let Some(Value::Array(new_fields)) = updates.get("fields") {
                     existing_config.insert("fields".to_string(), Value::Array(new_fields.clone()));
@@ -144,7 +145,7 @@ impl PipeManager {
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
-            .unwrap_or_else(|_| Value::Null);
+            .unwrap_or(Value::Null);
 
         PipeInfo {
             id: pipe_id,
@@ -256,7 +257,8 @@ impl PipeManager {
                         let killport = Killport;
                         let signal: KillportSignal = "SIGKILL".parse().unwrap();
 
-                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false) {
+                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                        {
                             Ok(killed_services) => {
                                 if killed_services.is_empty() {
                                     debug!("no services found using port {}", port);
@@ -273,7 +275,9 @@ impl PipeManager {
                                 warn!("error killing port {}: {}", port, e);
                             }
                         }
-                    }).await.map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                    })
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
                 }
                 PipeState::Pid(pid) => {
                     // Force kill the process if it's still running

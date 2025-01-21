@@ -67,10 +67,15 @@ async fn test_index_command_with_sql() -> Result<()> {
 
     // Run indexing
     handle_index_command(
-        temp_dir.path().to_string_lossy().to_string(),
+        temp_dir.path().into(),
+        video_path.to_str().unwrap().to_string(),
         None,
         db.clone(),
         OutputFormat::Text,
+        None,
+        None,
+        false,
+        false,
     )
     .await?;
 

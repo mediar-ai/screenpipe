@@ -3,7 +3,7 @@ use screenpipe_audio::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
-use std::fmt;
+use std::fmt::{self, Display};
 
 #[derive(Debug)]
 pub struct DatabaseError(pub String);
@@ -173,11 +173,11 @@ pub enum ContentSource {
     Audio,
 }
 
-impl ToString for ContentSource {
-    fn to_string(&self) -> String {
+impl Display for ContentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ContentSource::Screen => "screen".to_string(),
-            ContentSource::Audio => "audio".to_string(),
+            ContentSource::Screen => write!(f, "screen"),
+            ContentSource::Audio => write!(f, "audio"),
         }
     }
 }
