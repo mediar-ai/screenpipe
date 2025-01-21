@@ -20,7 +20,6 @@ const Select = <
 }: SelectProps<Option, IsMulti, Group>) => {
   const { menuPlacement = "auto", ...restProps } = props;
 
-  console.log({restProps})
   return (
     <ReactSelect
       isSearchable
