@@ -227,8 +227,8 @@ pub async fn capture_all_visible_windows(
             Ok(buffer) => {
                 let image = DynamicImage::ImageRgba8(
                     image::ImageBuffer::from_raw(
-                        buffer.width() as u32,
-                        buffer.height() as u32,
+                        buffer.width(),
+                        buffer.height(),
                         buffer.into_raw(),
                     )
                     .unwrap(),

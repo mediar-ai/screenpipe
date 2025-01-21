@@ -12,7 +12,7 @@ pub fn perform_ocr_tesseract(
         _ => TESSERACT_LANGUAGES
             .iter()
             .filter_map(|(key, val)| {
-                if let Some(_) = languages.iter().find(|l| l == &val) {
+                if languages.iter().any(|l| l == val) {
                     Some(key.to_string())
                 } else {
                     None
@@ -65,28 +65,26 @@ fn data_output_to_json(data_output: &DataOutput) -> String {
     let mut last_word_num = 0;
 
     for record in &data_output.data {
-        if record.word_num == 0 {
-            if !current_line.is_empty() {
-                let avg_conf = current_conf / word_count as f32;
-                let mut line_data = HashMap::new();
-                line_data.insert("text".to_string(), current_line.clone());
-                line_data.insert("confidence".to_string(), format!("{:.2}", avg_conf));
-                line_data.insert(
-                    "line_position".to_string(),
-                    format!(
-                        "level{}page_num{}block_num{}par_num{}line_num{}",
-                        record.level,
-                        record.page_num,
-                        record.block_num,
-                        record.par_num,
-                        record.line_num
-                    ),
-                );
-                lines.push(line_data);
-                current_line.clear();
-                current_conf = 0.0;
-                word_count = 0;
-            }
+        if record.word_num == 0 && !current_line.is_empty() {
+            let avg_conf = current_conf / word_count as f32;
+            let mut line_data = HashMap::new();
+            line_data.insert("text".to_string(), current_line.clone());
+            line_data.insert("confidence".to_string(), format!("{:.2}", avg_conf));
+            line_data.insert(
+                "line_position".to_string(),
+                format!(
+                    "level{}page_num{}block_num{}par_num{}line_num{}",
+                    record.level,
+                    record.page_num,
+                    record.block_num,
+                    record.par_num,
+                    record.line_num
+                ),
+            );
+            lines.push(line_data);
+            current_line.clear();
+            current_conf = 0.0;
+            word_count = 0;
         }
         if record.word_num > last_word_num {
             if !current_line.is_empty() {
