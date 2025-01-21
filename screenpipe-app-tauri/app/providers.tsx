@@ -9,6 +9,15 @@ import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
 import { store as SettingsStore } from "@/lib/hooks/use-settings";
 import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
+import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error, query) =>
+      //TODOO: TOAST
+      console.error(`${query.meta?.errorMessage} ${error.message}`),
+  }),
+})
 
 export const Providers = forwardRef<
   HTMLDivElement,
@@ -28,15 +37,17 @@ export const Providers = forwardRef<
   }, []);
 
   return (
-    <SettingsStore.Provider>
-      <ProfilesStore.Provider>
-        <OnboardingProvider>
-          <ChangelogDialogProvider>
-            <PostHogProvider client={posthog}>{children}</PostHogProvider>
-          </ChangelogDialogProvider>
-        </OnboardingProvider>
-      </ProfilesStore.Provider>
-    </SettingsStore.Provider>
+    <QueryClientProvider client={queryClient}>
+      <SettingsStore.Provider>
+        <ProfilesStore.Provider>
+          <OnboardingProvider>
+            <ChangelogDialogProvider>
+              <PostHogProvider client={posthog}>{children}</PostHogProvider>
+            </ChangelogDialogProvider>
+          </OnboardingProvider>
+        </ProfilesStore.Provider>
+      </SettingsStore.Provider>
+    </QueryClientProvider>
   );
 });
 
