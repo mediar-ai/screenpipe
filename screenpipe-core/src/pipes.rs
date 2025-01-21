@@ -686,7 +686,7 @@ mod pipes {
         ];
 
         ignore_list.iter().any(|ignored| file_name == *ignored)
-            || file_name.to_str().map_or(false, |s| s.starts_with('.'))
+            || file_name.to_str().is_some_and(|s| s.starts_with('.'))
     }
 
     fn download_github_folder(
@@ -1077,7 +1077,7 @@ mod pipes {
                 _ = tokio::time::sleep(duration) => {
                     debug!("executing cron job for pipe {} at path {}", pipe, path);
                     match client
-                        .get(&format!("{}{}", base_url, path))
+                        .get(format!("{}{}", base_url, path))
                         .headers(headers.clone())
                         .send()
                         .await
