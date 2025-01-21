@@ -18,6 +18,7 @@ const fields: FieldSchema[] = [
   {
     key: 'aiModel',
     title: 'ai model',
+    placeholder: 'select or type model name',
     validationMeta: {
      optional: false,
      errorMessage: 'hey' 

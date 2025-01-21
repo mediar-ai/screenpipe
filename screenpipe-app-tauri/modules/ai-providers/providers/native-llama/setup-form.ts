@@ -4,6 +4,7 @@ const fields: FieldSchema[] = [
   {
     key: 'aiModel',
     title: 'ai model',
+    placeholder: 'select or type model name',
     validationMeta: {
      optional: false,
      errorMessage: 'hey' 
@@ -12,22 +13,6 @@ const fields: FieldSchema[] = [
       isRegular: false,
       type: 'SELECT', 
       options: [
-        {
-          value: "gpt-4o",
-          label: "gpt-4o"
-        },
-        {
-          value: "gpt-4o-mini",
-          label: "gpt-4o-mini"
-        },
-        {
-          value: "o1-mini",
-          label: "o1-mini",
-        },
-        {
-          value: "o1",
-          label: "o1"
-        },
       ]
     }
   },
