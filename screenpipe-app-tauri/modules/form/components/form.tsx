@@ -6,12 +6,14 @@ import { generateFormSchema } from "../utils/zod-schema-generator";
 import { FormSchema } from '../entities/form';
 
 export default function Form({
-  onCreate, 
+  onCreate,
+  onReset,
   isLoading,
   form,
   defaultValues,
 } : {
   onCreate?: (values: any) => Promise<void>;
+  onReset?: () => Promise<void>;
   isLoading?: boolean;
   defaultValues?:any,
   form: FormSchema,
@@ -29,11 +31,22 @@ export default function Form({
     }
   }
 
+  async function resetForm() {
+    if (refForm.current) {
+      refForm.current.reset();
+      
+      if (onReset) {
+        await onReset()
+      }
+    }
+  }
+
   const formSchema = generateFormSchema(form.fields)
   type FormSchema = z.infer<typeof formSchema>
   
   return (
     <FormRenderer
+      resetForm={resetForm}
       buttonText={form.buttonText}
       title={form.title}
       fields={form.fields}

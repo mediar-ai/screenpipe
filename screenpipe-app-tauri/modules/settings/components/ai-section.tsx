@@ -110,6 +110,7 @@ const AISection = () => {
           ai provider
         </Label>
         <AiProviderSelect
+          key={aiProvider}
           setAiProvider={setAiProvider}
           activeAiProvider={aiProvider}
         />
@@ -119,6 +120,7 @@ const AISection = () => {
           defaultValues={data.defaultValues}
           isLoading={isPending}
           onCreate={async (values) => mutate(values)}
+          onReset={async () => setAiProvider(settings.aiProviderType)}
           key={aiProvider}
           form={data.setupForm}
         />

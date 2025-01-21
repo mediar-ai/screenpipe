@@ -8,13 +8,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { FieldSchema } from "../entities/field/field-metadata";
 import { FormFieldRenderer } from "./field-renderer";
 import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
-import { Button } from "@/components/ui/button";
-import { Eraser } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FormStatus } from "../form-status";
 
 export interface FormRendererHandles<FormValues> {
-  reset: (values: FormValues) => void;
+  reset: (values?: FormValues) => void;
   getValues: () => FormValues;
 }
 
@@ -28,6 +25,7 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   hideTitle?: boolean,
   buttonText: string;
   onSubmit: SubmitHandler<FormValues>;
+  resetForm(): Promise<void>
   isLoading?: boolean;
 }
 
@@ -41,8 +39,12 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
   });
 
   useImperativeHandle(ref, () => ({
-    reset(values: FormValues) {
-      form.reset(values, { keepDefaultValues: false })
+    reset(values?: FormValues) {
+      if (values) {
+        form.reset(values, { keepDefaultValues: false })
+      } else {
+        form.reset()
+      }
     },
     getValues() {
       return form.getValues();
@@ -74,7 +76,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
               )}
             </div>
             <FormStatus
-              reset={form.reset}
+              reset={props.resetForm}
             />
           </div>
         }
