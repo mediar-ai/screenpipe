@@ -8,7 +8,6 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { FieldSchema } from "../entities/field/field-metadata";
 import { FormFieldRenderer } from "./field-renderer";
 import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
-// import { ButtonWithLoadingState } from "./components/action-button";
 
 export interface FormRendererHandles<FormValues> {
   reset: (values: FormValues) => void;
@@ -102,7 +101,6 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
         )})}
 
         <ButtonWithLoadingState
-          handleClick={undefined}
           isLoading={props.isLoading}
           label={props.buttonText}
           type={"submit"}
