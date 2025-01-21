@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { useMemo } from "react";
 
 export interface FormFieldRendererProps {
   placeholder?: string,
@@ -44,18 +45,25 @@ export const FormFieldRenderer = ({
     case FormFieldTypes.SECRET_STRING: {
       return (
         <FormSecretStringField
-          placeholder={element.placeholder}
           field={field}
         />
       ) 
     }
     case FormFieldTypes.SELECT: {
-      console.log({field})
+      const options = useMemo(() => {
+        return element.typeMeta.options?.map((option) => {
+          return {
+            value: option, 
+            label: option
+          }
+        })
+      },[])
+      
       return (
         <Select
           placeholder={element.placeholder}
           className="w-[100%]"
-          options={element.typeMeta.options}
+          options={options}
           {...field}
           onChange={(e) => field.onChange(e?.value)}
           value={{value: field.value, label: field.value}}
