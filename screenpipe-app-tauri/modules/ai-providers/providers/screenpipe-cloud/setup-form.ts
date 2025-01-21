@@ -14,55 +14,21 @@ const fields: FieldSchema[] = [
       isRegular: false,
       type: 'SELECT',
       options: [
-        {
-          value: "gpt-4o",
-          label: "gpt-4o"
-        },
-        {
-          value: "gpt-4o-mini",
-          label: "gpt-4o-mini"
-        },
-        {
-          value: "o1-mini",
-          label: "o1-mini",
-        },
-        {
-          value: "o1",
-          label: "o1"
-        },
-        {
-          value: "claude-3-5-sonnet-latest",
-          label: "claude-3-5-sonnet-latest",
-        },
-        {
-          value: "claude-3-5-haiku-latest",
-          label: "claude-3-5-haiku-latest",
-        },
-        {
-          value: "gemini-2.0-flash-exp",
-          label: "gemini-2.0-flash-exp",
-        },
-        {
-          value: "gemini-2.0-flash-exp",
-          label: "gemini-2.0-flash-exp",
-        },
-        {
-          value: "gemini-1.5-flash",
-          label: "gemini-1.5-flash",
-        },
-        {
-          value: "gemini-1.5-flash-8b",
-          label: "gemini-1.5-flash-8b"
-        },
-        {
-          value: "gemini-1.5-pro",
-          label: "gemini-1.5-pro"
-        }
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o1-mini",
+        "o1",
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro"
       ]
     }
   },
   {
-    key: 'prompt',
+    key: 'customPrompt',
     title: 'prompt',
     placeholder: 'enter your custom prompt here',
     validationMeta: {
@@ -75,7 +41,7 @@ const fields: FieldSchema[] = [
     }
   },
   {
-    key: 'maxContent',
+    key: 'aiMaxContextChars',
     title: 'max content',
     validationMeta: {
       optional: false,

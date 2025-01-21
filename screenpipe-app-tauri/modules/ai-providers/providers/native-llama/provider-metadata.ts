@@ -12,8 +12,8 @@ export const NativeLlamaProvider: ProviderMetadata = {
     savedValuesGetter: (settings: Settings) => {
         return {
             aiModel: settings.aiModel,
-            prompt: settings.customPrompt,
-            maxContent: settings.aiMaxContextChars 
+            customPrompt: settings.customPrompt,
+            aiMaxContextChars: settings.aiMaxContextChars 
         }
     } 
 }

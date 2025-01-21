@@ -3,7 +3,7 @@ import { FormSchema } from "@/modules/form/entities/form"
 
 const fields: FieldSchema[] = [
   {
-    key: 'apiKey',
+    key: 'openaiApiKey',
     title: 'API Key',
     validationMeta: {
       errorMessage: 'this field is mandatory',
@@ -28,27 +28,15 @@ const fields: FieldSchema[] = [
       isRegular: false,
       type: 'SELECT', 
       options: [
-        {
-          value: "gpt-4o",
-          label: "gpt-4o"
-        },
-        {
-          value: "gpt-4o-mini",
-          label: "gpt-4o-mini"
-        },
-        {
-          value: "o1-mini",
-          label: "o1-mini",
-        },
-        {
-          value: "o1",
-          label: "o1"
-        },
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o1-mini",
+        "o1"
       ]
     }
   },
   {
-    key: 'prompt',
+    key: 'customPrompt',
     title: 'prompt',
     placeholder: 'enter your custom prompt here',
     validationMeta: {
@@ -61,7 +49,7 @@ const fields: FieldSchema[] = [
     }
   },
   {
-    key: 'maxContent',
+    key: 'aiMaxContextChars',
     title: 'max content',
     validationMeta: {
       optional: false,

@@ -13,12 +13,11 @@ const fields: FieldSchema[] = [
     typeMeta: {
       isRegular: false,
       type: 'SELECT', 
-      options: [
-      ]
+      options: []
     }
   },
   {
-    key: 'prompt',
+    key: 'customPrompt',
     title: 'prompt',
     placeholder: 'enter your custom prompt here',
     validationMeta: {
@@ -31,7 +30,7 @@ const fields: FieldSchema[] = [
     }
   },
   {
-    key: 'maxContent',
+    key: 'aiMaxContextChars',
     title: 'max content',
     validationMeta: {
       optional: false,

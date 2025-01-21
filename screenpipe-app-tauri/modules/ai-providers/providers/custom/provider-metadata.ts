@@ -11,10 +11,10 @@ export const CustomAiProvider: ProviderMetadata = {
     setupForm: CustomSetupForm,
     savedValuesGetter: (settings: Settings) => {
         return {
-            endpointUrl: settings.aiUrl,
+            aiUrl: settings.aiUrl,
             aiModel: settings.aiModel,
-            prompt: settings.customPrompt,
-            maxContent: settings.aiMaxContextChars 
+            customPrompt: settings.customPrompt,
+            aiMaxContextChars: settings.aiMaxContextChars 
         }
     } 
 }

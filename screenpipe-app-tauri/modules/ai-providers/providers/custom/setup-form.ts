@@ -3,7 +3,7 @@ import { FormSchema } from "@/modules/form/entities/form"
 
 const fields: FieldSchema[] = [
   {
-    key: 'endpointUrl',
+    key: 'aiUrl',
     title: 'endpoint url',
     validationMeta: {
       errorMessage: 'this field is mandatory',
@@ -32,7 +32,7 @@ const fields: FieldSchema[] = [
     }
   },
   {
-    key: 'prompt',
+    key: 'customPrompt',
     title: 'prompt',
     placeholder: 'enter your custom prompt here',
     validationMeta: {
@@ -45,7 +45,7 @@ const fields: FieldSchema[] = [
     }
   },
   {
-    key: 'maxContent',
+    key: 'aiMaxContextChars',
     title: 'max content',
     validationMeta: {
       optional: false,
