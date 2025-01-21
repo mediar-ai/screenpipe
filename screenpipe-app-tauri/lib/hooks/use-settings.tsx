@@ -12,6 +12,7 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -67,7 +68,7 @@ export type Settings = {
   disableAudio: boolean;
   ignoredWindows: string[];
   includedWindows: string[];
-  aiProviderType: AIProviderType;
+  aiProviderType: AvailableAiProviders;
   aiUrl: string;
   aiMaxContextChars: number;
   fps: number;
