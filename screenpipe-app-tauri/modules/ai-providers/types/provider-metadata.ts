@@ -7,7 +7,9 @@ export const ProviderMetadata = z.object({
     title: z.string(),
     description: z.string(),
     imgSrc: z.string(),
-    setupForm: formSchema
+    setupForm: formSchema,
+    // TODOO: TYPE SAFETY
+    savedValuesGetter: z.function().args(z.any()).returns(z.any())
 })
 
 export type ProviderMetadata = z.infer<typeof ProviderMetadata>
