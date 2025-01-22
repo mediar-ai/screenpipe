@@ -30,6 +30,12 @@ const DEFAULT_SETTINGS: Settings = {
   aiMaxContextChars: 512000,
   user: {},
   analyticsEnabled: true,
+  monitorIds: [],
+  audioDevices: [],
+  audioTranscriptionEngine: "",
+  enableRealtimeAudioTranscription: false,
+  realtimeAudioTranscriptionEngine: "",
+  disableVision: false,
 };
 
 export class SettingsManager {
@@ -192,5 +198,10 @@ export class SettingsManager {
     this.settings.customSettings = this.settings.customSettings || {};
     this.settings.customSettings[namespace] = settings;
     await this.save();
+  }
+
+  async reload(): Promise<void> {
+    this.initialized = false;
+    await this.init();
   }
 }
