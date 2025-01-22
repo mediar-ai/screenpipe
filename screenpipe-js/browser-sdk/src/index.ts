@@ -74,14 +74,45 @@ class BrowserPipeImpl implements BrowserPipe {
     if (this.analyticsInitialized || !this.userId) return;
 
     try {
-      const settings = { analyticsEnabled: false }; // TODO: impl settings browser side somehow ...
+      // Connect to settings SSE stream
+      const settingsStream = new EventSource(
+        "http://localhost:11435/sse/settings"
+      );
+
+      // Get initial settings
+      const settings = await new Promise<{ analyticsEnabled: boolean }>(
+        (resolve, reject) => {
+          const timeout = setTimeout(() => {
+            settingsStream.close();
+            reject(new Error("settings stream timeout"));
+          }, 5000);
+
+          settingsStream.onmessage = (event) => {
+            clearTimeout(timeout);
+            settingsStream.close();
+            resolve(JSON.parse(event.data));
+          };
+
+          settingsStream.onerror = (error) => {
+            clearTimeout(timeout);
+            settingsStream.close();
+            reject(error);
+          };
+        }
+      );
+
       this.analyticsEnabled = settings.analyticsEnabled;
-      if (settings.analyticsEnabled) {
-        await identifyUser(this.userId, this.userProperties);
-        this.analyticsInitialized = true;
-      }
     } catch (error) {
-      console.error("failed to fetch settings:", error);
+      console.error(
+        "failed to fetch settings, defaulting to analytics enabled:",
+        error
+      );
+      this.analyticsEnabled = false; // Default to false if fetch fails
+    }
+
+    if (this.analyticsEnabled) {
+      await identifyUser(this.userId, this.userProperties);
+      this.analyticsInitialized = true;
     }
   }
 

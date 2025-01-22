@@ -121,9 +121,9 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             cache_dir: PathBuf::from("frame_cache"),
-            max_cache_size_gb: 3.0,
-            frame_retention_days: 1,
-            compression_quality: 50,
+            max_cache_size_gb: 10.0,
+            frame_retention_days: 7,
+            compression_quality: 35,
         }
     }
 }
@@ -654,8 +654,12 @@ async fn extract_frame(
     let temp_dir = tempfile::tempdir()?;
     let output_pattern = temp_dir.path().join("frame%d.jpg");
 
-    // Calculate frame interval based on target FPS
-    let frame_interval = (source_fps / 0.1).round() as i64; // Using 0.1 as target FPS
+    // Reduce frame rate even further for older content
+    let frame_interval = if is_older_than_24h(&tasks[0].0.timestamp) {
+        (source_fps / 0.05).round() as i64 // 1 frame every 20 seconds for older content
+    } else {
+        (source_fps / 0.1).round() as i64 // 1 frame every 10 seconds for recent content
+    };
 
     debug!(
         "extracting frames with interval {} (source: {}fps, target: {}fps)",
@@ -688,21 +692,23 @@ async fn extract_frame(
         "-i",
         &video_file_path,
         "-vf",
-        &format!("{},format=yuv420p,scale=iw:ih", select_filter),
+        &format!("{},format=yuv420p,scale=iw*0.8:ih*0.8", select_filter),
         "-strict",
         "unofficial",
         "-c:v",
         "mjpeg",
         "-q:v",
-        "8",
-        "-qmin",
-        "8",
-        "-qmax",
         "12",
+        "-qmin",
+        "12",
+        "-qmax",
+        "15",
         "-vsync",
         "0",
         "-threads",
-        "2",
+        "1",         // Limit to single thread
+        "-cpu-used", // Faster encoding
+        "4",
         output_pattern.to_str().unwrap(),
     ]);
 
@@ -990,4 +996,8 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 
     debug!("detected fps from video metadata: {}", fps);
     Ok(fps)
+}
+
+fn is_older_than_24h(timestamp: &DateTime<Utc>) -> bool {
+    Utc::now() - *timestamp > Duration::hours(24)
 }

@@ -1,33 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Settings } from "@screenpipe/browser";
+import { getDefaultSettings, type Settings } from "@screenpipe/browser";
 
 export function useSettings() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-  };
+  const defaultSettings = getDefaultSettings();
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -204,4 +181,3 @@ export function useSettings() {
     resetSettings,
   };
 }
-
