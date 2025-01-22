@@ -52,7 +52,7 @@ export function ObsidianSettings() {
     if (settings?.customSettings?.obsidian?.prompt) {
       setCustomPrompt(settings.customSettings.obsidian.prompt);
     }
-  }, [settings]);
+  }, [settings?.customSettings?.obsidian?.prompt]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
