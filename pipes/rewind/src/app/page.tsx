@@ -45,6 +45,11 @@ interface TimeRange {
   end: Date;
 }
 
+// Add this easing function at the top level
+const easeOutCubic = (x: number): number => {
+  return 1 - Math.pow(1 - x, 3);
+};
+
 export default function Timeline() {
   const [currentFrame, setCurrentFrame] = useState<DeviceFrameResponse | null>(
     null
@@ -401,6 +406,37 @@ export default function Timeline() {
     }
   }, [currentIndex]);
 
+  const animateToIndex = (targetIndex: number, duration: number = 1000) => {
+    const startIndex = currentIndex;
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Apply easing
+      const easedProgress = easeOutCubic(progress);
+
+      // Calculate the current position
+      const newIndex = Math.round(
+        startIndex + (targetIndex - startIndex) * easedProgress
+      );
+
+      // Update the frame
+      setCurrentIndex(newIndex);
+      if (frames[newIndex]) {
+        setCurrentFrame(frames[newIndex].devices[0]);
+      }
+
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  };
+
   return (
     <TimelineProvider>
       <div
@@ -423,15 +459,12 @@ export default function Timeline() {
               onJumpToday={handleJumpToday}
               className="shadow-lg"
             />
-            {/* <TimelineSearch
+            <TimelineSearch
               frames={frames}
               onResultSelect={(index) => {
-                setCurrentIndex(index);
-                if (frames[index]) {
-                  setCurrentFrame(frames[index].devices[0]);
-                }
+                animateToIndex(index);
               }}
-            /> */}
+            />
           </div>
         </div>
 
