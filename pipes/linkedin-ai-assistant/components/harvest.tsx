@@ -149,12 +149,12 @@ export function HarvestClosestConnections() {
             const message = data.connectionsSent >= 35
               ? <span className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-gray-500" />
-                  <span>daily limit of {data.connectionsSent} connections reached</span>
+                  <span>daily limit reached, next harvest at</span>
                   <span className="font-medium">{formattedTime}</span>
                 </span>
               : <span className="flex items-center gap-2">
                   <Timer className="h-4 w-4 text-gray-500" />
-                  <span>harvesting cooldown until</span>
+                  <span>next harvest scheduled for</span>
                   <span className="font-medium">{formattedTime}</span>
                 </span>;
             setStatus(message);
@@ -170,25 +170,31 @@ export function HarvestClosestConnections() {
     loadInitialState();
   }, []);
 
-  // Stats polling without condition
+  // Stats polling stats, load connections
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/harvest/stats");
+        const res = await fetch("/api/harvest/stats");  // Changed from /api/harvest/stats
         if (!res.ok) return;
         const data = await res.json();
         
-        // update stats
+        // Update both stats and status
         if (data.stats) {
           setStats(data.stats);
         }
+        if (data.harvestingStatus) {
+          setHarvestingStatus(data.harvestingStatus);
+        }
+        if (data.nextHarvestTime) {
+          setNextHarvestTime(data.nextHarvestTime);
+        }
       } catch (error) {
-        console.error("failed to fetch stats:", error);
+        console.error("failed to fetch status:", error);
       }
     }, 2000);
-
+  
     return () => clearInterval(interval);
-  }, []); // Empty dependency array since we want it to run always
+  }, []);
 
   // Add this useEffect near your other effects
   useEffect(() => {
@@ -219,22 +225,6 @@ export function HarvestClosestConnections() {
       setIsWithdrawing(stats.withdrawStatus.isWithdrawing);
     }
   }, [stats.withdrawStatus?.isWithdrawing]);
-
-  // Add effect to auto-restart after cooldown
-  useEffect(() => {
-    if (!nextHarvestTime || harvestingStatus !== 'cooldown') return;
-
-    const timeUntilNextHarvest = new Date(nextHarvestTime).getTime() - Date.now();
-    if (timeUntilNextHarvest <= 0) return;
-
-    console.log('scheduling auto-restart after cooldown');
-    const timer = setTimeout(() => {
-      console.log('cooldown finished, auto-restarting harvest');
-      startHarvesting();
-    }, timeUntilNextHarvest);
-
-    return () => clearTimeout(timer);
-  }, [nextHarvestTime, harvestingStatus]);
 
   // Simplify the updateConnectionsStatus function
   const updateConnectionsStatus = async () => {
