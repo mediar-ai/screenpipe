@@ -23,6 +23,7 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   formZodSchema: z.ZodObject<ZodRawShape>;
   showInternalButton?: boolean;
   hideTitle?: boolean,
+  isDirty?: boolean,
   buttonText: string;
   onSubmit: SubmitHandler<FormValues>;
   resetForm(): Promise<void>
@@ -76,6 +77,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
               )}
             </div>
             <FormStatus
+              isDirty={props.isDirty}
               reset={props.resetForm}
             />
           </div>

@@ -90,12 +90,12 @@ const AISection = () => {
     }
   })
 
-  const { mutateAsync, isPending } = useMutation({
+  const { 
+    mutateAsync: updateSettingsAsync, 
+    isPending: updateSettingsAsyncPending
+  } = useMutation({
     mutationFn: async (values: Partial<Settings>) => {
       try {
-        if (AiProviders[aiProvider].credentialValidation) {
-          await AiProviders[aiProvider].credentialValidation(values)
-        }
         updateSettings({
           aiProviderType: aiProvider,
           ...values
@@ -118,6 +118,33 @@ const AISection = () => {
     }
   })
 
+  const { 
+    mutateAsync: credentialValidation, 
+    isPending:  credentialValidationPending
+  } = useMutation({
+    mutationFn: async (values: Partial<Settings>) => {
+      try {
+        if (AiProviders[aiProvider].credentialValidation) {
+          await AiProviders[aiProvider].credentialValidation(values)
+        }
+      } catch (e: any) {
+        throw new Error(e.message)
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: "credential validation successful",
+      });
+    }, 
+    onError: (e) => {
+      toast({
+        title: "credential validation failed!",
+        description: e.message ? e.message : 'please try again.',
+        variant: 'destructive'
+      });
+    }
+  })
+
   const componentsVisibility = useMemo(() => {
     if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !user) {
       return {showForm: false, showLoginStep: true}
@@ -125,7 +152,12 @@ const AISection = () => {
 
     return {showForm: true}
   },[aiProvider, user])
-  
+
+  async function submitChanges(values: Partial<Settings>) {
+    await credentialValidation(values)
+    await updateSettingsAsync(values)
+  }
+
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">ai settings</h1>
@@ -139,6 +171,7 @@ const AISection = () => {
           activeAiProvider={aiProvider}
         />
       </div>
+
       {componentsVisibility.showLoginStep && (
         <div className="w-full flex flex-col items-center space-y-3">
           <h1>
@@ -154,11 +187,13 @@ const AISection = () => {
           </Button>
         </div>
       )}
+      
       {(data?.setupForm && componentsVisibility.showForm) &&
         <Form
+          isDirty={!(aiProvider === settings.aiProviderType)}
           defaultValues={data.defaultValues}
-          isLoading={isPending}
-          onSubmit={mutateAsync}
+          isLoading={updateSettingsAsyncPending || credentialValidationPending}
+          onSubmit={submitChanges}
           onReset={async () => setAiProvider(settings.aiProviderType)}
           key={aiProvider}
           form={data.setupForm}

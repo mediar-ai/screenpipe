@@ -6,12 +6,14 @@ import { generateFormSchema } from "../utils/zod-schema-generator";
 import { FormSchema } from '../entities/form';
 
 export default function Form({
+  isDirty,
   onSubmit,
   onReset,
   isLoading,
   form,
   defaultValues,
 } : {
+  isDirty?: boolean,
   onSubmit?: (values: any) => Promise<void>;
   onReset?: () => Promise<void>;
   isLoading?: boolean;
@@ -50,6 +52,7 @@ export default function Form({
   
   return (
     <FormRenderer
+      isDirty={isDirty}
       resetForm={resetForm}
       buttonText={form.buttonText}
       title={form.title}

@@ -4,13 +4,15 @@ import { Eraser } from "lucide-react"
 import { FieldValues, UseFormReset, useFormState } from "react-hook-form"
 
 export const FormStatus = <FormValues extends FieldValues>({
+    isDirty: externalIsDirty,
     reset
 } : {
-    reset: UseFormReset<FormValues>
+    reset: UseFormReset<FormValues>,
+    isDirty?: boolean
 }) => {
-    const { isDirty } = useFormState()
+    const { isDirty, dirtyFields } = useFormState()
 
-    if (!isDirty) return null
+    if (!isDirty && !externalIsDirty) return null
 
     return (
         <div className="flex items-center space-x-2">
