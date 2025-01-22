@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@screenpipe/browser": "0.1.22",
+    "@screenpipe/browser": "0.1.24",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-popover": "^1.1.1",
     "@radix-ui/react-slot": "1.1.0",

@@ -1,36 +1,14 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { flattenObject, unflattenObject } from "../../common/utils";
+import {
+  flattenObject,
+  getDefaultSettings,
+  unflattenObject,
+} from "../../common/utils";
 import type { Settings } from "../../common/types";
 
-const DEFAULT_SETTINGS: Settings = {
-  openaiApiKey: "",
-  deepgramApiKey: "",
-  aiModel: "gpt-4",
-  aiUrl: "https://api.openai.com/v1",
-  customPrompt: `Rules:
-  - You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
-  - Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
-  - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
-  - Always answer my question/intent, do not make up things`,
-  port: 3030,
-  dataDir: "default",
-  disableAudio: false,
-  ignoredWindows: [],
-  includedWindows: [],
-  aiProviderType: "openai",
-  embeddedLLM: {
-    enabled: false,
-    model: "llama3.2:1b-instruct-q4_K_M",
-    port: 11438,
-  },
-  enableFrameCache: true,
-  enableUiMonitoring: false,
-  aiMaxContextChars: 512000,
-  user: {},
-  analyticsEnabled: true,
-};
+const DEFAULT_SETTINGS = getDefaultSettings();
 
 export class SettingsManager {
   private settings: Settings;
@@ -92,7 +70,7 @@ export class SettingsManager {
   }
 
   async init(): Promise<void> {
-    if (this.initialized) return;
+    // if (this.initialized) return;
 
     if (!fs || !path) throw new Error("failed to load required modules");
 
