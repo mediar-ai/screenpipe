@@ -9,6 +9,7 @@ import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
 import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
+import { TimelineSearch } from "@/components/timeline/timeline-search";
 
 export interface StreamTimeSeriesResponse {
   timestamp: string;
@@ -60,14 +61,14 @@ export default function Timeline() {
   );
   const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState({
+  const [aiPanelPosition, setAiPanelPosition] = useState({
     x: 0,
     y: 0,
   });
   const [currentDate, setCurrentDate] = useState(new Date());
 
   useEffect(() => {
-    setPosition({
+    setAiPanelPosition({
       x: window.innerWidth - 400,
       y: window.innerHeight / 4,
     });
@@ -113,10 +114,10 @@ export default function Timeline() {
       try {
         const data = JSON.parse(event.data);
         if (data === "keep-alive-text") {
-          setError(null);
-          setIsLoading(false);
-          setMessage(
-            "please wait, we are collecting data to stream timeline..."
+          setError((prev) => (prev !== null ? null : prev));
+          setIsLoading((prev) => (prev !== false ? false : prev));
+          setMessage((prev) =>
+            prev !== "please wait..." ? "please wait..." : prev
           );
           return;
         }
@@ -180,7 +181,6 @@ export default function Timeline() {
       }
 
       console.error("eventsource error:", error);
-      setError("connection lost. retrying...");
     };
 
     eventSource.onopen = () => {
@@ -212,19 +212,18 @@ export default function Timeline() {
   const handleScroll = useMemo(
     () =>
       throttle((e: WheelEvent) => {
-        const isWithinAiPanel = document
-          .querySelector(".ai-panel")
-          ?.contains(e.target as Node);
-        const isWithinAudioPanel = document
-          .querySelector(".audio-transcript-panel")
-          ?.contains(e.target as Node);
-        const isWithinTimelineDialog = document
-          .querySelector('[role="dialog"]')
-          ?.contains(e.target as Node);
+        // Move these checks outside the throttle to improve performance
+        const isWithinAiPanel =
+          e.target instanceof Node &&
+          document.querySelector(".ai-panel")?.contains(e.target);
+        const isWithinAudioPanel =
+          e.target instanceof Node &&
+          document.querySelector(".audio-transcript-panel")?.contains(e.target);
+        const isWithinTimelineDialog =
+          e.target instanceof Node &&
+          document.querySelector('[role="dialog"]')?.contains(e.target);
 
         if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
-          e.preventDefault();
-          e.stopPropagation();
           return;
         }
 
@@ -234,20 +233,23 @@ export default function Timeline() {
         const scrollSensitivity = 1;
         const delta = -Math.sign(e.deltaY) / scrollSensitivity;
 
-        const newIndex = Math.min(
-          Math.max(
-            0,
-            currentIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta))
-          ),
-          frames.length - 1
-        );
+        setCurrentIndex((prevIndex) => {
+          const newIndex = Math.min(
+            Math.max(
+              0,
+              prevIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta))
+            ),
+            frames.length - 1
+          );
 
-        if (newIndex !== currentIndex) {
-          setCurrentIndex(newIndex);
-          frames[newIndex] && setCurrentFrame(frames[newIndex].devices[0]);
-        }
+          if (newIndex !== prevIndex && frames[newIndex]) {
+            setCurrentFrame(frames[newIndex].devices[0]);
+          }
+
+          return newIndex;
+        });
       }, 16),
-    [currentIndex, frames]
+    [frames] // Only depend on frames length changes
   );
 
   const timePercentage = useMemo(() => {
@@ -292,14 +294,6 @@ export default function Timeline() {
 
   const handleRefresh = () => {
     window.location.reload();
-    setFrames([]);
-    setCurrentFrame(null);
-    setCurrentIndex(0);
-    setError(null);
-    setMessage(null);
-    setIsLoading(false);
-    setMessage("connecting to the server...");
-    setupEventSource();
   };
 
   useEffect(() => {
@@ -405,7 +399,7 @@ export default function Timeline() {
 
       setCurrentDate(localDate);
     }
-  }, [currentIndex, frames]);
+  }, [currentIndex]);
 
   return (
     <TimelineProvider>
@@ -422,12 +416,23 @@ export default function Timeline() {
         }}
       >
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-          <TimelineControls
-            currentDate={currentDate}
-            onDateChange={handleDateChange}
-            onJumpToday={handleJumpToday}
-            className="shadow-lg"
-          />
+          <div className="flex items-center gap-4">
+            <TimelineControls
+              currentDate={currentDate}
+              onDateChange={handleDateChange}
+              onJumpToday={handleJumpToday}
+              className="shadow-lg"
+            />
+            {/* <TimelineSearch
+              frames={frames}
+              onResultSelect={(index) => {
+                setCurrentIndex(index);
+                if (frames[index]) {
+                  setCurrentFrame(frames[index].devices[0]);
+                }
+              }}
+            /> */}
+          </div>
         </div>
 
         <div className="flex-1 relative min-h-0">
@@ -516,8 +521,8 @@ export default function Timeline() {
           </div>
 
           <AIPanel
-            position={position}
-            onPositionChange={setPosition}
+            position={aiPanelPosition}
+            onPositionChange={setAiPanelPosition}
             onClose={() => {
               setIsAiPanelExpanded(false);
             }}
