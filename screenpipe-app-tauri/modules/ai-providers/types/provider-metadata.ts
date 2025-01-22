@@ -9,7 +9,8 @@ export const ProviderMetadata = z.object({
     imgSrc: z.string(),
     setupForm: formSchema,
     // TODOO: TYPE SAFETY
-    savedValuesGetter: z.function().args(z.any()).returns(z.any())
+    savedValuesGetter: z.function().args(z.any()).returns(z.any()),
+    credentialValidation: z.function().args(z.any()).returns(z.any())
 })
 
 export type ProviderMetadata = z.infer<typeof ProviderMetadata>
