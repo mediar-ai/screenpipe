@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import path from "path";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { debounce } from "lodash";
 
 // This interface represents the shape of obsidian settings
 interface ObsidianSettings {
@@ -47,6 +48,17 @@ export function ObsidianSettings() {
   console.log("settings", settings);
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const [testLogLoading, setTestLogLoading] = useState(false);
+  const [pathValidation, setPathValidation] = useState<{
+    isValid: boolean;
+    message: string;
+    validatedPath: string | null;
+    isChecking: boolean;
+  }>({
+    isValid: false,
+    message: "",
+    validatedPath: null,
+    isChecking: false,
+  });
 
   useEffect(() => {
     if (settings?.customSettings?.obsidian?.prompt) {
@@ -290,6 +302,91 @@ export function ObsidianSettings() {
     return Boolean(settings.customSettings?.obsidian?.path?.trim());
   };
 
+  const validatePath = useCallback(
+    debounce(async (inputPath: string) => {
+      if (!inputPath?.trim()) {
+        setPathValidation({
+          isValid: false,
+          message: "please enter a path",
+          validatedPath: null,
+          isChecking: false,
+        });
+        return;
+      }
+
+      setPathValidation((prev) => ({ ...prev, isChecking: true }));
+
+      try {
+        // Remove quotes and normalize path separators to forward slashes
+        let currentPath = inputPath.replace(/['"]/g, "").replace(/\\/g, "/");
+        let foundPath = null;
+
+        // Handle Windows root paths (e.g., C:/)
+        const isWindowsPath = /^[a-zA-Z]:\//i.test(currentPath);
+        const rootPath = isWindowsPath ? currentPath.slice(0, 3) : "/";
+
+        // First check the input path itself
+        const hasObsidianFolder = await fetch("/api/check-folder", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: `${currentPath}/.obsidian` }),
+        })
+          .then((r) => r.json())
+          .then((r) => r.exists);
+
+        if (hasObsidianFolder) {
+          foundPath = currentPath;
+        } else {
+          // If not found, walk up the directory tree
+          while (currentPath !== rootPath) {
+            const parentDir =
+              currentPath.split("/").slice(0, -1).join("/") || rootPath;
+            const obsidianPath = `${parentDir}/.obsidian`;
+
+            const hasParentObsidianFolder = await fetch("/api/check-folder", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ path: obsidianPath }),
+            })
+              .then((r) => r.json())
+              .then((r) => r.exists);
+
+            if (hasParentObsidianFolder) {
+              foundPath = parentDir;
+              break;
+            }
+            currentPath = parentDir;
+          }
+        }
+
+        if (foundPath) {
+          setPathValidation({
+            isValid: true,
+            message: `found obsidian vault at "${foundPath}"`,
+            // Store the cleaned path without quotes
+            validatedPath: currentPath,
+            isChecking: false,
+          });
+        } else {
+          setPathValidation({
+            isValid: false,
+            message: "no obsidian vault found in path or parent directories",
+            validatedPath: null,
+            isChecking: false,
+          });
+        }
+      } catch (err) {
+        setPathValidation({
+          isValid: false,
+          message: "error validating path",
+          validatedPath: null,
+          isChecking: false,
+        });
+      }
+    }, 500),
+    []
+  );
+
   if (loading) {
     return (
       <div className="w-full max-w-4xl mx-auto space-y-8">
@@ -349,13 +446,25 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="path">obsidian vault path</Label>
               <div className="flex gap-2">
-                <Input
-                  id="path"
-                  name="path"
-                  defaultValue={settings.customSettings?.obsidian?.path}
-                  placeholder="/path/to/vault"
-                  className="flex-1"
-                />
+                <div className="flex-1 relative">
+                  <Input
+                    id="path"
+                    name="path"
+                    defaultValue={settings.customSettings?.obsidian?.path}
+                    placeholder="/path/to/vault"
+                    className={`${
+                      pathValidation.isValid
+                        ? "border-green-500"
+                        : pathValidation.message
+                        ? "border-red-500"
+                        : ""
+                    }`}
+                    onChange={(e) => validatePath(e.target.value)}
+                  />
+                  {pathValidation.isChecking && (
+                    <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -371,17 +480,26 @@ export function ObsidianSettings() {
                   onClick={openObsidianVault}
                   className="px-3"
                   title="open in obsidian"
-                  disabled={!isVaultPathSet()}
+                  disabled={!pathValidation.isValid}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               </div>
+              {pathValidation.message && (
+                <p
+                  className={`text-sm ${
+                    pathValidation.isValid ? "text-green-500" : "text-red-500"
+                  }`}
+                >
+                  {pathValidation.message}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="interval">sync interval (minutes)</Label>
               <Input
-                disabled={!isVaultPathSet()}
+                disabled={!pathValidation.isValid}
                 id="interval"
                 name="interval"
                 type="number"
@@ -399,7 +517,7 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="pageSize">page size</Label>
               <Input
-                disabled={!isVaultPathSet()}
+                disabled={!pathValidation.isValid}
                 id="pageSize"
                 name="pageSize"
                 type="number"
@@ -412,7 +530,7 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="aiModel">ollama/embedded ai model</Label>
               <OllamaModelsList
-                disabled={!isVaultPathSet()}
+                disabled={!pathValidation.isValid}
                 defaultValue={
                   settings.customSettings?.obsidian?.aiModel ||
                   "llama3.2:3b-instruct-q4_K_M"
@@ -436,19 +554,20 @@ export function ObsidianSettings() {
               <FileSuggestTextarea
                 value={customPrompt || ""}
                 setValue={setCustomPrompt}
-                disabled={!isVaultPathSet()}
+                disabled={!pathValidation.isValid}
               />
               <p className="text-xs text-muted-foreground">
                 make sure to keep the prompt within llm context window size.
                 <br />
-                protip: use the @mention feature to link to files in your vault as context.
+                protip: use the @mention feature to link to files in your vault
+                as context.
               </p>
             </div>
 
             <Button
               className="w-full"
               type="submit"
-              // disabled={!isVaultPathSet()}
+              disabled={!pathValidation.isValid}
             >
               <FileCheck className="mr-2 h-4 w-4" />
               save settings
@@ -459,7 +578,7 @@ export function ObsidianSettings() {
             <Button
               onClick={testLog}
               variant="outline"
-              disabled={testLogLoading || !isVaultPathSet()}
+              disabled={testLogLoading || !pathValidation.isValid}
               className="w-full"
             >
               {testLogLoading ? (
@@ -501,9 +620,7 @@ export function ObsidianSettings() {
             <Button
               onClick={testIntelligence}
               variant="outline"
-              disabled={
-                intelligenceLoading || !settings.customSettings?.obsidian?.path
-              }
+              disabled={intelligenceLoading || !pathValidation.isValid}
             >
               <Brain className="mr-2 h-4 w-4" />
               {intelligenceLoading ? "analyzing..." : "analyze relationships"}
