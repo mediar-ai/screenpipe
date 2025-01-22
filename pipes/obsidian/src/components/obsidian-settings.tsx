@@ -448,7 +448,7 @@ export function ObsidianSettings() {
             <Button
               className="w-full"
               type="submit"
-              disabled={!isVaultPathSet()}
+              // disabled={!isVaultPathSet()}
             >
               <FileCheck className="mr-2 h-4 w-4" />
               save settings
