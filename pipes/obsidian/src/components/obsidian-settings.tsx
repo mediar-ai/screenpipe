@@ -59,12 +59,27 @@ export function ObsidianSettings() {
     validatedPath: null,
     isChecking: false,
   });
+  const [suggestedPaths, setSuggestedPaths] = useState<string[]>([]);
 
   useEffect(() => {
     if (settings?.customSettings?.obsidian?.prompt) {
       setCustomPrompt(settings.customSettings.obsidian.prompt);
     }
   }, [settings?.customSettings?.obsidian?.prompt]);
+
+  useEffect(() => {
+    const fetchPaths = async () => {
+      try {
+        const res = await fetch("/api/obsidian-paths");
+        const data = await res.json();
+        setSuggestedPaths(data.paths);
+      } catch (err) {
+        console.warn("failed to fetch obsidian paths:", err);
+      }
+    };
+
+    fetchPaths();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -464,6 +479,27 @@ export function ObsidianSettings() {
                   {pathValidation.isChecking && (
                     <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
                   )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {suggestedPaths.map((path) => (
+                      <Badge
+                        key={path}
+                        variant="outline"
+                        className="cursor-pointer hover:bg-muted"
+                        onClick={() => {
+                          const input = document.getElementById(
+                            "path"
+                          ) as HTMLInputElement;
+                          if (input) {
+                            input.value = path;
+                            validatePath(path);
+                          }
+                        }}
+                        title={path}
+                      >
+                        {path.split(/(\/|\\)/).pop()}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
                 <Button
                   type="button"
