@@ -3,6 +3,7 @@ import { useState } from "react";
 import { EyeIcon, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "./icon-button";
 
 export default function FormSecretStringField({
   field
@@ -20,28 +21,12 @@ export default function FormSecretStringField({
           autoComplete="off"
           {...field}
         />
-        <Button
-          type="button"
+        <IconButton
           onClick={() => setVisibility(!visibility)}
-          size={"icon"}
-          variant={'ghost'}
-          className="border min-w-[40px] min-h-[40px]"
-        >
-          { visibility 
-            ? <EyeIcon className="h-5 w-5" strokeWidth={1.5}/>
-            : <EyeOff className="h-5 w-5" strokeWidth={1.5}/>
-          }
-        </Button>
-        {/* {isLast && showInternalButton && (
-          <Button
-            type="submit"
-            data-dirty={form.formState.isDirty}
-            className="mb-1 data-[dirty=false]:hidden "
-            // loading={isLoading}
-          >
-            Submit
-          </Button>
-        )} */}
+          defaultToggleValue={visibility}
+          OnComponent={EyeIcon}
+          OffComponent={EyeOff}
+        />
       </div>
     );
 }
