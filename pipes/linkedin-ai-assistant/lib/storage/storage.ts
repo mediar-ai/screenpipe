@@ -504,3 +504,41 @@ export async function saveRestrictionInfo(info: {
     await saveToChrome('linkedin_assistant_connections', store);
     console.log('saved restriction info:', info);
 }
+
+// Add this interface
+interface CronLog {
+  timestamp: string;
+  action: string;
+  result: string;
+  nextHarvestTime?: string;
+}
+
+// Add these functions
+export async function saveCronLog(log: CronLog) {
+  const logPath = path.join(STORAGE_DIR, 'cron-logs.json');
+  let logs: CronLog[] = [];
+
+  try {
+    const data = await fs.readFile(logPath, 'utf-8');
+    logs = JSON.parse(data);
+  } catch {
+    // File doesn't exist yet, start with empty array
+  }
+
+  // Add new log and keep last 100 entries
+  logs.unshift(log);
+  logs = logs.slice(0, 100);
+
+  await fs.writeFile(logPath, JSON.stringify(logs, null, 2));
+  console.log('saved cron log:', log);
+}
+
+export async function loadCronLogs(): Promise<CronLog[]> {
+  const logPath = path.join(STORAGE_DIR, 'cron-logs.json');
+  try {
+    const data = await fs.readFile(logPath, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
