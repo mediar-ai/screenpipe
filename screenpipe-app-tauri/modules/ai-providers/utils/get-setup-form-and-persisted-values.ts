@@ -23,13 +23,19 @@ export async function getSetupFormAndPersistedValues({
         const formWithoutOptions = AiProviders[selectedAiProvider].setupForm
         const ollamaModels = await getOllamaModels()
 
-        formWithoutOptions.fields[0].typeMeta.options = ollamaModels.models.map((model) => model.name)
+        // Find aiModel field and inject options
+        formWithoutOptions.fields.forEach((field, index) => {
+            if (!field.typeMeta.isRegular && field.key === 'aiModel') {
+                formWithoutOptions.fields[index].typeMeta.options = ollamaModels.models.map((model) => model.name)
+            }
+        })
+
         setupForm = {...formWithoutOptions}
     }
 
     // 2. Define default values
     if (selectedAiProvider !== activeAiProvider) {
-        defaultValues = undefined
+        defaultValues = await AiProviders[selectedAiProvider].defaultValuesGetter() as Record<string, string>
     } else {
         defaultValues = await AiProviders[selectedAiProvider].savedValuesGetter(settings) as Record<string, string>
     }
