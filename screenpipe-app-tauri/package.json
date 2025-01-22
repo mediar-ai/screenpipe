@@ -72,7 +72,8 @@
     "tailwindcss-animate": "^1.0.7",
     "tauri-plugin-store-api": "^0.0.0",
     "use-debounce": "^10.0.4",
-    "use-immer": "^0.11.0"
+    "use-immer": "^0.11.0",
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.13",

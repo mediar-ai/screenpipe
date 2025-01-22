@@ -42,6 +42,7 @@ import { Progress } from "@/components/ui/progress";
 import supabase from "@/lib/supabase/client";
 import { CreditPurchaseDialog } from "./store/credit-purchase-dialog";
 import localforage from "localforage";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
 export interface Pipe {
   enabled: boolean;
@@ -137,13 +138,13 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     paid: false,
   },
   {
-    id: "timeline",
-    name: "timeline",
+    id: "rewind",
+    name: "rewind",
     description:
-      "visualize your day with a beautiful AI-powered timeline of your activities, perfect for time tracking and productivity analysis",
-    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline",
-    credits: 0,
-    paid: false,
+      "rewind-like interface meet cursor-like AI chat interface",
+    url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/rewind",
+    credits: 20,
+    paid: true,
   },
   {
     id: "identify-speakers",
@@ -296,6 +297,7 @@ const PipeStore: React.FC = () => {
   const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const MAX_STARTUP_ATTEMPTS = 20; // Will give up after ~20 seconds (20 attempts * 2 second interval)
   const [coreReadmes, setCoreReadmes] = useState<Record<string, string>>({});
+  const { open: openStatusDialog } = useStatusDialog();
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -1457,6 +1459,33 @@ const PipeStore: React.FC = () => {
       return false;
     }
   };
+
+  // Add this empty state render function
+  const renderEmptyState = () => {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
+        <div className="text-center space-y-4">
+          <h3 className="text-lg font-medium">screenpipe is not recording</h3>
+          <p className="text-sm text-muted-foreground">
+            please start the screenpipe service to browse and manage pipes
+          </p>
+          <Button
+            variant="outline"
+            onClick={openStatusDialog}
+            className="gap-2"
+          >
+            <Power className="h-4 w-4" />
+            check service status
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // Add this check at the start of the component render
+  if (health?.status === "error") {
+    return renderEmptyState();
+  }
 
   if (selectedPipe) {
     return renderPipeDetails();

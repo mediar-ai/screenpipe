@@ -29,7 +29,7 @@ use tauri_plugin_store::StoreBuilder;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
@@ -48,6 +48,7 @@ mod sidecar;
 mod store;
 mod tray;
 mod updates;
+mod disk_usage;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
@@ -61,7 +62,6 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-use tauri_plugin_sentry::sentry;
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -481,7 +481,7 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    if data_dir == "default" {
+    if data_dir == "default" || data_dir.is_empty() {
         Ok(default_path)
     } else {
         get_base_dir(app, Some(data_dir))
@@ -668,6 +668,7 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::show_meetings,
             commands::show_identify_speakers,
+            commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
             update_global_shortcuts,
@@ -974,12 +975,6 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            // if first time user do t start sidecar yet
-            let mut is_first_time_user = store
-                .get("isFirstTimeUser")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-
             // double-check if they have any files in the data dir
             let data_dir = app
                 .path()
@@ -993,28 +988,21 @@ async fn main() {
 
             info!("has_files: {}", has_files);
 
-            if has_files {
-                is_first_time_user = false;
-                // Update the store with the new value
-                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
-                store.save().unwrap();
-            }
-
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            info!("is_first_time_user: {}", is_first_time_user);
             info!("use_dev_mode: {}", use_dev_mode);
 
             info!(
                 "will start sidecar: {}",
-                !use_dev_mode && !is_first_time_user
+                !use_dev_mode && has_files
             );
 
-            if !use_dev_mode && !is_first_time_user {
+            // if non dev mode and previously started sidecar, start sidecar
+            if !use_dev_mode && has_files {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {
@@ -1077,7 +1065,7 @@ async fn main() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle).await {
-                    error!("Failed to initialize global shortcuts: {}", e);
+                    warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });
             Ok(())

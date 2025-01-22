@@ -5,11 +5,19 @@ import { ChatMessage } from "@/components/chat-message";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Send, Square, X, GripHorizontal } from "lucide-react";
+import { Loader2, Send, Square, X, GripHorizontal, Bot } from "lucide-react";
 import { StreamTimeSeriesResponse } from "@/app/page";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { Agent } from "./agents";
 import { pipe, type Settings } from "@screenpipe/browser";
+import { useAiProvider } from "@/lib/hooks/use-ai-provider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 interface AIPanelProps {
   position: { x: number; y: number };
@@ -17,7 +25,6 @@ interface AIPanelProps {
   onClose: () => void;
   frames: StreamTimeSeriesResponse[];
   agents: Agent[];
-  settings: Settings;
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }
@@ -28,10 +35,10 @@ export function AIPanel({
   onClose,
   frames,
   agents,
-  settings,
   isExpanded,
   onExpandedChange,
 }: AIPanelProps) {
+  const { settings } = useSettings();
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -50,9 +57,27 @@ export function AIPanel({
   const resizerRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const { selectionRange, setSelectionRange } = useTimelineSelection();
+  const { isAvailable, error } = useAiProvider(settings);
+
+  // Add abort controller ref
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    setOsType(window.navigator.platform);
+    const detectOS = () => {
+      // Try using modern API first
+      if ("userAgentData" in navigator) {
+        // @ts-ignore - userAgentData is not yet in all TypeScript definitions
+        return navigator.userAgentData.platform;
+      }
+      // Fallback to user agent string parsing
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      if (userAgent.includes("mac")) return "macos";
+      if (userAgent.includes("win")) return "windows";
+      if (userAgent.includes("linux")) return "linux";
+      return "unknown";
+    };
+
+    setOsType(detectOS());
   }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -150,12 +175,38 @@ export function AIPanel({
     setSelectedAgent(newAgent);
   };
 
+  const handleClose = () => {
+    // Abort any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsAiLoading(false);
+    setIsStreaming(false);
+    setChatMessages([]);
+    setAiInput("");
+    onClose();
+    setSelectionRange(null);
+  };
+
+  const handleStopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsStreaming(false);
+      setIsAiLoading(false);
+    }
+  };
+
   const handleAiSubmit = async (e: React.FormEvent) => {
     pipe.captureMainFeatureEvent("ai-panel", {
       action: "ai-submit",
     });
     e.preventDefault();
     if (!selectionRange || !aiInput.trim()) return;
+
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
 
     const userMessage = {
       id: generateId(),
@@ -165,6 +216,7 @@ export function AIPanel({
     setChatMessages((prev) => [...prev, userMessage]);
     setAiInput("");
     setIsAiLoading(true);
+    setIsStreaming(true);
 
     try {
       const relevantFrames = frames.filter((frame) => {
@@ -201,27 +253,25 @@ export function AIPanel({
               { id: generateId(), role: "assistant", content: currentResponse },
             ]);
           },
+          signal: abortControllerRef.current.signal,
         },
         aiInput
       );
     } catch (error) {
-      console.error("Error generating AI response:", error);
-      toast({
-        title: "error",
-        description: "failed to generate AI response. please try again.",
-        variant: "destructive",
-      });
+      // Only show error if not aborted
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        console.error("Error generating AI response:", error);
+        toast({
+          title: "error",
+          description: "failed to generate AI response. please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsAiLoading(false);
       setIsStreaming(false);
+      abortControllerRef.current = null;
     }
-  };
-
-  const handleClose = () => {
-    setChatMessages([]);
-    setAiInput("");
-    onClose();
-    setSelectionRange(null);
   };
 
   if (!selectionRange) return null;
@@ -309,36 +359,60 @@ export function AIPanel({
             className="p-3 border-t border-muted-foreground"
           >
             <div className="flex flex-col gap-2">
-              <select
-                value={selectedAgent.id}
-                onChange={(e) => handleAgentChange(e.target.value)}
-                className="w-full bg-background border border-muted-foreground text-foreground rounded px-2 py-1 text-xs"
-              >
-                {agents.map((agent) => (
-                  <option
-                    key={agent.id}
-                    value={agent.id}
-                    className="bg-background text-foreground"
-                  >
-                    {agent.name} - {agent.description}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Bot className="h-4 w-4 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">using {settings.aiModel}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <select
+                  value={selectedAgent.id}
+                  onChange={(e) => handleAgentChange(e.target.value)}
+                  className="w-full bg-background border border-muted-foreground text-foreground rounded px-2 py-1 text-xs"
+                >
+                  {agents.map((agent) => (
+                    <option
+                      key={agent.id}
+                      value={agent.id}
+                      className="bg-background text-foreground"
+                    >
+                      {agent.name} - {agent.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
-                  type="text"
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="ask about this time range..."
-                  className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
-                  disabled={isAiLoading}
-                />
+                <TooltipProvider>
+                  <Tooltip open={!isAvailable}>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1">
+                        <Input
+                          ref={inputRef}
+                          type="text"
+                          value={aiInput}
+                          onChange={(e) => setAiInput(e.target.value)}
+                          placeholder="ask about this time range..."
+                          className="flex-1 bg-background border border-muted-foreground text-foreground placeholder-muted-foreground"
+                          disabled={isAiLoading || !isAvailable}
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p className="text-sm text-destructive">{error}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Button
                   type="submit"
                   variant="outline"
                   className="hover:bg-accent transition-colors"
-                  disabled={isAiLoading}
+                  disabled={!isAvailable}
+                  onClick={isStreaming ? handleStopStreaming : handleAiSubmit}
                 >
                   {isStreaming ? (
                     <Square className="h-4 w-4" />

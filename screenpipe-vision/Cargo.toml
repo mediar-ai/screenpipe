@@ -46,6 +46,8 @@ once_cell = { workspace = true }
 chrono = { version = "0.4.39", features = ["serde"] }
 base64 = "0.22.1"
 
+reqwest = { workspace = true }
+
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }

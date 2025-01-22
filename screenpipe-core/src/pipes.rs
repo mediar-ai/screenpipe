@@ -3,6 +3,8 @@
 mod pipes {
     use dirs::home_dir;
     use regex::Regex;
+    use sentry;
+    use serde_json::Value;
     use std::collections::HashMap;
     use std::future::Future;
     use std::path::PathBuf;
@@ -11,13 +13,11 @@ mod pipes {
     use tokio::process::Command;
     use tokio::sync::watch;
 
-    use serde_json::Value;
-
     use anyhow::Result;
     use std::fs;
     use std::path::Path;
     use tokio::io::{AsyncBufReadExt, BufReader};
-    use tracing::{debug, error, info};
+    use tracing::{debug, error, info, warn};
     use url::Url;
     use which::which;
 
@@ -36,6 +36,7 @@ mod pipes {
     use reqwest_middleware::reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
     use reqwest_middleware::reqwest::Client;
     use reqwest_middleware::ClientBuilder;
+    use std::collections::HashSet;
     use std::str::FromStr;
 
     #[derive(Clone, Debug, Copy)]
@@ -83,7 +84,11 @@ mod pipes {
         pipe: &str,
         screenpipe_dir: PathBuf,
     ) -> Result<(tokio::process::Child, PipeState)> {
-        let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+        let bun_path = find_bun_path().ok_or_else(|| {
+            let err = anyhow::anyhow!("bun not found");
+            sentry::capture_error(&err.source().unwrap());
+            err
+        })?;
         let pipe_dir = screenpipe_dir.join("pipes").join(pipe);
         let pipe_json_path = pipe_dir.join("pipe.json");
         let package_json_path = pipe_dir.join("package.json");
@@ -240,11 +245,14 @@ mod pipes {
                     .await?;
 
                 if !install_output.status.success() {
-                    error!(
-                        "failed to install dependencies: {}",
-                        String::from_utf8_lossy(&install_output.stderr)
+                    let err_msg = String::from_utf8_lossy(&install_output.stderr);
+                    error!("failed to install dependencies: {}", err_msg);
+                    let err = anyhow::anyhow!(
+                        "failed to install dependencies for next.js pipe: {}",
+                        err_msg
                     );
-                    anyhow::bail!("failed to install dependencies for next.js pipe");
+                    sentry::capture_error(&err.source().unwrap());
+                    anyhow::bail!(err);
                 }
                 debug!("successfully installed dependencies for next.js pipe");
             } else {
@@ -346,30 +354,91 @@ mod pipes {
         let pipe_clone = pipe.to_string();
 
         let _stderr_handle = tokio::spawn(async move {
+            // Create static HashMaps for efficient lookups
+            static INFO_PATTERNS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+                let mut set = HashSet::new();
+                // Development related
+                set.insert("Download");
+                set.insert("Task dev");
+                set.insert("$ next dev");
+                set.insert("ready started server");
+                set.insert("Local:");
+                set.insert("Webpack is configured");
+                set.insert("See instructions");
+                set.insert("https://nextjs.org");
+                set.insert("⚠ See instructions");
+                set.insert("$ next start");
+                set.insert("[bun install]");
+                set.insert("Saved lockfile");
+                set.insert("Resolved, downloaded");
+                set.insert("Installing");
+                set.insert("Successfully installed");
+                set.insert("packages installed");
+                set.insert("Fetching");
+                set.insert("Resolving");
+                // Frontend console patterns
+                set.insert("[LOG]");
+                set.insert("console.log");
+                set.insert("] ");
+                set.insert("›");
+                set.insert("<");
+                set.insert("Warning:");
+                set.insert("render@");
+                set.insert("webpack");
+                set.insert("HMR");
+                set.insert("[HMR]");
+                set
+            });
+
+            static ERROR_PATTERNS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+                let mut set = HashSet::new();
+                set.insert("TypeError:");
+                set.insert("ReferenceError:");
+                set.insert("SyntaxError:");
+                set.insert("Error:");
+                set.insert("Uncaught");
+                set.insert("Failed to compile");
+                set.insert("ENOENT");
+                set.insert("FATAL");
+                set
+            });
+
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                // List of patterns that should be treated as info logs
-                let info_patterns = [
-                    "Download",
-                    "Task dev ",
-                    "$ next dev",
-                    "ready started server",
-                    "Local:",
-                    "Webpack is configured",
-                    "See instructions",
-                    "https://nextjs.org",
-                    "⚠ See instructions",
-                    "$ next start",
-                ];
 
-                if info_patterns.iter().any(|pattern| line.contains(pattern))
-                    || line.trim().is_empty()
+            while let Ok(Some(line)) = lines.next_line().await {
+                let line_lower = line.to_lowercase(); // Convert once for case-insensitive matching
+
+                // Quick checks first
+                if line.trim().is_empty() || line.contains("console.") {
+                    info!("[{}] {}", pipe_clone, line);
+                    continue;
+                }
+
+                // Check for error patterns first (higher priority)
+                if ERROR_PATTERNS
+                    .iter()
+                    .any(|&pattern| line_lower.contains(&pattern.to_lowercase()))
+                {
+                    error!("[{}] {}", pipe_clone, line);
+                    sentry::capture_message(
+                        &format!("[{}] {}", pipe_clone, line),
+                        sentry::Level::Error,
+                    );
+                    continue;
+                }
+
+                // Then check for info patterns
+                if INFO_PATTERNS
+                    .iter()
+                    .any(|&pattern| line_lower.contains(&pattern.to_lowercase()))
                 {
                     info!("[{}] {}", pipe_clone, line);
-                } else {
-                    error!("[{}] {}", pipe_clone, line);
+                    continue;
                 }
+
+                // Default to warning for unknown patterns
+                warn!("[{}] {}", pipe_clone, line);
             }
         });
 
@@ -938,7 +1007,9 @@ mod pipes {
         let schedule = match cron::Schedule::from_str(schedule) {
             Ok(s) => s,
             Err(e) => {
-                error!("invalid cron schedule: {}", e);
+                let err_msg = format!("invalid cron schedule: {}", e);
+                error!("{}", err_msg);
+                sentry::capture_error(&anyhow::anyhow!(err_msg).source().unwrap());
                 return;
             }
         };
@@ -963,10 +1034,10 @@ mod pipes {
                 }
             };
 
-            let now = chrono::Utc::now();
+            let now = chrono::Local::now();
             let next = if let Some(last) = last_run {
                 // Get next occurrence after the last execution
-                let last_chrono = chrono::DateTime::<chrono::Utc>::from(last);
+                let last_chrono = chrono::DateTime::<chrono::Local>::from(last);
                 schedule.after(&last_chrono).next()
             } else {
                 schedule.after(&now).next()
@@ -980,11 +1051,17 @@ mod pipes {
                 }
             };
 
+            if next <= now {
+                info!(
+                    "next execution time is before or equal to the current time, recalculating..."
+                );
+                continue;
+            }
             let duration = match (next - now).to_std() {
                 Ok(duration) => duration,
                 Err(e) => {
                     error!("invalid duration: {}", e);
-                    tokio::time::Duration::from_secs(60) // fallback to 1 minute
+                    continue; // falling back to minute is messing with cron schedule
                 }
             };
 
@@ -1006,20 +1083,25 @@ mod pipes {
                         .await
                     {
                         Ok(res) => {
-                            if res.status().is_success() {
-                                // Save successful execution time
-                                if let Err(e) = save_cron_execution(&pipe_dir, path).await {
-                                    error!("failed to save cron execution time: {}", e);
-                                }
-                                debug!("cron job executed successfully");
-                            } else {
-                                error!("cron job failed with status: {}", res.status());
+                            if !res.status().is_success() {
+                                let err_msg = format!("cron job failed with status: {}", res.status());
+                                error!("{}", err_msg);
                                 if let Ok(text) = res.text().await {
                                     error!("error response: {}", text);
+                                    sentry::capture_message(
+                                        &format!("{}: {}", err_msg, text),
+                                        sentry::Level::Error
+                                    );
+                                } else {
+                                    sentry::capture_message(&err_msg, sentry::Level::Error);
                                 }
                             }
                         }
-                        Err(e) => error!("failed to execute cron job: {}", e),
+                        Err(e) => {
+                            let err_msg = format!("failed to execute cron job: {}", e);
+                            error!("{}", err_msg);
+                            sentry::capture_error(&e);
+                        }
                     }
                 }
                 Ok(()) = shutdown.changed() => {

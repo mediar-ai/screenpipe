@@ -12,6 +12,7 @@ export interface Agent {
     options: {
       model: string;
       onProgress: (chunk: string) => void;
+      signal?: AbortSignal;
     },
     userQuery: string
   ) => Promise<void>;
@@ -24,6 +25,7 @@ async function streamCompletion(
   options: {
     model: string;
     onProgress: (chunk: string) => void;
+    signal?: AbortSignal;
   }
 ) {
   const messagesWithQuery = [
@@ -34,11 +36,16 @@ async function streamCompletion(
     },
   ];
 
-  const stream = await openai.chat.completions.create({
-    model: options.model,
-    messages: messagesWithQuery,
-    stream: true,
-  });
+  const stream = await openai.chat.completions.create(
+    {
+      model: options.model,
+      messages: messagesWithQuery,
+      stream: true,
+    },
+    {
+      signal: options.signal,
+    }
+  );
 
   let fullResponse = "";
   for await (const chunk of stream) {
@@ -51,22 +58,28 @@ async function streamCompletion(
 export async function analyzeChunk(
   chunk: any[],
   openai: OpenAI,
-  model: string
+  model: string,
+  signal?: AbortSignal
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model,
-    messages: [
-      {
-        role: "user" as const,
-        content:
-          "summarize this chunk of activity in 2-3 sentences, focus on key events and patterns",
-      },
-      {
-        role: "user",
-        content: JSON.stringify(chunk),
-      },
-    ],
-  });
+  const response = await openai.chat.completions.create(
+    {
+      model,
+      messages: [
+        {
+          role: "user" as const,
+          content:
+            "summarize this chunk of activity in 2-3 sentences, focus on key events and patterns",
+        },
+        {
+          role: "user",
+          content: JSON.stringify(chunk),
+        },
+      ],
+    },
+    {
+      signal,
+    }
+  );
   return response.choices[0]?.message?.content || "";
 }
 
@@ -79,9 +92,11 @@ export const AGENTS: Agent[] = [
     analyze: async (
       frames,
       openai,
-      { model, onProgress = () => {} },
+      { model, onProgress = () => {}, signal },
       userQuery
     ) => {
+      console.log("userQuery", userQuery);
+      console.log("frames", frames);
       if (!frames.length) {
         onProgress("no frames to analyze\n\n");
         return;
@@ -119,7 +134,7 @@ export const AGENTS: Agent[] = [
 
       const chunkSummaries = await Promise.all(
         chunks.map(async (chunk, index) => {
-          const summary = await analyzeChunk(chunk, openai, model);
+          const summary = await analyzeChunk(chunk, openai, model, signal);
           onProgress(`chunk ${index + 1}/${chunks.length}: ${summary}\n`);
           return {
             time: new Date(chunk[0].timestamp).toLocaleTimeString(),
@@ -159,7 +174,7 @@ export const AGENTS: Agent[] = [
           },
         ],
         userQuery,
-        { model, onProgress }
+        { model, onProgress, signal }
       );
     },
   },
@@ -167,7 +182,12 @@ export const AGENTS: Agent[] = [
     id: "context-master",
     name: "context master",
     description: "analyzes everything: apps, windows, text & audio",
-    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
+    analyze: async (
+      frames,
+      openai,
+      { model, onProgress, signal },
+      userQuery
+    ) => {
       const contextData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         devices: frame.devices.map((device) => ({
@@ -191,7 +211,7 @@ export const AGENTS: Agent[] = [
           },
         ],
         userQuery,
-        { model, onProgress }
+        { model, onProgress, signal }
       );
     },
   },
@@ -199,7 +219,12 @@ export const AGENTS: Agent[] = [
     id: "window-tracker",
     name: "window tracker",
     description: "focuses on app & window usage data",
-    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
+    analyze: async (
+      frames,
+      openai,
+      { model, onProgress, signal },
+      userQuery
+    ) => {
       const windowData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         windows: frame.devices.map((device) => ({
@@ -222,7 +247,7 @@ export const AGENTS: Agent[] = [
           },
         ],
         userQuery,
-        { model, onProgress }
+        { model, onProgress, signal }
       );
     },
   },
@@ -230,7 +255,12 @@ export const AGENTS: Agent[] = [
     id: "text-scanner",
     name: "text scanner",
     description: "analyzes visible text (OCR)",
-    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
+    analyze: async (
+      frames,
+      openai,
+      { model, onProgress, signal },
+      userQuery
+    ) => {
       const textData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         text: frame.devices
@@ -252,7 +282,7 @@ export const AGENTS: Agent[] = [
           },
         ],
         userQuery,
-        { model, onProgress }
+        { model, onProgress, signal }
       );
     },
   },
@@ -260,7 +290,12 @@ export const AGENTS: Agent[] = [
     id: "voice-analyzer",
     name: "voice analyzer",
     description: "focuses on audio transcriptions",
-    analyze: async (frames, openai, { model, onProgress }, userQuery) => {
+    analyze: async (
+      frames,
+      openai,
+      { model, onProgress, signal },
+      userQuery
+    ) => {
       const audioData = frames.map((frame) => ({
         timestamp: frame.timestamp,
         audio: frame.devices.flatMap((device) => device.audio),
@@ -280,7 +315,7 @@ export const AGENTS: Agent[] = [
           },
         ],
         userQuery,
-        { model, onProgress }
+        { model, onProgress, signal }
       );
     },
   },

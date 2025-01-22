@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,19 +13,30 @@ import {
   LineChart,
   Clock,
   ExternalLink,
+  LoaderIcon,
+  Loader2,
 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { OllamaModelsList } from "./ollama-models-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import path from "path";
-import { pipe } from "@screenpipe/browser";
+import { FileSuggestTextarea } from "./file-suggest-textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// This interface represents the shape of obsidian settings
+interface ObsidianSettings {
+  path: string;
+  interval: number;
+  pageSize: number;
+  aiModel: string;
+  prompt: string | null;
+}
 
 export function ObsidianSettings() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loading } = useSettings();
   const [lastLog, setLastLog] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const [intelligence, setIntelligence] = useState<any>(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
@@ -33,34 +44,65 @@ export function ObsidianSettings() {
   const [intelligenceDeepLink, setIntelligenceDeepLink] = useState<
     string | null
   >(null);
+  console.log("settings", settings);
+  const [customPrompt, setCustomPrompt] = useState<string | null>(null);
+  const [testLogLoading, setTestLogLoading] = useState(false);
+
+  useEffect(() => {
+    if (settings?.customSettings?.obsidian?.prompt) {
+      setCustomPrompt(settings.customSettings.obsidian.prompt);
+    }
+  }, [settings?.customSettings?.obsidian?.prompt]);
 
   const handleSave = async (e: React.FormEvent) => {
-    pipe.captureMainFeatureEvent("obsidian", {
-      action: "save-settings",
-    });
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
+    const path = formData.get("path") as string;
+
+    if (!path?.trim()) {
+      toast({
+        variant: "destructive",
+        title: "error",
+        description: "please set an obsidian vault path",
+      });
+      return;
+    }
+
+    const loadingToast = toast({
+      title: "saving settings...",
+      description: (
+        <div>
+          <p>please wait while we update your configuration</p>
+          <p>this may take a few minutes</p>
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ),
+    });
 
     try {
-      await updateSettings(
-        {
-          // @ts-ignore
-          path: formData.get("path") as string,
-          interval: parseInt(formData.get("interval") as string) * 60000,
-          pageSize: parseInt(formData.get("pageSize") as string),
-          aiModel: formData.get("aiModel") as string,
-          prompt: formData.get("prompt") as string,
-        },
-        "obsidian"
-      );
+      const obsidianSettings: ObsidianSettings = {
+        path: formData.get("path") as string,
+        interval: parseInt(formData.get("interval") as string) * 60000,
+        pageSize: parseInt(formData.get("pageSize") as string),
+        aiModel: formData.get("aiModel") as string,
+        prompt: customPrompt,
+      };
 
-      toast({
+      await updateSettings({
+        customSettings: {
+          obsidian: obsidianSettings,
+        },
+      });
+
+      loadingToast.update({
+        id: loadingToast.id,
         title: "settings saved",
         description: "your obsidian settings have been updated",
       });
     } catch (err) {
-      toast({
-        variant: "destructive",
+      // dismiss loading toast and show error
+      loadingToast.update({
+        id: loadingToast.id,
         title: "error",
         description: "failed to save settings",
       });
@@ -68,16 +110,39 @@ export function ObsidianSettings() {
   };
 
   const testLog = async () => {
-    setLoading(true);
+    setTestLogLoading(true);
     try {
+      const formData = new FormData(
+        document.querySelector("form") as HTMLFormElement
+      );
+      const obsidianSettings: ObsidianSettings = {
+        path: formData.get("path") as string,
+        interval: parseInt(formData.get("interval") as string) * 60000,
+        pageSize: parseInt(formData.get("pageSize") as string),
+        aiModel: formData.get("aiModel") as string,
+        prompt: customPrompt,
+      };
+
+      await updateSettings({
+        customSettings: {
+          obsidian: obsidianSettings,
+        },
+      });
+
+      // Then test log generation
       const res = await fetch("/api/log");
       const data = await res.json();
       setLastLog(data);
       setLogDeepLink(data.deepLink);
     } catch (err) {
       console.error("error testing log:", err);
+      toast({
+        variant: "destructive",
+        title: "error",
+        description: "failed to test log generation",
+      });
     } finally {
-      setLoading(false);
+      setTestLogLoading(false);
     }
   };
 
@@ -89,7 +154,7 @@ export function ObsidianSettings() {
           variant: "destructive",
           title: "error",
           description:
-            "your browser doesn't support directory selection. please enter the path manually.",
+            "your browser doesn't support directory selection. please enter the path manually or try a different browser.",
         });
         return;
       }
@@ -106,8 +171,12 @@ export function ObsidianSettings() {
 
       await updateSettings(
         {
-          ...settings.customSettings?.obsidian,
-          path,
+          customSettings: {
+            obsidian: {
+              ...settings.customSettings?.obsidian,
+              path,
+            },
+          },
         },
         "obsidian"
       );
@@ -117,7 +186,7 @@ export function ObsidianSettings() {
         description: "obsidian vault path has been set",
       });
     } catch (err) {
-      console.error("failed to open directory picker:", err);
+      console.warn("failed to open directory picker:", err);
       toast({
         variant: "destructive",
         title: "error",
@@ -131,6 +200,7 @@ export function ObsidianSettings() {
     try {
       const res = await fetch("/api/intelligence");
       const data = await res.json();
+      console.log("data", data);
       setIntelligence(data.intelligence);
       setIntelligenceDeepLink(data.deepLink);
 
@@ -148,7 +218,7 @@ export function ObsidianSettings() {
         description: `analyzed ${data.summary.logsAnalyzed} logs, found ${data.summary.contacts} contacts`,
       });
     } catch (err) {
-      console.error("error testing intelligence:", err);
+      console.warn("error testing intelligence:", err);
       toast({
         variant: "destructive",
         title: "error",
@@ -215,16 +285,67 @@ export function ObsidianSettings() {
     }
   };
 
+  // Helper function to check if vault path is set
+  const isVaultPathSet = () => {
+    return Boolean(settings.customSettings?.obsidian?.path?.trim());
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full max-w-4xl mx-auto space-y-8">
+        <Tabs defaultValue="logs">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="logs">logs</TabsTrigger>
+            <TabsTrigger value="intelligence">intelligence (beta)</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="logs" className="space-y-4 w-full my-2">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <div className="flex gap-2">
+                <Skeleton className="h-10 flex-1" />
+                <Skeleton className="h-10 w-10" />
+                <Skeleton className="h-10 w-10" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+
+            <Skeleton className="h-10 w-full" />
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
       <Tabs defaultValue="logs">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="logs">logs</TabsTrigger>
-          <TabsTrigger value="intelligence">intelligence</TabsTrigger>
+          <TabsTrigger value="intelligence">intelligence (beta)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="logs">
-          <form onSubmit={handleSave} className="space-y-4 w-full">
+          <form onSubmit={handleSave} className="space-y-4 w-full my-2">
             <div className="space-y-2">
               <Label htmlFor="path">obsidian vault path</Label>
               <div className="flex gap-2">
@@ -250,6 +371,7 @@ export function ObsidianSettings() {
                   onClick={openObsidianVault}
                   className="px-3"
                   title="open in obsidian"
+                  disabled={!isVaultPathSet()}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>
@@ -259,6 +381,7 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="interval">sync interval (minutes)</Label>
               <Input
+                disabled={!isVaultPathSet()}
                 id="interval"
                 name="interval"
                 type="number"
@@ -276,6 +399,7 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="pageSize">page size</Label>
               <Input
+                disabled={!isVaultPathSet()}
                 id="pageSize"
                 name="pageSize"
                 type="number"
@@ -288,6 +412,7 @@ export function ObsidianSettings() {
             <div className="space-y-2">
               <Label htmlFor="aiModel">ollama/embedded ai model</Label>
               <OllamaModelsList
+                disabled={!isVaultPathSet()}
                 defaultValue={
                   settings.customSettings?.obsidian?.aiModel ||
                   "llama3.2:3b-instruct-q4_K_M"
@@ -308,38 +433,23 @@ export function ObsidianSettings() {
 
             <div className="space-y-2">
               <Label htmlFor="prompt">custom prompt</Label>
-              <textarea
-                id="prompt"
-                name="prompt"
-                className="w-full min-h-[100px] p-2 rounded-md border bg-background"
-                defaultValue={
-                  settings.customSettings?.obsidian?.prompt ||
-                  `yo, you're my personal data detective! 🕵️‍♂️
-
-rules for the investigation:
-- extract names of people i interact with and what we discussed
-- identify recurring topics/themes in my convos
-- spot any promises or commitments made (by me or others)
-- catch interesting ideas or insights dropped in casual chat
-- note emotional vibes and energy levels in conversations
-- highlight potential opportunities or connections
-- track project progress and blockers mentioned
-
-style rules:
-- keep it real and conversational
-- use bullet points for clarity
-- include relevant timestamps
-- group related info together
-- max 4 lines per insight
-- no corporate speak, keep it human
-- for tags use hyphen between words, no spaces, eg: #my-tag not #my tag nor #myTag nor #my_tag
-
-remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!`
-                }
+              <FileSuggestTextarea
+                value={customPrompt || ""}
+                setValue={setCustomPrompt}
+                disabled={!isVaultPathSet()}
               />
+              <p className="text-xs text-muted-foreground">
+                make sure to keep the prompt within llm context window size.
+                <br />
+                protip: use the @mention feature to link to files in your vault as context.
+              </p>
             </div>
 
-            <Button type="submit">
+            <Button
+              className="w-full"
+              type="submit"
+              // disabled={!isVaultPathSet()}
+            >
               <FileCheck className="mr-2 h-4 w-4" />
               save settings
             </Button>
@@ -349,10 +459,17 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
             <Button
               onClick={testLog}
               variant="outline"
-              disabled={loading}
+              disabled={testLogLoading || !isVaultPathSet()}
               className="w-full"
             >
-              {loading ? "testing..." : "test log generation"}
+              {testLogLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  testing...
+                </>
+              ) : (
+                "test log generation"
+              )}
             </Button>
 
             {lastLog && (
@@ -369,7 +486,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
                 variant="outline"
                 size="sm"
                 onClick={() => window.open(logDeepLink, "_blank")}
-                className="ml-2"
+                className="ml-2 my-2"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
                 open in obsidian
@@ -384,7 +501,9 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
             <Button
               onClick={testIntelligence}
               variant="outline"
-              disabled={intelligenceLoading}
+              disabled={
+                intelligenceLoading || !settings.customSettings?.obsidian?.path
+              }
             >
               <Brain className="mr-2 h-4 w-4" />
               {intelligenceLoading ? "analyzing..." : "analyze relationships"}
@@ -508,6 +627,7 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
               open in obsidian
             </Button>
           )}
+          <div className="my-4 h-16" />
         </TabsContent>
       </Tabs>
     </div>

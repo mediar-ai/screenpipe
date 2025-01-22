@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
 import { getActiveBrowser } from '../browser-setup';
+import { ChromeSession } from '../chrome-session';
 
 const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
 console.log('storage directory:', STORAGE_DIR);
@@ -251,6 +252,14 @@ interface ConnectionsStore {
         endDate?: string;
         reason?: string;
     };
+    isWithdrawing: boolean;
+    withdrawStatus?: WithdrawStatus;
+}
+
+interface WithdrawStatus {
+    isWithdrawing: boolean;
+    reason?: string;
+    timestamp?: string;
 }
 
 // Define default values
@@ -261,7 +270,8 @@ const DEFAULT_CONNECTION_STORE: ConnectionsStore = {
   stopRequested: false,
   nextHarvestTime: '',
   lastRefreshDuration: 0,
-  averageProfileCheckDuration: 0
+  averageProfileCheckDuration: 0,
+  isWithdrawing: false
 };
 
 export async function loadConnections(): Promise<ConnectionsStore> {
@@ -416,26 +426,81 @@ export async function isStopRequested(): Promise<boolean> {
 } 
 
 export async function saveToChrome(key: string, data: unknown) {
-    const { page } = getActiveBrowser();
-    if (!page) return;
-    
-    // Navigate to LinkedIn if we're not already there
-    if (!page.url().includes('linkedin.com')) {
-        await page.goto('https://www.linkedin.com');
+    const session = ChromeSession.getInstance();
+    const page = session.getActivePage();
+    if (!page) {
+        console.log('cannot save to chrome: no active page in session');
+        return;
     }
     
-    await page.evaluate((key: string, data: unknown) => {
-        localStorage.setItem(key, JSON.stringify(data));
-    }, key, data);
+    try {
+        const currentUrl = await page.url();
+        // console.log('current page url:', currentUrl);
+        
+        // Only save if we're already on LinkedIn
+        if (!currentUrl.includes('linkedin.com')) {
+            console.log('skipping chrome storage: not on linkedin.com');
+            return;
+        }
+        
+        await page.evaluate((key: string, data: unknown) => {
+            localStorage.setItem(key, JSON.stringify(data));
+            console.log('saved to chrome storage:', key);
+        }, key, data);
+    } catch (err) {
+        console.log('failed to save to chrome storage:', err);
+    }
 }
 
 export async function loadFromChrome(key: string) {
-    const { page } = getActiveBrowser();
-    if (!page) return null;
+    const session = ChromeSession.getInstance();
+    const page = session.getActivePage();
+    if (!page) {
+        console.log('cannot load from chrome: no active page in session');
+        return null;
+    }
     
-    const data = await page.evaluate((key: string) => {
-        return localStorage.getItem(key);
-    }, key);
-    
-    return data ? JSON.parse(data) : null;
+    try {
+        console.log('attempting to load', key, 'from chrome storage');
+        const data = await page.evaluate((key: string) => {
+            console.log('in page context, loading:', key);
+            const value = localStorage.getItem(key);
+            console.log('loaded value:', value);
+            return value;
+        }, key);
+        
+        console.log('chrome storage load result:', data ? 'found' : 'not found');
+        return data ? JSON.parse(data) : null;
+    } catch (err) {
+        console.log('failed to load from chrome storage:', err);
+        return null;
+    }
+}
+
+export async function setWithdrawingStatus(isWithdrawing: boolean, details?: { reason: string; timestamp: string }) {
+    const store = await loadConnections();
+    store.withdrawStatus = {
+        isWithdrawing,
+        ...(details || {})
+    };
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    console.log('saved withdrawal status:', { isWithdrawing, ...details });
+}
+
+export async function saveRestrictionInfo(info: {
+    isRestricted: boolean;
+    endDate?: string;
+    reason?: string;
+}) {
+    const store = await loadConnections();
+    store.restrictionInfo = info;
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    await saveToChrome('linkedin_assistant_connections', store);
+    console.log('saved restriction info:', info);
 }

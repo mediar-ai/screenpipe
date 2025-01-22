@@ -1,10 +1,9 @@
 #[cfg(target_os = "macos")]
 #[cfg(test)]
 mod tests {
-    use cidre::ns;
     use image::GenericImageView;
     use screenpipe_core::Language;
-    use screenpipe_vision::{core::get_apple_languages, perform_ocr_apple};
+    use screenpipe_vision::perform_ocr_apple;
     use std::path::PathBuf;
 
     #[tokio::test]
@@ -27,8 +26,7 @@ mod tests {
         let rgb_image = image.to_rgb8();
         println!("RGB image dimensions: {:?}", rgb_image.dimensions());
 
-        let (ocr_text, _, _) =
-            perform_ocr_apple(&image, &ns::ArrayMut::<ns::String>::with_capacity(0));
+        let (ocr_text, _, _) = perform_ocr_apple(&image, &[]);
 
         println!("OCR text: {:?}", ocr_text);
         assert!(
@@ -48,16 +46,7 @@ mod tests {
         let image = image::open(&path).expect("Failed to open Chinese test image");
         println!("Image dimensions: {:?}", image.dimensions());
 
-        let languages_slice = {
-            use ns;
-            let apple_languages = get_apple_languages(vec![Language::Chinese]);
-            let mut slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
-            apple_languages.iter().for_each(|language| {
-                slice.push(&ns::String::with_str(language.as_str()));
-            });
-            slice
-        };
-        let (ocr_text, _, _) = perform_ocr_apple(&image, &languages_slice);
+        let (ocr_text, _, _) = perform_ocr_apple(&image, &[Language::Chinese]);
 
         println!("OCR text: {:?}", ocr_text);
         assert!(

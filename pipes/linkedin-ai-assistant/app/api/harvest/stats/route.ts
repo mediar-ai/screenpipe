@@ -24,7 +24,10 @@ export async function GET() {
         cooldown: stats?.cooldown || 0,
         total: Object.keys(connectionsStore.connections).length,
         lastRefreshDuration: connectionsStore.lastRefreshDuration,
-        averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration
+        averageProfileCheckDuration: connectionsStore.averageProfileCheckDuration,
+        withdrawStatus: connectionsStore.withdrawStatus || {
+          isWithdrawing: false
+        }
       }
     });
   } catch (error) {

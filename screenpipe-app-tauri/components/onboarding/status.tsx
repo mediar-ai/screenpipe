@@ -51,6 +51,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     null
   );
   const [isRestartNeeded, setIsRestartNeeded] = useState(false);
+  const [stats, setStats] = useState<{
+    screenshots: number;
+    audioSeconds: number;
+  } | null>(null);
 
   useEffect(() => {
     const checkRestartStatus = async () => {
@@ -84,6 +88,59 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     checkPermissions();
   }, []);
 
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const screenshotsResponse = await fetch(
+          "http://localhost:3030/raw_sql",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: `SELECT COUNT(*) as count FROM frames`,
+            }),
+          }
+        );
+        const screenshotsResult = await screenshotsResponse.json();
+
+        const audioResponse = await fetch("http://localhost:3030/raw_sql", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: `
+              SELECT 
+                ROUND(SUM((end_time - start_time)), 2) as total_seconds
+              FROM audio_transcriptions 
+              WHERE start_time IS NOT NULL 
+              AND end_time IS NOT NULL
+            `,
+          }),
+        });
+        const audioResult = await audioResponse.json();
+
+        setStats({
+          screenshots: screenshotsResult[0].count,
+          audioSeconds: audioResult[0].total_seconds || 0,
+        });
+      } catch (error) {
+        console.error("failed to fetch stats:", error);
+      }
+    };
+
+    // initial fetch
+    fetchStats();
+
+    // set up interval for periodic updates
+    const interval = setInterval(fetchStats, 1000); // refresh every second
+
+    // cleanup interval on unmount
+    return () => clearInterval(interval);
+  }, []);
+
   const handlePermissionButton = async (
     type: "screen" | "audio" | "accessibility"
   ) => {
@@ -106,6 +163,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         permission: permissionType,
       });
 
+      // Only handle macOS screen recording special case after requesting permission
       if (os === "macos" && type === "screen") {
         setIsRestartNeeded(true);
         await setRestartPending();
@@ -118,15 +176,25 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         return;
       }
 
+      // Immediately check permissions after granting
       const perms = await invoke<PermissionsStatus>("do_permissions_check", {
         initialCheck: false,
       });
       setPermissions(perms);
 
+      const granted =
+        type === "screen"
+          ? perms.screenRecording.toLowerCase() === "granted"
+          : type === "audio"
+          ? perms.microphone.toLowerCase() === "granted"
+          : perms.accessibility.toLowerCase() === "granted";
+
       toastId.update({
         id: toastId.id,
-        title: "permission check complete",
-        description: `${type} permission check completed`,
+        title: granted ? "permission granted" : "permission check complete",
+        description: granted
+          ? `${type} permission was successfully granted`
+          : `please try granting ${type} permission again if needed`,
         duration: 3000,
       });
     } catch (error) {
@@ -203,29 +271,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           setting up screenpipe
         </DialogTitle>
       </DialogHeader>
-      {/* <div className="mt-4 text-sm text-zinc-600 mx-auto text-center flex flex-col items-center">
-        <p className="mb-2 text-center">how screenpipe works:</p>
-        <ul className="list-disc list-inside text-left">
-          <li>captures screens & mics 24/7 in the background</li>
-          <li>
-            extracts inforation from screens (ocr, accessibility API, etc.)
-          </li>
-          <li>
-            extracts information from mics (speech-to-text, voice
-            identification, etc.)
-          </li>
-          <li>
-            saves data locally for privacy (100% offline, no cloud storage)
-          </li>
-        </ul>
-      </div> */}
 
       <div className="w-3/4 space-y-4 mt-4 flex flex-col items-center">
         <div className="flex items-center justify-between mx-auto w-full">
           <div className="flex items-right gap-2">
             {permissions && (
               <span>
-                {permissions.screenRecording === "Granted" ? (
+                {permissions.screenRecording.toLowerCase() === "granted" ? (
                   <Check className="h-4 w-4 text-green-500" />
                 ) : (
                   <X className="h-4 w-4 text-red-500" />
@@ -248,7 +300,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <div className="flex items-center gap-2">
             {permissions && (
               <span>
-                {permissions.microphone === "Granted" ? (
+                {permissions.microphone.toLowerCase() === "granted" ? (
                   <Check className="h-4 w-4 text-green-500" />
                 ) : (
                   <X className="h-4 w-4 text-red-500" />
@@ -271,7 +323,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           <div className="flex items-center gap-2">
             {permissions && (
               <span>
-                {permissions.accessibility === "Granted" ? (
+                {permissions.accessibility.toLowerCase() === "granted" ? (
                   <Check className="h-4 w-4 text-green-500" />
                 ) : (
                   <X className="h-4 w-4 text-red-500" />
@@ -291,7 +343,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         </div>
       </div>
 
-      <Separator className="w-full my-4" />
+      <Separator className="w-full my-2" />
 
       <div className="flex items-center space-x-2 mt-4">
         <Switch
@@ -324,50 +376,76 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           </TooltipProvider>
         </Label>
       </div>
-      {status === null ? (
-        <Button
-          onClick={handleStartScreenpipe}
-          disabled={isLoading}
-          className="mt-4"
-        >
-          {isLoading ? (
-            <svg
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              viewBox="0 0 24 24"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              xmlns="http://www.w3.org/2000/svg"
-              className="size-5 animate-spin stroke-zinc-400 mr-2"
-            >
-              <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
-            </svg>
-          ) : (
-            <Video className="h-4 w-4 mr-2" />
-          )}
-          {isLoading ? "starting..." : "start recording"}
-        </Button>
-      ) : status === "ok" ? (
-        <div className="flex flex-col items-center mt-4">
-          <Check className="size-5 stroke-zinc-400" />
-          <p className="text-sm text-zinc-600 mt-2 text-center">
-            screenpipe setup complete. <br />
-            AI models downloaded.
-          </p>
-        </div>
-      ) : (
-        <p className="text-center mt-4">{status}</p>
-      )}
-      <Separator className="w-full my-4 " />
-      <LogFileButton />
-      <Separator className="w-full my-4 " />
+      <div className="w-full flex flex-col items-center justify-center gap-2 my-1">
+        {status === null ? (
+          <Button
+            onClick={handleStartScreenpipe}
+            disabled={isLoading}
+            className="mt-4"
+          >
+            {isLoading ? (
+              <svg
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                viewBox="0 0 24 24"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                xmlns="http://www.w3.org/2000/svg"
+                className="size-5 animate-spin stroke-zinc-400 mr-2"
+              >
+                <path d="M12 3v3m6.366-.366-2.12 2.12M21 12h-3m.366 6.366-2.12-2.12M12 21v-3m-6.366.366 2.12-2.12M3 12h3m-.366-6.366 2.12 2.12"></path>
+              </svg>
+            ) : (
+              <Video className="h-4 w-4 mr-2" />
+            )}
+            {isLoading ? "starting..." : "start recording"}
+          </Button>
+        ) : status === "ok" ? (
+          <div className="flex flex-col items-center mt-4">
+            <Check className="size-5 stroke-zinc-400" />
+            <p className="text-sm text-zinc-600 mt-2 text-center">
+              screenpipe setup complete. <br />
+              AI models downloaded.
+            </p>
+          </div>
+        ) : (
+          <p className="text-center mt-4">{status}</p>
+        )}
+
+        <LogFileButton />
+      </div>
+
       <OnboardingNavigation
         handlePrevSlide={handlePrev}
         handleNextSlide={handleNext}
         prevBtnText="previous"
         nextBtnText="next"
       />
+
+      {/* Replace stats display with better styling */}
+      {stats && (
+        <div className="w-full p-4 space-y-3 rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Video className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">screenshots</span>
+            </div>
+            <span className="font-mono text-sm">
+              {stats.screenshots.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Video className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">audio</span>
+            </div>
+            <span className="font-mono text-sm">
+              {Math.round(stats.audioSeconds / 60)}m
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -28,6 +28,7 @@ export interface ScreenpipeQueryParams {
   minLength?: number;
   maxLength?: number;
   speakerIds?: number[];
+  frameName?: string;
 }
 
 /**
@@ -43,6 +44,7 @@ export interface OCRContent {
   windowName: string;
   tags: string[];
   frame?: string;
+  frameName?: string;
 }
 
 /**
@@ -209,6 +211,12 @@ export interface Settings {
   analyticsEnabled: boolean;
   user: User;
   customSettings?: Record<string, any>;
+  monitorIds: string[];
+  audioDevices: string[];
+  audioTranscriptionEngine: string;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
 }
 
 /**

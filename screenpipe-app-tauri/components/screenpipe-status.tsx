@@ -6,28 +6,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { platform } from "@tauri-apps/plugin-os";
 import { Badge } from "./ui/badge";
 import { invoke } from "@tauri-apps/api/core";
-import { toast, useToast } from "./ui/use-toast";
+import { toast } from "./ui/use-toast";
 
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, Activity } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
-import LogViewer from "./log-viewer-v2";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Lock, Folder, Activity, Power } from "lucide-react";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -36,20 +30,13 @@ type PermissionsStatus = {
 };
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health, debouncedFetchHealth } = useHealthCheck();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isMac, setIsMac] = useState(false);
+  const { health } = useHealthCheck();
+  const { isOpen, open, close } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
-  const [isLogOpen, setIsLogOpen] = useState(false);
-  const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(
     null
   );
-
-  useEffect(() => {
-    setIsMac(platform() === "macos");
-  }, []);
 
   useEffect(() => {
     const checkPermissions = async () => {
@@ -73,7 +60,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const handleOpenDataDir = async () => {
     try {
       const dataDir = await getDataDir();
-      await open(dataDir);
+      await openUrl(dataDir);
     } catch (error) {
       console.error("failed to open data directory:", error);
       toast({
@@ -148,10 +135,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   const handleOpenStatusDialog = async () => {
     try {
-      setIsDialogLoading(true);
       const dir = await getDataDir();
       setLocalDataDir(dir);
-      setIsDialogOpen(true);
+      open();
     } catch (error) {
       console.error("failed to open status dialog:", error);
       toast({
@@ -160,8 +146,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
         variant: "destructive",
         duration: 3000,
       });
-    } finally {
-      setIsDialogLoading(false);
     }
   };
 
@@ -232,14 +216,15 @@ const HealthStatus = ({ className }: { className?: string }) => {
         )}
         onClick={handleOpenStatusDialog}
       >
-        <Activity className="mr-2 h-4 w-4" />
+        {/* <Activity className="mr-2 h-4 w-4" /> */}
+        <Power className="mr-2 h-4 w-4" />
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
             statusColor === "bg-red-500" ? "animate-pulse" : ""
           }`}
         />
       </Badge>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isOpen} onOpenChange={close}>
         <DialogContent
           className="max-w-4xl max-h-[90vh] flex flex-col p-8"
           aria-describedby="status-dialog-description"

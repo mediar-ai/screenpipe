@@ -61,7 +61,7 @@ impl VideoCapture {
             continuous_capture(
                 result_sender,
                 interval,
-                *ocr_engine,
+                (*ocr_engine).clone(),
                 monitor_id,
                 window_filters_clone,
                 languages.clone(),

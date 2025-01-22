@@ -12,6 +12,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    handle_index_command,
     highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -158,9 +159,6 @@ async fn main() -> anyhow::Result<()> {
                 PipeCommand::List {
                     output: OutputFormat::Text,
                     ..
-                } | PipeCommand::Download {
-                    output: OutputFormat::Text,
-                    ..
                 } | PipeCommand::Install {
                     output: OutputFormat::Text,
                     ..
@@ -174,6 +172,10 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
+        Some(Command::Add {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -275,6 +277,58 @@ async fn main() -> anyhow::Result<()> {
                         e
                     })?;
                 info!("database migrations completed successfully");
+                return Ok(());
+            }
+            Command::Add {
+                path,
+                output,
+                data_dir,
+                pattern,
+                ocr_engine,
+                metadata_override,
+                copy_videos,
+                debug,
+                use_embedding,
+            } => {
+                let local_data_dir = get_base_dir(&data_dir)?;
+
+                // Update logging filter if debug is enabled
+                if debug {
+                    tracing::subscriber::set_global_default(
+                        tracing_subscriber::registry()
+                            .with(
+                                EnvFilter::from_default_env()
+                                    .add_directive("screenpipe=debug".parse().unwrap()),
+                            )
+                            .with(fmt::layer().with_writer(std::io::stdout)),
+                    )
+                    .ok();
+                    debug!("debug logging enabled");
+                }
+
+                let db = Arc::new(
+                    DatabaseManager::new(&format!(
+                        "{}/db.sqlite",
+                        local_data_dir.to_string_lossy()
+                    ))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?,
+                );
+                handle_index_command(
+                    local_data_dir,
+                    path,
+                    pattern,
+                    db,
+                    output,
+                    ocr_engine,
+                    metadata_override,
+                    copy_videos,
+                    use_embedding,
+                )
+                .await?;
                 return Ok(());
             }
         }
@@ -431,8 +485,6 @@ async fn main() -> anyhow::Result<()> {
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
-    let warning_realtime_audio_transcription_engine_clone =
-        cli.realtime_audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
         all_monitors.iter().map(|m| m.id()).collect::<Vec<_>>()
     } else {
@@ -509,7 +561,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    Arc::new(cli.realtime_audio_transcription_engine.clone().into()),
                     Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
                 );
@@ -647,10 +698,6 @@ async fn main() -> anyhow::Result<()> {
     println!(
         "│ audio engine           │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
-    );
-    println!(
-        "│ realtime audio engine  │ {:<34} │",
-        format!("{:?}", warning_realtime_audio_transcription_engine_clone)
     );
     println!(
         "│ ocr engine             │ {:<34} │",

@@ -75,7 +75,7 @@ export function TimelineIconsSection({
   }>({});
   const { setSelectionRange } = useTimelineSelection();
 
-  // Get the visible time range
+  // Separate time range calculation
   const timeRange = useMemo(() => {
     if (blocks.length === 0) return null;
     const startTime = new Date(blocks[blocks.length - 1].timestamp);
@@ -83,7 +83,7 @@ export function TimelineIconsSection({
     return { start: startTime, end: endTime };
   }, [blocks]);
 
-  // Combine both computations into one useMemo
+  // Process blocks without icon dependency
   const { processedBlocks, processedAudioGroups } = useMemo(() => {
     if (!timeRange) return { processedBlocks: [], processedAudioGroups: [] };
 
@@ -178,12 +178,12 @@ export function TimelineIconsSection({
         );
 
         const windowsInBlock = blockEntries
-          .filter((w) => w.title) // only keep windows with titles
+          .filter((w) => w.title)
           .map((w) => ({
             title: w.title!,
             timestamp: w.timestamp,
           }))
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); // most recent first
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
         b.push({
           appName,
@@ -192,7 +192,6 @@ export function TimelineIconsSection({
             ((blockMiddle.getTime() - timeRange.start.getTime()) /
               (timeRange.end.getTime() - timeRange.start.getTime())) *
             100,
-          iconSrc: iconCache[appName],
           windows: windowsInBlock,
         });
       });
@@ -211,7 +210,15 @@ export function TimelineIconsSection({
         }),
       processedAudioGroups: audioGroups,
     };
-  }, [blocks, iconCache, timeRange]);
+  }, [blocks, timeRange]); // Remove iconCache dependency
+
+  // Add icons to blocks in a separate memo
+  const blocksWithIcons = useMemo(() => {
+    return processedBlocks.map((block) => ({
+      ...block,
+      iconSrc: iconCache[block.appName],
+    }));
+  }, [processedBlocks, iconCache]);
 
   const loadAppIcon = useCallback(
     async (appName: string, appPath?: string) => {
@@ -267,7 +274,7 @@ export function TimelineIconsSection({
   return (
     <>
       <div className="absolute -top-8 inset-x-0 h-8">
-        {processedBlocks.map((block, i) => {
+        {blocksWithIcons.map((block, i) => {
           const bgColor = stringToColor(block.appName);
 
           return (

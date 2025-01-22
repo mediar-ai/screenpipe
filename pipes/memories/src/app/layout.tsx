@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Search • Screenpipe",
-  description: "Search your spent time through Screenpipe",
+  title: "Memories • Screenpipe",
+  description: "Resurface your digital memories and insights with AI",
 };
 
 export default function RootLayout({
