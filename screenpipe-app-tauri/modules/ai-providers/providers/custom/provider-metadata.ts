@@ -6,7 +6,7 @@ import { Settings, store } from "@/lib/hooks/use-settings";
 export const CustomAiProvider: ProviderMetadata = {
     type: AvailableAiProviders.CUSTOM,
     title: 'custom',
-    description: 'run ai models locally using your existing ollama installation',
+    description: 'connect to your own ai provider or self-hosted models',
     imgSrc: '/images/custom.png',
     setupForm: CustomSetupForm,
     savedValuesGetter: (settings: Settings) => {

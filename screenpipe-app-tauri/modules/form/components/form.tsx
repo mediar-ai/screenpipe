@@ -6,13 +6,13 @@ import { generateFormSchema } from "../utils/zod-schema-generator";
 import { FormSchema } from '../entities/form';
 
 export default function Form({
-  onCreate,
+  onSubmit,
   onReset,
   isLoading,
   form,
   defaultValues,
 } : {
-  onCreate?: (values: any) => Promise<void>;
+  onSubmit?: (values: any) => Promise<void>;
   onReset?: () => Promise<void>;
   isLoading?: boolean;
   defaultValues?:any,
@@ -22,10 +22,14 @@ export default function Form({
   
   async function handleSubmit(values: FormSchema) {
     if (refForm.current) {
-      if (!onCreate) {
+      if (!onSubmit) {
         console.log({values})
       } else {
-        await onCreate(values);
+        try {
+          await onSubmit(values);
+        } catch (e) {
+          return
+        }
       }
       refForm.current.reset(refForm.current.getValues());
     }

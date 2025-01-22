@@ -8,7 +8,7 @@ const fields: FieldSchema[] = [
     validationMeta: {
       errorMessage: 'this field is mandatory',
       min: 1,
-      max: 50,
+      max: 250,
       optional: false
     },
     typeMeta: {

@@ -21,7 +21,7 @@ export function ButtonWithLoadingState({
       <Button onClick={handleClick} className={className} disabled={disabled} type={type}> 
         <div className="flex items-end">
           <p className="leading-none">
-            {!isLoading ? label : "Cargando..."}
+            {!isLoading ? label : "loading..."}
           </p>
           {isLoading ?
           <div className="max-w-[15px] w-[15px] h-[15px] ml-4">

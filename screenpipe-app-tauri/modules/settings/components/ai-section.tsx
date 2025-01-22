@@ -10,6 +10,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { getSetupFormAndPersistedValues } from '@/modules/ai-providers/utils/get-setup-form-and-persisted-values';
 import { useToast } from '@/components/ui/use-toast';
 import { AiProviders } from "@/modules/ai-providers/providers";
+import { update } from "lodash";
 
 interface AIProviderCardProps {
   type: AvailableAiProviders;
@@ -84,7 +85,7 @@ const AISection = () => {
     }
   })
 
-  const { mutate, isPending } = useMutation({
+  const { mutateAsync, isPending } = useMutation({
     mutationFn: async (values: Partial<Settings>) => {
       try {
         await AiProviders[aiProvider].credentialValidation(values)
@@ -127,7 +128,7 @@ const AISection = () => {
         <Form
           defaultValues={data.defaultValues}
           isLoading={isPending}
-          onCreate={async (values) => mutate(values)}
+          onSubmit={mutateAsync}
           onReset={async () => setAiProvider(settings.aiProviderType)}
           key={aiProvider}
           form={data.setupForm}
