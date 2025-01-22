@@ -10,6 +10,7 @@ export const ProviderMetadata = z.object({
     setupForm: formSchema,
     // TODOO: TYPE SAFETY
     savedValuesGetter: z.function().args(z.any()).returns(z.any()),
+    defaultValuesGetter: z.function().returns(z.any()),
     credentialValidation: z.function().args(z.any()).returns(z.any())
 })
 
