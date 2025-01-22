@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { Settings, useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "@/components/ui/label";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import Form from "@/modules/form/components/form";
 import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-select";
@@ -10,7 +10,10 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { getSetupFormAndPersistedValues } from '@/modules/ai-providers/utils/get-setup-form-and-persisted-values';
 import { useToast } from '@/components/ui/use-toast';
 import { AiProviders } from "@/modules/ai-providers/providers";
-import { update } from "lodash";
+import { useUser } from "@/lib/hooks/use-user";
+import { Button } from "@/components/ui/button";
+import { ExternalLinkIcon } from "lucide-react";
+import { open as openUrl } from "@tauri-apps/plugin-shell"
 
 interface AIProviderCardProps {
   type: AvailableAiProviders;
@@ -71,8 +74,10 @@ export const AIProviderCard = ({
 const AISection = () => {
   const { settings, updateSettings, resetSetting } = useSettings();
   const [ aiProvider, setAiProvider ] = useState<AvailableAiProviders>(settings.aiProviderType)
+  const { user } = useUser();
 
   const { toast } = useToast();
+
   const { data } = useQuery({
     queryKey: ['setupForm', aiProvider],
     queryFn: async () => {
@@ -88,7 +93,9 @@ const AISection = () => {
   const { mutateAsync, isPending } = useMutation({
     mutationFn: async (values: Partial<Settings>) => {
       try {
-        await AiProviders[aiProvider].credentialValidation(values)
+        if (AiProviders[aiProvider].credentialValidation) {
+          await AiProviders[aiProvider].credentialValidation(values)
+        }
         updateSettings({
           aiProviderType: aiProvider,
           ...values
@@ -111,6 +118,14 @@ const AISection = () => {
     }
   })
 
+  const componentsVisibility = useMemo(() => {
+    if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !user) {
+      return {showForm: false, showLoginStep: true}
+    }
+
+    return {showForm: true}
+  },[aiProvider, user])
+  
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold">ai settings</h1>
@@ -124,7 +139,22 @@ const AISection = () => {
           activeAiProvider={aiProvider}
         />
       </div>
-      {data?.setupForm && 
+      {componentsVisibility.showLoginStep && (
+        <div className="w-full flex flex-col items-center space-y-3">
+          <h1>
+            please login to your screenpipe account to continue
+          </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openUrl("https://screenpi.pe/login")}
+            className="hover:bg-secondary/80"
+          >
+            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+      )}
+      {(data?.setupForm && componentsVisibility.showForm) &&
         <Form
           defaultValues={data.defaultValues}
           isLoading={isPending}

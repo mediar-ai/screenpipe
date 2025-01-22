@@ -2,7 +2,6 @@ import { ControllerRenderProps } from "react-hook-form";
 import { useState } from "react";
 import { EyeIcon, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { IconButton } from "./icon-button";
 
 export default function FormSecretStringField({

@@ -11,7 +11,7 @@ export const ProviderMetadata = z.object({
     // TODOO: TYPE SAFETY
     savedValuesGetter: z.function().args(z.any()).returns(z.any()),
     defaultValuesGetter: z.function().returns(z.any()),
-    credentialValidation: z.function().args(z.any()).returns(z.any())
+    credentialValidation: z.function().args(z.any()).returns(z.any()).optional()
 })
 
 export type ProviderMetadata = z.infer<typeof ProviderMetadata>
