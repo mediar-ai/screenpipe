@@ -9,6 +9,7 @@ import { AvailableAiProviders } from "@/modules/ai-providers/types/available-pro
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { getSetupFormAndPersistedValues } from '@/modules/ai-providers/utils/get-setup-form-and-persisted-values';
 import { useToast } from '@/components/ui/use-toast';
+import { AiProviders } from "@/modules/ai-providers/providers";
 
 interface AIProviderCardProps {
   type: AvailableAiProviders;
@@ -85,19 +86,25 @@ const AISection = () => {
 
   const { mutate, isPending } = useMutation({
     mutationFn: async (values: Partial<Settings>) => {
-      updateSettings({
-        aiProviderType: aiProvider,
-        ...values
-      });
+      try {
+        await AiProviders[aiProvider].credentialValidation(values)
+        updateSettings({
+          aiProviderType: aiProvider,
+          ...values
+        });
+      } catch (e: any) {
+        throw new Error(e.message)
+      }
     },
     onSuccess: () => {
       toast({
         title: "ai provider info updated",
       });
     }, 
-    onError: () => {
+    onError: (e) => {
       toast({
-        title: "ai provider info updated",
+        title: "ai provider update failed!",
+        description: e.message ? e.message : 'please try again.',
         variant: 'destructive'
       });
     }
