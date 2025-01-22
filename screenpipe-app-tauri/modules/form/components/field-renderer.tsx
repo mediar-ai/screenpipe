@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
-import { useMemo } from "react";
+import { EyeIcon, EyeOff, LockKeyhole, LockKeyholeOpen, RefreshCw } from "lucide-react";
+import { useCallback, useMemo, useRef } from "react";
+import { IconButton } from "./fields/icon-button";
 
 export interface FormFieldRendererProps {
   placeholder?: string,
@@ -31,15 +32,33 @@ export const FormFieldRenderer = ({
 }: FormFieldRendererProps) => {
   switch (element.typeMeta.type) {
     case FormFieldTypes.STRING: {
+      const inputRef = useRef<HTMLInputElement>(null);
+      const toggleDisabled = useCallback(() => {
+        if (inputRef.current) {
+          inputRef.current.disabled = !inputRef.current.disabled;
+        }
+      }, []);
       return (
-        <Input
-          {...field}
-          placeholder={element.placeholder}
-          autoCorrect="off"
-          autoCapitalize="off"
-          autoComplete="off"
-          type="text"
-        />
+        <div className="relative w-full flex flex-row space-x-2">
+          <Input
+            {...field}
+            ref={inputRef}
+            disabled={element.typeMeta.disabled}
+            placeholder={element.placeholder}
+            autoCorrect="off"
+            autoCapitalize="off"
+            autoComplete="off"
+            type="text"
+          />
+          { element.typeMeta.disabledToggle && (
+            <IconButton
+              onClick={toggleDisabled}
+              defaultToggleValue={element.typeMeta.disabled}
+              OnComponent={LockKeyhole}
+              OffComponent={LockKeyholeOpen}
+            />
+          )}
+        </div>
       );
     }
     case FormFieldTypes.SECRET_STRING: {
