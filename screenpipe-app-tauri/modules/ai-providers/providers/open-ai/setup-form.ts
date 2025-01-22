@@ -3,12 +3,28 @@ import { FormSchema } from "@/modules/form/entities/form"
 
 const fields: FieldSchema[] = [
   {
+    key: 'aiUrl',
+    title: 'endpoint url',
+    validationMeta: {
+      errorMessage: 'this field is mandatory',
+      min: 1,
+      max: 50,
+      optional: false
+    },
+    typeMeta: {
+      isRegular: true,
+      type: 'STRING',
+      disabledToggle: true,
+      disabled: true
+    }
+  },
+  {
     key: 'openaiApiKey',
     title: 'API Key',
     validationMeta: {
       errorMessage: 'this field is mandatory',
       min: 1,
-      max: 250,
+      max: 250, 
       optional: false
     },
     typeMeta: {
