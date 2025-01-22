@@ -365,24 +365,24 @@ export default Sentry.withSentry(
 								throw new Error(`API error: ${JSON.stringify(errorData)}`);
 							}
 
-							const data = (await apiResponse.json()) as { choices: { message: { content: string } }[] };
+							const data: any = await apiResponse.json();
 
-							if (!data.choices?.length) {
-								throw new Error('no completion choices returned from api: ' + JSON.stringify(data, null, 2));
-							}
+							// Handle both OpenAI-style and Anthropic-style responses
+							const content = isAnthropicModel
+								? // Anthropic format: either content array or direct message
+								  data.content?.[0]?.text || data.choices?.[0]?.message?.content || ''
+								: // OpenAI format
+								  data.choices?.[0]?.message?.content || '';
 
-							// Normalize Anthropic response to match OpenAI format
-							const normalizedResponse = isAnthropicModel
-								? {
-										choices: [
-											{
-												message: {
-													content: data.choices[0].message.content,
-												},
-											},
-										],
-								  }
-								: data;
+							const normalizedResponse = {
+								choices: [
+									{
+										message: {
+											content: content,
+										},
+									},
+								],
+							};
 
 							generation.end({
 								completionStartTime: new Date(),
