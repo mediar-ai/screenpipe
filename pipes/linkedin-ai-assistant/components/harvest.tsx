@@ -170,7 +170,7 @@ export function HarvestClosestConnections() {
     loadInitialState();
   }, []);
 
-  // Stats polling stats
+  // Stats polling stats, load connections
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
