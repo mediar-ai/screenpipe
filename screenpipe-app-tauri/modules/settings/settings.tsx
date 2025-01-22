@@ -20,7 +20,7 @@ import { RecordingSettings } from "@/modules/settings/components/recording-setti
 import { AccountSection } from "@/modules/settings/components/account-section";
 import ShortcutSection from "@/modules/settings/components/shortcut-section";
 import DiskUsage from "@/modules/settings/components/disk-usage";
-import AISection from "@/modules/settings/components//ai-section";
+import AISection from "@/modules/settings/components/ai-section";
 import {
   DropdownMenu,
   DropdownMenuContent,
