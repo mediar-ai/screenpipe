@@ -3,6 +3,6 @@ export const AvailableAiProviders = {
     SCREENPIPE_CLOUD: "screenpipe-cloud",
     NATIVE_OLLAMA: "native-ollama",
     CUSTOM: "custom",
-    // EMBEDDED: "EMBEDDED"
+    EMBEDDED: "EMBEDDED"
 } as const
 export type AvailableAiProviders = typeof AvailableAiProviders[keyof typeof AvailableAiProviders];
