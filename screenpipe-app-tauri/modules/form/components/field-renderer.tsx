@@ -77,15 +77,16 @@ export const FormFieldRenderer = ({
           }
         })
       },[])
+
       
       return (
         <Select
-          placeholder={element.placeholder}
           className="w-[100%]"
           options={options}
           {...field}
           onChange={(e) => field.onChange(e?.value)}
-          value={{value: field.value, label: field.value}}
+          value={field.value ? {value: field.value, label: field.value} : undefined}
+          placeholder={element.placeholder}
         />
       )
     }
