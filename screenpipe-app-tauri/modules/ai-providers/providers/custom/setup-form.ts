@@ -22,11 +22,10 @@ const fields: FieldSchema[] = [
     placeholder: 'type model name',
     validationMeta: {
      optional: false,
-     errorMessage: 'hey' 
     },
     typeMeta: {
       isRegular: false,
-      type: 'SELECT', 
+      type: 'SELECT_CREATEABLE', 
       options: [
       ]
     }

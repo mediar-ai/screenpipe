@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 export const FieldTypeWithOptions = {
     SELECT: "SELECT",
+    SELECT_CREATEABLE: "SELECT_CREATEABLE"
 } as const
 
 export const RegularField = {

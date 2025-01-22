@@ -78,9 +78,30 @@ export const FormFieldRenderer = ({
         })
       },[])
 
-      
       return (
         <Select
+          className="w-[100%]"
+          options={options}
+          {...field}
+          onChange={(e) => field.onChange(e?.value)}
+          value={field.value ? {value: field.value, label: field.value} : undefined}
+          placeholder={element.placeholder}
+        />
+      )
+    }
+    case FormFieldTypes.SELECT_CREATEABLE: {
+      const options = useMemo(() => {
+        return element.typeMeta.options?.map((option) => {
+          return {
+            value: option, 
+            label: option
+          }
+        })
+      },[])
+
+      return (
+        <Select
+          isCreateable
           className="w-[100%]"
           options={options}
           {...field}

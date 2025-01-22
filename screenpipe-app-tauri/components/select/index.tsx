@@ -1,12 +1,13 @@
 import type { GroupBase, Props, SingleValue, MultiValue } from "react-select"
-import ReactSelect from "react-select"
+import CreatableSelect from 'react-select/creatable';
+import SelectReact from 'react-select';
 import * as React from "react"
 
 export type SelectProps<
   Option,
   IsMulti extends boolean = false,
   Group extends GroupBase<Option> = GroupBase<Option>
-> = Props<Option, IsMulti, Group> & { variant?: "default" | "checkbox"; "data-testid"?: string };
+> = Props<Option, IsMulti, Group> & { isCreateable?: boolean };
 
 
 const Select = <
@@ -15,13 +16,15 @@ const Select = <
   Group extends GroupBase<Option> = GroupBase<Option>
 >({
   components,
-  variant = "default",
+  isCreateable,
   ...props
 }: SelectProps<Option, IsMulti, Group>) => {
   const { menuPlacement = "auto", ...restProps } = props;
 
+  const Comp = isCreateable ? CreatableSelect : SelectReact
   return (
-    <ReactSelect
+    <Comp
+      isClearable
       isSearchable
       {...restProps}
     />
