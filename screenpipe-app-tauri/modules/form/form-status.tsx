@@ -10,14 +10,14 @@ export const FormStatus = <FormValues extends FieldValues>({
     reset: UseFormReset<FormValues>,
     isDirty?: boolean
 }) => {
-    const { isDirty, dirtyFields } = useFormState()
+    const { isDirty } = useFormState()
 
     if (!isDirty && !externalIsDirty) return null
 
     return (
         <div className="flex items-center space-x-2">
             <p className="opacity-50 font-[200] font-sans">
-            unsaved edits!
+                unsaved edits!
             </p>
             
             <TooltipProvider>

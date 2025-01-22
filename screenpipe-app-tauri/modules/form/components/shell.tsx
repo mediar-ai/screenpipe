@@ -65,8 +65,8 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
         className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[10px]"
       >
         {!props.hideTitle &&
-          <div className="flex min-h-[50px] justify-between">
-            <div className="flex flex-col justify-center">
+          <div className="flex min-h-[40px] justify-between items-end">
+            <div className="flex flex-col justify-end">
               <h1 className="text-xl font-bold">
                 {props.title}
               </h1>

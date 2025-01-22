@@ -1,9 +1,9 @@
 import * as Select from "@radix-ui/react-select";
 import { ChevronDown } from "lucide-react";
-import { AIProviderCard } from "../../../settings/components/ai-section";
 import { SelectContent } from "@/components/ui/select";
 import { AvailableAiProviders } from '../../../ai-providers/types/available-providers';
 import { AiProviders } from "@/modules/ai-providers/providers";
+import { AIProviderCard } from "@/modules/settings/components/ai-section/ai-provider-card";
 
 
 export function AiProviderSelect({
