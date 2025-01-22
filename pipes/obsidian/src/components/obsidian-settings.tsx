@@ -52,7 +52,7 @@ export function ObsidianSettings() {
     if (settings?.customSettings?.obsidian?.prompt) {
       setCustomPrompt(settings.customSettings.obsidian.prompt);
     }
-  }, [settings]);
+  }, [settings?.customSettings?.obsidian?.prompt]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,7 +448,7 @@ export function ObsidianSettings() {
             <Button
               className="w-full"
               type="submit"
-              disabled={!isVaultPathSet()}
+              // disabled={!isVaultPathSet()}
             >
               <FileCheck className="mr-2 h-4 w-4" />
               save settings
