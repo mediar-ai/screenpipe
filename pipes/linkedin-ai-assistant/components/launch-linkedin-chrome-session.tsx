@@ -70,9 +70,14 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
 
   const launchChrome = async () => {
     try {
-      await killChrome();
       setStatus('connecting');
       setError(null);
+
+      // Kill Chrome first
+      await killChrome();
+      
+      // Add a small delay to ensure Chrome is fully killed
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Get screen dimensions from browser
       const screenDims = {
@@ -94,6 +99,9 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
         throw new Error(data.error || 'Failed to launch chrome');
       }
 
+      // Add delay before polling to ensure Chrome is ready
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       // Start polling the server-side API for debugger URL
       pollDebuggerStatus();
     } catch (error) {
