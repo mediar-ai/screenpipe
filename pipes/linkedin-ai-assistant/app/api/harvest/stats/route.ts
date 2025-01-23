@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadConnections } from '@/lib/storage/storage';
+import { loadConnections, isHarvestingAlive, saveHarvestingState } from '@/lib/storage/storage';
 
 export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
@@ -7,7 +7,15 @@ export const fetchCache = 'force-no-store'
 export async function GET() {
   try {
     const connectionsStore = await loadConnections();
+    const isAlive = await isHarvestingAlive();
     
+    // Reset state if process is dead but status is running
+    if (connectionsStore.harvestingStatus === 'running' && !isAlive) {
+      console.log('detected dead harvest process, resetting state to stopped');
+      await saveHarvestingState('stopped');
+      connectionsStore.harvestingStatus = 'stopped';
+    }
+
     // Calculate stats using reduce
     const stats = Object.values(connectionsStore.connections).reduce((acc, connection) => {
       const status = connection.status || 'pending';
@@ -28,7 +36,12 @@ export async function GET() {
         withdrawStatus: connectionsStore.withdrawStatus || {
           isWithdrawing: false
         }
-      }
+      },
+      isAlive,
+      harvestingStatus: connectionsStore.harvestingStatus,
+      nextHarvestTime: connectionsStore.nextHarvestTime,
+      connectionsSent: connectionsStore.connectionsSent,
+      statusMessage: connectionsStore.statusMessage
     });
   } catch (error) {
     console.error('stats check failed:', error);
