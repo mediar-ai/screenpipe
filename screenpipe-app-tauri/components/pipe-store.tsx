@@ -161,7 +161,7 @@ const corePipes: (CorePipe & { fullDescription?: string })[] = [
     description:
       "write logs of your day in obsidian with local AI features, customization, and user friendly UI",
     url: "https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian",
-    credits: 10,
+    credits: 20,
     paid: true,
   },
   {

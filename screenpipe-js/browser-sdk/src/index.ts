@@ -65,14 +65,12 @@ export interface BrowserPipe {
 }
 
 class BrowserPipeImpl implements BrowserPipe {
-  private analyticsInitialized = false;
-  private analyticsEnabled = false;
-  private userId?: string;
   private userProperties?: Record<string, any>;
 
-  private async initAnalyticsIfNeeded() {
-    if (this.analyticsInitialized || !this.userId) return;
-
+  private async initAnalyticsIfNeeded(): Promise<{
+    analyticsEnabled: boolean;
+    userId?: string;
+  }> {
     try {
       // Connect to settings SSE stream
       const settingsStream = new EventSource(
@@ -80,39 +78,52 @@ class BrowserPipeImpl implements BrowserPipe {
       );
 
       // Get initial settings
-      const settings = await new Promise<{ analyticsEnabled: boolean }>(
-        (resolve, reject) => {
-          const timeout = setTimeout(() => {
-            settingsStream.close();
-            reject(new Error("settings stream timeout"));
-          }, 5000);
+      const settings = await new Promise<{
+        analyticsEnabled: boolean;
+        userId?: string;
+      }>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          settingsStream.close();
+          reject(new Error("settings stream timeout"));
+        }, 5000);
 
-          settingsStream.onmessage = (event) => {
-            clearTimeout(timeout);
-            settingsStream.close();
-            resolve(JSON.parse(event.data));
-          };
+        settingsStream.onmessage = (event) => {
+          clearTimeout(timeout);
+          settingsStream.close();
+          // Parse the settings array and find analyticsEnabled
+          const settingsArray: [string, any][] = JSON.parse(event.data);
+          const analyticsEnabled =
+            settingsArray.find(([key]) => key === "analyticsEnabled")?.[1] ??
+            false;
+          const userId =
+            settingsArray.find(([key]) => key === "user.clerk_id")?.[1] ??
+            undefined;
+          resolve({ analyticsEnabled, userId });
+        };
 
-          settingsStream.onerror = (error) => {
-            clearTimeout(timeout);
-            settingsStream.close();
-            reject(error);
-          };
-        }
-      );
+        settingsStream.onerror = (error) => {
+          clearTimeout(timeout);
+          settingsStream.close();
+          reject(error);
+        };
+      });
 
-      this.analyticsEnabled = settings.analyticsEnabled;
+      if (settings.analyticsEnabled && settings.userId) {
+        await identifyUser(settings.userId, this.userProperties);
+      }
+      return {
+        analyticsEnabled: settings.analyticsEnabled,
+        userId: settings.userId,
+      };
     } catch (error) {
       console.error(
         "failed to fetch settings, defaulting to analytics enabled:",
         error
       );
-      this.analyticsEnabled = false; // Default to false if fetch fails
-    }
-
-    if (this.analyticsEnabled) {
-      await identifyUser(this.userId, this.userProperties);
-      this.analyticsInitialized = true;
+      return {
+        analyticsEnabled: false,
+        userId: undefined,
+      };
     }
   }
 
@@ -141,6 +152,7 @@ class BrowserPipeImpl implements BrowserPipe {
   async queryScreenpipe(
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {
+    console.log("queryScreenpipe:", params);
     await this.initAnalyticsIfNeeded();
     const queryParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -300,8 +312,8 @@ class BrowserPipeImpl implements BrowserPipe {
     eventName: string,
     properties?: Record<string, any>
   ) {
-    if (!this.analyticsEnabled) return;
-    await this.initAnalyticsIfNeeded();
+    const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
+    if (!analyticsEnabled) return;
     return captureEvent(eventName, properties);
   }
 
@@ -309,8 +321,8 @@ class BrowserPipeImpl implements BrowserPipe {
     featureName: string,
     properties?: Record<string, any>
   ) {
-    if (!this.analyticsEnabled) return;
-    await this.initAnalyticsIfNeeded();
+    const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
+    if (!analyticsEnabled) return;
     return captureMainFeatureEvent(featureName, properties);
   }
 }

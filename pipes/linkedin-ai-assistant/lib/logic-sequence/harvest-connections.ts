@@ -364,14 +364,18 @@ async function clickNextConnectButton(
   stopRequested: boolean
 ): Promise<ConnectionResult> {
   try {
-    // Load existing connections first
+    // Simple check if page is still valid
+    if (page.isClosed()) {
+      console.log('page is closed, cannot proceed');
+      return { success: false };
+    }
+
     const { connections } = await loadConnections();
-
-    const connectButtonSelector =
-      'button[aria-label^="Invite"][aria-label$="to connect"]';
+    
+    const connectButtonSelector = 'button[aria-label^="Invite"][aria-label$="to connect"]';
+    
+    // Use evaluateHandle for more stable element selection
     const connectButtons = await page.$$(connectButtonSelector);
-
-    // Add logging for found buttons
     console.log(`found ${connectButtons.length} connect buttons`);
 
     // Log page structure
