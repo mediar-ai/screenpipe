@@ -48,6 +48,7 @@ export async function setupBrowser(logs: string[] = []): Promise<{ browser: Brow
                     browserWSEndpoint: wsUrl,
                     defaultViewport: null,
                 });
+                session.setActiveBrowser(activeBrowser);
                 addLog('browser connected successfully');
                 
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -92,8 +93,8 @@ export async function setupBrowser(logs: string[] = []): Promise<{ browser: Brow
 export function getActiveBrowser() {
     const session = ChromeSession.getInstance();
     return { 
-        browser: activeBrowser, 
-        page: session.getActivePage() || activePage 
+        browser: session.getActiveBrowser(),
+        page: session.getActivePage() 
     };
 }
 
