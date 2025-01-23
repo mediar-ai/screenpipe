@@ -21,6 +21,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
@@ -41,6 +42,7 @@ use crate::analytics::start_analytics;
 use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
+mod disk_usage;
 mod llm_sidecar;
 mod permissions;
 mod server;
@@ -48,7 +50,6 @@ mod sidecar;
 mod store;
 mod tray;
 mod updates;
-mod disk_usage;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
@@ -290,7 +291,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-    
+
     // Register stop audio shortcut
     register_shortcut(
         app,
@@ -363,7 +364,6 @@ async fn list_pipes() -> anyhow::Result<Value> {
     Ok(response)
 }
 
-
 fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
@@ -384,10 +384,12 @@ pub struct LogFile {
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
-    
+
     // Collect all entries first
     let mut entries = Vec::new();
-    let mut dir = tokio::fs::read_dir(&data_dir).await.map_err(|e| e.to_string())?;
+    let mut dir = tokio::fs::read_dir(&data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
     while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
         // Get metadata immediately for each entry
         if let Ok(metadata) = entry.metadata().await {
@@ -403,7 +405,7 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
                 .ok()
                 .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
-                .unwrap_or(0)
+                .unwrap_or(0),
         )
     });
 
@@ -434,7 +436,6 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
 
     Ok(log_files)
 }
-
 
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
@@ -674,6 +675,13 @@ async fn main() {
             update_global_shortcuts,
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
@@ -789,7 +797,9 @@ async fn main() {
                                         if pipe["enabled"].as_bool().unwrap_or(false) {
                                             if let Some(id) = pipe["id"].as_str() {
                                                 let _ = reqwest::Client::new()
-                                                    .post(format!("http://localhost:3030/pipes/disable"))
+                                                    .post(format!(
+                                                        "http://localhost:3030/pipes/disable"
+                                                    ))
                                                     .json(&serde_json::json!({
                                                         "pipe_id": id
                                                     }))
@@ -800,10 +810,12 @@ async fn main() {
                                     }
                                 }
                             }
-                            
+
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
-                            if let Err(e) = kill_all_sreenpipes(state, app_handle_clone.clone()).await {
+                            if let Err(e) =
+                                kill_all_sreenpipes(state, app_handle_clone.clone()).await
+                            {
                                 error!("Error stopping recordings during quit: {}", e);
                             }
                         });
@@ -996,10 +1008,7 @@ async fn main() {
 
             info!("use_dev_mode: {}", use_dev_mode);
 
-            info!(
-                "will start sidecar: {}",
-                !use_dev_mode && has_files
-            );
+            info!("will start sidecar: {}", !use_dev_mode && has_files);
 
             // if non dev mode and previously started sidecar, start sidecar
             if !use_dev_mode && has_files {
