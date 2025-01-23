@@ -199,7 +199,7 @@ export function AIPanel({
   };
 
   const handleAiSubmit = async (e: React.FormEvent) => {
-    pipe.captureMainFeatureEvent("ai-panel", {
+    pipe.captureMainFeatureEvent("rewind-ai-panel", {
       action: "ai-submit",
     });
     e.preventDefault();
