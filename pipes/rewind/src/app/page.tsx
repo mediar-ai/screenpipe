@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
@@ -251,7 +251,7 @@ export default function Timeline() {
 				e.preventDefault();
 				e.stopPropagation();
 
-				const scrollSensitivity = 0.4;
+				const scrollSensitivity = 1;
 				const delta = -Math.sign(e.deltaY) / scrollSensitivity;
 
 				setCurrentIndex((prevIndex) => {
@@ -546,7 +546,6 @@ export default function Timeline() {
 						<div
 							className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
 							style={{ left: `${timePercentage}%` }}
-							draggable
 						>
 							<div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
 								{currentIndex < frames.length &&
@@ -592,19 +591,20 @@ export default function Timeline() {
 					<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
 						{timeRange.map((time, i) => {
 							return (
-								<div
+								<button
 									key={i}
 									className="absolute transform -translate-x-1/2 text-nowrap"
 									style={{
 										left: `${(i * 100) / (timeRange.length - 1)}%`,
 									}}
+									onClick={() => jumpToDate(new Date(time))}
 								>
 									{new Date(time).toLocaleTimeString("en-US", {
 										hour: "numeric",
 										minute: "2-digit",
 										hour12: true,
 									})}
-								</div>
+								</button>
 							);
 						})}
 					</div>
