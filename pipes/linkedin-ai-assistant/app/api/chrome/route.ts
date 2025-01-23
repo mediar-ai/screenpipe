@@ -53,7 +53,7 @@ function getScreenDimensions(requestDims?: ScreenDimensions) {
 export async function POST(request: Request) {
   try {
     addLog('chrome route: starting POST request');
-    
+
     // Get dimensions from request first
     const body = await request.json();
     const screenDims = getScreenDimensions(body.screenDims);
@@ -82,72 +82,94 @@ export async function POST(request: Request) {
     addLog(`system architecture: ${os.arch()}`);
     addLog(`cpu info: ${JSON.stringify(os.cpus()[0], null, 2)}`);
 
-    addLog("attempting to launch chrome");
-    addLog("killing existing chrome instances...");
-    await quitChrome();
-    await quitBrowser(logs);
-
-    const chromePath = getChromePath();
-    addLog(`using chrome path: ${chromePath}`);
-    addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
-
-    addLog("spawning chrome with debugging port 9222...");
-    const isArmMac = os.platform() === 'darwin' && os.arch() === 'arm64';
-    const spawnCommand = isArmMac ? 'arch' : chromePath;
-    const spawnArgs = isArmMac ? [
-      '-arm64',
-      chromePath,
-      ...additionalFlags
-    ] : [
-      ...additionalFlags
-    ];
-
-    const chromeProcess = spawn(spawnCommand, spawnArgs, { 
-      detached: true, 
-      stdio: 'ignore' 
-    });
-
-    chromeProcess.unref();
-    addLog("chrome process spawned and detached");
-
-    addLog("waiting for chrome to initialize...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    let attempts = 0;
-    const maxAttempts = 5;
-    addLog(`attempting to connect to debug port (max ${maxAttempts} attempts)`);
-
-    while (attempts < maxAttempts) {
-      try {
-        addLog(`connection attempt ${attempts + 1}/${maxAttempts}`);
-        const response = await fetch('http://127.0.0.1:9222/json/version');
-        const data = await response.json();
-        
-        if (response.ok && data.webSocketDebuggerUrl) {
-          addLog('chrome debug port responding');
-          const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
-          addLog(`websocket url: ${wsUrl}`);
-          ChromeSession.getInstance().setWsUrl(wsUrl);
-          
-          return NextResponse.json({ 
-            success: true,
-            wsUrl,
-            logs
-          });
-        }
-      } catch (err) {
-        addLog(`attempt ${attempts + 1} failed: ${err}`);
+    addLog("checking for existing chrome instance...");
+    let wsUrl: string | null = null;
+    try {
+      const response = await fetch('http://127.0.0.1:9222/json/version');
+      if (response.ok) {
+        const data = await response.json() as { webSocketDebuggerUrl: string };
+        wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+        addLog(`found existing chrome instance at ${wsUrl}`);
+      } else {
+        addLog('no existing chrome instance found, launching a new one');
       }
-      attempts++;
-      addLog(`waiting 1s before retry ${attempts}/${maxAttempts}`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      addLog(`error checking for existing chrome instance: ${error}`);
+      addLog('launching a new chrome instance');
     }
-    
-    throw new Error('failed to connect to chrome debug port after all attempts');
+
+    if (!wsUrl) {
+      addLog("attempting to launch chrome");
+      addLog("killing existing chrome instances...");
+      await quitChrome(); // only kill if we are about to launch a new one
+      await quitBrowser(logs);
+
+      const chromePath = getChromePath();
+      addLog(`using chrome path: ${chromePath}`);
+      addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
+
+      addLog("spawning chrome with debugging port 9222...");
+      const isArmMac = os.platform() === 'darwin' && os.arch() === 'arm64';
+      const spawnCommand = isArmMac ? 'arch' : chromePath;
+      const spawnArgs = isArmMac ? [
+        '-arm64',
+        chromePath,
+        ...additionalFlags
+      ] : [
+        ...additionalFlags
+      ];
+
+      const chromeProcess = spawn(spawnCommand, spawnArgs, {
+        detached: true,
+        stdio: 'ignore'
+      });
+
+      chromeProcess.unref();
+      addLog("chrome process spawned and detached");
+
+      addLog("waiting for chrome to initialize...");
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      let attempts = 0;
+      const maxAttempts = 5;
+      addLog(`attempting to connect to debug port (max ${maxAttempts} attempts)`);
+
+      while (attempts < maxAttempts) {
+        try {
+          addLog(`connection attempt ${attempts + 1}/${maxAttempts}`);
+          const response = await fetch('http://127.0.0.1:9222/json/version');
+          const data = await response.json();
+
+          if (response.ok && data.webSocketDebuggerUrl) {
+            addLog('chrome debug port responding');
+            wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+            addLog(`websocket url: ${wsUrl}`);
+            ChromeSession.getInstance().setWsUrl(wsUrl);
+            break; // exit retry loop on success
+          }
+        } catch (err) {
+          addLog(`attempt ${attempts + 1} failed: ${err}`);
+        }
+        attempts++;
+        addLog(`waiting 1s before retry ${attempts}/${maxAttempts}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      if (!wsUrl) {
+        throw new Error('failed to connect to chrome debug port after all attempts');
+      }
+    }
+
+
+    return NextResponse.json({
+      success: true,
+      wsUrl,
+      logs
+    });
   } catch (err) {
     addLog(`chrome launch failed with error: ${err}`);
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: String(err),
       logs
     }, { status: 500 });
