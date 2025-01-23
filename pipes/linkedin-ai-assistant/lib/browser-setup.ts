@@ -29,36 +29,42 @@ export async function setupBrowser(logs: string[] = []): Promise<{ browser: Brow
         logs.push(`${new Date().toISOString()} - ${msg}`);
     };
 
-    addLog('setting up browser...');
+    addLog('checking for existing browser...');
     if (!activeBrowser) {
         const session = ChromeSession.getInstance();
-        addLog('getting ws url...');
+        // addLog('getting ws url...');
         const wsUrl = session.getWsUrl() || await getDebuggerUrl(logs);
-        addLog('using ws url: ' + wsUrl);
-        
+        // addLog('using ws url: ' + wsUrl);
+
         let retries = 5;
         let lastError;
-        
+
         while (retries > 0) {
             try {
                 addLog(`connection attempt ${6 - retries}...`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
+
                 activeBrowser = await puppeteer.connect({
                     browserWSEndpoint: wsUrl,
                     defaultViewport: null,
                 });
                 session.setActiveBrowser(activeBrowser);
                 addLog('browser connected successfully');
-                
+
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                const pages = await activeBrowser.pages();
+                let pages = await activeBrowser.pages();
                 addLog(`found ${pages.length} pages`);
-                
-                if (!pages.length) {
-                    throw new Error('no pages available');
+
+                let linkedinPage = pages.find(page => page.url().startsWith('https://www.linkedin.com'));
+
+                if (linkedinPage) {
+                    addLog('found existing linkedin page, reusing it');
+                    activePage = linkedinPage;
+                } else {
+                    addLog('no existing linkedin page found, opening a new tab');
+                    activePage = await activeBrowser.newPage();
+                    addLog('new tab opened');
                 }
-                activePage = pages[0];
                 session.setActivePage(activePage);
                 addLog('browser setup complete');
                 break;
