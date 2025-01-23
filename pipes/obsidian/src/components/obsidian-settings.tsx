@@ -402,6 +402,13 @@ export function ObsidianSettings() {
     []
   );
 
+  // Add this new useEffect for initial path validation
+  useEffect(() => {
+    if (settings?.customSettings?.obsidian?.path) {
+      validatePath(settings.customSettings.obsidian.path);
+    }
+  }, [settings?.customSettings?.obsidian?.path, validatePath]);
+
   if (loading) {
     return (
       <div className="w-full max-w-4xl mx-auto space-y-8">
