@@ -290,7 +290,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-    
+
     // Register stop audio shortcut
     register_shortcut(
         app,
@@ -384,7 +384,7 @@ pub struct LogFile {
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
-    
+
     // Collect all entries first
     let mut entries = Vec::new();
     let mut dir = tokio::fs::read_dir(&data_dir).await.map_err(|e| e.to_string())?;
@@ -800,7 +800,7 @@ async fn main() {
                                     }
                                 }
                             }
-                            
+
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
                             if let Err(e) = kill_all_sreenpipes(state, app_handle_clone.clone()).await {
@@ -1010,7 +1010,6 @@ async fn main() {
                     }
 
                     // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.check_and_restart(&app_handle).await {
                         error!("Failed to restart sidecar: {}", e);
                     }
@@ -1018,10 +1017,6 @@ async fn main() {
             } else {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");
             }
-
-            // Inside the main function, after the `app.manage(port);` line, add:
-            let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
-            app.manage(server_shutdown_tx);
 
             // Start health check service
             // macos only
@@ -1072,6 +1067,9 @@ async fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
+
+        let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
+        app.manage(server_shutdown_tx);
 
     // set_tray_unhealth_icon(app.app_handle().clone());
     app.run(|app_handle, event| match event {
