@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use screenpipe_events::{define_event_registry, send_event};
+use screenpipe_events::{send_event, update_event_registry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -13,7 +13,7 @@ struct TestData {
 
 #[tokio::test]
 async fn test_single_subscriber() {
-    define_event_registry! {
+    update_event_registry! {
         test_event => String,
     }
     let mut stream = test_event();
@@ -23,7 +23,7 @@ async fn test_single_subscriber() {
 
 #[tokio::test]
 async fn test_multiple_subscribers() {
-    define_event_registry! {
+    update_event_registry! {
         test_event => String,
     }
     let mut stream1 = test_event();
@@ -37,7 +37,7 @@ async fn test_multiple_subscribers() {
 
 #[tokio::test]
 async fn test_different_events() {
-    define_event_registry! {
+    update_event_registry! {
         event1 => i32,
         event2 => String,
     }
@@ -53,7 +53,7 @@ async fn test_different_events() {
 
 #[tokio::test]
 async fn test_complex_data() {
-    define_event_registry! {
+    update_event_registry! {
         complex => TestData,
     }
     let mut stream = complex();
@@ -72,7 +72,7 @@ async fn test_complex_data() {
 
 #[tokio::test]
 async fn test_dropped_events() {
-    define_event_registry! {
+    update_event_registry! {
         drop_test => i32,
     }
     let mut stream = drop_test();
@@ -90,7 +90,7 @@ async fn test_dropped_events() {
 
 #[tokio::test]
 async fn test_concurrent_senders() {
-    define_event_registry! {
+    update_event_registry! {
         concurrent_send => String,
     }
     let mut stream = concurrent_send();
@@ -122,7 +122,7 @@ async fn test_concurrent_senders() {
 
 #[tokio::test]
 async fn test_unsubscribe() {
-    define_event_registry! {
+    update_event_registry! {
         unsubscribe_test => String,
     }
     let mut stream1 = unsubscribe_test();
@@ -140,7 +140,7 @@ async fn test_unsubscribe() {
 
 #[tokio::test]
 async fn test_send_without_subscribers() {
-    define_event_registry! {
+    update_event_registry! {
         no_subscribers => String,
     }
 
@@ -149,7 +149,7 @@ async fn test_send_without_subscribers() {
 
 #[tokio::test]
 async fn test_multiple_subscriptions_same_subscriber() {
-    define_event_registry! {
+    update_event_registry! {
         multi_sub => String,
     }
     let mut stream1 = multi_sub();
@@ -165,7 +165,7 @@ async fn test_multiple_subscriptions_same_subscriber() {
 
 #[tokio::test]
 async fn test_type_mismatch() {
-    define_event_registry! {
+    update_event_registry! {
         type_test => String,
     }
     let mut stream = type_test();
@@ -179,7 +179,7 @@ async fn test_type_mismatch() {
 
 #[tokio::test]
 async fn test_subscribe_macro_type_inference() {
-    define_event_registry! {
+    update_event_registry! {
         type_test1 => String,
         type_test2 => i32,
         type_test3 => TestData,
@@ -206,7 +206,7 @@ async fn test_subscribe_macro_type_inference() {
 
 #[tokio::test]
 async fn test_macro_multiple_subscribers() {
-    define_event_registry! {
+    update_event_registry! {
         macro_multi => String,
     }
     let mut stream1 = macro_multi();

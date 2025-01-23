@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use screenpipe_events::{define_event_registry, send_event};
+use screenpipe_events::{send_event, update_event_registry};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
 // Simulate crate A's types and events
@@ -12,7 +12,7 @@ mod crate_a {
         pub action: String,
     }
 
-    define_event_registry! {
+    update_event_registry! {
         user_joined => UserEvent,
         user_left => UserEvent
     }
@@ -28,7 +28,7 @@ mod crate_b {
         pub content: String,
     }
 
-    define_event_registry! {
+    update_event_registry! {
         message_sent => ChatMessage,
         message_edited => ChatMessage
     }

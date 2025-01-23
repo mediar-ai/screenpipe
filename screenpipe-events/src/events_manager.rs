@@ -54,7 +54,7 @@ macro_rules! send_event {
 }
 
 #[macro_export]
-macro_rules! define_event_registry {
+macro_rules! update_event_registry {
     ($($name:ident => $type:ty),* $(,)?) => {
         #[derive(Clone)]
         pub struct Registry;

@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
-use screenpipe_events::{define_event_registry, send_event};
+use screenpipe_events::{send_event, update_event_registry};
 use tokio::runtime::Runtime;
 
-define_event_registry! {
+update_event_registry! {
     test_event => String,
     counter_event => u64,
 
