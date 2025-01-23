@@ -803,12 +803,12 @@ async function goToNextPage(
 
     console.log('no valid next button found - ending harvest process');
     await setStopRequested(true); // Request stop when no more pages
-    await saveHarvestingState('stopped', 'no more pages available');
+    await saveHarvestingState('stopped', 'last farming cycle: no more pages available');
     return false;
   } catch (error) {
     console.error('error in goToNextPage:', error);
     await setStopRequested(true);
-    await saveHarvestingState('stopped', 'error navigating to next page');
+    await saveHarvestingState('stopped', 'last farming cycle: error navigating to next page');
     return false;
   }
 }
