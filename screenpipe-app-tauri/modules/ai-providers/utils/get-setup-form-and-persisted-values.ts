@@ -35,7 +35,7 @@ export async function getSetupFormAndPersistedValues({
 
     // 2. Define default values
     if (selectedAiProvider !== activeAiProvider) {
-        defaultValues = await AiProviders[selectedAiProvider].defaultValuesGetter() as Record<string, string>
+        defaultValues = await AiProviders[selectedAiProvider].defaultValuesGetter(settings) as Record<string, string>
     } else {
         defaultValues = await AiProviders[selectedAiProvider].savedValuesGetter(settings) as Record<string, string>
     }

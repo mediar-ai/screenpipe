@@ -6,6 +6,7 @@ import { generateFormSchema } from "../utils/zod-schema-generator";
 import { FormSchema } from '../entities/form';
 
 export default function Form({
+  controlledShowSubmitButton,
   isDirty,
   onSubmit,
   onReset,
@@ -13,6 +14,7 @@ export default function Form({
   form,
   defaultValues,
 } : {
+  controlledShowSubmitButton?: boolean,
   isDirty?: boolean,
   onSubmit?: (values: any) => Promise<void>;
   onReset?: () => Promise<void>;
@@ -52,9 +54,11 @@ export default function Form({
   
   return (
     <FormRenderer
+      controlledShowSubmitButton={controlledShowSubmitButton}
       isDirty={isDirty}
       resetForm={resetForm}
       buttonText={form.buttonText}
+      showSubmitButton={form.showSubmitButton}
       title={form.title}
       fields={form.fields}
       description={form.description}

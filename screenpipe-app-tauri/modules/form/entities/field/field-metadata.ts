@@ -7,6 +7,7 @@ export const fieldSchema = z.object({
     title: z.string(),
     subtitle: z.string().optional(),
     description: z.string().optional(),
+    infoTooltip: z.string().optional(),
     placeholder: z.string().optional(),
     validationMeta: validationMeta,
     typeMeta: typeMetadata

@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-select";
 import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
 import { RegularProviderSetupForm } from "./provider-setup-forms";
-import { EmbeddedControlCenter } from "./embedded.control-center";
+import { EmbeddedControlCenter } from "./embedded-llm/control-center";
 
 const AISection = () => {
   const { settings } = useSettings();
@@ -31,7 +31,10 @@ const AISection = () => {
             setAiProvider={setAiProvider}
           />
         )
-      : <EmbeddedControlCenter/>
+      : <EmbeddedControlCenter
+          aiProvider={aiProvider}
+          setAiProvider={setAiProvider}
+        />
     }
      
     </div>

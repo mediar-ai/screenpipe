@@ -1,6 +1,6 @@
 "use client"
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ForwardRefRenderFunction, PropsWithoutRef, useImperativeHandle } from "react";
+import { ForwardRefRenderFunction, PropsWithoutRef, useImperativeHandle, useMemo } from "react";
 import React from "react";
 import { type SubmitHandler, type FieldValues, type DefaultValues, useForm, Path, useFormState, UseFormReset } from "react-hook-form";
 import { z, ZodRawShape } from "zod";
@@ -9,6 +9,10 @@ import { FieldSchema } from "../entities/field/field-metadata";
 import { FormFieldRenderer } from "./field-renderer";
 import { ButtonWithLoadingState } from "@/components/ui/button-with-loading-state";
 import { FormStatus } from "../form-status";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpCircle } from "lucide-react";
+import { InfoTooltip } from "./fields/info-tooltip";
 
 export interface FormRendererHandles<FormValues> {
   reset: (values?: FormValues) => void;
@@ -22,6 +26,8 @@ export interface FormRendererProps<FormValues extends FieldValues> {
   defaultValues?: DefaultValues<FormValues>;
   formZodSchema: z.ZodObject<ZodRawShape>;
   showInternalButton?: boolean;
+  showSubmitButton?: boolean;
+  controlledShowSubmitButton?: boolean;
   hideTitle?: boolean,
   isDirty?: boolean,
   buttonText: string;
@@ -52,6 +58,18 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
     },
   }));
 
+  const showSubmitButton = useMemo(() => {
+    if (props.controlledShowSubmitButton) {
+      return props.controlledShowSubmitButton
+    }
+    
+    return (form.formState.isDirty || props.showSubmitButton)
+  }, [
+      form.formState.isDirty,
+      props.showSubmitButton, 
+      props.controlledShowSubmitButton
+  ])
+
   return (
     <Form {...form}>
       <form
@@ -62,18 +80,18 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
           form
             .handleSubmit(props.onSubmit)(event)
         }}
-        className="flex w-[100%] min-h-[100%] flex-col space-y-8 pb-[10px]"
+        className="flex w-[100%] min-h-[100%] flex-col space-y-8 p-1 pb-[10px]"
       >
         {!props.hideTitle &&
           <div className="flex min-h-[40px] justify-between items-end">
-            <div className="flex flex-col justify-end">
-              <h1 className="text-xl font-bold">
+            <div className="flex flex-col justify-end space-y-1">
+              <Label>
                 {props.title}
-              </h1>
+              </Label>
               {!!props.description && (
-                <h3 className="text-xs font-[200]">
+                <p className="text-sm text-muted-foreground">
                   {props.description}
-                </h3>
+                </p>
               )}
             </div>
             <FormStatus
@@ -92,9 +110,16 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
                 return (
                   <FormItem className="flex flex-col justify-center space-y-2">
                       <div className="flex flex-col space-y-1">
-                        <FormLabel>
-                          {element.title}
-                        </FormLabel>
+                        <div className="flex items-center">
+                          <FormLabel>
+                            {element.title}
+                          </FormLabel>
+                          { !!element.infoTooltip && (
+                            <InfoTooltip
+                              text={element.infoTooltip}
+                            />
+                          )}
+                        </div>
                         <FormDescription>
                           {element.description}
                         </FormDescription>
@@ -117,7 +142,7 @@ export const InternalFormRenderer = <FormValues extends FieldValues>(
           )
         })}
 
-        { form.formState.isDirty && (
+        { showSubmitButton && (
           <ButtonWithLoadingState
             isLoading={props.isLoading}
             label={props.buttonText}

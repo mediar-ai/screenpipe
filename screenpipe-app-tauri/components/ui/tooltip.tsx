@@ -27,4 +27,35 @@ const TooltipContent = React.forwardRef<
 ))
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
+export function TooltipDefault({
+    text,
+    children,
+    side,
+    hideTooltip
+} : {
+    text: string,
+    side?: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>['side']
+    children: React.ReactElement,
+    hideTooltip?: boolean
+}) {
+    const open = React.useMemo(() => {
+      return hideTooltip ? !hideTooltip : undefined
+    },[hideTooltip])
+
+    return (
+        <TooltipProvider>
+            <Tooltip open={open}>
+                <TooltipTrigger asChild>
+                  {children}
+                </TooltipTrigger>
+                <TooltipContent side={side} className="max-w-[300px]">
+                  <p>
+                      {text}
+                  </p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
+
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
