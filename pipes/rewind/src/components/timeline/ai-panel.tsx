@@ -297,8 +297,21 @@ export function AIPanel({
           <div className="flex items-center gap-2 flex-1">
             <GripHorizontal className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
             <div className="text-muted-foreground text-xs">
-              {new Date(selectionRange.start.getTime()).toLocaleTimeString()} -{" "}
-              {new Date(selectionRange.end.getTime()).toLocaleTimeString()}
+              {new Date(selectionRange.start).toLocaleString([], {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
+              {" - "}
+              {new Date(selectionRange.end).toLocaleString([], {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              })}
             </div>
           </div>
           <button
@@ -333,7 +346,7 @@ export function AIPanel({
       {isExpanded && (
         <div className="flex flex-col h-[calc(100%-52px)]">
           <div
-            className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed"
+            className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 hover:cursor-auto text-foreground font-mono text-sm leading-relaxed "
             style={{
               WebkitUserSelect: "text",
               userSelect: "text",
@@ -342,6 +355,8 @@ export function AIPanel({
               overscrollBehavior: "contain",
               overflowY: "scroll",
               height: "100%",
+              maxWidth: "100%",
+              boxSizing: "border-box",
             }}
           >
             {chatMessages.map((msg, index) => (
