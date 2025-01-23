@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import {
   Select,
   SelectContent,
@@ -240,6 +241,7 @@ export function SearchChat() {
   const [offset, setOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const { settings } = useSettings();
+  const { isAvailable, error } = useAiProvider(settings);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);
@@ -1137,6 +1139,7 @@ export function SearchChat() {
     // Add any other reset logic you need
   };
 
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
@@ -1822,20 +1825,28 @@ export function SearchChat() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-
-                <Input
-                  ref={floatingInputRef}
-                  type="text"
-                  placeholder="ask a question about the results..."
-                  value={floatingInput}
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH ||
-                    isAiDisabled
-                  }
-                  onChange={(e) => setFloatingInput(e.target.value)}
-                  className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
-                />
-
+                <TooltipProvider>
+                  <Tooltip open={!isAvailable}>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1">
+                        <Input
+                          ref={floatingInputRef}
+                          type="text"
+                          placeholder="ask a question about the results..."
+                          value={floatingInput}
+                          disabled={ 
+                            calculateSelectedContentLength() > MAX_CONTENT_LENGTH || isAiDisabled || !isAvailable
+                          }
+                          onChange={(e) => setFloatingInput(e.target.value)}
+                          className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p className="text-sm text-destructive">{error}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Select
                   value={selectedAgent.id}
                   onValueChange={(value) =>
