@@ -80,125 +80,129 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-[320px] border-r bg-muted/10 flex-shrink-0 overflow-y-auto">
-          <div className="p-4 space-y-4">
-            <div className="flex gap-2">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          onClick={() => {
-                            onToggle(pipe, () => setIsLoading(false));
-                          }}
-                          variant={
-                            pipe.installed_config?.enabled
-                              ? "default"
-                              : "outline"
-                          }
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <Power className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          {pipe.installed_config?.enabled
-                            ? "disable"
-                            : "enable"}{" "}
-                          pipe
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-
-                  <LogFileButton className="text-xs" />
-
-                  {pipe.installed_config?.source &&
-                  isValidSource(pipe.installed_config.source) ? (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={() =>
-                              onRefreshFromDisk(pipe, () => setIsLoading(false))
-                            }
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>refresh the code from your local disk</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  ) : (
+        {pipe.is_installed && (
+          <div className="w-[320px] border-r bg-muted/10 flex-shrink-0 overflow-y-auto">
+            <div className="p-4 space-y-4">
+              <div className="flex gap-2">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             onClick={() => {
-                              onUpdate(pipe, () => setIsLoading(false));
+                              onToggle(pipe, () => setIsLoading(false));
                             }}
-                            variant="outline"
+                            variant={
+                              pipe.installed_config?.enabled
+                                ? "default"
+                                : "outline"
+                            }
                             size="icon"
                             className="h-8 w-8"
                           >
-                            <RefreshCw className="h-4 w-4" />
+                            <Power className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>update pipe</p>
+                          <p>
+                            {pipe.installed_config?.enabled
+                              ? "disable"
+                              : "enable"}{" "}
+                            pipe
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-                  )}
 
-                  <div className="flex items-center gap-2">
-                    {/* Only show delete button for non-core pipes */}
-                    {!pipe.is_core_pipe && (
+                    <LogFileButton className="text-xs" />
+
+                    {pipe.installed_config?.source &&
+                    isValidSource(pipe.installed_config.source) ? (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              onClick={() =>
+                                onRefreshFromDisk(pipe, () =>
+                                  setIsLoading(false)
+                                )
+                              }
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>refresh the code from your local disk</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               onClick={() => {
-                                onDelete(pipe, () => setIsLoading(false));
+                                onUpdate(pipe, () => setIsLoading(false));
                               }}
                               variant="outline"
                               size="icon"
                               className="h-8 w-8"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <RefreshCw className="h-4 w-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>delete pipe</p>
+                            <p>update pipe</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
                     )}
+
+                    <div className="flex items-center gap-2">
+                      {/* Only show delete button for non-core pipes */}
+                      {!pipe.is_core_pipe && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                onClick={() => {
+                                  onDelete(pipe, () => setIsLoading(false));
+                                }}
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>delete pipe</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {pipe.installed_config?.enabled && (
-              <div className="space-y-3 pt-4 border-t">
-                <PipeConfigForm
-                  pipe={pipe}
-                  onConfigSave={(config) => {
-                    onConfigSave(config, () => setIsLoading(false));
-                  }}
-                />
-              </div>
-            )}
+              {pipe.installed_config?.enabled && (
+                <div className="space-y-3 pt-4 border-t">
+                  <PipeConfigForm
+                    pipe={pipe}
+                    onConfigSave={(config) => {
+                      onConfigSave(config, () => setIsLoading(false));
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-8 ">
