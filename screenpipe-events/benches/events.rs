@@ -17,13 +17,13 @@ fn benchmark_event_system(c: &mut Criterion) {
                         // Setup phase - not timed
                         let mut receivers = Vec::new();
                         for _ in 0..num_subscribers {
-                            receivers.push(subscribe_to_event!("test_event", String));
+                            receivers.push(subscribe_to_event::<String>("test_event"));
                         }
                         receivers
                     },
                     |mut receivers| async move {
                         // Benchmark phase - timed
-                        send_event!("test_event", String::from("test data"));
+                        let _ = send_event("test_event", String::from("test data"));
                         for rx in &mut receivers {
                             black_box(rx.next().await.unwrap());
                         }
@@ -38,11 +38,11 @@ fn benchmark_event_system(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             const NUM_EVENTS: usize = 10_000;
 
-            let mut rx = subscribe_to_event!("counter_event", u64);
+            let mut rx = subscribe_to_event::<u64>("counter_event");
 
             // Send many events in sequence
             for i in 0..NUM_EVENTS {
-                send_event!("counter_event", i as u64);
+                let _ = send_event("counter_event", i as u64);
             }
 
             // Receive all events

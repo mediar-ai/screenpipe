@@ -523,8 +523,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
@@ -535,7 +533,6 @@ async fn main() -> anyhow::Result<()> {
                 let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
@@ -561,7 +558,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
                 );
 
@@ -618,8 +614,6 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
-        cli.enable_realtime_audio_transcription,
-        realtime_transcription_sender_clone,
         realtime_vision_sender_clone.clone(),
     );
 

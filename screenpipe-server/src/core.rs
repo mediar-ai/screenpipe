@@ -50,7 +50,6 @@ pub async fn start_continuous_recording(
     capture_unfocused_windows: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     realtime_audio_enabled: bool,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
@@ -138,7 +137,6 @@ pub async fn start_continuous_recording(
                 realtime_audio_enabled,
                 realtime_audio_devices,
                 languages,
-                realtime_transcription_sender,
                 deepgram_api_key,
             )
             .await
@@ -296,13 +294,11 @@ async fn record_audio(
     realtime_audio_enabled: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     languages: Vec<Language>,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
-    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     loop {
         // Iterate over DashMap entries and process each device
         for entry in audio_devices_control.iter() {
@@ -335,7 +331,6 @@ async fn record_audio(
 
             let realtime_audio_devices_clone = realtime_audio_devices.clone();
             let languages_clone = languages.clone();
-            let realtime_transcription_sender_clone = realtime_transcription_sender_clone.clone();
             let deepgram_api_key_clone = deepgram_api_key.clone();
             let handle = tokio::spawn(async move {
                 let audio_device_clone = Arc::clone(&audio_device);
@@ -397,8 +392,6 @@ async fn record_audio(
                     let realtime_audio_devices_clone = realtime_audio_devices_clone.clone();
                     let languages_clone = languages_clone.clone();
                     let is_running_loop = is_running_loop.clone();
-                    let realtime_transcription_sender_clone =
-                        realtime_transcription_sender_clone.clone();
                     let live_transcription_handle = Some(tokio::spawn(async move {
                         if realtime_audio_enabled
                             && realtime_audio_devices_clone.contains(&audio_device_clone)
@@ -407,7 +400,6 @@ async fn record_audio(
                                 audio_stream_clone,
                                 languages_clone.clone(),
                                 is_running_loop.clone(),
-                                realtime_transcription_sender_clone.clone(),
                                 deepgram_api_key.clone(),
                             )
                             .await;

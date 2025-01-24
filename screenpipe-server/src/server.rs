@@ -13,7 +13,7 @@ use futures::{
     SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
-use screenpipe_events::subscribe_to_all_events;
+use screenpipe_events::{send_event, subscribe_to_all_events};
 
 use crate::{
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
@@ -1807,14 +1807,25 @@ async fn handle_socket(socket: WebSocket) {
     // You can add your logic to handle messages, upgrades, etc.
 
     let outgoing = tokio::spawn(async move {
-        let mut stream = subscribe_to_all_events!();
-        while let Some(event) = stream.next().await {
-            sender
-                .send(Message::Text(
-                    serde_json::to_string(&event).unwrap_or_default(),
-                ))
-                .await
-                .unwrap();
+        let mut stream = subscribe_to_all_events();
+        loop {
+            tokio::select! {
+                event = stream.next() => {
+                    tracing::info!("sending event: {:?}", event);
+                    if let Err(e) = sender
+                        .send(Message::Text(
+                            serde_json::to_string(&event).unwrap_or_default(),
+                        ))
+                        .await
+                    {
+                        tracing::error!("Failed to send websocket message: {}", e);
+                        break;
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    sender.send(Message::Ping(vec![])).await.unwrap();
+                }
+            }
         }
     });
 

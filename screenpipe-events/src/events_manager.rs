@@ -23,13 +23,17 @@ pub struct EventManager {
     subscriptions: RwLock<HashMap<String, Box<dyn Any + Send + Sync>>>,
 }
 
-#[macro_export]
-macro_rules! send_event {
-    ($name:expr, $data:expr) => {{
-        if let Err(e) = $crate::EventManager::instance().send($name, $data) {
-            tracing::error!("Failed to send event {}: {}", $name, e);
-        }
-    }};
+// #[macro_export]
+// macro_rules! send_event {
+//     ($name:expr, $data:expr) => {{
+//         if let Err(e) = $crate::EventManager::instance().send($name, $data) {
+//             tracing::error!("Failed to send event {}: {}", $name, e);
+//         }
+//     }};
+// }
+
+pub fn send_event<T: Serialize + 'static>(event: impl Into<String>, data: T) -> Result<()> {
+    EventManager::instance().send(event, data)
 }
 
 pub struct EventSubscription<T = Value> {
@@ -59,14 +63,14 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for EventSubscription<T> {
         let me = self.get_mut();
         loop {
             match me.stream.as_mut().poll_next(cx) {
-                std::task::Poll::Ready(Some(Ok(event)))
-                    if event.name == me.event_name || event.name.is_empty() =>
-                {
-                    if let Ok(data) = serde_json::from_value::<T>(event.data) {
-                        return std::task::Poll::Ready(Some(Event {
-                            name: event.name,
-                            data,
-                        }));
+                std::task::Poll::Ready(Some(Ok(event))) => {
+                    if event.name == me.event_name || me.event_name.is_empty() {
+                        if let Ok(data) = serde_json::from_value::<T>(event.data) {
+                            return std::task::Poll::Ready(Some(Event {
+                                name: event.name,
+                                data,
+                            }));
+                        }
                     }
                 }
                 std::task::Poll::Ready(Some(_)) => continue,
@@ -102,11 +106,40 @@ impl EventManager {
     pub fn send<T: Serialize + 'static>(&self, event: impl Into<String>, data: T) -> Result<()> {
         let event_name = event.into();
         let value = serde_json::to_value(data)?;
-        self.sender.send(Event {
-            name: event_name,
+        tracing::debug!("Sending event {} with data {:?}", event_name, value);
+        match self.sender.send(Event {
+            name: event_name.clone(),
             data: value,
-        })?;
-        Ok(())
+        }) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if !e.to_string().contains("channel closed") {
+                    tracing::error!("Failed to send event {}: {}", event_name, e);
+                    Err(anyhow::anyhow!(
+                        "Failed to send event {}: {}",
+                        event_name,
+                        e
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    pub fn subscribe_to_all<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
+        &self,
+    ) -> EventSubscription<T> {
+        let rx = self.sender.subscribe();
+        let sub = EventSubscription {
+            stream: Box::pin(BroadcastStream::new(rx)),
+            event_name: "".to_string(),
+            _phantom: std::marker::PhantomData,
+        };
+
+        let mut subs = self.subscriptions.write();
+        subs.insert("".to_string(), Box::new(sub.clone()));
+        sub
     }
 
     pub fn subscribe<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
@@ -136,19 +169,22 @@ impl EventManager {
     }
 }
 
-#[macro_export]
-macro_rules! subscribe_to_event {
-    ($event:expr) => {
-        $crate::EventManager::instance().subscribe::<serde_json::Value>($event)
-    };
-    ($event:expr, $type:ty) => {
-        $crate::EventManager::instance().subscribe::<$type>($event)
-    };
+// #[macro_export]
+// macro_rules! subscribe_to_event {
+//     ($event:expr) => {
+//         $crate::EventManager::instance().subscribe::<serde_json::Value>($event)
+//     };
+//     ($event:expr, $type:ty) => {
+//         $crate::EventManager::instance().subscribe::<$type>($event)
+//     };
+// }
+
+pub fn subscribe_to_event<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
+    event: impl Into<String>,
+) -> EventSubscription<T> {
+    EventManager::instance().subscribe::<T>(event)
 }
 
-#[macro_export]
-macro_rules! subscribe_to_all_events {
-    () => {
-        $crate::subscribe_to_event!("")
-    };
+pub fn subscribe_to_all_events() -> EventSubscription<serde_json::Value> {
+    EventManager::instance().subscribe::<serde_json::Value>("")
 }
