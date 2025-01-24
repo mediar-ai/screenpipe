@@ -14,7 +14,7 @@ use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_events::send_event;
-use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
+use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
