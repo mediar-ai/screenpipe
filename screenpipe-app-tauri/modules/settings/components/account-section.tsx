@@ -34,9 +34,9 @@ import {
 import { toast } from "@/components/ui/use-toast";
 
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { invoke } from "@tauri-apps/api/core";
+import { Card } from "@/components/ui/card";
 
 function PlanCard({
   title,
