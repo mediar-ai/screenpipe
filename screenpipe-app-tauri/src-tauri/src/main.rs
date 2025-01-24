@@ -670,6 +670,8 @@ async fn main() {
             set_tray_health_icon,
             llm_sidecar::start_ollama_sidecar,
             llm_sidecar::stop_ollama_sidecar,
+            llm_sidecar::check_ollama_sidecar,
+            llm_sidecar::run_ollama_model_sidecar,
             commands::update_show_screenpipe_shortcut,
             commands::show_meetings,
             commands::show_identify_speakers,
