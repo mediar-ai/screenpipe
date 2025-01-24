@@ -30,19 +30,24 @@ export function LLMControler({
           description:
             "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
         });
-        //   // TODOO: Need proper error propagarion from sidecar
+        //   // TODOO: Separate start server and start model rust commands
         try {
-          console.log("ABOUT TO RE")
-          const result = await invoke<string>("start_ollama_sidecar", {
-            settings: {
-              enabled: settings.embeddedLLM.enabled,
-              model: settings.embeddedLLM.model,
-              port: settings.embeddedLLM.port,
-            },
-          });
+          // const result = await invoke<string>("start_ollama_sidecar", {
+          //   settings: {
+          //     enabled: settings.embeddedLLM.enabled,
+          //     model: settings.embeddedLLM.model,
+          //     port: settings.embeddedLLM.port,
+          //   },
+          // });
   
-          console.log({result})
-          return result
+          // return result
+
+          return await new Promise<string>((resolve) => {
+            setTimeout(() => {
+              resolve('success!!');
+            }, 2000);
+          });
+
         } catch (e) {
           console.log("AAAAH", {e})
         }
@@ -95,7 +100,6 @@ export function LLMControler({
         }
     })
 
-    console.log("RENDEING")
     async function handleClick() {
       if (embeddedLLMStatus === EmbeddedLLMState.IDLE) {
         await startOllamaSidecar()
