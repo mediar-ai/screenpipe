@@ -103,7 +103,6 @@ export function AccountSection() {
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
-              loadUser(apiKey);
               toast({
                 title: "logged in!",
                 description: "your api key has been set",
@@ -113,12 +112,15 @@ export function AccountSection() {
           if (url.includes("return") || url.includes("refresh")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
+              const apiKey = new URL(url).searchParams.get("api_key")!;
               if (settings.user) {
-                const updatedUser = {
-                  ...settings.user,
-                  stripe_connected: true,
-                };
-                updateSettings({ user: updatedUser });
+                updateSettings({
+                  user: {
+                    ...settings.user,
+                    api_key: apiKey,
+                    stripe_connected: true,
+                  },
+                });
               }
               toast({
                 title: "stripe connected!",
@@ -308,7 +310,8 @@ export function AccountSection() {
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[280px]">
                     <p className="text-xs leading-relaxed">
-                      (dev preview) you can use your key to use screenpipe cloud with code.{" "}
+                      (dev preview) you can use your key to use screenpipe cloud
+                      with code.{" "}
                       <span className="text-destructive font-medium">
                         keep it private.
                       </span>
