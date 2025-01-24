@@ -58,7 +58,7 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
                 
                 // Visit profile
                 await page.goto(connection.profileUrl, {
-                    waitUntil: 'networkidle0',
+                    waitUntil: 'domcontentloaded',
                     timeout: 15000
                 });
 
@@ -71,8 +71,14 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
                     'button[aria-label*="Message"]'
                 ];
                 
-                await page.waitForSelector(selectors.join(','), { timeout: 30000 })
-                    .catch(e => console.log('selector wait timeout:', e.message));
+                const button = await Promise.race([
+                    ...selectors.map(selector => 
+                        page.waitForSelector(selector, { timeout: 45000 })
+                            .catch(() => null)
+                    )
+                ]);
+
+                console.log('button detection result:', !!button);
 
                 // Check connection status
                 const pendingButton = await page.$('button[aria-label*="Pending"]');
