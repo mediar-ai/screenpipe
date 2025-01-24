@@ -1,13 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::StreamExt;
-use screenpipe_events::{send_event, update_event_registry};
+use screenpipe_events::{send_event, subscribe_to_event};
 use tokio::runtime::Runtime;
-
-update_event_registry! {
-    test_event => String,
-    counter_event => u64,
-
-}
 
 fn benchmark_event_system(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
@@ -23,7 +17,7 @@ fn benchmark_event_system(c: &mut Criterion) {
                         // Setup phase - not timed
                         let mut receivers = Vec::new();
                         for _ in 0..num_subscribers {
-                            receivers.push(test_event());
+                            receivers.push(subscribe_to_event!("test_event", String));
                         }
                         receivers
                     },
@@ -44,7 +38,7 @@ fn benchmark_event_system(c: &mut Criterion) {
         b.to_async(&rt).iter(|| async {
             const NUM_EVENTS: usize = 10_000;
 
-            let mut rx = counter_event();
+            let mut rx = subscribe_to_event!("counter_event", u64);
 
             // Send many events in sequence
             for i in 0..NUM_EVENTS {

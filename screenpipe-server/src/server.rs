@@ -1,15 +1,19 @@
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Json, Path, Query, State,
+    },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Response, Sse},
     routing::{get, post},
     serve, Router,
 };
 use futures::{
     future::{try_join, try_join_all},
-    Stream,
+    SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
+use screenpipe_events::subscribe_to_all_events;
 
 use crate::{
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
@@ -1784,7 +1788,10 @@ async fn semantic_search_handler(
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 
-    debug!("semantic search for '{}' with limit {} and threshold {}", query.text, limit, threshold);
+    debug!(
+        "semantic search for '{}' with limit {} and threshold {}",
+        query.text, limit, threshold
+    );
 
     // Generate embedding for search text
     let embedding = match generate_embedding(&query.text, 0).await {
@@ -1799,7 +1806,11 @@ async fn semantic_search_handler(
     };
 
     // Search database for similar embeddings
-    match state.db.search_similar_embeddings(embedding, limit, threshold).await {
+    match state
+        .db
+        .search_similar_embeddings(embedding, limit, threshold)
+        .await
+    {
         Ok(results) => {
             debug!("found {} similar results", results.len());
             Ok(JsonResponse(results))
@@ -1812,6 +1823,51 @@ async fn semantic_search_handler(
             ))
         }
     }
+}
+
+// websocket events handler
+async fn ws_events_handler(ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(socket: WebSocket) {
+    let (mut sender, mut receiver) = socket.split();
+
+    let incoming = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            match msg {
+                Message::Ping(p) => {
+                    println!("received ping: {:?}", p);
+                }
+                Message::Text(t) => {
+                    println!("received text: {:?}", t);
+                }
+                _ => {}
+            }
+        }
+    });
+    // Handle the WebSocket connection here
+    // You can add your logic to handle messages, upgrades, etc.
+
+    let outgoing = tokio::spawn(async move {
+        let mut stream = subscribe_to_all_events!();
+        while let Some(event) = stream.next().await {
+            sender
+                .send(Message::Text(
+                    serde_json::to_string(&event).unwrap_or_default(),
+                ))
+                .await
+                .unwrap();
+        }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = incoming => {}
+        _ = outgoing => {}
+    }
+
+    debug!("WebSocket connection closed");
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
@@ -1859,6 +1915,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
+        .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .layer(cors);
 
@@ -2211,4 +2268,3 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
-

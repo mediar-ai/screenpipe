@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use screenpipe_events::{send_event, update_event_registry};
+use screenpipe_events::{send_event, subscribe_to_event};
 use serde::{Deserialize, Serialize};
 use serial_test::serial;
 // Simulate crate A's types and events
@@ -10,11 +10,6 @@ mod crate_a {
     pub struct UserEvent {
         pub username: String,
         pub action: String,
-    }
-
-    update_event_registry! {
-        user_joined => UserEvent,
-        user_left => UserEvent
     }
 }
 
@@ -27,19 +22,14 @@ mod crate_b {
         pub from: String,
         pub content: String,
     }
-
-    update_event_registry! {
-        message_sent => ChatMessage,
-        message_edited => ChatMessage
-    }
 }
 
 #[tokio::test]
 #[serial]
 async fn test_cross_crate_events() {
     // Subscribe to events from both crates
-    let mut user_stream = crate_a::user_joined();
-    let mut chat_stream = crate_b::message_sent();
+    let mut user_stream = subscribe_to_event!("user_joined", crate_a::UserEvent);
+    let mut chat_stream = subscribe_to_event!("message_sent", crate_b::ChatMessage);
 
     // Send events from crate A
     let user_event = crate_a::UserEvent {
@@ -58,8 +48,8 @@ async fn test_cross_crate_events() {
     send_event!("message_sent", chat_event.clone());
 
     // Verify events are received correctly
-    assert_eq!(user_stream.next().await.unwrap(), user_event);
-    assert_eq!(chat_stream.next().await.unwrap(), chat_event);
+    assert_eq!(user_stream.next().await.unwrap().data, user_event);
+    assert_eq!(chat_stream.next().await.unwrap().data, chat_event);
 }
 
 #[tokio::test]
@@ -69,21 +59,21 @@ async fn test_cross_crate_type_safety() {
     // EventManager::instance().send("user_joined", "wrong type").unwrap();
 
     // Verify type safety across crate boundaries
-    let mut user_stream = crate_a::user_joined();
+    let mut user_stream = subscribe_to_event!("user_joined", crate_a::UserEvent);
     let user_event = crate_a::UserEvent {
         username: "Bob".to_string(),
         action: "login".to_string(),
     };
     send_event!("user_joined", user_event.clone());
 
-    assert_eq!(user_stream.next().await.unwrap(), user_event);
+    assert_eq!(user_stream.next().await.unwrap().data, user_event);
 }
 
 #[tokio::test]
 #[serial]
 async fn test_cross_crate_multiple_subscribers() {
-    let mut stream1 = crate_a::user_joined();
-    let mut stream2 = crate_a::user_joined();
+    let mut stream1 = subscribe_to_event!("user_joined", crate_a::UserEvent);
+    let mut stream2 = subscribe_to_event!("user_joined", crate_a::UserEvent);
 
     let event = crate_a::UserEvent {
         username: "Charlie".to_string(),
@@ -92,17 +82,17 @@ async fn test_cross_crate_multiple_subscribers() {
 
     send_event!("user_joined", event.clone());
 
-    assert_eq!(stream1.next().await.unwrap(), event);
-    assert_eq!(stream2.next().await.unwrap(), event);
+    assert_eq!(stream1.next().await.unwrap().data, event);
+    assert_eq!(stream2.next().await.unwrap().data, event);
 }
 
 #[tokio::test]
 #[serial]
 async fn test_multiple_event_types() {
-    let mut user_joined = crate_a::user_joined();
-    let mut user_left = crate_a::user_left();
-    let mut message_sent = crate_b::message_sent();
-    let mut message_edited = crate_b::message_edited();
+    let mut user_joined = subscribe_to_event!("user_joined", crate_a::UserEvent);
+    let mut user_left = subscribe_to_event!("user_left", crate_a::UserEvent);
+    let mut message_sent = subscribe_to_event!("message_sent", crate_b::ChatMessage);
+    let mut message_edited = subscribe_to_event!("message_edited", crate_b::ChatMessage);
 
     // Send multiple different events
     let join_event = crate_a::UserEvent {
@@ -129,10 +119,10 @@ async fn test_multiple_event_types() {
     send_event!("message_edited", edit_event.clone());
 
     // Verify all events are received in order
-    assert_eq!(user_joined.next().await.unwrap(), join_event);
-    assert_eq!(user_left.next().await.unwrap(), leave_event);
-    assert_eq!(message_sent.next().await.unwrap(), msg_event);
-    assert_eq!(message_edited.next().await.unwrap(), edit_event);
+    assert_eq!(user_joined.next().await.unwrap().data, join_event);
+    assert_eq!(user_left.next().await.unwrap().data, leave_event);
+    assert_eq!(message_sent.next().await.unwrap().data, msg_event);
+    assert_eq!(message_edited.next().await.unwrap().data, edit_event);
 }
 
 #[tokio::test]
@@ -140,7 +130,7 @@ async fn test_multiple_event_types() {
 async fn test_stream_drop_behavior() {
     // Create and immediately drop a stream
     {
-        let _stream = crate_a::user_joined();
+        let _stream = subscribe_to_event!("user_joined", crate_a::UserEvent);
     }
 
     // Send an event
@@ -153,14 +143,13 @@ async fn test_stream_drop_behavior() {
     send_event!("user_joined", event.clone());
 
     // Create a new stream and verify it receives new events
-    let mut new_stream = crate_a::user_joined();
+    let mut new_stream = subscribe_to_event!("user_joined", crate_a::UserEvent);
     send_event!("user_joined", event.clone());
-    assert_eq!(new_stream.next().await.unwrap(), event);
+    assert_eq!(new_stream.next().await.unwrap().data, event);
 }
 
 #[tokio::test]
 #[serial]
-#[should_panic]
 async fn test_unregistered_event() {
     // Attempt to send an event that hasn't been registered
     send_event!("nonexistent_event", "some data");
