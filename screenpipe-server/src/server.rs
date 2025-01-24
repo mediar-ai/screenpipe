@@ -1783,7 +1783,7 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
                     }
                 }
                 _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                    sender.send(Message::Ping(vec![])).await.unwrap();
+                    let _ = sender.send(Message::Ping(vec![])).await;
                 }
             }
         }
