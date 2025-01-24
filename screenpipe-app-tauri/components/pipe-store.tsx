@@ -51,7 +51,7 @@ export const PipeStore: React.FC = () => {
     []
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
-  const { openStatusDialog } = useStatusDialog();
+  const { open: openStatusDialog } = useStatusDialog();
 
   const filteredPipes = pipes
     .filter(
