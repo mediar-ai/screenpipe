@@ -144,7 +144,9 @@ export async function POST(request: Request) {
             addLog('chrome debug port responding');
             wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
             addLog(`websocket url: ${wsUrl}`);
-            ChromeSession.getInstance().setWsUrl(wsUrl);
+            if (wsUrl) {
+              ChromeSession.getInstance().setWsUrl(wsUrl);
+            }
             break; // exit retry loop on success
           }
         } catch (err) {
