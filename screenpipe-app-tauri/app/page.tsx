@@ -13,16 +13,17 @@ import { ChangelogDialog } from "@/components/changelog-dialog";
 import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
 
 import { platform } from "@tauri-apps/plugin-os";
-import PipeStore from "@/components/pipe-store";
+import {PipeStore} from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { PipeApi } from "@/lib/api";
 import localforage from "localforage";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 export default function Home() {
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { setActiveProfile } = useProfiles();
   const posthog = usePostHog();
   const { toast } = useToast();
@@ -35,6 +36,31 @@ export default function Home() {
       const devices = (await store.get("audioDevices")) as string[];
       return devices;
     };
+
+    const setupDeepLink = async () => {
+      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
+        console.log("received deep link urls:", urls);
+        for (const url of urls) {
+          if (url.includes("api_key=")) {
+            const apiKey = new URL(url).searchParams.get("api_key");
+            if (apiKey) {
+              updateSettings({ user: { token: apiKey } });
+              toast({
+                title: "logged in!",
+                description: "your api key has been set",
+              });
+            }
+          }
+        }
+      });
+      return unsubscribeDeepLink;
+    };
+
+    let deepLinkUnsubscribe: (() => void) | undefined;
+
+    setupDeepLink().then((unsubscribe) => {
+      deepLinkUnsubscribe = unsubscribe;
+    });
 
     const unlisten = Promise.all([
       listen("shortcut-start-recording", async () => {
@@ -142,6 +168,7 @@ export default function Home() {
       unlisten.then((listeners) => {
         listeners.forEach((unlistenFn) => unlistenFn());
       });
+      if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, []);
 
