@@ -75,9 +75,6 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
-    pub realtime_transcription_enabled: bool,
-    pub realtime_transcription_sender:
-        Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     pub realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
@@ -820,8 +817,6 @@ pub struct Server {
     vision_disabled: bool,
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
-    realtime_transcription_enabled: bool,
-    realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
     realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
@@ -837,8 +832,6 @@ impl Server {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
-        realtime_transcription_enabled: bool,
-        realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
         realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
     ) -> Self {
         Server {
@@ -851,8 +844,6 @@ impl Server {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
-            realtime_transcription_enabled,
-            realtime_transcription_sender,
             realtime_vision_sender,
         }
     }
@@ -886,8 +877,6 @@ impl Server {
             } else {
                 None
             },
-            realtime_transcription_enabled: self.realtime_transcription_enabled,
-            realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
             realtime_vision_sender: self.realtime_vision_sender,
         });
 
@@ -1593,38 +1582,6 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-
-async fn sse_transcription_handler(
-    State(state): State<Arc<AppState>>,
-) -> Result<
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    if !state.realtime_transcription_enabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            JsonResponse(json!({"error": "Real-time transcription is not enabled"})),
-        ));
-    }
-
-    // Get a new subscription - this won't affect the sender
-    let rx = state.realtime_transcription_sender.subscribe();
-
-    let stream = async_stream::stream! {
-        let mut rx = rx; // Create a new mutable reference to the receiver
-        while let Ok(event) = rx.recv().await {
-            yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
-        }
-        // Even if this stream ends, the sender remains active
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
-}
-
 #[derive(Deserialize)]
 pub struct AudioDeviceControlRequest {
     device_name: String,
@@ -1911,7 +1868,6 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
-        .route("/sse/transcriptions", get(sse_transcription_handler))
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
