@@ -15,6 +15,7 @@ use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
+use screenpipe_events::send_event;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -312,7 +313,7 @@ pub async fn process_ocr_task(
             window_count += 1;
         }
 
-        window_ocr_results.push(WindowOcrResult {
+        let ocr_result = WindowOcrResult {
             image: captured_window.image,
             window_name: captured_window.window_name,
             app_name: captured_window.app_name,
@@ -320,7 +321,9 @@ pub async fn process_ocr_task(
             text_json: parse_json_output(&window_json_output),
             focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
-        });
+        };
+
+        window_ocr_results.push(ocr_result);
     }
 
     let capture_result = CaptureResult {

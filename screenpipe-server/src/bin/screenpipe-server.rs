@@ -523,14 +523,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
-    let realtime_vision_sender_clone = realtime_vision_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
@@ -558,7 +554,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    realtime_vision_sender_clone,
                 );
 
                 let result = tokio::select! {
@@ -602,7 +597,6 @@ async fn main() -> anyhow::Result<()> {
     let (audio_devices_tx, _) = broadcast::channel(100);
     let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
 
-    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
@@ -614,7 +608,6 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
-        realtime_vision_sender_clone.clone(),
     );
 
     let mut rx = audio_devices_tx.subscribe();
@@ -1000,7 +993,7 @@ async fn main() -> anyhow::Result<()> {
 
             loop {
                 tokio::select! {
-                    result = run_ui(realtime_vision_sender_clone.clone()) => {
+                    result = run_ui() => {
                         match result {
                             Ok(_) => break,
                             Err(e) => {
