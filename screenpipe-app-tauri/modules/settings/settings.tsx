@@ -33,8 +33,8 @@ import { Button } from "@/components/ui/button";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfiles } from "@/lib/hooks/use-profiles";
-import { toast } from "./ui/use-toast";
-import { DataImportSection } from "./settings/data-import-section";
+import { toast } from "@/components/ui/use-toast";
+import { DataImportSection } from "./components/data-import-section";
 
 type SettingsSection =
   | "ai"

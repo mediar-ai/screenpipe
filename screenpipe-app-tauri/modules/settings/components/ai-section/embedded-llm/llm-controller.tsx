@@ -30,26 +30,22 @@ export function LLMControler({
           description:
             "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
         });
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            resolve("Resolved after 2 seconds");
-          }, 2000);
-        });
-        // try {
-        //   console.log("STARTING")
         //   // TODOO: Need proper error propagarion from sidecar
-        //   // const result = await invoke<string>("start_ollama_sidecar", {
-        //   //   settings: {
-        //   //     enabled: settings.embeddedLLM.enabled,
-        //   //     model: settings.embeddedLLM.model,
-        //   //     port: settings.embeddedLLM.port,
-        //   //   },
-        //   // });
-        //   console.log({result})
-        //   return result
-        // } catch(e) {
-        //   console.log({e})
-        // }
+        try {
+          console.log("ABOUT TO RE")
+          const result = await invoke<string>("start_ollama_sidecar", {
+            settings: {
+              enabled: settings.embeddedLLM.enabled,
+              model: settings.embeddedLLM.model,
+              port: settings.embeddedLLM.port,
+            },
+          });
+  
+          console.log({result})
+          return result
+        } catch (e) {
+          console.log("AAAAH", {e})
+        }
       },
       onSuccess: (result) => {
         setEmbeddedLLMStatus(EmbeddedLLMState.RUNNING);
@@ -59,7 +55,7 @@ export function LLMControler({
         });
         toast({
           title: `${settings.embeddedLLM.model} wants to tell you a joke.`,
-          // description: result,
+          description: result,
           duration: 10000,
         });
       }, 
@@ -71,7 +67,7 @@ export function LLMControler({
             description: "check the console for more details",
             variant: "destructive",
           });
-      }
+      },
   })
 
     const { 
@@ -99,6 +95,7 @@ export function LLMControler({
         }
     })
 
+    console.log("RENDEING")
     async function handleClick() {
       if (embeddedLLMStatus === EmbeddedLLMState.IDLE) {
         await startOllamaSidecar()

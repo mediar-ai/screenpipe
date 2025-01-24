@@ -1,29 +1,19 @@
 import React, { useState, useEffect } from "react";
 import { Command, Trash2, Plus } from "lucide-react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
 import { Command as TauriCommand } from "@tauri-apps/plugin-shell";
-import { toast } from "../ui/use-toast";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen } from "lucide-react";
-import { Card, CardContent } from "../ui/card";
-import { Label } from "../ui/label";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../ui/accordion";
 import { writeTextFile, BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import { appLocalDataDir } from "@tauri-apps/api/path";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../ui/tooltip";
 import { AlertCircle } from "lucide-react";
+import { toast } from "@/components/ui/use-toast";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface VideoMetadata {
   file_path: string;

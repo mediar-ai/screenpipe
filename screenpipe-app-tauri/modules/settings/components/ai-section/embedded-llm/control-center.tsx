@@ -1,5 +1,3 @@
-import { LogFileButton } from "@/components/log-file-button";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { TooltipDefault } from "@/components/ui/tooltip";
 import { useToast } from "@/components/ui/use-toast";
@@ -9,7 +7,6 @@ import { AvailableAiProviders } from "@/modules/ai-providers/types/available-pro
 import { getSetupFormAndPersistedValues } from "@/modules/ai-providers/utils/get-setup-form-and-persisted-values";
 import Form from "@/modules/form/components/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Info, Play } from "lucide-react";
 import { useState } from "react";
 import { LLMStatus } from "./llm-status";
 import { LLMLogFiles } from "./log-files";
@@ -97,7 +94,6 @@ export function EmbeddedControlCenter({
         }
       })
     }
-
 
     return (
       <div className="flex flex-col space-y-3">
