@@ -63,3 +63,6 @@ History*
 # storage files
 lib/storage/*.json
 !lib/storage/templates.json
+
+# Sentry Config File
+.env.sentry-build-plugin
