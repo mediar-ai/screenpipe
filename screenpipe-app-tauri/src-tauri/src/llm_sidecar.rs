@@ -246,12 +246,10 @@ pub async fn start_ollama_sidecar(
 }
 
 #[tauri::command]
-pub async fn check_ollama_sidecar() -> Result<String, String> {
-    let llm_sidecar = LLMSidecar::new(EmbeddedLLMSettings {
-        enabled: false,
-        model: String::new(),
-        port: 0,
-    });
+pub async fn check_ollama_sidecar(
+    settings: EmbeddedLLMSettings,
+) -> Result<String, String> {
+    let llm_sidecar = LLMSidecar::new(settings);
     llm_sidecar
         .wait_for_server()
         .await
