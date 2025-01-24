@@ -13,7 +13,7 @@ use futures::{
     SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
-use screenpipe_events::{send_event, subscribe_to_all_events};
+use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
@@ -33,8 +33,8 @@ use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceControl,
     DeviceType,
 };
+use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
-use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -1749,7 +1749,9 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
                     println!("received ping: {:?}", p);
                 }
                 Message::Text(t) => {
-                    println!("received text: {:?}", t);
+                    if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
+                        let _ = send_event(&event.name, event.data);
+                    }
                 }
                 _ => {}
             }
