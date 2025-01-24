@@ -1132,7 +1132,7 @@ pub(crate) async fn add_to_database(
                     let output_dir = state.screenpipe_dir.join("data");
                     let time = Utc::now();
                     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let video_file_path = PathBuf::from(output_dir)
+                    let video_file_path = output_dir
                         .join(format!("{}_{}.mp4", device_name, formatted_time))
                         .to_str()
                         .expect("Failed to create valid path")
@@ -1952,7 +1952,7 @@ async fn stream_frames_handler(
         };
 
         // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
 
         // Calculate center timestamp
         let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
