@@ -489,12 +489,11 @@ export default function Timeline() {
 							onJumpToday={handleJumpToday}
 							className="shadow-lg"
 						/>
-						<TimelineSearch
-							frames={frames}
-							onResultSelect={(index) => {
-								animateToIndex(index);
-							}}
-						/>
+						{/* <TimelineSearch2
+              frames={frames}
+              onResultSelect={animateToIndex}
+              onSearchResults={setSearchResults}
+            /> */}
 					</div>
 				</div>
 
