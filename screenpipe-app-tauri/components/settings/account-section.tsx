@@ -92,7 +92,7 @@ export function AccountSection() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
-  const [userToken, setUserToken] = useState<string | null>(null);  const [showApiKey, setShowApiKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
     const setupDeepLink = async () => {
