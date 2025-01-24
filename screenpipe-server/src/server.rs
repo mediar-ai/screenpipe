@@ -1744,18 +1744,10 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
 
     let incoming = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            match msg {
-                Message::Ping(p) => {
-                    println!("received ping: {:?}", p);
+            if let Message::Text(t) = msg {
+                if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
+                    let _ = send_event(&event.name, event.data);
                 }
-                Message::Text(t) => {
-                    tracing::info!("received text: {:?}", t);
-                    if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
-                        tracing::info!("received event: {:?}", event);
-                        let _ = send_event(&event.name, event.data);
-                    }
-                }
-                _ => {}
             }
         }
     });
@@ -1768,7 +1760,6 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
             tokio::select! {
                 event = stream.next() => {
                     if let Some(mut event) = event {
-                        tracing::info!("sending event: {:?}", event);
                         if !query.images.unwrap_or(false) && (event.name == "ocr_result" || event.name == "ui_frame") {
                             if let Some(data) = event.data.as_object_mut() {
                                 data.remove("image");
