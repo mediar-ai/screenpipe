@@ -62,6 +62,7 @@ opentelemetry-semantic-conventions = "0.13"
 
 # Server
 axum = "0.7.5"
+axum-macros = "0.5.0"
 async-stream = "0.3"
 tokio = { version = "1.15", features = ["full", "tracing"] }
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
