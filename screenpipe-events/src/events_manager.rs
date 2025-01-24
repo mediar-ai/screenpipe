@@ -5,7 +5,7 @@ use parking_lot::RwLock;
 use serde::Deserialize;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use std::any::{type_name, Any};
+use std::any::Any;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::BroadcastStream;
