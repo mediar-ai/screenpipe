@@ -40,14 +40,10 @@ impl LLMSidecar {
         self.status = OllamaStatus::Running;
         app.emit("ollama_status", &self.status)?;
 
-        // Get the resource directory path
         let resource_path = app.path().resource_dir().unwrap();
-
-        // Append the resource path to CUDA_PATH
         let cuda_path = env::var("CUDA_PATH").unwrap_or_default();
         let new_cuda_path = format!("{}:{}", cuda_path, resource_path.display());
 
-        info!("Starting Ollama serve command...");
         let mut serve_command = app.shell().sidecar("ollama").unwrap();
         serve_command = serve_command
             .args(&["serve"])
@@ -62,16 +58,20 @@ impl LLMSidecar {
             serve_command = serve_command.env("OLLAMA_ORIGINS", "*");
         }
 
-        let (mut receiver, _) = serve_command.spawn()?;
+        info!("Spawning Ollama serve command");
+        // serve_command.spawn()?;
+        serve_command.spawn()?;
 
-        // Stream logs for serve command
-        self.stream_logs("ollama-serve", &mut receiver).await?;
+        info!("Ollama serve command spawned. Please wait a few seconds to check ollama's server health");
+        Ok("Serve command spawned".to_string())
+    }
 
-        info!("Waiting for Ollama server to start...");
-        self.wait_for_server().await?;
+    pub async fn run_model(&mut self, app: tauri::AppHandle) -> Result<String> {
+        let resource_path = app.path().resource_dir().unwrap();
+        let cuda_path = env::var("CUDA_PATH").unwrap_or_default();
+        let new_cuda_path = format!("{}:{}", cuda_path, resource_path.display());
 
-        // Now run the model
-        info!("Starting Ollama model...");
+        info!("Starting Ollama model: {}", &self.settings.model);
         let mut model_command = app.shell().sidecar("ollama").unwrap();
         model_command = model_command
             .args(&["run", &self.settings.model])
@@ -84,15 +84,14 @@ impl LLMSidecar {
 
         let (mut receiver, _) = model_command.spawn()?;
 
-        // Stream logs for model command
         self.stream_logs("ollama-model", &mut receiver).await?;
 
-        info!("Testing Ollama model...");
+        info!("Testing Ollama model: {}", &self.settings.model);
         let test_result = self.test_model().await?;
 
         Ok(test_result)
     }
-
+    
     async fn stream_logs(&self, prefix: &str, rx: &mut Receiver<CommandEvent>) -> Result<()> {
         while let Some(event) = rx.recv().await {
             match event {
@@ -118,27 +117,28 @@ impl LLMSidecar {
         Ok(())
     }
 
-    async fn wait_for_server(&self) -> Result<()> {
+    async fn wait_for_server(&self) -> Result<String> {
         let max_retries = 30;
         let retry_interval = Duration::from_secs(1);
 
         for _ in 0..max_retries {
+            info!("Checking ollama server");
             if let Ok(response) = reqwest::get(&format!(
                 "http://localhost:{}/api/version",
                 self.settings.port
-            ))
-            .await
+            )).await
             {
                 if response.status().is_success() {
-                    info!("Ollama server started successfully");
-                    return Ok(());
+                    info!("Ollama server is running");
+                    return Ok("Ollama server is running".to_string());
                 }
             }
             sleep(retry_interval).await;
         }
 
+        info!("Ollama server is not running");
         Err(anyhow!(
-            "Ollama server failed to start after maximum retries"
+            "Looks like Ollama server is not running."
         ))
     }
 
@@ -241,6 +241,31 @@ pub async fn start_ollama_sidecar(
     let mut llm_sidecar = LLMSidecar::new(settings);
     llm_sidecar
         .start(app)
+        .await
+        .map_err(|e| format!("Failed to start Ollama: {}", e))
+}
+
+#[tauri::command]
+pub async fn check_ollama_sidecar() -> Result<String, String> {
+    let llm_sidecar = LLMSidecar::new(EmbeddedLLMSettings {
+        enabled: false,
+        model: String::new(),
+        port: 0,
+    });
+    llm_sidecar
+        .wait_for_server()
+        .await
+        .map_err(|e| format!("Failed to start Ollama: {}", e))
+}
+
+#[tauri::command]
+pub async fn run_ollama_model_sidecar(
+    app: tauri::AppHandle,
+    settings: EmbeddedLLMSettings,
+) -> Result<String, String> {
+    let mut llm_sidecar = LLMSidecar::new(settings);
+    llm_sidecar
+        .run_model(app)
         .await
         .map_err(|e| format!("Failed to start Ollama: {}", e))
 }
