@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Search, Trash2 } from "lucide-react";
+import { Loader2, Power, Search, Trash2 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Command } from "@tauri-apps/plugin-shell";
@@ -22,6 +22,7 @@ import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
 import { LoginDialog, useLoginCheck } from "./login-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
 const corePipes: string[] = [
   "auto-pay",
@@ -46,11 +47,11 @@ export const PipeStore: React.FC = () => {
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
-  const [brokenPipes, setBrokenPipes] = useState<BrokenPipe[]>([]);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
     []
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
+  const { openStatusDialog } = useStatusDialog();
 
   const filteredPipes = pipes
     .filter(
