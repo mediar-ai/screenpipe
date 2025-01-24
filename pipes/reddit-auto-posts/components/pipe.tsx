@@ -11,6 +11,7 @@ import { useHealthCheck } from "@/lib/hooks/use-health";
 import { MemoizedReactMarkdown } from "./markdown";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import { Eye, EyeOff } from "lucide-react";
+import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import {
@@ -30,6 +31,7 @@ import {
 const Pipe: React.FC = () => {
 
   const { settings, updateSettings } = useSettings();
+  const { isAvailable, error } = useAiProvider(settings);
   const { isServerDown } = useHealthCheck();
   const { toast } = useToast();
   const [showKey, setShowKey] = useState(false);
@@ -329,18 +331,19 @@ const Pipe: React.FC = () => {
                   onClick={testPipe}
                   className="w-full border-[1.4px] shadow-sm"
                   variant={"outline"}
-                  disabled={loading || aiDisabled || isServerDown}
+                  disabled={loading || aiDisabled || isServerDown || !isAvailable}
                 >
                 {loading ? "generating..." : "generate reddit questions"}
                 </Button>
               </span>
             </TooltipTrigger>
-            {(aiDisabled || isServerDown) && (
+            {(aiDisabled || isServerDown || !isAvailable) && (
               <TooltipContent>
-                <p>{`${(aiDisabled && isServerDown) ? 
+                <p>{`${(aiDisabled && isServerDown  || !isAvailable) ? 
                   "you don't have access of screenpipe-cloud and screenpipe is down!" 
                   : isServerDown ? "screenpipe is not running..."
                   : aiDisabled ? "you don't have access to screenpipe-cloud :( please consider login"
+                  : !isAvailable ? {error}
                   : ""
                   }
                 `}</p>

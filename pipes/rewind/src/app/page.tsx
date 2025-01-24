@@ -10,6 +10,7 @@ import { AGENTS } from "@/components/timeline/agents";
 import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
 import { TimelineSearch } from "@/components/timeline/timeline-search";
+import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -87,6 +88,7 @@ export default function Timeline() {
 		y: 0,
 	});
 	const [currentDate, setCurrentDate] = useState(new Date());
+	const [searchResults, setSearchResults] = useState<number[]>([]);
 
 	useEffect(() => {
 		setAiPanelPosition({
@@ -548,13 +550,19 @@ export default function Timeline() {
 				</div>
 
 				<div className="w-4/5 mx-auto my-8 relative select-none">
-					<div className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative">
+					<div
+						className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative overflow-hidden"
+						style={{
+							width: "100%",
+							boxSizing: "border-box",
+						}}
+					>
 						{loadedTimeRange && (
 							<TimelineSelection loadedTimeRange={loadedTimeRange} />
 						)}
 						<div
 							className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-							style={{ left: `${timePercentage}%` }}
+							style={{ left: `${timePercentage}%`, zIndex: 5 }}
 						>
 							<div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
 								{currentIndex < frames.length &&
@@ -579,6 +587,30 @@ export default function Timeline() {
 									})()}
 							</div>
 						</div>
+						{searchResults.map((frameIndex) => {
+							const percentage = (frameIndex / (frames.length - 1)) * 100;
+							return (
+								<div
+									key={frameIndex}
+									className="absolute top-0 h-full w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-pointer transition-colors"
+									style={{ left: `${percentage}%`, zIndex: 4 }}
+									onClick={() => {
+										animateToIndex(frameIndex);
+										setSearchResults([]); // Clear results after clicking
+									}}
+								>
+									<div className="absolute -top-6 -left-2 text-[10px] text-blue-500 whitespace-nowrap">
+										{new Date(frames[frameIndex].timestamp).toLocaleTimeString(
+											[],
+											{
+												hour: "2-digit",
+												minute: "2-digit",
+											},
+										)}
+									</div>
+								</div>
+							);
+						})}
 					</div>
 
 					<AIPanel

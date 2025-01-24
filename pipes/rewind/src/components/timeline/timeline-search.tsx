@@ -60,7 +60,7 @@ async function validateFrameContext(
     model,
   });
 
-  const windowSize = 2;
+  const windowSize = 1000;
   const start = Math.max(0, centerIndex - windowSize);
   const end = Math.min(frames.length - 1, centerIndex + windowSize);
 
@@ -112,6 +112,7 @@ async function validateFrameContext(
 
   return JSON.parse(response.choices[0].message.content);
 }
+
 
 async function findRelevantFrame(
   query: string,
@@ -207,10 +208,10 @@ async function findRelevantFrame(
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Add early return after checking N frames
-    const MAX_FRAMES_TO_CHECK = 100; // Adjust this number
+    const MAX_FRAMES_TO_CHECK = 1000; // Adjust this number
     let framesChecked = 0;
 
-    const BATCH_SIZE = 50; // Adjust based on performance needs
+    const BATCH_SIZE = 2000; // Adjust based on performance needs
     for (let i = 0; i < frames.length; i += BATCH_SIZE) {
       if (signal?.aborted) {
         throw new Error("AbortError");
@@ -443,6 +444,7 @@ export function TimelineSearch({
   const hasLoadedSuggestions = useRef(false);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+
 
   // Compute app statistics once when component mounts or frames update
   const appStats = useMemo(() => {
@@ -731,7 +733,7 @@ prioritize precision over recall - better to return no match than a wrong match.
                   <Input
                     autoFocus
                     placeholder="search in your timeline..."
-                    className="pl-9 h-10"
+                    className="pl-9 h-12"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
