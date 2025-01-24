@@ -251,15 +251,24 @@ export default function Timeline() {
 				e.preventDefault();
 				e.stopPropagation();
 
-				const scrollSensitivity = 1;
-				const delta = -Math.sign(e.deltaY) / scrollSensitivity;
+				// Calculate scroll intensity based on absolute delta
+				const scrollIntensity = Math.abs(e.deltaY);
+				const direction = Math.sign(e.deltaY);
+
+				// Change this if you want limit the index change
+				const limitIndexChange = Infinity;
+
+				// Adjust index change based on scroll intensity
+				const indexChange =
+					direction *
+					Math.min(
+						limitIndexChange,
+						Math.ceil(Math.pow(scrollIntensity / 10, 1.5)),
+					);
 
 				setCurrentIndex((prevIndex) => {
 					const newIndex = Math.min(
-						Math.max(
-							0,
-							prevIndex + (delta > 0 ? Math.ceil(delta) : Math.floor(delta)),
-						),
+						Math.max(0, Math.floor(prevIndex + indexChange)),
 						frames.length - 1,
 					);
 
@@ -590,20 +599,28 @@ export default function Timeline() {
 
 					<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
 						{timeRange.map((time, i) => {
+							const dateTime = new Date(time);
 							return (
 								<button
 									key={i}
-									className="absolute transform -translate-x-1/2 text-nowrap"
+									className="absolute transform -translate-x-1/2 text-nowrap flex flex-col"
 									style={{
 										left: `${(i * 100) / (timeRange.length - 1)}%`,
 									}}
 									onClick={() => jumpToDate(new Date(time))}
 								>
-									{new Date(time).toLocaleTimeString("en-US", {
+									{dateTime.toLocaleTimeString("en-US", {
 										hour: "numeric",
 										minute: "2-digit",
 										hour12: true,
 									})}
+									<span className="text-center">
+										{dateTime.toLocaleDateString([], {
+											weekday: "short",
+
+											day: "numeric",
+										})}
+									</span>
 								</button>
 							);
 						})}
