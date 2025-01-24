@@ -94,15 +94,6 @@ impl EventManager {
         &EVENT_MANAGER
     }
 
-    pub fn register_event<T: 'static>(&self, event: impl Into<String>) {
-        let event_name = event.into();
-        tracing::debug!(
-            "Registered event {} with type {}",
-            event_name,
-            type_name::<T>()
-        );
-    }
-
     pub fn send<T: Serialize + 'static>(&self, event: impl Into<String>, data: T) -> Result<()> {
         let event_name = event.into();
         let value = serde_json::to_value(data)?;
@@ -125,21 +116,6 @@ impl EventManager {
                 }
             }
         }
-    }
-
-    pub fn subscribe_to_all<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
-        &self,
-    ) -> EventSubscription<T> {
-        let rx = self.sender.subscribe();
-        let sub = EventSubscription {
-            stream: Box::pin(BroadcastStream::new(rx)),
-            event_name: "".to_string(),
-            _phantom: std::marker::PhantomData,
-        };
-
-        let mut subs = self.subscriptions.write();
-        subs.insert("".to_string(), Box::new(sub.clone()));
-        sub
     }
 
     pub fn subscribe<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
@@ -168,16 +144,6 @@ impl EventManager {
         sub
     }
 }
-
-// #[macro_export]
-// macro_rules! subscribe_to_event {
-//     ($event:expr) => {
-//         $crate::EventManager::instance().subscribe::<serde_json::Value>($event)
-//     };
-//     ($event:expr, $type:ty) => {
-//         $crate::EventManager::instance().subscribe::<$type>($event)
-//     };
-// }
 
 pub fn subscribe_to_event<T: DeserializeOwned + Unpin + Clone + Send + Sync + 'static>(
     event: impl Into<String>,
