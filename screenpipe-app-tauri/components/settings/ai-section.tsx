@@ -174,21 +174,36 @@ const AISection = () => {
   const startOllamaSidecar = async () => {
     posthog.capture("start_ollama_sidecar");
     setOllamaStatus("running");
-    toast({
-      title: "starting ai",
-      description:
-        "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
-    });
-
     try {
       console.log(
         "starting ollama sidecar with settings:",
         settings.embeddedLLM
       );
-      const result = await invoke<string>("start_ollama_sidecar", {
+      
+      await invoke<string>("start_ollama_sidecar", {
         settings: {
           enabled: settings.embeddedLLM.enabled,
           model: settings.embeddedLLM.model,
+          port: settings.embeddedLLM.port,
+        },
+      });
+
+      await invoke<string>("check_ollama_sidecar", {
+        settings: {
+          enabled: settings.embeddedLLM.enabled,
+          model: settings.embeddedLLM.model,
+          port: settings.embeddedLLM.port,
+        },
+      });
+
+      toast({
+        title: "ollama server was initiated successfully",
+      });
+
+      const result = await invoke<string>("run_ollama_model_sidecar", {
+        settings: {
+          enabled: settings.embeddedLLM.enabled,
+          model: 'llama3.2',
           port: settings.embeddedLLM.port,
         },
       });
