@@ -13,6 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import * as Sentry from "@sentry/nextjs";
 // import { pipe } from "@screenpipe/js";
 
 interface Props {
