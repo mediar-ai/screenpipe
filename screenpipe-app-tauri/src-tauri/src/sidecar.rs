@@ -250,11 +250,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let realtime_audio_transcription_engine = store
-        .get("realtimeAudioTranscriptionEngine")
-        .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or(String::from("whisper-large-v3-turbo"));
-
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);

@@ -17,6 +17,13 @@ import {
 import { writeTextFile, BaseDirectory, readDir } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import { appLocalDataDir } from "@tauri-apps/api/path";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../ui/tooltip";
+import { AlertCircle } from "lucide-react";
 
 interface VideoMetadata {
   file_path: string;
@@ -38,6 +45,8 @@ export function DataImportSection() {
     current: number;
     total: number;
   } | null>(null);
+  const [useEmbeddings, setUseEmbeddings] = useState(true);
+  const [ollamaAvailable, setOllamaAvailable] = useState<boolean | null>(null);
 
   // Scan for videos in the selected path
   const scanForVideos = async () => {
@@ -157,6 +166,7 @@ export function DataImportSection() {
         configPath,
         "--output",
         "json",
+        ...(ollamaAvailable && useEmbeddings ? ["--use-embedding"] : []),
       ]);
       console.log("executing command:", command);
 
@@ -220,6 +230,40 @@ export function DataImportSection() {
       });
     }
   };
+
+  // Check Ollama availability
+  const checkOllama = async () => {
+    try {
+      const response = await fetch("http://localhost:11434/api/version");
+      setOllamaAvailable(response.ok);
+      console.log("ollama available:", response.ok);
+
+      if (response.ok) {
+        // Check if model is available
+        const modelResponse = await fetch("http://localhost:11434/api/tags");
+        const models = await modelResponse.json();
+        console.log("ollama model available:", models);
+
+        const hasModel = models.models?.some(
+          (m: any) => m.name.includes("nomic-embed-text")
+        );
+        setOllamaAvailable(hasModel);
+      }
+    } catch (e) {
+      console.error("ollama check error:", e);
+      setOllamaAvailable(false);
+      if (useEmbeddings) {
+        setUseEmbeddings(false);
+      }
+    }
+  };
+
+  // Check Ollama status periodically
+  useEffect(() => {
+    checkOllama();
+    const interval = setInterval(checkOllama, 10000); // Check every 10s
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -346,10 +390,86 @@ export function DataImportSection() {
 
         {detectedVideos.length > 0 && (
           <div className="flex items-center gap-4">
-            <Button onClick={handleIndex} disabled={isIndexing}>
-              <Command className="h-4 w-4 mr-2" />
-              {isIndexing ? "importing..." : "start import"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={handleIndex} disabled={isIndexing}>
+                <Command className="h-4 w-4 mr-2" />
+                {isIndexing ? "importing..." : "start import"}
+              </Button>
+
+              <div className="flex flex-col gap-1 ml-2">
+                <div className="flex items-center gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="embeddings-toggle"
+                            checked={useEmbeddings}
+                            onChange={(e) => setUseEmbeddings(e.target.checked)}
+                            disabled={!ollamaAvailable}
+                            className={`h-4 w-4 ${
+                              !ollamaAvailable
+                                ? "cursor-not-allowed opacity-50"
+                                : ""
+                            }`}
+                          />
+                          <Label
+                            htmlFor="embeddings-toggle"
+                            className={`text-sm ${
+                              !ollamaAvailable
+                                ? "cursor-not-allowed opacity-50"
+                                : ""
+                            }`}
+                          >
+                            generate embeddings
+                          </Label>
+                          {ollamaAvailable === false && (
+                            <AlertCircle className="h-4 w-4 text-yellow-500" />
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[300px]">
+                        {ollamaAvailable === false ? (
+                          <div className="space-y-2">
+                            <p>ollama is not running. to enable embeddings:</p>
+                            <ol className="list-decimal list-inside space-y-1">
+                              <li>
+                                install ollama from{" "}
+                                <a
+                                  href="https://ollama.ai"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline"
+                                >
+                                  ollama.ai
+                                </a>
+                              </li>
+                              <li>start ollama</li>
+                              <li>
+                                run:{" "}
+                                <code className="bg-secondary px-1 rounded">
+                                  ollama run nomic-embed-text
+                                </code>
+                              </li>
+                            </ol>
+                          </div>
+                        ) : ollamaAvailable === true ? (
+                          <p>ollama is running and ready for embeddings</p>
+                        ) : (
+                          <p>checking ollama availability...</p>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                {useEmbeddings && ollamaAvailable && (
+                  <p className="text-xs text-muted-foreground">
+                    using ollama with nomic-embed-text model for embeddings
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Progress indicator */}
             {isIndexing && (

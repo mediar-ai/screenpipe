@@ -183,7 +183,7 @@ pub async fn handle_index_command(
             let engine_arc = Arc::new(engine.clone());
 
             // Do OCR processing directly
-            let (text, _, confidence) = match engine.clone() {
+            let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
                 #[cfg(target_os = "macos")]
                 OcrEngine::AppleNative => perform_ocr_apple(&frame, &[]),
                 #[cfg(target_os = "windows")]

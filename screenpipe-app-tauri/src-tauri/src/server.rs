@@ -1,20 +1,26 @@
 use crate::{get_store, icons::AppIcon};
+use axum::response::sse::{Event, Sse};
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
+use futures::stream::Stream;
 use http::header::HeaderValue;
+use notify::RecursiveMode;
+use notify::Watcher;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use tauri::Emitter;
+use tauri::Manager;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
-
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -26,6 +32,7 @@ struct LogEntry {
 #[derive(Clone)]
 pub struct ServerState {
     app_handle: tauri::AppHandle,
+    settings_tx: broadcast::Sender<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,8 +84,81 @@ struct AppIconQuery {
     path: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct WindowSizePayload {
+    title: String,
+    width: f64,
+    height: f64,
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn settings_stream(
+    State(state): State<ServerState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.settings_tx.subscribe();
+
+    let stream = async_stream::stream! {
+        let store = get_store(&state.app_handle, None).unwrap();
+        let settings = serde_json::to_string(&store.entries()).unwrap();
+        yield Ok(Event::default().data(settings));
+
+        while let Ok(settings) = rx.recv().await {
+            yield Ok(Event::default().data(settings));
+        }
+    };
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(1))
+            .text("keep-alive-text"),
+    )
+}
+
+#[cfg(target_os = "windows")]
+async fn settings_stream(
+    State(_): State<ServerState>,
+) -> (StatusCode, String) {
+    (StatusCode::NOT_IMPLEMENTED, "SSE not supported on Windows".to_string())
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
-    let state = ServerState { app_handle };
+    let (settings_tx, _) = broadcast::channel(100);
+    
+    #[cfg(not(target_os = "windows"))]
+    let settings_tx_clone = settings_tx.clone();
+
+    let app_handle_clone = app_handle.clone();
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let store_path = app_handle
+            .path()
+            .local_data_dir()
+            .unwrap()
+            .join("store.bin");
+
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            if let Ok(event) = res {
+                if event.kind.is_modify() {
+                    if let Ok(store) = get_store(&app_handle_clone, None) {
+                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                            let _ = settings_tx_clone.send(settings);
+                        }
+                    }
+                }
+            }
+        })
+        .unwrap();
+
+        watcher
+            .watch(&store_path, RecursiveMode::NonRecursive)
+            .unwrap();
+    }
+
+    let state = ServerState {
+        app_handle,
+        settings_tx,
+    };
 
     let cors = CorsLayer::new()
         .allow_origin("*".parse::<HeaderValue>().unwrap())
@@ -92,6 +172,8 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/log", axum::routing::post(log_message))
         .route("/auth", axum::routing::post(handle_auth))
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
+        .route("/window-size", axum::routing::post(set_window_size))
+        .route("/sse/settings", axum::routing::get(settings_stream))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -242,6 +324,34 @@ async fn get_app_icon_handler(
         Err((
             StatusCode::NOT_IMPLEMENTED,
             "app icon retrieval not supported on this platform".to_string(),
+        ))
+    }
+}
+
+async fn set_window_size(
+    State(state): State<ServerState>,
+    Json(payload): Json<WindowSizePayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received window size request: {:?}", payload);
+
+    if let Some(window) = state.app_handle.get_webview_window(&payload.title) {
+        match window.set_size(tauri::LogicalSize::new(payload.width, payload.height)) {
+            Ok(_) => Ok(Json(ApiResponse {
+                success: true,
+                message: "window size updated successfully".to_string(),
+            })),
+            Err(e) => {
+                error!("failed to set window size: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to set window size: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            format!("window with title '{}' not found", payload.title),
         ))
     }
 }

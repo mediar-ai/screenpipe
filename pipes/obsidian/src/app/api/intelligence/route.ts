@@ -37,14 +37,40 @@ async function analyzeRelationships(
     - finding patterns in topics discussed
     
     recent logs: ${recentLogs}
+
+    todays date: ${new Date().toISOString().split("T")[0]}
+    local time: ${new Date().toLocaleTimeString()}
+    timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
     
-    return a detailed json object following this structure for relationship intelligence.`;
+    return a detailed json object following this structure for relationship intelligence.
+    
+    example response from you:
+    
+    {
+      "contacts": [
+        {
+          "name": "John Doe",
+          "company": "Acme Inc.",
+          "lastInteraction": "2024-01-01",
+          "sentiment": 0.8,
+          "topics": ["sales", "marketing"],
+          "nextSteps": ["schedule a call", "send a follow-up email"]
+        }
+      ],
+      "insights": {
+        "followUps": ["schedule a call", "send a follow-up email"],
+        "opportunities": ["schedule a call", "send a follow-up email"]
+      }
+    }
+    `;
 
   const provider = ollama(model);
+  console.log("prompt", prompt);
   const response = await generateObject({
     model: provider,
     messages: [{ role: "user", content: prompt }],
     schema: relationshipIntelligence,
+    maxRetries: 5,
   });
 
   console.log(response.object);
@@ -131,12 +157,13 @@ ${intelligence.insights.opportunities.map((o) => `- ${o}`).join("\n")}
   await fs.writeFile(path.join(graphPath, filename), content, "utf8");
 
   // get vault name safely for windows paths
-  const vaultName = path.basename(path.resolve(normalizedPath));
-
+  const relativePath = obsidianPath
+    .replace(normalizedPath, "")
+    .replace(/^\//, "");
   // Return the deep link
-  return `obsidian://open?vault=${encodeURIComponent(
-    vaultName
-  )}&file=${encodeURIComponent(`relationship-graph/${filename}`)}`;
+  return `obsidian://search?vault=${encodeURIComponent(
+    relativePath
+  )}&query=relationship-intelligence`;
 }
 
 async function readRecentLogs(

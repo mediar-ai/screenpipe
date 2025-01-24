@@ -686,11 +686,19 @@ export const PipeStore: React.FC = () => {
   if (health?.status === "error") {
     return (
       <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
-        <div className="text-center space-y-2">
-          <h3 className="text-lg font-medium">screenpipe is not running</h3>
+        <div className="text-center space-y-4">
+          <h3 className="text-lg font-medium">screenpipe is not recording</h3>
           <p className="text-sm text-muted-foreground">
             please start the screenpipe service to browse and manage pipes
           </p>
+          <Button
+            variant="outline"
+            onClick={openStatusDialog}
+            className="gap-2"
+          >
+            <Power className="h-4 w-4" />
+            check service status
+          </Button>
         </div>
       </div>
     );

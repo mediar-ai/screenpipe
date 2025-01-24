@@ -252,6 +252,14 @@ interface ConnectionsStore {
         endDate?: string;
         reason?: string;
     };
+    isWithdrawing: boolean;
+    withdrawStatus?: WithdrawStatus;
+}
+
+interface WithdrawStatus {
+    isWithdrawing: boolean;
+    reason?: string;
+    timestamp?: string;
 }
 
 // Define default values
@@ -262,7 +270,8 @@ const DEFAULT_CONNECTION_STORE: ConnectionsStore = {
   stopRequested: false,
   nextHarvestTime: '',
   lastRefreshDuration: 0,
-  averageProfileCheckDuration: 0
+  averageProfileCheckDuration: 0,
+  isWithdrawing: false
 };
 
 export async function loadConnections(): Promise<ConnectionsStore> {
@@ -425,22 +434,19 @@ export async function saveToChrome(key: string, data: unknown) {
     }
     
     try {
-        console.log('current page url:', await page.url());
+        const currentUrl = await page.url();
+        // console.log('current page url:', currentUrl);
         
-        // Navigate to LinkedIn if we're not already there
-        if (!page.url().includes('linkedin.com')) {
-            console.log('navigating to linkedin.com...');
-            await page.goto('https://www.linkedin.com');
-            console.log('navigation complete, new url:', await page.url());
+        // Only save if we're already on LinkedIn
+        if (!currentUrl.includes('linkedin.com')) {
+            console.log('skipping chrome storage: not on linkedin.com');
+            return;
         }
         
-        // console.log(`attempting to save ${key} to chrome storage...`);
         await page.evaluate((key: string, data: unknown) => {
-            console.log('in page context, saving:', key, data);
             localStorage.setItem(key, JSON.stringify(data));
-            console.log('storage after save:', localStorage.getItem(key));
+            console.log('saved to chrome storage:', key);
         }, key, data);
-        // console.log('chrome storage save complete');
     } catch (err) {
         console.log('failed to save to chrome storage:', err);
     }
@@ -469,4 +475,70 @@ export async function loadFromChrome(key: string) {
         console.log('failed to load from chrome storage:', err);
         return null;
     }
+}
+
+export async function setWithdrawingStatus(isWithdrawing: boolean, details?: { reason: string; timestamp: string }) {
+    const store = await loadConnections();
+    store.withdrawStatus = {
+        isWithdrawing,
+        ...(details || {})
+    };
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    console.log('saved withdrawal status:', { isWithdrawing, ...details });
+}
+
+export async function saveRestrictionInfo(info: {
+    isRestricted: boolean;
+    endDate?: string;
+    reason?: string;
+}) {
+    const store = await loadConnections();
+    store.restrictionInfo = info;
+    await fs.writeFile(
+        path.join(STORAGE_DIR, 'connections.json'),
+        JSON.stringify(store, null, 2)
+    );
+    await saveToChrome('linkedin_assistant_connections', store);
+    console.log('saved restriction info:', info);
+}
+
+// Add this interface
+interface CronLog {
+  timestamp: string;
+  action: string;
+  result: string;
+  nextHarvestTime?: string;
+}
+
+// Add these functions
+export async function saveCronLog(log: CronLog) {
+  const logPath = path.join(STORAGE_DIR, 'cron-logs.json');
+  let logs: CronLog[] = [];
+
+  try {
+    const data = await fs.readFile(logPath, 'utf-8');
+    logs = JSON.parse(data);
+  } catch {
+    // File doesn't exist yet, start with empty array
+  }
+
+  // Add new log and keep last 100 entries
+  logs.unshift(log);
+  logs = logs.slice(0, 100);
+
+  await fs.writeFile(logPath, JSON.stringify(logs, null, 2));
+  console.log('saved cron log:', log);
+}
+
+export async function loadCronLogs(): Promise<CronLog[]> {
+  const logPath = path.join(STORAGE_DIR, 'cron-logs.json');
+  try {
+    const data = await fs.readFile(logPath, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
 }

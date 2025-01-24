@@ -28,6 +28,7 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
   const [logs, setLogs] = useState<string[]>([]);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [hasCopied, setHasCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -71,27 +72,34 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
     try {
       await killChrome();
       setStatus('connecting');
+      setError(null);
 
-      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
-      //   status: "started"
-      // });
+      // Get screen dimensions from browser
+      const screenDims = {
+        width: window.screen.availWidth,
+        height: window.screen.availHeight
+      };
+      addLog(`screen dimensions: ${screenDims.width}x${screenDims.height}`);
 
-      const response = await fetch('/api/chrome', { method: 'POST' });
+      const response = await fetch('/api/chrome', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screenDims })
+      });
       const data = await response.json();
-      if (!response.ok) throw new Error('Failed to launch chrome');
       if (data.logs) {
         data.logs.forEach((log: string) => addLog(log));
+      }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to launch chrome');
       }
 
       // Start polling the server-side API for debugger URL
       pollDebuggerStatus();
     } catch (error) {
       console.error('failed to launch chrome:', error);
-      // await pipe.captureMainFeatureEvent("linkedin_chrome_launched", {
-      //   status: "error",
-      //   error: error instanceof Error ? error.message : String(error)
-      // });
       setStatus('error');
+      setError(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -101,21 +109,32 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
 
     while (attempts < maxAttempts) {
       try {
+        addLog('polling debugger status...');
         const response = await fetch('/api/chrome/status');
         const data = await response.json();
+        
+        // Add logs from the status endpoint
+        if (data.logs) {
+          data.logs.forEach((log: string) => addLog(log));
+        }
+        
+        addLog(`poll response: ${JSON.stringify(data)}`);
 
         if (data.status === 'connected') {
+          addLog('debugger connected, proceeding to linkedin');
           setStatus('connected');
-          // Automatically navigate to LinkedIn when Chrome connects
           await navigateToLinkedIn();
           return;
         }
+        addLog(`not connected yet, attempt ${attempts + 1}/${maxAttempts}`);
       } catch (error) {
+        addLog(`poll error: ${error}`);
         console.error('error checking debugger status:', error);
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
       attempts++;
     }
+    addLog('max polling attempts reached, setting error state');
     setStatus('error');
   };
 
@@ -129,6 +148,12 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       
       if (!response.ok) throw new Error('Failed to check login status');
       const data = await response.json();
+      
+      // Add log handling
+      if (data.logs) {
+        data.logs.forEach((log: string) => addLog(log));
+      }
+
       const isLoggedIn = data.isLoggedIn;
       setLoginStatus(isLoggedIn ? 'logged_in' : 'logged_out');
 
@@ -171,6 +196,12 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.details || 'Failed to navigate');
+      }
+
+      // Missing: We need to handle the response data and logs here
+      const data = await response.json();
+      if (data.logs) {
+        data.logs.forEach((log: string) => addLog(log));
       }
 
       // Add login status check after navigation
@@ -250,8 +281,9 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
           )}
 
           {status === 'error' && (
-            <div className="text-sm text-red-500">
-              failed to launch chrome
+            <div className="text-sm text-red-500 flex items-center gap-2">
+              <span>failed to launch chrome</span>
+              {error && <span className="font-mono">({error})</span>}
             </div>
           )}
         </div>
@@ -265,7 +297,7 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
             {isLogsOpen ? 'hide logs' : 'show logs'}
           </CollapsibleTrigger>
           <CollapsibleContent className="absolute mt-2 right-0 left-0">
-            <div className="bg-gray-50 rounded-md text-xs font-mono max-h-40 w-full relative">
+            <div className="bg-gray-50 rounded-md text-xs font-mono max-h-40 w-full relative border border-gray-200/50">
               <div className="absolute top-2 right-2 z-10">
                 <Button
                   variant="ghost"

@@ -1,9 +1,8 @@
 "use server";
-// requestion on this route will send mail (use it only in cron) 
 import fs from "node:fs";
 import path from "node:path";
 import { DailyLog } from "@/lib/types";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { pipe } from "@screenpipe/js";
 import sendEmail from "@/lib/actions/send-email";
 import generateDailyLog from "@/lib/actions/generate-log";
@@ -46,7 +45,7 @@ async function retry(fn: any, retries = 3, delay = 5000) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     console.log("starting daily log pipeline");
     const settingsManager = pipe.settings;
@@ -89,6 +88,8 @@ export async function GET() {
 
     const fileContent = fs.readFileSync(pipeConfigPath, 'utf-8');
     const configData = JSON.parse(fileContent);
+    const url = new URL(request.url);
+    const fromButton = url.searchParams.get("fromButton");
 
     if (emailEnabled && !configData?.welcomeEmailSent) {
       const welcomeEmail = `
@@ -162,7 +163,9 @@ export async function GET() {
         );
         console.log("reddit questions:", redditQuestions);
 
-        if (emailEnabled && redditQuestions) {
+        // only send mail in those request that are made from cron jobs,
+        // cz at that time user, is not seeing the frontend of this pipe
+        if (emailEnabled && redditQuestions && !fromButton) {
           try {
             await sendEmail(
               emailAddress!,

@@ -26,17 +26,17 @@ import {
   Eye,
   ArrowUpRight,
   BookOpen,
+  EyeIcon,
+  EyeOffIcon,
+  CopyIcon,
 } from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
-import { invoke } from "@tauri-apps/api/core";
 
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
-import {
-  onOpenUrl,
-  getCurrent as getCurrentDeepLinkUrls,
-} from "@tauri-apps/plugin-deep-link";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { invoke } from "@tauri-apps/api/core";
 
 function PlanCard({
   title,
@@ -92,13 +92,24 @@ export function AccountSection() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [userToken, setUserToken] = useState<string | null>(null);
+  const [userToken, setUserToken] = useState<string | null>(null);  const [showApiKey, setShowApiKey] = useState(false);
+
   useEffect(() => {
     const setupDeepLink = async () => {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
+          if (url.includes("api_key=")) {
+            const apiKey = new URL(url).searchParams.get("api_key");
+            if (apiKey) {
+              updateSettings({ user: { token: apiKey } });
+              loadUser(apiKey);
+              toast({
+                title: "logged in!",
+                description: "your api key has been set",
+              });
+            }
+          }
           if (url.includes("return") || url.includes("refresh")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
@@ -219,6 +230,16 @@ export function AccountSection() {
     }
   };
 
+  const handleCopyApiKey = () => {
+    if (settings.user?.token) {
+      navigator.clipboard.writeText(settings.user.token);
+      toast({
+        title: "copied to clipboard",
+        description: "api key copied successfully",
+      });
+    }
+  };
+
   useEffect(() => {
     console.log("document visibility state:", document.visibilityState);
 
@@ -287,8 +308,7 @@ export function AccountSection() {
                   </TooltipTrigger>
                   <TooltipContent side="right" className="max-w-[280px]">
                     <p className="text-xs leading-relaxed">
-                      your key syncs credits and settings across devices. you
-                      can find it in your dashboard.{" "}
+                      (dev preview) you can use your key to use screenpipe cloud with code.{" "}
                       <span className="text-destructive font-medium">
                         keep it private.
                       </span>
@@ -298,27 +318,46 @@ export function AccountSection() {
               </TooltipProvider>
             </div>
 
-            <div className="flex gap-2">
-              <Input
-                value={settings.user?.token || ""}
-                onChange={(e) => {
-                  updateSettings({
-                    user: { token: e.target.value },
-                  });
-                  loadUser(e.target.value);
-                }}
-                placeholder="enter your api key"
-                className="font-mono text-sm bg-secondary/30"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  toast({ title: "key updated" });
-                }}
-              >
-                verify
-              </Button>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={settings.user?.token || ""}
+                    type={showApiKey ? "text" : "password"}
+                    onChange={(e) => {
+                      updateSettings({
+                        user: { token: e.target.value },
+                      });
+                      loadUser(e.target.value);
+                    }}
+                    placeholder="enter your api key"
+                    className="font-mono text-sm bg-secondary/30 pr-20"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? (
+                        <EyeOffIcon className="h-4 w-4" />
+                      ) : (
+                        <EyeIcon className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={handleCopyApiKey}
+                      disabled={!settings.user?.token}
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

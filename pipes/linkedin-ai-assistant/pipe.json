@@ -1,0 +1,8 @@
+{
+    "crons": [
+        {
+            "path": "/api/harvest/check",
+            "schedule": "0 */5 * * * *" 
+        }
+    ]
+}

@@ -25,9 +25,10 @@ interface OllamaModel {
 interface Props {
   defaultValue: string;
   onChange?: (value: string) => void;
+  disabled?: boolean;
 }
 
-export function OllamaModelsList({ defaultValue, onChange }: Props) {
+export function OllamaModelsList({ defaultValue, onChange, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,12 +73,20 @@ export function OllamaModelsList({ defaultValue, onChange }: Props) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!disabled) {
+          setOpen(isOpen);
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
           className="w-full justify-between"
+          disabled={disabled}
         >
           <input type="hidden" name="aiModel" value={value} />
           {value || "select model..."}

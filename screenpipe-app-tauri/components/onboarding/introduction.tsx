@@ -16,12 +16,8 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   className = "",
   handleNextSlide,
 }) => {
-  const { updateSettings } = useSettings();
   const { setShowOnboarding } = useOnboarding();
   const handleSkip = () => {
-    updateSettings({
-      isFirstTimeUser: false,
-    });
     setShowOnboarding(false);
     posthog.capture("onboarding_skipped");
   };
