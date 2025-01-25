@@ -194,6 +194,10 @@ async fn main() -> anyhow::Result<()> {
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
+    if let Some(Command::Completions { shell }) = &cli.command {
+        cli.handle_completions(shell.clone())?;
+        return Ok(());
+    }
     if let Some(command) = cli.command {
         match command {
             Command::Pipe { subcommand } => {
@@ -331,6 +335,7 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
                 return Ok(());
             }
+            Command::Completions { .. } => todo!(),
         }
     }
 

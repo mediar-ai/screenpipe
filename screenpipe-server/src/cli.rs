@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, CommandFactory};
+use clap_complete_command::Shell;
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
+use anyhow::{Context, Result};
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
 
@@ -281,6 +283,39 @@ impl Cli {
         }
         Ok(unique_langs.into_iter().collect())
     }
+
+    pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
+        let mut cmd = Self::command();
+        
+        // Check for terminal output
+        if atty::is(atty::Stream::Stdout) {
+            let shell_instructions = match shell {
+                Shell::Bash => 
+                    "For Bash:\n\
+                    1. Generate: `screenpipe completions bash > ~/.bash_completion/screenpipe`\n\
+                    2. Source: Add `source ~/.bash_completion/screenpipe` to ~/.bashrc",
+                Shell::Zsh => 
+                    "For Zsh:\n\
+                    1. Generate: `screenpipe completions zsh > ~/.zsh/site-functions/_screenpipe`\n\
+                    2. Ensure completion directory is in fpath",
+                Shell::Fish => 
+                    "For Fish:\n\
+                    1. Generate: `screenpipe completions fish > ~/.config/fish/completions/screenpipe.fish`",
+                Shell::PowerShell => 
+                    "For PowerShell:\n\
+                    1. Generate: `screenpipe completions powershell > $PROFILE`\n\
+                    2. Reload profile: `. $PROFILE`",
+                _ => anyhow::bail!("Unsupported shell type"),
+            };
+            
+            anyhow::bail!("Completions must be redirected to a file.\n{}", shell_instructions);
+        }
+        
+        // Generate completions
+        shell.generate(&mut cmd, &mut std::io::stdout());
+        
+        Ok(())
+    }
 }
 
 #[derive(Subcommand)]
@@ -324,6 +359,12 @@ pub enum Command {
         /// Enable beta features
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
+    },
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
     /// Run database migrations
     Migrate,

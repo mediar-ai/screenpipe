@@ -81,6 +81,10 @@ sysinfo = "0.29.0"
 # Color
 colored = "2.0"
 
+# Completions
+clap_complete_command = "0.6.1"
+atty = "0.2"
+
 # Plugins
 tower = { version = "0.5", features = ["util"] }
 futures = "0.3.17"
