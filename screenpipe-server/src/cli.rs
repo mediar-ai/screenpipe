@@ -292,18 +292,18 @@ impl Cli {
             let shell_instructions = match shell {
                 Shell::Bash => 
                     "For Bash:\n\
-                    1. Generate: `screenpipe completions bash > ~/.bash_completion/screenpipe`\n\
-                    2. Source: Add `source ~/.bash_completion/screenpipe` to ~/.bashrc",
+                    1. Generate: `screenpipe completions bash >> ~/.bashrc`\n\
+                    2. Reload profile: `source ~/.bashrc`",
                 Shell::Zsh => 
                     "For Zsh:\n\
-                    1. Generate: `screenpipe completions zsh > ~/.zsh/site-functions/_screenpipe`\n\
-                    2. Ensure completion directory is in fpath",
+                    1. Generate: `screenpipe completions zsh >> ~/.zshrc`\n\
+                    2. Reload profile: `source ~/.zshrc`",
                 Shell::Fish => 
                     "For Fish:\n\
                     1. Generate: `screenpipe completions fish > ~/.config/fish/completions/screenpipe.fish`",
                 Shell::PowerShell => 
                     "For PowerShell:\n\
-                    1. Generate: `screenpipe completions powershell > $PROFILE`\n\
+                    1. Generate: `screenpipe completions powershell >> $PROFILE`\n\
                     2. Reload profile: `. $PROFILE`",
                 _ => anyhow::bail!("Unsupported shell type"),
             };
