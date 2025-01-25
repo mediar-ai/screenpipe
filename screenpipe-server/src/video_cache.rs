@@ -458,6 +458,7 @@ impl FrameCache {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         frame_tx: FrameChannel,
+        descending: bool,
     ) -> Result<()> {
         let mut extraction_queue = HashMap::new();
         let mut total_frames = 0;
@@ -469,7 +470,15 @@ impl FrameCache {
 
         let mut chunks = self.db.find_video_chunks(start_time, end_time).await?;
         // Sort by timestamp to ensure consistent ordering
-        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+        if descending {
+            // For descending, sort in reverse chronological order
+            chunks
+                .frames
+                .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+        } else {
+            // For ascending, sort in chronological order (default behavior)
+            chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+        }
 
         debug!("found {} chunks to process", chunks.frames.len());
 
@@ -575,7 +584,7 @@ impl FrameCache {
             let cache_clone = self.clone();
             tokio::spawn(async move {
                 let result = cache_clone
-                    .extract_frames_batch(start, end, extract_tx)
+                    .extract_frames_batch(start, end, extract_tx, descending)
                     .await;
                 debug!("extraction task completed: {:?}", result.is_ok());
                 result

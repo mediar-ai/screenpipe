@@ -1298,8 +1298,16 @@ struct InputControlResponse {
 
 #[derive(Deserialize, PartialEq)]
 enum Order {
+    #[serde(rename = "ascending")]
     Ascending,
+    #[serde(rename = "descending")]
     Descending,
+}
+
+impl Order {
+    fn default() -> Self {
+        Order::Descending
+    }
 }
 
 // Add this new struct
@@ -1307,9 +1315,9 @@ enum Order {
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    // #[serde(rename = "order")]
-    // #[serde(default = "descending")]
-    // order: Order,
+    #[serde(rename = "order")]
+    #[serde(default = "Order::default")]
+    order: Order,
 }
 
 #[derive(Debug, Serialize)]
@@ -1784,7 +1792,10 @@ async fn semantic_search_handler(
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 
-    debug!("semantic search for '{}' with limit {} and threshold {}", query.text, limit, threshold);
+    debug!(
+        "semantic search for '{}' with limit {} and threshold {}",
+        query.text, limit, threshold
+    );
 
     // Generate embedding for search text
     let embedding = match generate_embedding(&query.text, 0).await {
@@ -1799,7 +1810,11 @@ async fn semantic_search_handler(
     };
 
     // Search database for similar embeddings
-    match state.db.search_similar_embeddings(embedding, limit, threshold).await {
+    match state
+        .db
+        .search_similar_embeddings(embedding, limit, threshold)
+        .await
+    {
         Ok(results) => {
             debug!("found {} similar results", results.len());
             Ok(JsonResponse(results))
@@ -1881,6 +1896,7 @@ async fn stream_frames_handler(
     );
 
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let is_descending = request.order.eq(&Order::Descending);
 
     // Create a stream that will be used for both success and error cases
     let stream = async_stream::stream! {
@@ -1908,7 +1924,7 @@ async fn stream_frames_handler(
             let frame_tx = frame_tx.clone();
             async move {
                 tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
+                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), is_descending) => {
                         if let Err(e) = result {
                             error!("frame extraction failed: {}", e);
                             // Send error to client
@@ -2211,4 +2227,3 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
-

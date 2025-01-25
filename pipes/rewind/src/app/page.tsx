@@ -11,6 +11,7 @@ import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
 import { TimelineSearch } from "@/components/timeline/timeline-search";
 import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
+import { isAfter, isBefore } from "date-fns";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -45,6 +46,11 @@ interface TimeRange {
 	start: Date;
 	end: Date;
 }
+
+const Order = {
+	Ascending: "ascending",
+	Descending: "descending",
+} as const;
 
 function getTimeArray(
 	timeObj: TimeRange | null | undefined,
@@ -102,13 +108,19 @@ export default function Timeline() {
 			eventSourceRef.current.close();
 		}
 
-		const endTime = new Date();
-		endTime.setMinutes(endTime.getMinutes() - 2);
+		setFrames(() => []);
+		setCurrentIndex(() => 0);
+
+		const endTime = new Date(currentDate);
+		endTime.setMinutes(endTime.getMinutes() - 5);
 
 		const startTime = new Date(endTime);
-		startTime.setDate(startTime.getDate() - 7);
+		// startTime.setDate(startTime.getDate() - 7);
+		startTime.setHours(0, 0, 0, 0);
 
-		const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=descending`;
+		const order: "ascending" | "descending" = Order.Descending;
+
+		const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=${order}`;
 
 		setLoadedTimeRange({
 			start: startTime,
@@ -121,7 +133,9 @@ export default function Timeline() {
 		const eventSource = new EventSource(url);
 		eventSourceRef.current = eventSource;
 
+		console.log(eventSource);
 		const connectionTimeout = setTimeout(() => {
+			console.log(eventSource);
 			if (eventSource.readyState !== EventSource.OPEN) {
 				console.error(
 					"Connection timeout: Unable to establish connection, make sure screenpipe is running",
@@ -133,6 +147,7 @@ export default function Timeline() {
 			}
 		}, 5000);
 
+		let closestDiff = Infinity;
 		eventSource.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
@@ -154,6 +169,12 @@ export default function Timeline() {
 							const frameTime = new Date(data.timestamp);
 							setLoadedTimeRange((current) => {
 								if (!current) return null;
+								if (order === Order.Descending)
+									return {
+										...current,
+										start: current.start,
+										end: frameTime,
+									};
 								return {
 									...current,
 									start: frameTime,
@@ -161,6 +182,19 @@ export default function Timeline() {
 								};
 							});
 							return [data];
+						}
+
+						if (order === Order.Descending) {
+							const frameTime = new Date(data.timestamp);
+							const diff = Math.abs(frameTime.getTime() - startTime.getTime());
+							if (diff < closestDiff) {
+								closestDiff = diff;
+								setLoadedTimeRange((current) => ({
+									...current,
+									start: frameTime,
+									end: current?.end || frameTime,
+								}));
+							}
 						}
 
 						// Find the correct insertion index using binary search
@@ -206,6 +240,12 @@ export default function Timeline() {
 			console.error("eventsource error:", error);
 		};
 
+		eventSource.addEventListener("close", () => {
+			console.log("stream closed ");
+			setMessage(null);
+			setIsLoading(false);
+		});
+
 		eventSource.onopen = () => {
 			console.log("eventsource connection opened");
 			clearTimeout(connectionTimeout);
@@ -230,7 +270,7 @@ export default function Timeline() {
 			setError(null);
 			setMessage(null);
 		};
-	}, []);
+	}, [currentDate]);
 
 	const handleScroll = useMemo(
 		() =>
@@ -265,7 +305,7 @@ export default function Timeline() {
 					direction *
 					Math.min(
 						limitIndexChange,
-						Math.ceil(Math.pow(scrollIntensity / 10, 1.5)),
+						Math.ceil(Math.pow(scrollIntensity / 50, 3.5)),
 					);
 
 				setCurrentIndex((prevIndex) => {
@@ -273,6 +313,8 @@ export default function Timeline() {
 						Math.max(0, Math.floor(prevIndex + indexChange)),
 						frames.length - 1,
 					);
+
+					console.log(newIndex, indexChange, scrollIntensity / 50);
 
 					if (newIndex !== prevIndex && frames[newIndex]) {
 						setCurrentFrame(frames[newIndex].devices[0]);
@@ -300,7 +342,10 @@ export default function Timeline() {
 		const currentMilliseconds =
 			frameTime.getTime() - loadedTimeRange.start.getTime();
 
-		const percentage = (currentMilliseconds / totalVisibleMilliseconds) * 100;
+		const percentage = Math.min(
+			99.5,
+			(currentMilliseconds / totalVisibleMilliseconds) * 100,
+		);
 		return Boolean(percentage) ? percentage : 0;
 	}, [currentIndex, frames, loadedTimeRange]);
 
@@ -342,7 +387,7 @@ export default function Timeline() {
 		};
 	}, [handleScroll]);
 
-	const jumpToDate = (targetDate: Date) => {
+	const jumpToTime = (targetDate: Date) => {
 		// Find the closest frame to the target date
 		if (frames.length === 0) return;
 
@@ -363,76 +408,64 @@ export default function Timeline() {
 		setCurrentIndex(closestIndex);
 		if (frames[closestIndex]) {
 			setCurrentFrame(frames[closestIndex].devices[0]);
-			setCurrentDate(new Date(frames[closestIndex].timestamp));
+			//setCurrentDate(new Date(frames[closestIndex].timestamp));
 		}
 	};
 
 	const handleDateChange = (newDate: Date) => {
 		// Ensure we're comparing dates at start of day
-		const targetStartOfDay = new Date(
-			newDate.getFullYear(),
-			newDate.getMonth(),
-			newDate.getDate(),
-			0,
-			0,
-			0,
-			0,
-		);
+		//const targetStartOfDay = new Date(
+		//	newDate.getFullYear(),
+		//	newDate.getMonth(),
+		//	newDate.getDate(),
+		//	0,
+		//	0,
+		//	0,
+		//	0,
+		//);
 
-		let closestIndex = 0;
-		let closestDiff = Infinity;
+		//let closestIndex = 0;
+		//let closestDiff = Infinity;
 
-		frames.forEach((frame, index) => {
-			const frameDate = new Date(frame.timestamp);
-			const frameStartOfDay = new Date(
-				frameDate.getFullYear(),
-				frameDate.getMonth(),
-				frameDate.getDate(),
-				0,
-				0,
-				0,
-				0,
-			);
-
-			const diff = Math.abs(
-				frameStartOfDay.getTime() - targetStartOfDay.getTime(),
-			);
-			if (diff < closestDiff) {
-				closestDiff = diff;
-				closestIndex = index;
-			}
-		});
-
-		setCurrentIndex(closestIndex);
-		if (frames[closestIndex]) {
-			setCurrentFrame(frames[closestIndex].devices[0]);
+		if (!frames.length && isAfter(currentDate.getDate(), newDate.getDate())) {
+			return;
 		}
+
+		const frameTimeStamp = new Date(newDate);
+		if (!(frameTimeStamp.getDate() === new Date(currentDate).getDate())) {
+			setCurrentDate(newDate);
+		}
+
+		//frames.forEach((frame, index) => {
+		//	const frameDate = new Date(frame.timestamp);
+		//	const frameStartOfDay = new Date(
+		//		frameDate.getFullYear(),
+		//		frameDate.getMonth(),
+		//		frameDate.getDate(),
+		//		0,
+		//		0,
+		//		0,
+		//		0,
+		//	);
+
+		//	const diff = Math.abs(
+		//		frameStartOfDay.getTime() - targetStartOfDay.getTime(),
+		//	);
+		//	if (diff < closestDiff) {
+		//		closestDiff = diff;
+		//		closestIndex = index;
+		//	}
+		//});
+
+		//setCurrentIndex(closestIndex);
+		//if (frames[closestIndex]) {
+		//	setCurrentFrame(frames[closestIndex].devices[0]);
+		//}
 	};
 
 	const handleJumpToday = () => {
-		jumpToDate(new Date());
+		setCurrentDate(new Date());
 	};
-
-	// More explicit date handling
-	useEffect(() => {
-		if (frames[currentIndex]) {
-			const frameTimestamp = frames[currentIndex].timestamp;
-			const frameDate = new Date(frameTimestamp);
-
-			// Force date to start of day to avoid timezone issues
-			const localDate = new Date(
-				frameDate.getFullYear(),
-				frameDate.getMonth(),
-				frameDate.getDate(),
-				0,
-				0,
-				0,
-				0,
-			);
-
-			setCurrentDate(localDate);
-		}
-	}, [currentIndex]);
 
 	const animateToIndex = (targetIndex: number, duration: number = 1000) => {
 		const startIndex = currentIndex;
@@ -465,7 +498,10 @@ export default function Timeline() {
 		requestAnimationFrame(animate);
 	};
 
-	const timeRange = getTimeArray(loadedTimeRange);
+	const timeRange = useMemo(
+		() => getTimeArray(loadedTimeRange),
+		[loadedTimeRange],
+	);
 
 	return (
 		<TimelineProvider>
@@ -550,7 +586,7 @@ export default function Timeline() {
 
 				<div className="w-4/5 mx-auto my-8 relative select-none">
 					<div
-						className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative overflow-hidden"
+						className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative"
 						style={{
 							width: "100%",
 							boxSizing: "border-box",
@@ -561,9 +597,9 @@ export default function Timeline() {
 						)}
 						<div
 							className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-							style={{ left: `${timePercentage}%`, zIndex: 5 }}
+							style={{ left: `${timePercentage}%`, zIndex: 100 }}
 						>
-							<div className="relative -top-6 right-3 text-[10px] text-muted-foreground whitespace-nowrap">
+							<div className="relative -top-6 right-3 z-50 text-[10px] text-muted-foreground whitespace-nowrap">
 								{currentIndex < frames.length &&
 									frames[currentIndex] &&
 									frames[currentIndex].timestamp &&
@@ -625,7 +661,7 @@ export default function Timeline() {
 					/>
 
 					{loadedTimeRange && frames.length > 0 && (
-						<TimelineIconsSection blocks={frames} />
+						<TimelineIconsSection blocks={frames} timeRange={loadedTimeRange} />
 					)}
 
 					<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
@@ -638,20 +674,22 @@ export default function Timeline() {
 									style={{
 										left: `${(i * 100) / (timeRange.length - 1)}%`,
 									}}
-									onClick={() => jumpToDate(new Date(time))}
+									onClick={() => jumpToTime(new Date(time))}
 								>
 									{dateTime.toLocaleTimeString("en-US", {
 										hour: "numeric",
 										minute: "2-digit",
 										hour12: true,
 									})}
-									<span className="text-center">
-										{dateTime.toLocaleDateString([], {
-											weekday: "short",
-
-											day: "numeric",
-										})}
-									</span>
+									{
+										//<span className="text-center">
+										//	{dateTime.toLocaleDateString([], {
+										//		weekday: "short",
+										//
+										//		day: "numeric",
+										//	})}
+										//</span>
+									}
 								</button>
 							);
 						})}
