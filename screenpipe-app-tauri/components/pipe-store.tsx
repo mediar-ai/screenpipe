@@ -64,6 +64,7 @@ export const PipeStore: React.FC = () => {
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
+      console.log("fetching store plugins", settings.user?.token);
       const plugins = await pipeApi.listStorePlugins();
 
       // Create PipeWithStatus objects for store plugins
@@ -115,6 +116,7 @@ export const PipeStore: React.FC = () => {
     if (!settings.user?.token) return;
     const pipeApi = await PipeApi.create(settings.user!.token!);
     const purchaseHistory = await pipeApi.getUserPurchaseHistory();
+    console.log("purchase history", purchaseHistory);
     setPurchaseHistory(purchaseHistory);
   };
 
@@ -138,13 +140,16 @@ export const PipeStore: React.FC = () => {
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
+      // user had credits left
       if (response.data.used_credits) {
-        toast({
-          title: "purchase successful",
-          description: "your purchase has been successful",
-        });
+      } else if (response.data.checkout_url) {
+        // user had no credits left
+        openUrl(response.data.checkout_url);
       }
-      openUrl(response.data.checkout_url);
+      toast({
+        title: "purchase successful",
+        description: "your purchase has been successful",
+      });
       onComplete?.();
     } catch (error) {
       console.error("error purchasing pipe:", error);
@@ -408,7 +413,9 @@ export const PipeStore: React.FC = () => {
       onComplete();
     } catch (error) {
       console.error(
-        `Failed to ${pipe.installed_config?.enabled ? "disable" : "enable"} pipe:`,
+        `Failed to ${
+          pipe.installed_config?.enabled ? "disable" : "enable"
+        } pipe:`,
         error
       );
       toast({

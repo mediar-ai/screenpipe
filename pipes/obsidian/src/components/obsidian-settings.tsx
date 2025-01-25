@@ -45,7 +45,6 @@ export function ObsidianSettings() {
   const [intelligenceDeepLink, setIntelligenceDeepLink] = useState<
     string | null
   >(null);
-  console.log("settings", settings);
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const [testLogLoading, setTestLogLoading] = useState(false);
   const [pathValidation, setPathValidation] = useState<{

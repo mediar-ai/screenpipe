@@ -84,12 +84,9 @@ export const PipeCard: React.FC<PipeCardProps> = ({
       className="group border rounded-xl p-5 hover:bg-muted/40 transition-all duration-200 cursor-pointer backdrop-blur-sm"
       onClick={() => onClick(pipe)}
     >
-      <div className="flex flex-col h-full space-y-4">
+      <div className="flex flex-col h-full justify-between space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="size-12 rounded-[20%] bg-muted flex items-center justify-center overflow-hidden">
-              <Puzzle className="size-4 text-muted-foreground" />
-            </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-lg tracking-tight">
                 {pipe.name}
@@ -141,8 +138,8 @@ export const PipeCard: React.FC<PipeCardProps> = ({
             )}
           </div>
         </div>
-        {pipe.installed_config?.source === "store" && (
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {pipe.developer_accounts.developer_name && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-auto">
             <div className="flex items-center gap-1">
               <div className="size-6 rounded-full bg-muted flex items-center justify-center">
                 <UserIcon className="size-3" />
