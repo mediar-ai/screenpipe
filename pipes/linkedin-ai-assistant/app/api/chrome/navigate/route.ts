@@ -50,7 +50,7 @@ export async function POST(request: Request) {
         
         // Setup the browser connection
         logger.log('setting up browser...');
-        const { page } = await setupBrowser(logger.getLogs());
+        const { page } = await setupBrowser(logger);
         
         // Perform the navigation
         const result = await navigateToPage(page, url);
