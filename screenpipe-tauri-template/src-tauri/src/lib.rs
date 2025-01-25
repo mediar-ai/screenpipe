@@ -17,19 +17,13 @@ pub fn run() {
     let app_handle = app.handle();
 
     // Start screenpipe server
-    let shell = app_handle.shell();
-    let output = tauri::async_runtime::block_on(async move {
-        shell
-            .command("screenpipe")
-            .output()
-            .await
-            .unwrap()
-    });
-    if output.status.success() {
-        println!("Result: {:?}", String::from_utf8(output.stdout));
-    } else {
-        println!("Exit with code: {}", output.status.code().unwrap());
-    }
+    app_handle.
+    shell()
+    .sidecar("screenpipe")
+    .unwrap()
+    .spawn()
+    .expect("Failed to start screenpipe");
+
     // Download latest ffmpeg version
     ffmpeg_sidecar::download::auto_download().unwrap();
 
