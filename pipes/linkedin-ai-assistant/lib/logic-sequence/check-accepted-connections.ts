@@ -56,11 +56,26 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
             try {
                 console.log(`navigating to profile: ${connection.profileUrl}`);
                 
-                // Visit profile
                 await page.goto(connection.profileUrl, {
                     waitUntil: 'domcontentloaded',
                     timeout: 15000
                 });
+
+                // Check for 404 page
+                const is404 = await Promise.race([
+                    page.$eval('.not-found__header', () => true).catch(() => false),
+                    page.$eval('[data-test-not-found-error-container]', () => true).catch(() => false)
+                ]);
+
+                if (is404) {
+                    console.log(`profile not found (404) for ${connection.profileUrl}`);
+                    await saveConnection({
+                        ...connection,
+                        status: 'invalid',
+                        timestamp: new Date().toISOString()
+                    });
+                    continue;
+                }
 
                 console.log('waiting for profile content to load...');
                 
