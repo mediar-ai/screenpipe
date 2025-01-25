@@ -1,4 +1,5 @@
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::{ShellExt, process::CommandChild};
+use tauri::RunEvent;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -6,28 +7,70 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+// https://github.com/tauri-apps/tauri/discussions/3273#discussioncomment-9729103
+// fn kill_process(child: &mut Child) -> Result<(), Box<dyn std::error::Error>> {
+//     #[cfg(unix)]
+//     {
+//         let pid = child.id().to_string();
+//         println!("Sending INT signal to process with PID: {}", pid);
+
+//         let mut kill = StdCommand::new("kill")
+//             .args(["-s", "SIGINT", &pid])
+//             .spawn()?;
+//         kill.wait()?;
+//     }
+
+//     #[cfg(windows)]
+//     {
+//         let pid = child.id().to_string();
+//         println!("Sending taskkill to process with PID: {}", pid);
+
+//         let mut kill = StdCommand::new("taskkill")
+//             .args(["/PID", &pid, "/F"])
+//             .spawn()?;
+//         kill.wait()?;
+//     }
+
+//     Ok(())
+
+struct ChildCommands(Option<CommandChild>);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Build the Tauri application
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet]);
     let app = builder
         .build(tauri::generate_context!()).unwrap();
-    let app_handle = app.handle();
-
-    // Start screenpipe server
-    app_handle.
-    shell()
-    .sidecar("screenpipe")
-    .unwrap()
-    .spawn()
-    .expect("Failed to start screenpipe");
 
     // Download latest ffmpeg version
     ffmpeg_sidecar::download::auto_download().unwrap();
 
     // Start the actual Tauri app
+    let mut child_commands = ChildCommands(None);
     app
-    .run(|_, _| {});
+    .run(move |app_handle, event| match event {
+        RunEvent::Ready => {
+            // Start screenpipe server
+            let (_, screenpipe_child) = app_handle.
+            shell()
+            .sidecar("screenpipe")
+            .unwrap()
+            .spawn()
+            .expect("Failed to start screenpipe");
+
+            child_commands.0 = Some(screenpipe_child);
+        }
+        RunEvent::ExitRequested { code: _, api: _, .. } => {
+            // Kill screenpipe server.
+            // Tauri is supposed to do this with sidecars but with Screenpipe
+            // it doesn't seem to be working
+            if let Some(child) = child_commands.0.take() {
+                child.kill().expect("Failed to close subprocesses");
+            }
+        }
+        _ => {}
+    });
 }
