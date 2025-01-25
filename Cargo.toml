@@ -8,7 +8,8 @@ members = [
     "screenpipe-actions",
 ]
 exclude = [
-    "screenpipe-app-tauri/src-tauri"
+    "screenpipe-app-tauri/src-tauri",
+    "screenpipe-tauri-template/src-tauri"
 ]
 resolver = "2"
 
