@@ -91,6 +91,7 @@ struct WindowSizePayload {
     height: f64,
 }
 
+#[cfg(not(target_os = "windows"))]
 async fn settings_stream(
     State(state): State<ServerState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
@@ -113,34 +114,46 @@ async fn settings_stream(
     )
 }
 
+#[cfg(target_os = "windows")]
+async fn settings_stream(
+    State(_): State<ServerState>,
+) -> (StatusCode, String) {
+    (StatusCode::NOT_IMPLEMENTED, "SSE not supported on Windows".to_string())
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
+    
+    #[cfg(not(target_os = "windows"))]
     let settings_tx_clone = settings_tx.clone();
 
     let app_handle_clone = app_handle.clone();
 
-    let store_path = app_handle
-        .path()
-        .local_data_dir()
-        .unwrap()
-        .join("store.bin");
+    #[cfg(not(target_os = "windows"))]
+    {
+        let store_path = app_handle
+            .path()
+            .local_data_dir()
+            .unwrap()
+            .join("store.bin");
 
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(event) = res {
-            if event.kind.is_modify() {
-                if let Ok(store) = get_store(&app_handle_clone, None) {
-                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
-                        let _ = settings_tx_clone.send(settings);
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            if let Ok(event) = res {
+                if event.kind.is_modify() {
+                    if let Ok(store) = get_store(&app_handle_clone, None) {
+                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                            let _ = settings_tx_clone.send(settings);
+                        }
                     }
                 }
             }
-        }
-    })
-    .unwrap();
-
-    watcher
-        .watch(&store_path, RecursiveMode::NonRecursive)
+        })
         .unwrap();
+
+        watcher
+            .watch(&store_path, RecursiveMode::NonRecursive)
+            .unwrap();
+    }
 
     let state = ServerState {
         app_handle,

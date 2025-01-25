@@ -257,3 +257,4 @@ const pipe = new NodePipe();
 export { pipe };
 
 export * from "../../common/types";
+export { getDefaultSettings } from "../../common/utils";

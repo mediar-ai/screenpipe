@@ -2,37 +2,13 @@
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
 import type { Settings } from "@screenpipe/js";
+import { getDefaultSettings } from "@screenpipe/browser";
 // Force Node.js runtime
 export const runtime = "nodejs"; // Add this line
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-    analyticsEnabled: true,
-  };
-
+  const defaultSettings = getDefaultSettings();
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {

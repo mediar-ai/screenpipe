@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     serve, Router,
 };
+use axum_macros::debug_handler;
 use futures::{
     future::{try_join, try_join_all},
     Stream,
@@ -648,6 +649,13 @@ struct DownloadPipeRequest {
 }
 
 #[derive(Deserialize)]
+struct DownloadPipePrivateRequest {
+    url: String,
+    pipe_name: String,
+    pipe_id: String,
+}
+
+#[derive(Deserialize)]
 struct RunPipeRequest {
     pipe_id: String,
 }
@@ -665,6 +673,31 @@ async fn download_pipe_handler(
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Downloading pipe: {}", payload.url);
     match state.pipe_manager.download_pipe(&payload.url).await {
+        Ok(pipe_dir) => Ok(JsonResponse(json!({
+            "data": {
+                "pipe_id": pipe_dir,
+                "message": "pipe downloaded successfully"
+            },
+            "success": true
+        }))),
+        Err(e) => {
+            error!("Failed to download pipe: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to download pipe: {}", e),
+                    "success": false
+                })),
+            ))
+        }
+    }
+}
+
+async fn download_pipe_private_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
+    match state.pipe_manager.download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id).await {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
             "data": {
                 "pipe_id": pipe_dir,
@@ -1835,6 +1868,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
+        .route("/pipes/download-private", post(download_pipe_private_handler))
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))

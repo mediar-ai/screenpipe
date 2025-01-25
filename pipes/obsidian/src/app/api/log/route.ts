@@ -52,8 +52,8 @@ async function extractLinkedContent(
     // Find the vault root first
     const vaultRoot = await findVaultRoot(basePath);
 
-    // Match [[file]] or [[folder/file]] patterns
-    const linkRegex = /\[\[(.*?)\]\]/g;
+    // Match @[[file]] or @[[folder/file]] patterns
+    const linkRegex = /@\[\[(.*?)\]\]/g;
     const matches = [...prompt.matchAll(linkRegex)];
 
     let enrichedPrompt = prompt;
@@ -68,7 +68,7 @@ async function extractLinkedContent(
 
       try {
         const content = await readObsidianFile(fullPath);
-        // Replace the [[link]] with actual content
+        // Replace the @[[link]] with actual content
         enrichedPrompt = enrichedPrompt.replace(
           match[0],
           `\n--- Content of ${relativePath} ---\n${content}\n---\n`
