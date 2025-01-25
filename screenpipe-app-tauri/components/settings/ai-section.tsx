@@ -30,7 +30,6 @@ import { Textarea } from "../ui/textarea";
 import { toast } from "../ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { useUser } from "@/lib/hooks/use-user";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "../ui/card";
@@ -124,9 +123,7 @@ const AISection = () => {
   >("idle");
 
   const [showApiKey, setShowApiKey] = React.useState(false);
-  const { user } = useUser();
 
-  const { credits } = user || {};
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     updateSettings({ openaiApiKey: e.target.value });
   };
@@ -350,11 +347,11 @@ const AISection = () => {
             imageSrc="/images/screenpipe.png"
             selected={settings.aiProviderType === "screenpipe-cloud"}
             onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            disabled={!user}
+            disabled={!settings.user}
             warningText={
-              !user
+              !settings.user
                 ? "login required"
-                : !credits?.amount
+                : !settings.user?.credits?.amount
                 ? "requires credits"
                 : undefined
             }
