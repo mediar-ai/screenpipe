@@ -2,11 +2,18 @@
 
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
-import { format, isAfter, isSameDay, startOfDay } from "date-fns";
+import { format, isAfter, isSameDay, startOfDay, subDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMemo } from "react";
+
+interface TimeRange {
+	start: Date;
+	end: Date;
+}
 
 interface TimelineControlsProps {
+	startAndEndDates: TimeRange;
 	currentDate: Date;
 	onDateChange: (date: Date) => void;
 	onJumpToday: () => void;
@@ -14,14 +21,15 @@ interface TimelineControlsProps {
 }
 
 export function TimelineControls({
+	startAndEndDates,
 	currentDate,
 	onDateChange,
 	onJumpToday,
 	className,
 }: TimelineControlsProps) {
-	const today = new Date();
-
 	const jumpDay = (days: number) => {
+		const today = new Date();
+
 		const newDate = new Date(currentDate);
 		newDate.setDate(newDate.getDate() + days);
 
@@ -31,13 +39,23 @@ export function TimelineControls({
 			return;
 		}
 
-		console.log(newDate);
-
 		onDateChange(newDate);
 	};
 
 	// Disable forward button if we're at today
-	const isAtToday = !isAfter(today.getDate(), currentDate.getDate());
+	const isAtToday = useMemo(
+		() => !isAfter(new Date().getDate(), currentDate.getDate()),
+		[currentDate],
+	);
+
+	const canGoBack = useMemo(
+		() =>
+			isAfter(
+				startAndEndDates.start.getDate(),
+				subDays(currentDate, 1).getDate(),
+			),
+		[startAndEndDates.start, currentDate],
+	);
 
 	return (
 		<div
@@ -51,6 +69,7 @@ export function TimelineControls({
 				size="icon"
 				onClick={() => jumpDay(-1)}
 				className="h-8 w-8"
+				disabled={canGoBack}
 			>
 				<ChevronLeft className="h-4 w-4" />
 			</Button>

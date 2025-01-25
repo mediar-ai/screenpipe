@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
@@ -11,7 +11,8 @@ import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
 import { TimelineSearch } from "@/components/timeline/timeline-search";
 import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
-import { isAfter, isBefore } from "date-fns";
+import { endOfDay, isAfter } from "date-fns";
+import { getStartDate } from "@/lib/actions/get-start-date";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -95,6 +96,10 @@ export default function Timeline() {
 	});
 	const [currentDate, setCurrentDate] = useState(new Date());
 	const [searchResults, setSearchResults] = useState<number[]>([]);
+	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
+		start: new Date(new Date().setHours(0, 0, 0, 0)),
+		end: new Date(),
+	});
 
 	useEffect(() => {
 		setAiPanelPosition({
@@ -111,8 +116,12 @@ export default function Timeline() {
 		setFrames(() => []);
 		setCurrentIndex(() => 0);
 
-		const endTime = new Date(currentDate);
-		endTime.setMinutes(endTime.getMinutes() - 5);
+		let endTime = new Date(currentDate);
+		if (endTime.getDate() === new Date().getDate()) {
+			endTime.setMinutes(endTime.getMinutes() - 5);
+		} else {
+			endTime = endOfDay(new Date(currentDate));
+		}
 
 		const startTime = new Date(endTime);
 		// startTime.setDate(startTime.getDate() - 7);
@@ -133,9 +142,7 @@ export default function Timeline() {
 		const eventSource = new EventSource(url);
 		eventSourceRef.current = eventSource;
 
-		console.log(eventSource);
 		const connectionTimeout = setTimeout(() => {
-			console.log(eventSource);
 			if (eventSource.readyState !== EventSource.OPEN) {
 				console.error(
 					"Connection timeout: Unable to establish connection, make sure screenpipe is running",
@@ -254,6 +261,23 @@ export default function Timeline() {
 			setIsLoading(true);
 		};
 	};
+
+	useEffect(() => {
+		const getStartEndDates = async () => {
+			const data = await getStartDate();
+
+			if ("error" in data) {
+				return;
+			}
+
+			setStartAndEndDates((prev) => ({
+				...prev,
+				start: data,
+			}));
+		};
+
+		getStartEndDates();
+	}, []);
 
 	useEffect(() => {
 		setupEventSource();
@@ -432,9 +456,15 @@ export default function Timeline() {
 		}
 
 		const frameTimeStamp = new Date(newDate);
-		if (!(frameTimeStamp.getDate() === new Date(currentDate).getDate())) {
-			setCurrentDate(newDate);
+		if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
+			return;
 		}
+
+		if (isAfter(startAndEndDates.start.getDate(), newDate.getDate())) {
+			return;
+		}
+
+		setCurrentDate(newDate);
 
 		//frames.forEach((frame, index) => {
 		//	const frameDate = new Date(frame.timestamp);
@@ -521,6 +551,7 @@ export default function Timeline() {
 					<div className="flex items-center gap-4">
 						<TimelineControls
 							currentDate={currentDate}
+							startAndEndDates={startAndEndDates}
 							onDateChange={handleDateChange}
 							onJumpToday={handleJumpToday}
 							className="shadow-lg"
