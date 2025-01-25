@@ -4,14 +4,64 @@ import { verifyToken } from '@clerk/backend';
 import { Anthropic } from '@anthropic-ai/sdk';
 import * as Sentry from '@sentry/cloudflare';
 
-async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
-	try {
-		const payload = await verifyToken(token, {
-			secretKey: env.CLERK_SECRET_KEY,
+// Add cache for subscription status
+class SubscriptionCache {
+	private cache: Map<string, { isValid: boolean; timestamp: number }>;
+	private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+	constructor() {
+		this.cache = new Map();
+	}
+
+	get(userId: string): boolean | null {
+		const entry = this.cache.get(userId);
+		if (!entry) return null;
+
+		if (Date.now() - entry.timestamp > this.CACHE_TTL) {
+			this.cache.delete(userId);
+			return null;
+		}
+
+		return entry.isValid;
+	}
+
+	set(userId: string, isValid: boolean) {
+		this.cache.set(userId, {
+			isValid,
+			timestamp: Date.now(),
 		});
-		return !!payload.sub;
+	}
+}
+
+const subscriptionCache = new SubscriptionCache();
+
+async function validateSubscription(env: Env, userId: string): Promise<boolean> {
+	// Check cache first
+	const cached = subscriptionCache.get(userId);
+	if (cached !== null) {
+		return cached;
+	}
+
+	try {
+		const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
+			method: 'POST',
+			headers: {
+				apikey: env.SUPABASE_ANON_KEY,
+				Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ user_id: userId }),
+		});
+
+		if (!response.ok) {
+			throw new Error(`Supabase error: ${response.status}`);
+		}
+
+		const isValid: boolean = await response.json();
+		subscriptionCache.set(userId, isValid);
+		return isValid;
 	} catch (error) {
-		console.error('clerk verification failed:', error);
+		console.error('Error checking subscription:', error);
 		return false;
 	}
 }
@@ -145,11 +195,11 @@ export default Sentry.withSentry(
 						});
 					}
 
-					const token = authHeader.split(' ')[1];
-					const isValid = await verifyClerkToken(env, token);
+					const userId = authHeader.split(' ')[1];
+					const isValid = await validateSubscription(env, userId);
 
 					if (!isValid) {
-						return new Response(JSON.stringify({ error: 'invalid token' }), {
+						return new Response(JSON.stringify({ error: 'invalid subscription' }), {
 							status: 401,
 							headers: corsHeaders,
 						});
@@ -486,9 +536,10 @@ interface Env {
 	ANTHROPIC_API_KEY: string;
 	DEEPGRAM_API_KEY: string;
 	RATE_LIMITER: DurableObjectNamespace;
-	CLERK_SECRET_KEY: string;
 	GEMINI_API_KEY: string;
 	NODE_ENV?: string;
+	SUPABASE_URL: string;
+	SUPABASE_ANON_KEY: string;
 }
 
 /*

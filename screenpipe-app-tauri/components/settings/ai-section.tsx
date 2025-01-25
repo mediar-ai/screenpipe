@@ -114,14 +114,6 @@ const AIProviderCard = ({
 const AISection = () => {
   const { settings, updateSettings, resetSetting } = useSettings();
 
-  const [ollamaStatus, setOllamaStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
-
-  const [embeddedAIStatus, setEmbeddedAIStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
-
   const [showApiKey, setShowApiKey] = React.useState(false);
 
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,109 +122,6 @@ const AISection = () => {
 
   const handleMaxContextCharsChange = (value: number[]) => {
     updateSettings({ aiMaxContextChars: value[0] });
-  };
-
-  const handleEmbeddedLLMChange = (checked: boolean) => {
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        enabled: checked,
-      },
-    });
-    if (!checked) {
-      setOllamaStatus("idle");
-    }
-  };
-
-  const handleEmbeddedLLMModelChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const newModel = e.target.value;
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        model: newModel,
-      },
-      aiModel: newModel,
-    });
-  };
-
-  const handleEmbeddedLLMPortChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        port: parseInt(e.target.value, 10),
-      },
-    });
-  };
-
-  const startOllamaSidecar = async () => {
-    posthog.capture("start_ollama_sidecar");
-    setOllamaStatus("running");
-    toast({
-      title: "starting ai",
-      description:
-        "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
-    });
-
-    try {
-      console.log(
-        "starting ollama sidecar with settings:",
-        settings.embeddedLLM
-      );
-      const result = await invoke<string>("start_ollama_sidecar", {
-        settings: {
-          enabled: settings.embeddedLLM.enabled,
-          model: settings.embeddedLLM.model,
-          port: settings.embeddedLLM.port,
-        },
-      });
-
-      setOllamaStatus("running");
-      setEmbeddedAIStatus("running");
-      toast({
-        title: "ai ready",
-        description: `${settings.embeddedLLM.model} is running.`,
-      });
-
-      // Show the LLM test result in a toast
-      toast({
-        title: `${settings.embeddedLLM.model} wants to tell you a joke.`,
-        description: result,
-        duration: 10000,
-      });
-    } catch (error) {
-      console.error("Error starting ai sidecar:", error);
-      setOllamaStatus("error");
-      setEmbeddedAIStatus("error");
-      toast({
-        title: "error starting ai",
-        description: "check the console for more details",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleStopLLM = async () => {
-    try {
-      await invoke("stop_ollama_sidecar");
-      setOllamaStatus("idle");
-      setEmbeddedAIStatus("idle");
-      toast({
-        title: "ai stopped",
-        description: "the embedded ai has been shut down",
-      });
-    } catch (error) {
-      console.error("error stopping ai:", error);
-      setEmbeddedAIStatus("error");
-      toast({
-        title: "error stopping ai",
-        description: "check the console for more details",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleCustomPromptChange = (
@@ -374,17 +263,6 @@ const AISection = () => {
             selected={settings.aiProviderType === "custom"}
             onClick={() => handleAiProviderChange("custom")}
           />
-
-          {embeddedAIStatus === "running" && (
-            <AIProviderCard
-              type="embedded"
-              title="embedded ai"
-              description="use the built-in ai engine for offline processing"
-              imageSrc="/images/embedded.png"
-              selected={settings.aiProviderType === "embedded"}
-              onClick={() => handleAiProviderChange("embedded")}
-            />
-          )}
         </div>
       </div>
       {settings.aiProviderType === "custom" && (
@@ -568,114 +446,6 @@ const AISection = () => {
           </div>
         </div>
       </div>
-
-      <div className="flex items-center gap-4 mb-4 w-full">
-        <div className="flex items-center justify-between w-full">
-          <div className="space-y-1">
-            <h4 className="font-medium">embedded ai</h4>
-            <p className="text-sm text-muted-foreground">
-              enable this to use local ai features in screenpipe.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="embeddedLLM"
-              checked={settings.embeddedLLM.enabled}
-              onCheckedChange={handleEmbeddedLLMChange}
-            />
-            {settings.embeddedLLM.enabled && (
-              <>
-                <Button
-                  onClick={startOllamaSidecar}
-                  disabled={ollamaStatus === "running"}
-                  className="ml-auto"
-                >
-                  {ollamaStatus === "running" ? (
-                    <Check className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "error" ? (
-                    <X className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "idle" ? (
-                    <Play className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  {ollamaStatus === "running"
-                    ? "running"
-                    : ollamaStatus === "error"
-                    ? "error"
-                    : "start ai"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleStopLLM}
-                  className="ml-auto"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  stop ai
-                </Button>
-                <LogFileButton isAppLog={true} />
-                <Badge>{embeddedAIStatus}</Badge>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {settings.embeddedLLM.enabled && (
-        <>
-          <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
-              <Label
-                htmlFor="embeddedLLMModel"
-                className="min-w-[80px] text-right"
-              >
-                llm model
-              </Label>
-              <div className="flex-grow flex items-center">
-                <Input
-                  id="embeddedLLMModel"
-                  value={settings.embeddedLLM.model}
-                  onChange={handleEmbeddedLLMModelChange}
-                  className="flex-grow"
-                  placeholder="enter embedded llm model"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="ml-2 h-4 w-4 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-[300px]">
-                      <p>
-                        supported models are the same as ollama. check the
-                        ollama documentation for a list of available models.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
-              <Label
-                htmlFor="embeddedLLMPort"
-                className="min-w-[80px] text-right"
-              >
-                llm port
-              </Label>
-              <Input
-                id="embeddedLLMPort"
-                type="number"
-                value={settings.embeddedLLM.port}
-                onChange={handleEmbeddedLLMPortChange}
-                className="flex-grow"
-                placeholder="enter embedded llm port"
-              />
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 };
