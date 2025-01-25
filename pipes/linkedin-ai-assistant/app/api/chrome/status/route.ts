@@ -1,43 +1,40 @@
 import { NextResponse } from 'next/server';
+import { RouteLogger } from '@/lib/route-logger';
 
 export const runtime = 'nodejs';
 
-const logs: string[] = [];
-const addLog = (msg: string) => {
-  console.log(msg);
-  logs.push(`${new Date().toISOString()} - ${msg}`);
-};
+const logger = new RouteLogger('chrome-status');
 
 export async function GET() {
   try {
-    addLog('checking chrome connection status...');
+    logger.log('checking chrome connection status...');
     const response = await fetch('http://127.0.0.1:9222/json/version');
     
     if (!response.ok) {
-      addLog('chrome not connected');
+      logger.log('chrome not connected');
       return NextResponse.json({ 
         status: 'not_connected',
-        logs 
+        logs: logger.getLogs()
       }, { status: 200 });
     }
 
     const data = await response.json() as { webSocketDebuggerUrl: string };
-    addLog('chrome connected, getting websocket url');
+    logger.log('chrome connected, getting websocket url');
     
     const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
-    addLog(`websocket url: ${wsUrl}`);
+    logger.log(`websocket url: ${wsUrl}`);
 
     return NextResponse.json({
       wsUrl,
       status: 'connected',
-      logs
+      logs: logger.getLogs()
     });
   } catch (error) {
-    addLog(`error checking status: ${error}`);
+    logger.error(`error checking status: ${error}`);
     return NextResponse.json({ 
       status: 'not_connected',
       error: String(error),
-      logs 
+      logs: logger.getLogs()
     }, { status: 200 });
   }
 } 
