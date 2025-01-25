@@ -451,10 +451,6 @@ export default function Timeline() {
 		//let closestIndex = 0;
 		//let closestDiff = Infinity;
 
-		if (!frames.length && isAfter(currentDate.getDate(), newDate.getDate())) {
-			return;
-		}
-
 		const frameTimeStamp = new Date(newDate);
 		if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
 			return;
