@@ -80,6 +80,7 @@ export async function setupBrowser(logger: RouteLogger = defaultLogger): Promise
             }
         }
 
+        
         if (!activeBrowser) {
             logger.error(`all connection attempts failed: ${lastError}`);
             throw new Error(`failed to connect to browser after 5 attempts: ${lastError}`);
