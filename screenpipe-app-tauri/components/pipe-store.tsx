@@ -138,6 +138,12 @@ export const PipeStore: React.FC = () => {
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
+      if (response.data.used_credits) {
+        toast({
+          title: "purchase successful",
+          description: "your purchase has been successful",
+        });
+      }
       openUrl(response.data.checkout_url);
       onComplete?.();
     } catch (error) {

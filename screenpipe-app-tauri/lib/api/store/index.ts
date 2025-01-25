@@ -51,6 +51,8 @@ interface Developer_accounts {
 interface PurchaseUrlResponse {
   data: {
     checkout_url: string;
+    // when user had credits from previous app purchase
+    used_credits?: boolean;
   };
 }
 

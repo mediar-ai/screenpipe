@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Puzzle, UserIcon } from "lucide-react";
+import { CheckCircle, Download, Puzzle, UserIcon } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -110,7 +110,8 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 onClick={handleOpenWindow}
                 className="hover:bg-muted font-medium"
               >
-                Installed
+                <CheckCircle className="h-3.5 w-3.5 mr-2" />
+                installed
               </Button>
             ) : (
               <Button
@@ -133,26 +134,26 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 ) : (
                   <>
                     <Download className="h-3.5 w-3.5 mr-2" />
-                    Get
+                    get
                   </>
                 )}
               </Button>
             )}
           </div>
         </div>
-        {pipe.installed_config?.source === 'store' && (
+        {pipe.installed_config?.source === "store" && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <div className="size-6 rounded-full bg-muted flex items-center justify-center">
-              <UserIcon className="size-3" />
+                <UserIcon className="size-3" />
+              </div>
+              {pipe.developer_accounts.developer_name}
             </div>
-            {pipe.developer_accounts.developer_name}
-          </div>
-          {pipe.plugin_analytics.downloads_count != null && (
-            <span className="flex items-center gap-1">
-              <Download className="h-3 w-3" />
-              {pipe.plugin_analytics.downloads_count}
-            </span>
+            {pipe.plugin_analytics.downloads_count != null && (
+              <span className="flex items-center gap-1">
+                <Download className="h-3 w-3" />
+                {pipe.plugin_analytics.downloads_count}
+              </span>
             )}
           </div>
         )}
