@@ -54,17 +54,60 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
             }
 
             try {
-                console.log(`checking connection status for ${connection.profileUrl}`);
+                console.log(`navigating to profile: ${connection.profileUrl}`);
                 
-                // Visit profile
                 await page.goto(connection.profileUrl, {
-                    waitUntil: 'networkidle0',
-                    timeout: 30000
+                    waitUntil: 'domcontentloaded',
+                    timeout: 15000
                 });
 
-                // Check if connected
+                // Check for 404 page
+                const is404 = await Promise.race([
+                    page.$eval('.not-found__header', () => true).catch(() => false),
+                    page.$eval('[data-test-not-found-error-container]', () => true).catch(() => false)
+                ]);
+
+                if (is404) {
+                    console.log(`profile not found (404) for ${connection.profileUrl}`);
+                    await saveConnection({
+                        ...connection,
+                        status: 'invalid',
+                        timestamp: new Date().toISOString()
+                    });
+                    continue;
+                }
+
+                console.log('waiting for profile content to load...');
+                
+                // Wait for either connect button or pending/message buttons to appear
+                const selectors = [
+                    'button.artdeco-button--connect',
+                    'button[aria-label*="Pending"]',
+                    'button[aria-label*="Message"]'
+                ];
+                
+                const button = await Promise.race([
+                    ...selectors.map(selector => 
+                        page.waitForSelector(selector, { timeout: 45000 })
+                            .catch(() => null)
+                    )
+                ]);
+
+                console.log('button detection result:', !!button);
+
+                // Check connection status
+                const pendingButton = await page.$('button[aria-label*="Pending"]');
+                const messageButton = await page.$('button[aria-label*="Message"]');
                 const connectButton = await page.$('button.artdeco-button--connect');
-                const isConnected = !connectButton;
+
+                console.log('found buttons:', {
+                    pending: !!pendingButton,
+                    message: !!messageButton,
+                    connect: !!connectButton
+                });
+
+                // If we have a message button or pending button but no connect button, they're connected
+                const isConnected = messageButton && !connectButton;
 
                 if (isConnected) {
                     console.log(`connection accepted for ${connection.profileUrl}`);
@@ -82,13 +125,38 @@ export async function startCheckingAcceptedConnections(): Promise<void> {
                         status: 'accepted',
                         timestamp: new Date().toISOString()
                     });
+                } else if (pendingButton) {
+                    console.log(`connection still pending for ${connection.profileUrl}`);
+                } else {
+                    console.log(`unclear connection status for ${connection.profileUrl}`);
+                }
+
+                // Check for any potential blocks or captchas
+                const possibleCaptcha = await page.$('iframe[title*="recaptcha"]');
+                if (possibleCaptcha) {
+                    console.error('detected possible captcha, may need manual intervention');
+                    throw new Error('captcha detected');
                 }
 
                 // Random delay between profile checks
-                await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+                const delay = 2000 + Math.random() * 3000;
+                console.log(`waiting ${Math.round(delay)}ms before next profile...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
 
             } catch (error) {
                 console.error(`error checking connection ${connection.profileUrl}:`, error);
+                
+                // Take screenshot on error for debugging
+                try {
+                    await page.screenshot({ 
+                        path: `error-${Date.now()}.png`,
+                        fullPage: true 
+                    });
+                    console.log('saved error screenshot');
+                } catch (e) {
+                    console.error('failed to save error screenshot:', e);
+                }
+                
                 continue;
             }
         }
