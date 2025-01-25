@@ -1,27 +1,24 @@
 import { NextResponse } from 'next/server';
 import { setupBrowser, getActiveBrowser } from '@/lib/browser-setup';
+import { RouteLogger } from '@/lib/route-logger';
 
-const logs: string[] = [];
-const addLog = (msg: string) => {
-  console.log(msg);
-  logs.push(`${new Date().toISOString()} - ${msg}`);
-};
+const logger = new RouteLogger('chrome-check-login');
 
 export async function POST(request: Request) {
     try {
         await request.json(); // keep reading the request to avoid hanging
-        addLog('checking linkedin login status');
+        logger.log('checking linkedin login status');
 
-        addLog('setting up browser...');
-        await setupBrowser(logs);
+        logger.log('setting up browser...');
+        await setupBrowser(logger);
         const { page } = getActiveBrowser();
         
         if (!page) {
-            addLog('no active browser session found');
+            logger.log('no active browser session found');
             throw new Error('no active browser session');
         }
 
-        addLog('evaluating login state...');
+        logger.log('evaluating login state...');
         // Check for elements that indicate logged-in state
         const isLoggedIn = await page.evaluate(() => {
             // Check for feed-specific elements that only appear when logged in
@@ -32,18 +29,18 @@ export async function POST(request: Request) {
             return !!(feedElements || navElements)
         });
 
-        addLog(`login status: ${isLoggedIn ? 'logged in' : 'logged out'}`);
+        logger.log(`login status: ${isLoggedIn ? 'logged in' : 'logged out'}`);
 
         return NextResponse.json({
             success: true,
             isLoggedIn: Boolean(isLoggedIn),
-            logs
+            logs: logger.getLogs()
         });
 
     } catch (error) {
-        addLog(`failed to check login status: ${error}`);
+        logger.error(`failed to check login status: ${error}`);
         return NextResponse.json(
-            { success: false, error: String(error), logs },
+            { success: false, error: String(error), logs: logger.getLogs() },
             { status: 500 }
         );
     }
