@@ -63,7 +63,6 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { ToastAction } from "@/components/ui/toast";
-import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -142,8 +141,7 @@ export function RecordingSettings() {
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const { user } = useUser();
-  const { credits } = user || {};
+  const { credits } = settings.user || {};
   // Add new state to track if settings have changed
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -390,8 +388,8 @@ export function RecordingSettings() {
   };
 
   const handleAudioTranscriptionModelChange = (value: string) => {
-    if (value === "screenpipe-cloud" && !credits?.amount) {
-      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+    if (value === "screenpipe-cloud" && !settings.user?.cloud_subscribed) {
+      openUrl("https://buy.stripe.com/7sIdRzbym4RA98c7sX");
       return;
     }
 
@@ -1092,9 +1090,9 @@ export function RecordingSettings() {
                           <span>screenpipe cloud</span>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">cloud</Badge>
-                            {!credits?.amount && (
+                            {!settings.user?.cloud_subscribed && (
                               <Badge variant="outline" className="text-xs">
-                                get credits
+                                get screenpipe cloud
                               </Badge>
                             )}
                           </div>
@@ -1132,9 +1130,9 @@ export function RecordingSettings() {
                         <span>screenpipe cloud</span>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">cloud</Badge>
-                          {!credits?.amount && (
+                          {!settings.user?.cloud_subscribed && (
                             <Badge variant="outline" className="text-xs">
-                              get credits
+                              get screenpipe cloud
                             </Badge>
                           )}
                         </div>

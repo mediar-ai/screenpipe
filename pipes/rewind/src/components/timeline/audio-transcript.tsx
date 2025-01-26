@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { AudioData, StreamTimeSeriesResponse } from "@/app/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,22 +26,20 @@ export function AudioTranscript({
   groupingWindowMs = 30000,
   onClose,
 }: AudioTranscriptProps) {
-  const [audioGroups, setAudioGroups] = useState<AudioGroup[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
-  const [position, setPosition] = useState({
+  const [position, setPosition] = useState(() => ({
     x: window.innerWidth - 320,
     y: 100,
-  });
+  }));
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [windowSize, setWindowSize] = useState({ width: 300, height: 500 });
   const resizerRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const [isVisible, setIsVisible] = useState(true);
 
-  // Group audio files from nearby frames
-  useEffect(() => {
-    if (!frames.length) return;
+  // 2. Memoize the audio grouping logic
+  const audioGroups = useMemo(() => {
+    if (!frames.length) return [];
 
     const currentFrame = frames[currentIndex];
     const currentTime = new Date(currentFrame?.timestamp);
@@ -58,9 +56,6 @@ export function AudioTranscript({
     const hasNearbyAudio = nearbyFrames.some((frame) =>
       frame.devices.some((device) => device.audio.length > 0)
     );
-
-    // Show/hide panel based on nearby audio
-    setIsVisible(hasNearbyAudio);
 
     // Group audio by device
     const groups = new Map<string, AudioGroup>();
@@ -91,16 +86,30 @@ export function AudioTranscript({
       });
     });
 
-    setAudioGroups(Array.from(groups.values()));
+    return Array.from(groups.values());
   }, [frames, currentIndex, groupingWindowMs]);
 
-  const handlePlay = (audioPath: string) => {
-    if (playing === audioPath) {
-      setPlaying(null);
-    } else {
-      setPlaying(audioPath);
-    }
-  };
+  // 3. Memoize visibility based on audio groups
+  const isVisible = useMemo(() => {
+    return audioGroups.length > 0;
+  }, [audioGroups]);
+
+  // 4. Memoize handlers
+  const handlePanelMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (isDragging) {
+        setPosition({
+          x: e.clientX - dragOffset.x,
+          y: e.clientY - dragOffset.y,
+        });
+      }
+    },
+    [isDragging, dragOffset]
+  );
+
+  const handlePlay = useCallback((audioPath: string) => {
+    setPlaying((current) => (current === audioPath ? null : audioPath));
+  }, []);
 
   const handlePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(true);
@@ -108,15 +117,6 @@ export function AudioTranscript({
       x: e.clientX - position.x,
       y: e.clientY - position.y,
     });
-  };
-
-  const handlePanelMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y,
-      });
-    }
   };
 
   const handlePanelMouseUp = () => {
@@ -147,14 +147,8 @@ export function AudioTranscript({
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Modify the content scroll handler
-  const handleContentScroll = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.stopPropagation(); // Stop the event from reaching the timeline
-  };
-
   const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsVisible(false);
     onClose?.();
   };
 

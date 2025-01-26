@@ -1,26 +1,67 @@
 import { NextResponse } from 'next/server';
 import { startHarvesting } from '@/lib/logic-sequence/harvest-connections';
-import { loadConnections, saveHarvestingState } from '@/lib/storage/storage';
+import { 
+  loadConnections, 
+  saveHarvestingState, 
+  updateConnectionsSent,
+  isHarvestingAlive,
+  updateHeartbeat 
+} from '@/lib/storage/storage';
+import { ChromeSession } from '@/lib/chrome-session';
+import crypto from 'crypto';
 
 export async function POST() {
   try {
     console.log('farming start endpoint called');
     const connections = await loadConnections();
-    console.log('current harvesting status:', connections.harvestingStatus);
     
-    // Check if already running first
+    // Check if process is actually running via heartbeat
     if (connections.harvestingStatus === 'running') {
-      console.log('farming already in progress');
-      return NextResponse.json(
-        { 
-          message: 'farming already in progress',
-          harvestingStatus: 'running',
-          weeklyLimitReached: false,
-          dailyLimitReached: false,
-          connectionsSent: connections.connectionsSent || 0
-        },
-        { status: 200 }
-      );
+      const isAlive = await isHarvestingAlive();
+      
+      if (!isAlive) {
+        console.log('detected dead harvest process, resetting state');
+        await saveHarvestingState('stopped');
+      } else {
+        console.log('farming already in progress');
+        return NextResponse.json(
+          { 
+            message: 'farming already in progress',
+            harvestingStatus: 'running',
+            weeklyLimitReached: false,
+            dailyLimitReached: false,
+            connectionsSent: connections.connectionsSent || 0
+          },
+          { status: 200 }
+        );
+      }
+    }
+
+    // Generate unique process ID for this harvest run
+    const processId = crypto.randomUUID();
+    await updateHeartbeat(processId);
+
+    // Add browser validation
+    if (connections.harvestingStatus === 'running') {
+      const session = ChromeSession.getInstance();
+      const isValid = await session.validateConnection();
+      
+      if (!isValid) {
+        console.log('browser connection lost, resetting state');
+        await saveHarvestingState('stopped');
+      } else {
+        console.log('farming already in progress');
+        return NextResponse.json(
+          { 
+            message: 'farming already in progress',
+            harvestingStatus: 'running',
+            weeklyLimitReached: false,
+            dailyLimitReached: false,
+            connectionsSent: connections.connectionsSent || 0
+          },
+          { status: 200 }
+        );
+      }
     }
 
     // Check cooldown before starting
@@ -42,6 +83,7 @@ export async function POST() {
     // Set state to running and start harvest
     console.log('setting farming state to running');
     await saveHarvestingState('running');
+    await updateConnectionsSent(0); // Reset connections counter
     
     console.log('starting farming process');
     const result = await startHarvesting(35);

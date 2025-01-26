@@ -117,7 +117,7 @@ export function useHealthCheck() {
     }
   }, [isServerDown, setIsLoading]);
 
-  const debouncedFetchHealth = useCallback(debounce(fetchHealth, 200), [
+  const debouncedFetchHealth = useCallback(debounce(fetchHealth, 1000), [
     fetchHealth,
   ]);
 

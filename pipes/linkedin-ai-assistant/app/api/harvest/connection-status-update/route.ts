@@ -10,14 +10,14 @@ export const dynamic = 'force-dynamic'
 export const fetchCache = 'force-no-store'
 
 // Add types for page and connection
-type ConnectionStatus = 'cooldown' | 'declined' | 'accepted' | 'pending' | 'email_required';
+type ConnectionStatus = 'declined' | 'accepted' | 'pending' | 'email_required' | 'invalid';
 
 type Connection = {
   status: ConnectionStatus;
   timestamp?: string;
 };
 
-async function checkConnectionStatus(page: Page, profileUrl: string, connection: Connection) {
+async function checkConnectionStatus(page: Page, profileUrl: string, connection: Connection): Promise<Exclude<ConnectionStatus, 'cooldown'>> {
   try {
     const maxRetries = 3;
     const baseDelay = 60000; // base delay of 1 minute

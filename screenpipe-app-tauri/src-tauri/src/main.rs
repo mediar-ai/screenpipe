@@ -4,7 +4,6 @@
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
-use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -38,7 +37,6 @@ use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
-use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
 mod llm_sidecar;
@@ -332,6 +330,11 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_env(name: &str) -> String {
+    std::env::var(String::from(name)).unwrap_or(String::from(""))
 }
 
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
@@ -672,6 +675,7 @@ async fn main() {
             commands::open_pipe_window,
             get_log_files,
             update_global_shortcuts,
+            get_env
         ])
         .setup(|app| {
             // Logging setup
@@ -1039,28 +1043,28 @@ async fn main() {
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             // LLM Sidecar setup
-            let embedded_llm: EmbeddedLLMSettings = store
-                .get("embeddedLLM")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| EmbeddedLLMSettings {
-                    enabled: false,
-                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
-                    port: 11438,
-                });
+            // let embedded_llm: EmbeddedLLMSettings = store
+            //     .get("embeddedLLM")
+            //     .and_then(|v| serde_json::from_value(v.clone()).ok())
+            //     .unwrap_or_else(|| EmbeddedLLMSettings {
+            //         enabled: false,
+            //         model: "llama3.2:3b-instruct-q4_K_M".to_string(),
+            //         port: 11438,
+            //     });
 
-            if embedded_llm.enabled {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
-                        Ok(result) => {
-                            info!("LLM Sidecar started successfully: {}", result);
-                        }
-                        Err(e) => {
-                            error!("Failed to start LLM Sidecar: {}", e);
-                        }
-                    }
-                });
-            }
+            // if embedded_llm.enabled {
+            //     let app_handle = app.handle().clone();
+            //     tauri::async_runtime::spawn(async move {
+            //         match LLMSidecar::new(embedded_llm).start(app_handle).await {
+            //             Ok(result) => {
+            //                 info!("LLM Sidecar started successfully: {}", result);
+            //             }
+            //             Err(e) => {
+            //                 error!("Failed to start LLM Sidecar: {}", e);
+            //             }
+            //         }
+            //     });
+            // }
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
