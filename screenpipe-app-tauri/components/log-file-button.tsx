@@ -81,23 +81,29 @@ const LogContent = ({
 };
 LogContent.displayName = "LogContent";
 
-const ShareLogButton = ({ onShare, isSending }: { onShare: () => void, isSending: boolean }) => {
+const ShareLogButton = ({
+  onShare,
+  isSending,
+}: {
+  onShare: () => void;
+  isSending: boolean;
+}) => {
   return (
     <Button
-      variant='secondary'
-      size='sm'
+      variant="secondary"
+      size="sm"
       onClick={onShare}
       disabled={isSending}
-      className='gap-2 group relative'
+      className="gap-2 group relative"
     >
       {isSending ? (
         <>
-          <Loader className='h-3.5 w-3.5 animate-spin' />
+          <Loader className="h-3.5 w-3.5 animate-spin" />
           <span>sharing...</span>
         </>
       ) : (
         <>
-          <Upload className='h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5' />
+          <Upload className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
           <span>share logs</span>
         </>
       )}
@@ -105,39 +111,39 @@ const ShareLogButton = ({ onShare, isSending }: { onShare: () => void, isSending
   );
 };
 
-const ShareLinkDisplay = ({ 
-  shareLink, 
-  onCopy, 
-  onClose 
-}: { 
+const ShareLinkDisplay = ({
+  shareLink,
+  onCopy,
+  onClose,
+}: {
   shareLink: string;
   onCopy: () => void;
   onClose: () => void;
 }) => {
   return (
-    <div className='flex items-center gap-2 bg-secondary/30 px-3 py-2 rounded-lg border border-secondary animate-in fade-in slide-in-from-top-4'>
-      <div className='flex items-center gap-2 flex-1'>
-        <div className='h-2 w-2 bg-green-500 rounded-full animate-pulse' />
-        <span className='text-sm font-mono'>{shareLink}</span>
+    <div className="flex items-center gap-2 bg-secondary/30 px-3 py-2 rounded-lg border border-secondary animate-in fade-in slide-in-from-top-4">
+      <div className="flex items-center gap-2 flex-1">
+        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+        <span className="text-sm font-mono">{shareLink}</span>
       </div>
-      <div className='flex items-center gap-1.5'>
+      <div className="flex items-center gap-1.5">
         <Button
-          variant='ghost'
-          size='icon'
-          className='h-7 w-7 hover:bg-secondary/50 transition-colors'
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 hover:bg-secondary/50 transition-colors"
           onClick={onCopy}
-          title='Copy share link'
+          title="Copy share link"
         >
-          <Copy className='h-3.5 w-3.5' />
+          <Copy className="h-3.5 w-3.5" />
         </Button>
         <Button
-          variant='ghost'
-          size='icon'
-          className='h-7 w-7 hover:bg-secondary/50 transition-colors text-muted-foreground'
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 hover:bg-secondary/50 transition-colors text-muted-foreground"
           onClick={onClose}
-          title='Dismiss'
+          title="Dismiss"
         >
-          <X className='h-3.5 w-3.5' />
+          <X className="h-3.5 w-3.5" />
         </Button>
       </div>
     </div>
@@ -253,11 +259,18 @@ export const LogFileButton = ({
         headers: { "Content-Type": "text/plain" },
       });
 
+      const diagnostics = (await invoke("get_diagnostics")) as {
+        os: string;
+        app_version: string;
+      };
+      const os = diagnostics.os;
+      const app_version = diagnostics.app_version;
+
       // Confirm upload
       const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, identifier, type }),
+        body: JSON.stringify({ path, identifier, type, os, app_version }),
       });
 
       const {
@@ -318,17 +331,17 @@ export const LogFileButton = ({
                   <span>select a log file from the list</span>
                 </DialogDescription>
               </div>
-              <div className='flex mr-8'>
+              <div className="flex mr-8">
                 {!shareLink && (
                   <ShareLogButton onShare={sendLogs} isSending={isSending} />
                 )}
               </div>
             </div>
             {shareLink && (
-              <ShareLinkDisplay 
+              <ShareLinkDisplay
                 shareLink={shareLink}
                 onCopy={() => copyToClipboard(shareLink)}
-                onClose={() => setShareLink('')}
+                onClose={() => setShareLink("")}
               />
             )}
           </DialogHeader>
