@@ -441,7 +441,6 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
 }
 
 
-
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
     success: bool,
