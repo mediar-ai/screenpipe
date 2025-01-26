@@ -22,13 +22,13 @@ import {
 import { toast } from "@/components/ui/use-toast";
 
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { invoke } from "@tauri-apps/api/core";
 import { PricingToggle } from "./pricing-toggle";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 
 function PlanCard({
   title,
@@ -79,18 +79,8 @@ function PlanCard({
   );
 }
 
-export function AccountSection() {
+export function useUser() {
   const { settings, updateSettings, loadUser } = useSettings();
-  const [isConnectingStripe, setIsConnectingStripe] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [isAnnual, setIsAnnual] = useState(true);
-  const [profileForm, setProfileForm] = useState({
-    bio: "",
-    github_username: "",
-    website: "",
-    contact: "",
-  });
-
   useEffect(() => {
     const setupDeepLink = async () => {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
@@ -147,6 +137,34 @@ export function AccountSection() {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [settings.user?.token, updateSettings]);
+
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
+
+  useEffect(() => {
+    const updatedUser = { ...settings.user, stripe_connected: true };
+    updateSettings({ user: updatedUser });
+  }, []);
+}
+
+export function AccountSection() {
+  const { settings, updateSettings } = useSettings();
+  const [isConnectingStripe, setIsConnectingStripe] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(true);
+  const [profileForm, setProfileForm] = useState({
+    bio: "",
+    github_username: "",
+    website: "",
+    contact: "",
+  });
+
+  useUser()
 
   const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(
     settings.user?.email ?? ""
@@ -240,11 +258,6 @@ export function AccountSection() {
     }
   };
 
-  useEffect(() => {
-    const updatedUser = { ...settings.user, stripe_connected: true };
-    updateSettings({ user: updatedUser });
-  }, []);
-
   const updateProfile = async (updates: Partial<typeof settings.user>) => {
     if (!settings.user?.token) return;
 
@@ -271,13 +284,6 @@ export function AccountSection() {
       });
     }
   };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
 
   useEffect(() => {
     if (settings.user) {

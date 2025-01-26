@@ -1,15 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/use-toast";
+import { toast, useToast } from "@/components/ui/use-toast";
 import { Settings, useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@/lib/hooks/use-user";
 import { AiProviders } from "@/modules/ai-providers/providers";
 import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
 import { getSetupFormAndPersistedValues } from "@/modules/ai-providers/utils/get-setup-form-and-persisted-values";
 import Form from "@/modules/form/components/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { open as openUrl } from "@tauri-apps/plugin-shell"
 import { ExternalLinkIcon } from "lucide-react";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { useUser } from "../account-section";
 
 export function RegularProviderSetupForm({
     aiProvider,
@@ -18,7 +19,6 @@ export function RegularProviderSetupForm({
     aiProvider: AvailableAiProviders,
     setAiProvider: React.Dispatch<React.SetStateAction<AvailableAiProviders>>
 }) {
-    const { user } = useUser();
     const { toast } = useToast();
     const { settings, updateSettings } = useSettings()
 
@@ -89,12 +89,12 @@ export function RegularProviderSetupForm({
     })
     
     const componentsVisibility = useMemo(() => {
-        if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !user) {
+        if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !settings.user.token) {
           return {showForm: false, showLoginStep: true}
         }
     
-        return {showForm: true}
-    },[aiProvider, user])
+        return { showForm: true }
+    },[aiProvider, settings.user])
     
     async function submitChanges(values: Partial<Settings>) {
       if (aiProvider !== AvailableAiProviders.EMBEDDED) {
@@ -114,23 +114,10 @@ export function RegularProviderSetupForm({
 
     return (
         <>
-            {componentsVisibility.showLoginStep && (
-                <div className="w-full flex flex-col items-center space-y-3">
-                <h1>
-                    please login to your screenpipe account to continue
-                </h1>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openUrl("https://screenpi.pe/login")}
-                    className="hover:bg-secondary/80"
-                >
-                    login <ExternalLinkIcon className="w-4 h-4 ml-2" />
-                </Button>
-                </div>
-            )}
-            
-            {(data?.setupForm && componentsVisibility.showForm) &&
+         {componentsVisibility.showLoginStep && (
+            <ScreenpipeLogin/>
+          )}
+            {(data?.setupForm && componentsVisibility.showForm)  &&
               <Form
                 isDirty={!(aiProvider === settings.aiProviderType)}
                 defaultValues={data.defaultValues}
@@ -143,4 +130,24 @@ export function RegularProviderSetupForm({
             }
         </>
     )
+}
+
+function ScreenpipeLogin() {
+  useUser()
+
+  return (
+      <div className="w-full flex flex-col items-center space-y-3">
+        <h1>
+            please login to your screenpipe account to continue
+        </h1>
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openUrl("https://screenpi.pe/login")}
+            className="hover:bg-secondary/80"
+        >
+            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+        </Button>
+      </div>
+  )
 }
