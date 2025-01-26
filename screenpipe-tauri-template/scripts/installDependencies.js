@@ -1,4 +1,3 @@
-import { extract as tarExtract } from "tar";
 import zipExtract from "extract-zip";
 import {
 	mkdirSync,
@@ -10,6 +9,7 @@ import {
 import { join } from "path";
 import { finished } from "stream/promises";
 import { Readable } from "stream";
+import { execSync } from "child_process";
 import "dotenv/config";
 
 async function download(url, path) {
@@ -50,10 +50,9 @@ try {
 	);
 	await Promise.all([linuxDownload, windowsDownload, macDownload]);
 
-	await tarExtract({
-		file: linuxTar,
-		cwd: binDir,
-	});
+	// Using the 'tar' NPM package doesn't seem to work with Mac, so we'll use the 'tar' command directly,
+	// should probably fix this in the future
+	execSync(`tar -xzf ${linuxTar} -C ${binDir}`);
 	renameSync(
 		join(binDir, "bin", "screenpipe"),
 		join(binDir, "screenpipe-x86_64-unknown-linux-gnu")
@@ -65,11 +64,8 @@ try {
 		join(binDir, "screenpipe-x86_64-pc-windows-msvc.exe")
 	);
 
-	await tarExtract({
-		file: macTar,
-		cwd: binDir,
-	});
-	renameSync(
+	execSync(`tar -xzf ${macTar} -C ${binDir}`);
+	await renameSync(
 		join(binDir, "bin", "screenpipe"),
 		join(binDir, "screenpipe-aarch64-apple-darwin")
 	);
