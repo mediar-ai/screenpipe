@@ -447,16 +447,6 @@ pub struct Diagnostics {
     app_version: String,
 }
 
-#[tauri::command]
-fn get_diagnostics(app: AppHandle) -> Diagnostics {
-    let os = std::env::consts::OS;
-    let app_version = &app.package_info().version;
-    Diagnostics {
-        os: os.to_string(),
-        app_version: app_version.to_string()
-    }
-}
-
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
     success: bool,
@@ -693,7 +683,6 @@ async fn main() {
             commands::open_pipe_window,
             get_log_files,
             update_global_shortcuts,
-            get_diagnostics,
             get_env
         ])
         .setup(|app| {

@@ -25,6 +25,8 @@ import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 import { open } from "@tauri-apps/plugin-shell";
+import { getVersion } from '@tauri-apps/api/app';
+import { version as osVersion, platform as osPlatform } from '@tauri-apps/plugin-os';
 
 const LogContent = ({
   content,
@@ -259,24 +261,21 @@ export const LogFileButton = ({
         headers: { "Content-Type": "text/plain" },
       });
 
-      const diagnostics = (await invoke("get_diagnostics")) as {
-        os: string;
-        app_version: string;
-      };
-      const os = diagnostics.os;
-      const app_version = diagnostics.app_version;
+      const os = osPlatform();
+      const os_version = osVersion();
+      const app_version = await getVersion();
 
       // Confirm upload
       const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, identifier, type, os, app_version }),
+        body: JSON.stringify({ path, identifier, type, os, os_version, app_version }),
       });
 
       const {
         data: { id },
       } = await confirmRes.json();
-      setShareLink(`${BASE_URL}/api/logs/get?id=${id}`);
+      setShareLink(`${BASE_URL}/logs/${id}`);
     } catch (err) {
       console.error("log sharing failed:", err);
       toast({
