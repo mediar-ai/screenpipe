@@ -91,6 +91,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         <TooltipTrigger asChild>
                           <Button
                             onClick={() => {
+                              setIsLoading(true);
                               onToggle(pipe, () => setIsLoading(false));
                             }}
                             variant={
@@ -228,7 +229,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         try {
                           await invoke("open_pipe_window", {
                             port: pipe.installed_config!.port,
-                            title: pipe.id,
+                            title: pipe.name,
                           });
                         } catch (err) {
                           console.error("failed to open pipe window:", err);

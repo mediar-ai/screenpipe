@@ -78,29 +78,28 @@ for developers wanting to publish pipes to the store, we provide a dedicated CLI
 
 ![developer account](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/developer-account.png)
 
-```bash copy
-npm install -g @screenpipe/dev
-```
-
 prerequisite: connect your Stripe account in settings/account to obtain your developer API key.
 
 available commands:
 
 ```bash copy
 # authenticate with your API key
-screenpipe login --apiKey <your-key>
+bunx @screenpipe/dev login --apiKey <your-key>
 
 # create a new pipe
-screenpipe create --name my-pipe [--paid --price 9.99]
+bunx @screenpipe/dev create --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
+# you'll receive payouts to your stripe account on a daily basis
 
 # publish your pipe to the store
-screenpipe publish --name my-pipe
+bunx @screenpipe/dev publish --name my-pipe
+# our team will review your pipe and publish it to the store
+# if approved, your pipe will be available in the store to everyone
 
 # list all versions of your pipe
-screenpipe list-versions --name my-pipe
+bunx @screenpipe/dev list-versions --name my-pipe
 
 # end current session
-screenpipe logout
+bunx @screenpipe/dev logout
 ```
 
 you can deploy your pipe to your screenpipe app through the UI or using `screenpipe install <path>` and `screenpipe enable <id/folder of your pipe>`.
