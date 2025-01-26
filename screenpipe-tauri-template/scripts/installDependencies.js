@@ -10,7 +10,8 @@ import {
 import { join } from "path";
 import { finished } from "stream/promises";
 import { Readable } from "stream";
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: join(import.meta.dirname, ".pub.env") });
 
 async function download(url, path) {
 	const res = await fetch(url);
