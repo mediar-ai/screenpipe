@@ -91,13 +91,10 @@ export class PipeApi {
     }
   }
 
-  async getUserPurchaseHistory(): Promise<any> {
+  async getUserPurchaseHistory(): Promise<PurchaseHistoryResponse> {
     try {
-      console.log("listing purchase history", this.authToken);
-
       const response = await fetch(
         `${this.baseUrl}/api/plugins/user-purchase-history`,
-        // `http://localhost:3001/api/plugins/user-purchase-history`,
         {
           headers: {
             Authorization: `Bearer ${this.authToken}`,
@@ -108,9 +105,9 @@ export class PipeApi {
         const { error } = (await response.json()) as { error: string };
         throw new Error(`failed to fetch purchase history: ${error}`);
       }
-      // const dataText = await response.text();
-      // console.log("purchase history data", dataText);
+
       const data = (await response.json()) as PurchaseHistoryResponse;
+      console.log("purchase history data", data);
       return data;
     } catch (error) {
       console.error("error getting purchase history:", error);
@@ -120,7 +117,6 @@ export class PipeApi {
 
   async listStorePlugins(): Promise<PipeStorePlugin[]> {
     try {
-      // const response = await fetch(`http://localhost:3001/api/plugins/registry`, {
       const response = await fetch(`${this.baseUrl}/api/plugins/registry`, {
         headers: {
           Authorization: `Bearer ${this.authToken}`,

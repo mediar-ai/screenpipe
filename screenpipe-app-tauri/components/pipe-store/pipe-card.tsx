@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Download, Puzzle, UserIcon } from "lucide-react";
+import { CheckCircle, Download, Puzzle, UserIcon, Loader2 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
@@ -11,53 +11,17 @@ interface PipeCardProps {
   onInstall: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
   onPurchase: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
   onClick: (pipe: PipeWithStatus) => void;
+  isLoadingPurchase?: boolean;
+  isLoadingInstall?: boolean;
 }
-
-const truncateDescription = (description: string, maxLines: number = 4) => {
-  if (!description) return "";
-  const cleaned = description.replace(/Â/g, "").trim();
-
-  // Split into lines and track codeblock state
-  const lines = cleaned.split(/\r?\n/);
-  let inCodeBlock = false;
-  let visibleLines: string[] = [];
-  let lineCount = 0;
-
-  for (const line of lines) {
-    // Check for codeblock markers
-    if (line.trim().startsWith("```")) {
-      inCodeBlock = !inCodeBlock;
-      visibleLines.push(line);
-      continue;
-    }
-
-    // If we're in a codeblock, include the line
-    if (inCodeBlock) {
-      visibleLines.push(line);
-      continue;
-    }
-
-    // For non-codeblock content, count lines normally
-    if (lineCount < maxLines) {
-      visibleLines.push(line);
-      if (line.trim()) lineCount++;
-    }
-  }
-
-  // If we ended inside a codeblock, close it
-  if (inCodeBlock) {
-    visibleLines.push("```");
-  }
-
-  const result = visibleLines.join("\n");
-  return lineCount >= maxLines ? result + "..." : result;
-};
 
 export const PipeCard: React.FC<PipeCardProps> = ({
   pipe,
   onInstall,
-  onPurchase,
   onClick,
+  onPurchase,
+  isLoadingPurchase,
+  isLoadingInstall,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const handleOpenWindow = async (e: React.MouseEvent) => {
@@ -66,7 +30,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
       if (pipe.installed_config?.port) {
         await invoke("open_pipe_window", {
           port: pipe.installed_config.port,
-          title: pipe.id,
+          title: pipe.name, // atm we don't support pipes with same name
         });
       }
     } catch (err) {
@@ -125,8 +89,13 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                   }
                 }}
                 className="font-medium"
+                disabled={isLoadingPurchase}
               >
-                {pipe.is_paid && !pipe.has_purchased ? (
+                {isLoadingPurchase ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  </>
+                ) : pipe.is_paid && !pipe.has_purchased ? (
                   `$${pipe.price}`
                 ) : (
                   <>
