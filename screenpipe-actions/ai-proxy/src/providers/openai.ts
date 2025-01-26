@@ -1,9 +1,12 @@
 import { AIProvider } from './base';
-import { RequestBody } from '../types';
+import { Message, RequestBody } from '../types';
 import OpenAI from 'openai';
-import type { ChatCompletionCreateParams } from 'openai/resources/chat';
+import type { ChatCompletionMessage, ChatCompletionCreateParams } from 'openai/resources/chat';
 
 export class OpenAIProvider implements AIProvider {
+	supportsTools = true;
+	supportsVision = true;
+	supportsJson = true;
 	private client: OpenAI;
 
 	constructor(apiKey: string) {
@@ -11,18 +14,20 @@ export class OpenAIProvider implements AIProvider {
 	}
 
 	async createCompletion(body: RequestBody): Promise<Response> {
+		const messages = this.formatMessages(body.messages);
+
 		const params: ChatCompletionCreateParams = {
 			model: body.model,
-			messages: this.formatMessages(body.messages),
+			messages,
 			temperature: body.temperature,
 			stream: false,
 			response_format: body.response_format?.type === 'json_object' ? { type: 'json_object' } : undefined,
-			tools: body.tools,
+			tools: body.tools as ChatCompletionCreateParams['tools'],
+			tool_choice: body.tool_choice as ChatCompletionCreateParams['tool_choice'],
 		};
 
 		const response = await this.client.chat.completions.create(params);
-
-		return new Response(JSON.stringify(response), {
+		return new Response(JSON.stringify(this.formatResponse(response)), {
 			headers: { 'Content-Type': 'application/json' },
 		});
 	}
@@ -33,8 +38,8 @@ export class OpenAIProvider implements AIProvider {
 			messages: this.formatMessages(body.messages),
 			temperature: body.temperature,
 			stream: true,
-			response_format: body.response_format,
-			tools: body.tools,
+			response_format: body.response_format?.type === 'json_object' ? { type: 'json_object' } : undefined,
+			tools: body.tools as ChatCompletionCreateParams['tools'],
 		});
 
 		return new ReadableStream({
@@ -61,7 +66,43 @@ export class OpenAIProvider implements AIProvider {
 		});
 	}
 
-	formatMessages(messages: any[]): any {
-		return messages;
+	formatMessages(messages: Message[]): ChatCompletionMessage[] {
+		return messages.map(
+			(msg) =>
+				({
+					role: msg.role,
+					content: Array.isArray(msg.content)
+						? msg.content.map((part) => {
+								if (part.type === 'image') {
+									return {
+										type: 'image_url',
+										image_url: {
+											url: part.image?.url,
+											detail: 'auto',
+										},
+									};
+								}
+								return { type: 'text', text: part.text || '' };
+						  })
+						: msg.content,
+					tool_calls: msg.tool_calls,
+					name: msg.name,
+					refusal: null,
+				} as ChatCompletionMessage)
+		);
+	}
+
+	formatResponse(response: any): any {
+		return {
+			choices: [
+				{
+					message: {
+						content: response.choices[0].message.content,
+						role: 'assistant',
+						tool_calls: response.choices[0].message.tool_calls,
+					},
+				},
+			],
+		};
 	}
 }

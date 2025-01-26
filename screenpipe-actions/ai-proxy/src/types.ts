@@ -1,3 +1,4 @@
+import type Anthropic from '@anthropic-ai/sdk';
 
 export interface Message {
 	role: 'system' | 'user' | 'assistant' | 'tool';
@@ -23,14 +24,66 @@ export interface ToolCall {
 	};
 }
 
+export type OpenAITool = {
+	type: 'function';
+	function: {
+		name: string;
+		description: string;
+		parameters: {
+			type: 'object';
+			properties: Record<string, any>;
+			required?: string[];
+		};
+	};
+};
+
+export type AnthropicTool = Anthropic.Tool;
+
+export type GeminiTool = {
+	functionDeclarations: Array<{
+		name: string;
+		description: string;
+		parameters: {
+			type: 'object';
+			properties: Record<string, any>;
+			required?: string[];
+		};
+	}>;
+};
+
+export interface Tool {
+	type: 'function';
+	function: {
+		name: string;
+		description: string;
+		parameters: {
+			type: 'object';
+			properties: Record<string, any>;
+			required?: string[];
+		};
+	};
+}
+
 export interface RequestBody {
 	model: string;
 	messages: Message[];
 	stream?: boolean;
 	tools?: any[];
 	temperature?: number;
-	response_format?: {
-		type: 'text' | 'json_object';
+	tool_choice?: string | { type: 'function'; function: { name: string } };
+	response_format?: ResponseFormat;
+}
+
+export interface ResponseFormat {
+	type: 'text' | 'json_object';
+	schema?: Record<string, any>;
+}
+
+export interface ImageContent {
+	type: 'image';
+	image_url: {
+		url: string;
+		detail?: 'low' | 'high' | 'auto';
 	};
 }
 
@@ -68,6 +121,7 @@ export interface Env {
 	RATE_LIMITER: DurableObjectNamespace;
 	CLERK_SECRET_KEY: string;
 	GEMINI_API_KEY: string;
-    SUPABASE_URL: string;
-    SUPABASE_ANON_KEY: string;
+	SUPABASE_URL: string;
+	SUPABASE_ANON_KEY: string;
+	NODE_ENV: string;
 }
