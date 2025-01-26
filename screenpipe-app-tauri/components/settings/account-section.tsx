@@ -40,7 +40,7 @@ function PlanCard({
 }: {
   title: string;
   price: string;
-  features: string[];
+  features: (string | JSX.Element)[];
   isActive?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -84,6 +84,12 @@ export function AccountSection() {
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
+  const [profileForm, setProfileForm] = useState({
+    bio: "",
+    github_username: "",
+    website: "",
+    contact: "",
+  });
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -148,13 +154,41 @@ export function AccountSection() {
 
   const plans = [
     {
-      title: "subscription",
-      price: isAnnual ? "$200/year" : "$20/mo",
-      features: [
-        "unlimited screenpipe cloud",
-        "priority support",
-        isAnnual ? "17% discount applied" : "switch to annual for 17% off",
-      ],
+      title: settings.user?.cloud_subscribed
+        ? "your subscription"
+        : "subscription",
+      price: settings.user?.cloud_subscribed
+        ? "active"
+        : isAnnual
+        ? "$200/year"
+        : "$20/mo",
+      features: settings.user?.cloud_subscribed
+        ? [
+            "unlimited screenpipe cloud",
+            "priority support",
+            <a
+              key="portal"
+              href={`https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
+                settings.user?.email || ""
+              )}`}
+              className="text-primary hover:underline cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                openUrl(
+                  `https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
+                    settings.user?.email || ""
+                  )}`
+                );
+              }}
+            >
+              manage subscription
+            </a>,
+          ]
+        : [
+            "unlimited screenpipe cloud",
+            "priority support",
+            isAnnual ? "17% discount applied" : "switch to annual for 17% off",
+          ],
       url: isAnnual
         ? "https://buy.stripe.com/eVadRzfOCgAi5W0fZu" +
           `?client_reference_id=${clientRefId}`
@@ -207,8 +241,6 @@ export function AccountSection() {
   };
 
   useEffect(() => {
-    console.log("document visibility state:", document.visibilityState);
-
     const updatedUser = { ...settings.user, stripe_connected: true };
     updateSettings({ user: updatedUser });
   }, []);
@@ -239,6 +271,24 @@ export function AccountSection() {
       });
     }
   };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
+
+  useEffect(() => {
+    if (settings.user) {
+      setProfileForm({
+        bio: settings.user.bio || "",
+        github_username: settings.user.github_username || "",
+        website: settings.user.website || "",
+        contact: settings.user.contact || "",
+      });
+    }
+  }, []);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -290,7 +340,9 @@ export function AccountSection() {
                         });
                         return;
                       }
-                      openUrl(plan.url);
+                      if (!settings.user?.cloud_subscribed) {
+                        openUrl(plan.url);
+                      }
                     }}
                   />
                 ))}
@@ -494,18 +546,14 @@ export function AccountSection() {
                 placeholder="tell us about yourself..."
                 className="resize-none"
                 rows={3}
-                value={settings.user?.bio || ""}
+                value={profileForm.bio}
                 disabled={!settings.user?.api_key}
-                onChange={(e) => {
-                  if (settings.user) {
-                    const updatedUser = {
-                      ...settings.user,
-                      bio: e.target.value,
-                    };
-                    updateSettings({ user: updatedUser });
-                    updateProfile({ bio: e.target.value });
-                  }
-                }}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, bio: e.target.value }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
               />
             </div>
 
@@ -515,17 +563,16 @@ export function AccountSection() {
                 id="github"
                 placeholder="username"
                 disabled={!settings.user?.api_key}
-                value={settings.user?.github_username || ""}
-                onChange={(e) => {
-                  if (settings.user) {
-                    const updatedUser = {
-                      ...settings.user,
-                      github_username: e.target.value,
-                    };
-                    updateSettings({ user: updatedUser });
-                    updateProfile({ github_username: e.target.value });
-                  }
-                }}
+                value={profileForm.github_username}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    github_username: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
               />
             </div>
 
@@ -535,18 +582,17 @@ export function AccountSection() {
                 id="website"
                 type="url"
                 placeholder="https://..."
-                value={settings.user?.website || ""}
+                value={profileForm.website}
                 disabled={!settings.user?.api_key}
-                onChange={(e) => {
-                  if (settings.user) {
-                    const updatedUser = {
-                      ...settings.user,
-                      website: e.target.value,
-                    };
-                    updateSettings({ user: updatedUser });
-                    updateProfile({ website: e.target.value });
-                  }
-                }}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    website: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
               />
             </div>
 
@@ -555,19 +601,46 @@ export function AccountSection() {
               <Input
                 id="contact"
                 placeholder="discord, twitter, etc..."
-                value={settings.user?.contact || ""}
+                value={profileForm.contact}
                 disabled={!settings.user?.api_key}
-                onChange={(e) => {
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    contact: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                className="w-full"
+                disabled={!settings.user?.api_key}
+                onClick={async () => {
+                  if (!settings.user) return;
+
+                  await updateProfile(profileForm);
+
+                  // Update the main settings after successful profile update
                   if (settings.user) {
                     const updatedUser = {
                       ...settings.user,
-                      contact: e.target.value,
+                      ...profileForm,
                     };
                     updateSettings({ user: updatedUser });
-                    updateProfile({ contact: e.target.value });
                   }
+
+                  toast({
+                    title: "profile updated",
+                    description: "your developer profile has been saved",
+                  });
                 }}
-              />
+              >
+                save changes
+              </Button>
             </div>
           </div>
         </div>

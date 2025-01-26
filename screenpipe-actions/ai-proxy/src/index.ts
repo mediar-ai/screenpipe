@@ -66,6 +66,18 @@ async function validateSubscription(env: Env, userId: string): Promise<boolean> 
 	}
 }
 
+async function verifyClerkToken(env: Env, token: string): Promise<string | null> {
+	try {
+		const payload = await verifyToken(token, {
+			secretKey: env.CLERK_SECRET_KEY,
+		});
+		return payload.sub || null;
+	} catch (error) {
+		console.error('clerk verification failed:', error);
+		return null;
+	}
+}
+
 export class RateLimiter {
 	private state: DurableObjectState;
 	private requests: Map<string, { count: number; lastReset: number }>;
@@ -195,8 +207,17 @@ export default Sentry.withSentry(
 						});
 					}
 
-					const userId = authHeader.split(' ')[1];
-					const isValid = await validateSubscription(env, userId);
+					const token = authHeader.split(' ')[1];
+					// First try to validate as a user ID with subscription
+					let isValid = await validateSubscription(env, token);
+
+					// If not valid, try to verify as a Clerk token
+					if (!isValid) {
+						const clerkUserId = await verifyClerkToken(env, token);
+						if (clerkUserId) {
+							isValid = await validateSubscription(env, clerkUserId);
+						}
+					}
 
 					if (!isValid) {
 						return new Response(JSON.stringify({ error: 'invalid subscription' }), {
@@ -540,6 +561,7 @@ interface Env {
 	NODE_ENV?: string;
 	SUPABASE_URL: string;
 	SUPABASE_ANON_KEY: string;
+	CLERK_SECRET_KEY: string;
 }
 
 /*

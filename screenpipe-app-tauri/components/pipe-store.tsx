@@ -12,7 +12,7 @@ import {
   PurchaseHistoryItem,
 } from "@/lib/api/store";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
+import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
@@ -24,10 +24,7 @@ import { LoginDialog, useLoginCheck } from "./login-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
-const corePipes: string[] = [
-  // "data-table",
-  "search",
-];
+const corePipes: string[] = ["data-table", "search"];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
@@ -69,7 +66,7 @@ export const PipeStore: React.FC = () => {
         is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
         installed_config: installedPipes.find((p) => p.config?.id === plugin.id)
           ?.config,
-        has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
+        has_purchased: purchaseHistory.some((p) => p.plugin_id === plugin.id),
         is_core_pipe: corePipes.includes(plugin.name),
       }));
 
@@ -115,8 +112,6 @@ export const PipeStore: React.FC = () => {
     console.log("purchase history", purchaseHistory);
     setPurchaseHistory(purchaseHistory);
   };
-
-
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
@@ -237,6 +232,8 @@ export const PipeStore: React.FC = () => {
     onComplete?: () => void
   ) => {
     try {
+      console.log("user", settings.user);
+
       if (!checkLogin(settings.user)) return;
 
       // Keep the pipe in its current position by updating its status
@@ -729,38 +726,11 @@ export const PipeStore: React.FC = () => {
               description: "installing your new pipe...",
             });
 
-            // refresh store data first
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
-            const pipeApi = await PipeApi.create(settings.user?.token!);
-            const plugins = await pipeApi.listStorePlugins();
+            fetchPurchaseHistory();
 
-            // find the pipe in the store
-            const pipe = plugins.find((p) => p.id === pipeId);
-            if (!pipe) {
-              console.error("pipe not found:", pipeId);
-              toast({
-                title: "error installing pipe",
-                description: "pipe not found in store",
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // install the pipe
-            await handleInstallPipe(
-              {
-                ...pipe,
-                is_installed: false,
-                has_purchased: true,
-                is_core_pipe: false,
-              },
-              () => {
-                toast({
-                  title: "installation complete",
-                  description: `${pipe.name} is ready to use`,
-                });
-              }
-            );
+            console.log("pipes", pipes);
           }
         }
       });

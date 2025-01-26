@@ -35,16 +35,10 @@ export interface PurchaseHistoryItem {
   currency: string;
   stripe_payment_status: string;
   created_at: string;
-  refunded_at: null;
-  plugins: Plugins;
-}
-interface Plugins {
-  id: string;
-  name: string;
-  description: string;
-  developer_accounts: Developer_accounts;
-}
-interface Developer_accounts {
+  refunded_at: string | null;
+  plugin_id: string;
+  plugin_name: string;
+  plugin_description: string;
   developer_name: string;
 }
 
