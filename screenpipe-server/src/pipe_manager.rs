@@ -221,14 +221,22 @@ impl PipeManager {
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 
-    pub async fn download_pipe_private(&self, url: &str, pipe_name: &str, pipe_id: &str) -> Result<String> {
+    pub async fn download_pipe_private(
+        &self,
+        url: &str,
+        pipe_name: &str,
+        pipe_id: &str,
+    ) -> Result<String> {
         let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
 
         let package_json_path = pipe_dir.join("package.json");
         let version = if package_json_path.exists() {
             let package_json = tokio::fs::read_to_string(&package_json_path).await?;
             let package_data: Value = serde_json::from_str(&package_json)?;
-            package_data["version"].as_str().unwrap_or("1.0.0").to_string()
+            package_data["version"]
+                .as_str()
+                .unwrap_or("1.0.0")
+                .to_string()
         } else {
             "1.0.0".to_string()
         };
@@ -253,8 +261,25 @@ impl PipeManager {
     }
 
     pub async fn purge_pipes(&self) -> Result<()> {
+        // First, get all running pipes
+        let pipes = self.list_pipes().await;
+
+        // Stop all running pipes
+        for pipe in pipes {
+            if pipe.enabled {
+                debug!("stopping pipe {} before purge", pipe.id);
+                self.stop_pipe(&pipe.id).await?;
+            }
+        }
+
+        // Wait for all pipes to stop
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        // Then remove the directory
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
+
+        debug!("all pipes purged");
         Ok(())
     }
 
