@@ -7,13 +7,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2 } from "lucide-react";
+import { Trash2, Loader2 } from "lucide-react";
 import localforage from "localforage";
+import { useToast } from "@/components/ui/use-toast";
+import { Command } from "@tauri-apps/plugin-shell";
 
 export function BreakingChangesInstructionsDialog() {
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [hasShownDialog, setHasShownDialog] = useState(false);
   const [hasPipes, setHasPipes] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -38,26 +42,85 @@ export function BreakingChangesInstructionsDialog() {
     }
   }, [hasShownDialog, hasPipes]);
 
+  const handleResetAllPipes = async () => {
+    setIsDeleting(true);
+    try {
+      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
+      await cmd.execute();
+      toast({
+        title: "all pipes deleted",
+        description: "you can now reinstall the updated pipes from the store",
+      });
+      localforage.setItem("has-shown-delete-pipes-dialog", true);
+      setOpen(false);
+    } catch (error) {
+      console.error("failed to reset pipes:", error);
+      toast({
+        title: "error deleting pipes",
+        description: "please try again or check the logs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!hasPipes) return null;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[425px]">
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent
+        className="sm:max-w-[525px] [&>button]:hidden"
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex gap-2 items-center">
             <Trash2 className="h-5 w-5" />
-            major update: please reinstall all pipes
+            critical update: new pipe system available
           </DialogTitle>
-          <DialogDescription>
-            we&apos;ve made significant changes to the pipe system. to ensure
-            everything works correctly, please delete all your existing pipes
-            and reinstall them. you can do this by clicking the trash icon in
-            the pipe store.
+          <DialogDescription className="space-y-4">
+            <p>
+              we&apos;ve completely redesigned the pipe system from the ground
+              up to make it more powerful and efficient. this is a breaking
+              change that requires action from you.
+            </p>
+            <div className="bg-muted p-4 rounded-md space-y-2">
+              <p className="font-medium">required actions:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>delete all your existing pipes using the button below</li>
+                <li>
+                  reinstall the pipes you need from the updated collection
+                </li>
+              </ol>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              clicking &apos;delete all pipes&apos; will remove all your
+              existing pipes. don&apos;t worry, you can reinstall them from the
+              store afterwards.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              face any issues? DM us on{" "}
+              <a
+                href="https://discord.gg/dU9EBuw7Uq"
+                target="_blank"
+                className="text-blue-500 hover:underline"
+              >
+                discord
+              </a>
+              .
+            </p>
           </DialogDescription>
         </DialogHeader>
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            got it
+        <div className="flex justify-end gap-2">
+          <Button onClick={handleResetAllPipes} disabled={isDeleting}>
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                deleting...
+              </>
+            ) : (
+              "delete all pipes"
+            )}
           </Button>
         </div>
       </DialogContent>

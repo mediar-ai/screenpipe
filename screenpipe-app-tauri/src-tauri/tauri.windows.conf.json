@@ -2,8 +2,7 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "bun",
-            "ollama"
+            "bun"
         ],
         "targets": [
             "nsis"
@@ -16,7 +15,6 @@
             "onnxruntime*\\lib\\onnxruntime.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_cuda.dll": "./",
             "onnxruntime*\\lib\\onnxruntime_providers_shared.dll": "./",
-            "lib\\ollama\\*": "./",
             "mkl\\*.dll": "./"
         }
     }

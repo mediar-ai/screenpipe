@@ -38,6 +38,8 @@ pub struct User {
     pub clerk_id: Option<String>,
     #[serde(default)]
     pub credits: Option<UserCredits>,
+    #[serde(rename = "user.cloud_subscribed", default)]
+    pub cloud_subscribed: Option<bool>,
 }
 
 impl User {
@@ -70,6 +72,9 @@ impl User {
                     .get("user.credits.created_at")
                     .and_then(|v| v.as_str().map(String::from)),
             }),
+            cloud_subscribed: store
+                .get("user.cloud_subscribed")
+                .and_then(|v| v.as_bool()),
         }
     }
 }
@@ -389,14 +394,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
 
         // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-        if user.credits.is_some() {
+        if user.cloud_subscribed.is_some() {
             c = c.env(
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
             );
             // Add token if screenpipe-cloud is selected and user has a token
-            if user.token.is_some() {
-                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+            if user.id.is_some() {
+                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
             }
         }
 
@@ -419,14 +424,14 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-    if user.credits.is_some() {
+    if user.cloud_subscribed.is_some() {
         c = c.env(
             "DEEPGRAM_API_URL",
             "https://ai-proxy.i-f9f.workers.dev/v1/listen",
         );
         // Add token if screenpipe-cloud is selected and user has a token
-        if user.token.is_some() {
-            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+        if user.id.is_some() {
+            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
         }
     }
 

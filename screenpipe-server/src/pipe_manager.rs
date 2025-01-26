@@ -22,6 +22,7 @@ pub struct PipeInfo {
     pub config: Value,
     pub source: String,
     pub port: Option<u16>,
+    pub is_nextjs: bool,
 }
 
 struct PipeHandle {
@@ -164,6 +165,10 @@ impl PipeManager {
                 .get("port")
                 .and_then(Value::as_u64)
                 .and_then(|p| u16::try_from(p).ok()),
+            is_nextjs: config
+                .get("is_nextjs")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }
     }
 
