@@ -45,7 +45,6 @@ export function ObsidianSettings() {
   const [intelligenceDeepLink, setIntelligenceDeepLink] = useState<
     string | null
   >(null);
-  console.log("settings", settings);
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const [testLogLoading, setTestLogLoading] = useState(false);
   const [pathValidation, setPathValidation] = useState<{
@@ -571,7 +570,7 @@ export function ObsidianSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="aiModel">ollama/embedded ai model</Label>
+              <Label htmlFor="aiModel">ollama/local openai-compatible model</Label>
               <OllamaModelsList
                 disabled={!pathValidation.isValid}
                 defaultValue={

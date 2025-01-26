@@ -388,8 +388,8 @@ export function RecordingSettings() {
   };
 
   const handleAudioTranscriptionModelChange = (value: string) => {
-    if (value === "screenpipe-cloud" && !credits?.amount) {
-      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+    if (value === "screenpipe-cloud" && !settings.user?.cloud_subscribed) {
+      openUrl("https://buy.stripe.com/7sIdRzbym4RA98c7sX");
       return;
     }
 
@@ -1090,9 +1090,9 @@ export function RecordingSettings() {
                           <span>screenpipe cloud</span>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">cloud</Badge>
-                            {!credits?.amount && (
+                            {!settings.user?.cloud_subscribed && (
                               <Badge variant="outline" className="text-xs">
-                                get credits
+                                get screenpipe cloud
                               </Badge>
                             )}
                           </div>
@@ -1130,9 +1130,9 @@ export function RecordingSettings() {
                         <span>screenpipe cloud</span>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">cloud</Badge>
-                          {!credits?.amount && (
+                          {!settings.user?.cloud_subscribed && (
                             <Badge variant="outline" className="text-xs">
-                              get credits
+                              get screenpipe cloud
                             </Badge>
                           )}
                         </div>
