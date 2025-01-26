@@ -441,11 +441,6 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
 }
 
 
-#[derive(Debug, serde::Serialize)]
-pub struct Diagnostics {
-    os: String,
-    app_version: String,
-}
 
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
