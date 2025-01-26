@@ -182,12 +182,17 @@ this section guides you through submitting an enhancement suggestion for screen 
 
 ## styleguides
 
+### use cursor rules
+
+check [.cursorrules](.cursorrules) for more details, see any instructions we could add / remove? send a PR to update this file.
+
 ### git commit messages
 
 - use the present tense ("add feature" not "added feature")
 - use the imperative mood ("move cursor to..." not "moves cursor to...")
 - limit the first line to 72 characters or less
 - reference issues and pull requests liberally after the first line
+- we use git commit history to generate changelog with AI, so make sure to write relevant commit messages
 
 ### rust styleguide
 
@@ -200,6 +205,8 @@ we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 ### try to keep files small (under 600 lines of code)
 
 AI is quite bad when files are big, we should try to keep small so we move faster (also it's nice for humans too 🤓)
+
+**expand & distill**: iterate fast on long files, then split them up
 
 ### principles 
 
