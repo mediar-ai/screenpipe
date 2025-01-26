@@ -11,6 +11,7 @@
 		"postinstall": "cd scripts && node installDependencies.js"
 	},
 	"dependencies": {
+		"@screenpipe/browser": "^0.1.24",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2",
 		"@tauri-apps/plugin-shell": "^2.2.0",

@@ -4,11 +4,13 @@ import tauriLogo from "./assets/tauri.svg";
 import viteLogo from "./assets/vite.svg";
 import screenpipeLogo from "./assets/screenpipe.png";
 import { invoke } from "@tauri-apps/api/core";
+import { useVision } from "../hooks/useVision";
 import "./App.css";
 
 function App() {
 	const [greetMsg, setGreetMsg] = useState("");
 	const [name, setName] = useState("");
+	const { text } = useVision();
 
 	async function greet() {
 		// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -18,6 +20,11 @@ function App() {
 	return (
 		<main className="container">
 			<h1>Welcome to Screenpipe + Tauri</h1>
+
+			<div>
+				<p>First 50 characters detected on screen:</p>
+				<p>{text.substring(0, 50)}</p>
+			</div>
 
 			<div className="row">
 				<a href="https://screenpi.pe/" target="_blank">
