@@ -59,7 +59,6 @@ impl LLMSidecar {
         }
 
         info!("Spawning Ollama serve command");
-        // serve_command.spawn()?;
         serve_command.spawn()?;
 
         info!("Ollama serve command spawned. Please wait a few seconds to check ollama's server health");

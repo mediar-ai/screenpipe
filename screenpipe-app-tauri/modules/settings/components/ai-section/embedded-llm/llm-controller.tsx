@@ -30,7 +30,7 @@ export function LLMControler({
           description:
             "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
         });
-        //   // TODOO: Separate start server and start model rust commands
+
         try {
           // const result = await invoke<string>("start_ollama_sidecar", {
           //   settings: {
@@ -132,7 +132,9 @@ export function LLMControler({
                 className="w-[40px] h-[40px]"
             >
                 {stopIsPending || startIsPending 
-                  ? <Spinner/>
+                  ? <div className="w-[60%] h-[80%]">
+                      <Spinner/>
+                    </div>
                   : <Component className="h-5 w-5"/>
                 }
             </Button>

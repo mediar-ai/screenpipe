@@ -31,7 +31,3 @@ export const EmbeddedAiProvider: ProviderMetadata = {
         }
     },
 }
-// essentially then embedded ischosen
-// show form, save settings
-// once settings are saved, enable llm model control component
-// this component should start, stop and show status and logs

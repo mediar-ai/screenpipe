@@ -125,7 +125,7 @@ export function EmbeddedControlCenter({
                   control center
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                    control and find useful information about screenpipe's embedded ai
+                  control and find useful information about screenpipe's embedded ai
                 </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
