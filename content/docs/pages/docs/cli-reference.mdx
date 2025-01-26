@@ -316,4 +316,47 @@ note: if you don't provide a metadata override file, screenpipe will automatical
 screenpipe migrate
 ```
 
+
+### Shell Completions  
+
+The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:  
+
+#### Bash  
+1. Generate completions:  
+   ```bash  
+   screenpipe completions bash >> ~/.bashrc  
+   ```  
+2. Reload your profile:  
+   ```bash  
+   source ~/.bashrc  
+   ```  
+
+#### Zsh  
+1. Generate completions:  
+   ```bash  
+   screenpipe completions zsh >> ~/.zshrc  
+   ```  
+2. Reload your profile:  
+   ```bash  
+   source ~/.zshrc  
+   ```  
+
+#### Fish  
+1. Generate completions:  
+   ```fish  
+   screenpipe completions fish > ~/.config/fish/completions/screenpipe.fish  
+   ```  
+
+#### PowerShell  
+1. Generate completions:  
+   ```powershell  
+   screenpipe completions powershell >> $PROFILE  
+   ```  
+2. Reload your profile:  
+   ```powershell  
+   . $PROFILE  
+   ```  
+
+**Note:** Completions must be redirected to a file before use.
+
 </MotionDiv> 
