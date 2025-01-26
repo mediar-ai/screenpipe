@@ -332,6 +332,11 @@ export function AccountSection() {
                     price={plan.price}
                     features={plan.features}
                     onSelect={async () => {
+                      if (plan.title.toLowerCase() === "enterprise") {
+                        openUrl(plan.url);
+                        return;
+                      }
+
                       if (!settings.user?.id) {
                         toast({
                           title: "not logged in",
