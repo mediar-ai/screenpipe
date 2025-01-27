@@ -1,3 +1,7 @@
+// TODO:
+// - Better error handling by using 'finally' blocks to clean up
+// - Download 7-Zip on Windows if not already installed (maybe use the 7zip NPM package)
+
 import { $ } from "bun";
 import fs from "fs/promises";
 import {
