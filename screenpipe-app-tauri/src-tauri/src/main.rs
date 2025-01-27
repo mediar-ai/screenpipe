@@ -587,7 +587,7 @@ async fn main() {
 
     // Initialize Sentry early
     let sentry_guard = sentry::init((
-        "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", // Replace with your actual Sentry DSN
+        "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
         sentry::ClientOptions {
             release: sentry::release_name!(),
             ..Default::default()
