@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: { name: string } }
 ) {
   try {
-    const { name } = params
+    const { name } = await params
     // Cache the registry import
     const registryData = await import("@/registry.json")
     const registry = registryData.default

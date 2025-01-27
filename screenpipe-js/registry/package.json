@@ -1,5 +1,5 @@
 {
-  "name": "registry-template",
+  "name": "screenpipe-registry",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,10 +10,7 @@
     "registry:build": "shadcn build"
   },
   "dependencies": {
-    "@radix-ui/react-label": "^2.1.1",
-    "@radix-ui/react-slot": "^1.1.1",
     "@screenpipe/browser": "^0.1.24",
-    "@tanstack/react-query": "^5.64.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lodash": "^4.17.21",
