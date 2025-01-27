@@ -36,45 +36,56 @@ class SubscriptionCache {
 const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
+	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
 	if (cached !== null) {
 		return cached;
 	}
 
-	try {
-		const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
-			method: 'POST',
-			headers: {
-				apikey: env.SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ user_id: userId }),
-		});
+	// Only try Supabase if userId looks like a UUID
+	const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-		if (!response.ok) {
-			throw new Error(`Supabase error: ${response.status}`);
+	if (UUID_REGEX.test(userId)) {
+		try {
+			const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
+				method: 'POST',
+				headers: {
+					apikey: env.SUPABASE_ANON_KEY,
+					Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ user_id: userId }),
+			});
+
+			if (!response.ok) {
+				console.error('Supabase error:', await response.text());
+				return false;
+			}
+
+			const isValid: boolean = await response.json();
+			subscriptionCache.set(userId, isValid);
+			return isValid;
+		} catch (error) {
+			console.error('Error checking subscription:', error);
+			return false;
 		}
-
-		const isValid: boolean = await response.json();
-		subscriptionCache.set(userId, isValid);
-		return isValid;
-	} catch (error) {
-		console.error('Error checking subscription:', error);
-		return false;
 	}
+
+	// If not a UUID, return false to allow Clerk verification to proceed
+	return false;
 }
 
-async function verifyClerkToken(env: Env, token: string): Promise<string | null> {
+async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
+	console.log('verifying clerk token', token);
 	try {
 		const payload = await verifyToken(token, {
 			secretKey: env.CLERK_SECRET_KEY,
 		});
-		return payload.sub || null;
+		return payload.sub !== null;
 	} catch (error) {
 		console.error('clerk verification failed:', error);
-		return null;
+		return false;
 	}
 }
 
@@ -213,10 +224,7 @@ export default Sentry.withSentry(
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
-						const clerkUserId = await verifyClerkToken(env, token);
-						if (clerkUserId) {
-							isValid = await validateSubscription(env, clerkUserId);
-						}
+						isValid = await verifyClerkToken(env, token);
 					}
 
 					if (!isValid) {
