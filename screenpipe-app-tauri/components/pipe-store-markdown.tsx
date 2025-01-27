@@ -101,10 +101,10 @@ export function PipeStoreMarkdown({
           },
           img({ node, ...props }) {
             return (
-              <img 
-                {...props} 
+              <img
+                {...props}
                 className="max-w-full h-auto rounded-lg"
-                style={{ maxHeight: '600px' }}
+                style={{ maxHeight: "600px" }}
               />
             );
           },

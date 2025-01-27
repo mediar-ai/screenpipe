@@ -65,6 +65,9 @@ pub struct FrameMetadata {
     pub ocr_text: String,
 }
 
+type GetFrameResponse =
+    oneshot::Sender<Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>>>;
+
 #[derive(Debug)]
 enum CacheMessage {
     Store {
@@ -76,8 +79,7 @@ enum CacheMessage {
     },
     Get {
         cache_key: String,
-        response:
-            oneshot::Sender<Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>>>,
+        response: GetFrameResponse,
     },
 }
 
@@ -218,7 +220,7 @@ impl FrameDiskCache {
 
         let timestamp = parse_timestamp(timestamp_str)?;
 
-        let frame_path = self.get_frame_path(&timestamp.into(), device_id);
+        let frame_path = self.get_frame_path(&timestamp, device_id);
 
         if let Some(parent) = frame_path.parent() {
             fs::create_dir_all(parent).await?;
@@ -229,7 +231,7 @@ impl FrameDiskCache {
         let checksum = format!("{:x}", hasher.finalize());
 
         let cached_frame = CachedFrame {
-            timestamp: timestamp.into(),
+            timestamp,
             device_id: device_id.to_string(),
             checksum,
             metadata: FrameMetadata {
@@ -255,7 +257,7 @@ impl FrameDiskCache {
         fs::write(&frame_path, frame_data).await?;
 
         self.entries.insert(
-            (timestamp.into(), device_id.to_string()),
+            (timestamp, device_id.to_string()),
             CacheEntry {
                 frame: cached_frame,
                 path: frame_path,
@@ -289,7 +291,7 @@ impl FrameDiskCache {
         };
 
         // First check if we have the entry before reading the file
-        if let Some(entry) = self.entries.get(&(timestamp.into(), device_id.to_string())) {
+        if let Some(entry) = self.entries.get(&(timestamp, device_id.to_string())) {
             let frame_path = &entry.path;
 
             // Only verify checksum periodically (e.g., every 100th access) or if file size changed
@@ -316,7 +318,7 @@ impl FrameDiskCache {
                 Ok(Some((
                     frame_data,
                     entry.frame.metadata.clone(),
-                    (timestamp.into(), device_id.to_string()),
+                    (timestamp, device_id.to_string()),
                 )))
             } else {
                 // Fast path - skip checksum verification
@@ -324,7 +326,7 @@ impl FrameDiskCache {
                 Ok(Some((
                     frame_data,
                     entry.frame.metadata.clone(),
-                    (timestamp.into(), device_id.to_string()),
+                    (timestamp, device_id.to_string()),
                 )))
             }
         } else {
@@ -353,7 +355,7 @@ impl FrameDiskCache {
         let mut frames_to_remove = Vec::new();
 
         // Identify frames to remove based on age and total size
-        for (&(timestamp, ref device_id), _entry) in &self.entries {
+        for &(timestamp, ref device_id) in self.entries.keys() {
             if timestamp < retention_cutoff {
                 frames_to_remove.push((timestamp, device_id.clone()));
                 continue;
@@ -567,8 +569,7 @@ impl FrameCache {
 
         let (extract_tx, mut extract_rx) = mpsc::channel(100);
 
-        let mut streamer =
-            OrderedFrameStreamer::new(frame_tx, Duration::seconds(60 * 1), descending);
+        let mut streamer = OrderedFrameStreamer::new(frame_tx, Duration::seconds(60), descending);
 
         // Spawn extraction task
         let mut extraction_handle = {
@@ -671,7 +672,7 @@ async fn extract_frame(
         .iter()
         .filter_map(|(frame, _)| {
             // Only select frames that align with our target FPS
-            if frame.offset_index as i64 % frame_interval == 0 {
+            if frame.offset_index % frame_interval == 0 {
                 Some(frame.offset_index.to_string())
             } else {
                 None
@@ -814,8 +815,8 @@ async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Resul
         }
     }
 
-    match Command::new(&ffmpeg_path)
-        .args(&["-v", "error", "-i", file_path, "-f", "null", "-"])
+    match Command::new(ffmpeg_path)
+        .args(["-v", "error", "-i", file_path, "-f", "null", "-"])
         .output()
         .await
     {

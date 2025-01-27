@@ -9,9 +9,10 @@ use tokio::sync::Mutex;
 use tracing::info;
 use vad_rs::{Vad, VadStatus};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum VadSensitivity {
     Low,
+    #[default]
     Medium,
     High,
 }
@@ -38,6 +39,7 @@ pub trait VadEngine: Send {
     fn get_min_speech_ratio(&self) -> f32;
 }
 
+#[derive(Default)]
 pub struct WebRtcVad {
     vad: webrtc_vad::Vad,
     sensitivity: VadSensitivity,

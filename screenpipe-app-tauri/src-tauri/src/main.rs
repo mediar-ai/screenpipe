@@ -4,7 +4,6 @@
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
-use llm_sidecar::EmbeddedLLMSettings;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -38,9 +37,9 @@ use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
-use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
+mod disk_usage;
 mod llm_sidecar;
 mod permissions;
 mod server;
@@ -48,7 +47,6 @@ mod sidecar;
 mod store;
 mod tray;
 mod updates;
-mod disk_usage;
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
@@ -66,6 +64,7 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use tauri_plugin_sentry::{sentry};
 mod health;
 use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -98,7 +97,7 @@ impl ShortcutConfig {
                     .into_iter()
                     .filter_map(|profile| {
                         profiles_store
-                            .get(&format!("shortcuts.{}", profile))
+                            .get(format!("shortcuts.{}", profile))
                             .and_then(|v| v.as_str().map(String::from))
                             .map(|shortcut| (profile, shortcut))
                     })
@@ -181,13 +180,14 @@ async fn register_shortcut(
         .on_shortcut(shortcut, move |app, _shortcut, event| {
             // Only trigger on key press, not release
             if matches!(event.state, ShortcutState::Pressed) {
-                handler(&app);
+                handler(app);
             }
         })
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn update_global_shortcuts(
     app: AppHandle,
     show_shortcut: String,
@@ -290,7 +290,7 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         },
     )
     .await?;
-    
+
     // Register stop audio shortcut
     register_shortcut(
         app,
@@ -369,12 +369,12 @@ async fn list_pipes() -> anyhow::Result<Value> {
 }
 
 
-fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+pub fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 
-    fs::create_dir_all(&local_data_dir.join("data"))?;
+    fs::create_dir_all(local_data_dir.join("data"))?;
     Ok(local_data_dir)
 }
 
@@ -389,10 +389,12 @@ pub struct LogFile {
 async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
     let mut log_files = Vec::new();
-    
+
     // Collect all entries first
     let mut entries = Vec::new();
-    let mut dir = tokio::fs::read_dir(&data_dir).await.map_err(|e| e.to_string())?;
+    let mut dir = tokio::fs::read_dir(&data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
     while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
         // Get metadata immediately for each entry
         if let Ok(metadata) = entry.metadata().await {
@@ -408,7 +410,7 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
                 .ok()
                 .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
-                .unwrap_or(0)
+                .unwrap_or(0),
         )
     });
 
@@ -439,7 +441,6 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
 
     Ok(log_files)
 }
-
 
 fn send_recording_notification(
     app_handle: &tauri::AppHandle,
@@ -586,13 +587,13 @@ async fn main() {
     let _ = fix_path_env::fix();
 
     // Initialize Sentry early
-    // let sentry_guard = sentry::init((
-    //     "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664", // Replace with your actual Sentry DSN
-    //     sentry::ClientOptions {
-    //         release: sentry::release_name!(),
-    //         ..Default::default()
-    //     },
-    // ));
+    let sentry_guard = sentry::init((
+        "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
 
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
@@ -655,7 +656,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        // .plugin(tauri_plugin_sentry::init(&sentry_guard))
+        .plugin(tauri_plugin_sentry::init(&sentry_guard))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -683,7 +684,7 @@ async fn main() {
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+                get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
 
             // Set up rolling file appender
             let file_appender = RollingFileAppender::builder()
@@ -692,7 +693,7 @@ async fn main() {
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    &get_data_dir(&app.handle())
+                    get_data_dir(app.handle())
                         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
                 )?;
 
@@ -795,7 +796,7 @@ async fn main() {
                                         if pipe["enabled"].as_bool().unwrap_or(false) {
                                             if let Some(id) = pipe["id"].as_str() {
                                                 let _ = reqwest::Client::new()
-                                                    .post(format!("http://localhost:3030/pipes/disable"))
+                                                    .post("http://localhost:3030/pipes/disable")
                                                     .json(&serde_json::json!({
                                                         "pipe_id": id
                                                     }))
@@ -806,10 +807,12 @@ async fn main() {
                                     }
                                 }
                             }
-                            
+
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
-                            if let Err(e) = kill_all_sreenpipes(state, app_handle_clone.clone()).await {
+                            if let Err(e) =
+                                kill_all_sreenpipes(state, app_handle_clone.clone()).await
+                            {
                                 error!("Error stopping recordings during quit: {}", e);
                             }
                         });
@@ -911,7 +914,7 @@ async fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                show_main_window(&app, true);
+                                show_main_window(app, true);
                             }
                         }
                     }
@@ -924,7 +927,8 @@ async fn main() {
                 .build()
                 .unwrap();
 
-            if store.keys().len() == 0 {
+            // TODO: proper lookup of keys rather than assuming they exist
+            if store.is_empty() {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
                 store.set(
                     "config".to_string(),
@@ -1002,10 +1006,7 @@ async fn main() {
 
             info!("use_dev_mode: {}", use_dev_mode);
 
-            info!(
-                "will start sidecar: {}",
-                !use_dev_mode && has_files
-            );
+            info!("will start sidecar: {}", !use_dev_mode && has_files);
 
             // if non dev mode and previously started sidecar, start sidecar
             if !use_dev_mode && has_files {
@@ -1045,28 +1046,28 @@ async fn main() {
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
             // LLM Sidecar setup
-            let embedded_llm: EmbeddedLLMSettings = store
-                .get("embeddedLLM")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| EmbeddedLLMSettings {
-                    enabled: false,
-                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
-                    port: 11438,
-                });
+            // let embedded_llm: EmbeddedLLMSettings = store
+            //     .get("embeddedLLM")
+            //     .and_then(|v| serde_json::from_value(v.clone()).ok())
+            //     .unwrap_or_else(|| EmbeddedLLMSettings {
+            //         enabled: false,
+            //         model: "llama3.2:3b-instruct-q4_K_M".to_string(),
+            //         port: 11438,
+            //     });
 
-            if embedded_llm.enabled {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
-                        Ok(result) => {
-                            info!("LLM Sidecar started successfully: {}", result);
-                        }
-                        Err(e) => {
-                            error!("Failed to start LLM Sidecar: {}", e);
-                        }
-                    }
-                });
-            }
+            // if embedded_llm.enabled {
+            //     let app_handle = app.handle().clone();
+            //     tauri::async_runtime::spawn(async move {
+            //         match LLMSidecar::new(embedded_llm).start(app_handle).await {
+            //             Ok(result) => {
+            //                 info!("LLM Sidecar started successfully: {}", result);
+            //             }
+            //             Err(e) => {
+            //                 error!("Failed to start LLM Sidecar: {}", e);
+            //             }
+            //         }
+            //     });
+            // }
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -1089,7 +1090,7 @@ async fn main() {
 
             // Add this to shut down the server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
-                let _ = server_shutdown_tx.send(());
+                drop(server_shutdown_tx.send(()));
             }
         }
         tauri::RunEvent::WindowEvent {
@@ -1109,7 +1110,7 @@ async fn main() {
             ..
         } => {
             if !has_visible_windows {
-                show_main_window(&app_handle, false);
+                show_main_window(app_handle, false);
             }
         }
         _ => {}

@@ -70,6 +70,7 @@
     "remark-math": "^6.0.0",
     "tailwind-merge": "^2.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "tauri-plugin-sentry-api": "^0.4.1",
     "tauri-plugin-store-api": "^0.0.0",
     "use-debounce": "^10.0.4",
     "use-immer": "^0.11.0",

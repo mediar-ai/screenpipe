@@ -20,7 +20,6 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
-use sentry;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -261,7 +260,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         warn!("ffmpeg check failed: {}", e);
                         warn!("please ensure ffmpeg is installed correctly and is in your PATH");
-                        return Err(e.into());
+                        return Err(e);
                     }
                 }
 
@@ -576,7 +575,7 @@ async fn main() -> anyhow::Result<()> {
     debug!("LLM initializing");
 
     #[cfg(feature = "llm")]
-    let llm = {
+    let _llm = {
         match cli.enable_llm {
             true => Some(screenpipe_core::LLM::new(
                 screenpipe_core::ModelName::Llama,
@@ -631,7 +630,7 @@ async fn main() -> anyhow::Result<()> {
     ) -> anyhow::Result<()> {
         match list_audio_devices().await {
             Ok(available_devices) => {
-                if !available_devices.contains(&device) {
+                if !available_devices.contains(device) {
                     return Err(anyhow::anyhow!(
                         "attempted to control non-existent device: {}",
                         device.name
@@ -1048,7 +1047,7 @@ async fn handle_pipe_command(
         PipeCommand::List { output, port } => {
             let server_url = format!("{}:{}", server_url, port);
             let pipes = match client
-                .get(&format!("{}/pipes/list", server_url))
+                .get(format!("{}/pipes/list", server_url))
                 .send()
                 .await
             {
@@ -1094,7 +1093,7 @@ async fn handle_pipe_command(
         PipeCommand::Download { url, output, port }
         | PipeCommand::Install { url, output, port } => {
             match client
-                .post(&format!("{}:{}/pipes/download", server_url, port))
+                .post(format!("{}:{}/pipes/download", server_url, port))
                 .json(&json!({ "url": url }))
                 .send()
                 .await
@@ -1144,7 +1143,7 @@ async fn handle_pipe_command(
 
         PipeCommand::Info { id, output, port } => {
             let info = match client
-                .get(&format!("{}:{}/pipes/info/{}", server_url, port, id))
+                .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
                 .send()
                 .await
             {
@@ -1165,7 +1164,7 @@ async fn handle_pipe_command(
         }
         PipeCommand::Enable { id, port } => {
             match client
-                .post(&format!("{}:{}/pipes/enable", server_url, port))
+                .post(format!("{}:{}/pipes/enable", server_url, port))
                 .json(&json!({ "pipe_id": id }))
                 .send()
                 .await
@@ -1184,7 +1183,7 @@ async fn handle_pipe_command(
 
         PipeCommand::Disable { id, port } => {
             match client
-                .post(&format!("{}:{}/pipes/disable", server_url, port))
+                .post(format!("{}:{}/pipes/disable", server_url, port))
                 .json(&json!({ "pipe_id": id }))
                 .send()
                 .await
@@ -1206,7 +1205,7 @@ async fn handle_pipe_command(
                 .map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
 
             match client
-                .post(&format!("{}:{}/pipes/update", server_url, port))
+                .post(format!("{}:{}/pipes/update", server_url, port))
                 .json(&json!({
                     "pipe_id": id,
                     "config": config
@@ -1237,7 +1236,7 @@ async fn handle_pipe_command(
             }
 
             match client
-                .delete(&format!("{}:{}/pipes/delete/{}", server_url, port, id))
+                .delete(format!("{}:{}/pipes/delete/{}", server_url, port, id))
                 .send()
                 .await
             {
@@ -1264,7 +1263,7 @@ async fn handle_pipe_command(
             }
 
             match client
-                .post(&format!("{}:{}/pipes/purge", server_url, port))
+                .post(format!("{}:{}/pipes/purge", server_url, port))
                 .send()
                 .await
             {

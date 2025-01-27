@@ -156,7 +156,7 @@ pub fn write_audio_to_file(
             bytemuck::cast_slice(audio),
             sample_rate,
             1,
-            &file_path.into(),
+            &PathBuf::from(file_path),
         )?;
     }
     Ok(file_path_clone)

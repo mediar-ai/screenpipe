@@ -45,15 +45,26 @@ export async function setupBrowser(logger: RouteLogger = defaultLogger): Promise
                 let pages = await activeBrowser.pages();
                 logger.log(`found ${pages.length} pages`);
 
-                let linkedinPage = pages.find(page => page.url().startsWith('https://www.linkedin.com'));
+                // Find LinkedIn page or create new one without closing others
+                let linkedinPage = pages.find(page => {
+                    const url = page.url();
+                    return url.startsWith('https://www.linkedin.com') || url === 'about:blank';
+                });
 
                 if (linkedinPage) {
-                    logger.log('found existing linkedin page, reusing it');
+                    logger.log('found existing linkedin or blank page, reusing it');
                     activePage = linkedinPage;
+                    // If it's a blank page, we don't need to do anything special
+                    if (linkedinPage.url() === 'about:blank') {
+                        logger.log('using blank page for linkedin');
+                    }
+                    await activePage.bringToFront();
+                    logger.log('brought linkedin page to front');
                 } else {
-                    logger.log('no existing linkedin page found, opening a new tab');
+                    logger.log('creating new tab for linkedin');
                     activePage = await activeBrowser.newPage();
-                    logger.log('new tab opened');
+                    await activePage.bringToFront();
+                    logger.log('new tab created and brought to front');
                 }
                 session.setActivePage(activePage);
                 logger.log('browser setup complete');
@@ -69,6 +80,7 @@ export async function setupBrowser(logger: RouteLogger = defaultLogger): Promise
             }
         }
 
+        
         if (!activeBrowser) {
             logger.error(`all connection attempts failed: ${lastError}`);
             throw new Error(`failed to connect to browser after 5 attempts: ${lastError}`);

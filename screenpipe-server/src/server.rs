@@ -8,7 +8,6 @@ use axum::{
     routing::{get, post},
     serve, Router,
 };
-use axum_macros::debug_handler;
 use futures::{
     future::{try_join, try_join_all},
     SinkExt, Stream, StreamExt,
