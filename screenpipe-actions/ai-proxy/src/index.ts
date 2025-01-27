@@ -38,13 +38,13 @@ const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
 	console.log('validating user id has cloud sub', userId);
+	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
 	if (cached !== null) {
 		return cached;
 	}
 
-	// Only try Supabase if userId looks like a UUID
 	const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 	if (UUID_REGEX.test(userId)) {
@@ -56,9 +56,13 @@ async function validateSubscription(env: Env, userId: string): Promise<boolean> 
 					Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ user_id: userId }),
+				body: JSON.stringify({ input_user_id: userId }),
 			});
 
+			if (!response.ok) {
+				console.error('Supabase error:', await response.text());
+				return false;
+			}
 			if (!response.ok) {
 				console.error('Supabase error:', await response.text());
 				return false;
@@ -137,19 +141,49 @@ export class RateLimiter {
 
 async function handleChatCompletions(body: RequestBody, env: Env): Promise<Response> {
 	const provider = createProvider(body.model, env);
-  
+
 	if (body.stream) {
-	  const stream = await provider.createStreamingCompletion(body);
-	  return new Response(stream, {
-		headers: {
-		  'Content-Type': 'text/event-stream',
-		  'Cache-Control': 'no-cache',
-		  Connection: 'keep-alive',
-		},
-	  });
+		const stream = await provider.createStreamingCompletion(body);
+		return new Response(stream, {
+			headers: {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				Connection: 'keep-alive',
+			},
+		});
 	}
-  
+
 	return await provider.createCompletion(body);
+}
+
+async function handleOptions(request: Request) {
+	const corsHeaders = {
+		'Access-Control-Allow-Origin': '*',
+		'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+		'Access-Control-Allow-Headers': '*',
+		'Access-Control-Max-Age': '86400',
+	};
+
+	// Handle CORS preflight requests
+	if (
+		request.headers.get('Origin') !== null &&
+		request.headers.get('Access-Control-Request-Method') !== null &&
+		request.headers.get('Access-Control-Request-Headers') !== null
+	) {
+		return new Response(null, {
+			headers: {
+				...corsHeaders,
+				'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '*',
+			},
+		});
+	}
+
+	// Handle standard OPTIONS request
+	return new Response(null, {
+		headers: {
+			Allow: 'GET, HEAD, POST, OPTIONS',
+		},
+	});
 }
 
 export default Sentry.withSentry(
@@ -179,22 +213,9 @@ export default Sentry.withSentry(
 				console.error('langfuse error:', error);
 			});
 
-			// CORS headers
-			const corsHeaders = {
-				'Access-Control-Allow-Origin': '*', // Or specify your app's origin
-				'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-				'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent',
-			};
-
-			// Handle CORS preflight requests
+			// Modify your fetch handler to use this for OPTIONS requests
 			if (request.method === 'OPTIONS') {
-				return new Response(null, {
-					headers: {
-						...corsHeaders,
-						// Add this line to handle preflight requests for all headers
-						'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
-					},
-				});
+				return handleOptions(request);
 			}
 
 			const ip = request.headers.get('cf-connecting-ip') || 'unknown';
@@ -206,7 +227,7 @@ export default Sentry.withSentry(
 			const rateLimitData = (await rateLimitResponse.json()) as { allowed: boolean; remaining: number; reset_in: number };
 
 			if (!rateLimitData.allowed) {
-				return new Response(
+				const response = new Response(
 					JSON.stringify({
 						error: 'rate limit exceeded',
 						retry_after: 60, // seconds
@@ -214,12 +235,17 @@ export default Sentry.withSentry(
 					{
 						status: 429,
 						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
+							'Access-Control-Allow-Origin': '*',
+							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+							'Access-Control-Allow-Headers': '*',
+							'Access-Control-Allow-Credentials': 'true',
+							'Access-Control-Max-Age': '86400',
 							'Retry-After': '60',
 						},
 					}
 				);
+				response.headers.append('Vary', 'Origin');
+				return response;
 			}
 
 			try {
@@ -230,10 +256,18 @@ export default Sentry.withSentry(
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
 					if (!authHeader?.startsWith('Bearer ')) {
-						return new Response(JSON.stringify({ error: 'unauthorized' }), {
+						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
-							headers: corsHeaders,
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Access-Control-Allow-Credentials': 'true',
+								'Access-Control-Max-Age': '86400',
+							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 
 					const token = authHeader.split(' ')[1];
@@ -243,61 +277,80 @@ export default Sentry.withSentry(
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
+						isValid = await verifyClerkToken(env, token);
 					}
 
 					if (!isValid) {
-						return new Response(JSON.stringify({ error: 'invalid subscription' }), {
+						const response = new Response(JSON.stringify({ error: 'invalid subscription' }), {
 							status: 401,
-							headers: corsHeaders,
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Access-Control-Allow-Credentials': 'true',
+								'Access-Control-Max-Age': '86400',
+							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 				}
 
 				if (path === '/test') {
-					return new Response('ai proxy is working!', {
+					const response = new Response('ai proxy is working!', {
 						status: 200,
-						headers: corsHeaders,
+						headers: {
+							'Access-Control-Allow-Origin': '*',
+							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+							'Access-Control-Allow-Headers': '*',
+							'Access-Control-Allow-Credentials': 'true',
+							'Access-Control-Max-Age': '86400',
+						},
 					});
+					response.headers.append('Vary', 'Origin');
+					return response;
 				}
 
-			if (path === '/v1/chat/completions' && request.method === 'POST') {
-				const body = (await request.json()) as RequestBody;
-				const isStreaming = body.stream === true;
+				if (path === '/v1/chat/completions' && request.method === 'POST') {
+					const body = (await request.json()) as RequestBody;
 
-				const trace = langfuse.trace({
-					id: 'ai_call_' + Date.now(),
-					name: 'ai_call',
-					metadata: {
-					  model: body.model,
-					  streaming: body.stream === true,
-					},
-				});
-
-				try {
-					const response = await handleChatCompletions(body, env);
-					await trace.update({
-      					metadata: {
-						  completionStatus: 'success',
-      					  completionTime: new Date().toISOString(),
-      					  modelUsed: body.model,
-      					  isStreaming: body.stream === true,
-      					},
-						output: response.statusText,
-					});
-					return response;
-				  } catch (error: any) {
-					await trace.update({
+					const trace = langfuse.trace({
+						id: 'ai_call_' + Date.now(),
+						name: 'ai_call',
 						metadata: {
-						  completionStatus: 'error',
-						  errorTime: new Date().toISOString(),
-						  errorType: error.name,
-						  errorMessage: error.message,
+							model: body.model,
+							streaming: body.stream === true,
 						},
-						output: error.message,
 					});
-					throw error;
-				  }
-			}
+
+					try {
+						const response = await handleChatCompletions(body, env);
+						trace.update({
+							metadata: {
+								completionStatus: 'success',
+								completionTime: new Date().toISOString(),
+								modelUsed: body.model,
+								isStreaming: body.stream === true,
+							},
+							output: response.statusText,
+						});
+						response.headers.set('Access-Control-Allow-Origin', '*');
+						response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+						response.headers.append('Vary', 'Origin');
+						return response;
+					} catch (error: any) {
+						trace.update({
+							metadata: {
+								completionStatus: 'error',
+								errorTime: new Date().toISOString(),
+								errorType: error.name,
+								errorMessage: error.message,
+							},
+							output: error.message,
+						});
+						throw error;
+					}
+				}
 
 				if (path === '/v1/listen' && request.method === 'POST') {
 					// Get the raw body instead of form data
@@ -325,15 +378,19 @@ export default Sentry.withSentry(
 						}
 
 						const data = await deepgramResponse.json();
-						return new Response(JSON.stringify(data), {
+						const response = new Response(JSON.stringify(data), {
 							headers: {
-								...corsHeaders,
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
 								'Content-Type': 'application/json',
 							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					} catch (error: any) {
 						console.error('Error in Deepgram request:', error);
-						return new Response(
+						const response = new Response(
 							JSON.stringify({
 								error: error.message,
 								details: error.stack,
@@ -341,31 +398,48 @@ export default Sentry.withSentry(
 							{
 								status: 500,
 								headers: {
-									...corsHeaders,
+									'Access-Control-Allow-Origin': '*',
+									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+									'Access-Control-Allow-Headers': '*',
 									'Content-Type': 'application/json',
 								},
 							}
 						);
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 				}
 
-				return new Response('not found', {
+				const response = new Response('not found', {
 					status: 404,
-					headers: corsHeaders,
+					headers: {
+						'Access-Control-Allow-Origin': '*',
+						'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+						'Access-Control-Allow-Headers': '*',
+						'Access-Control-Max-Age': '86400',
+					},
 				});
+				response.headers.append('Vary', 'Origin');
+				return response;
 			} catch (error) {
 				console.error('error in fetch:', error);
-				return new Response('an error occurred', {
+				const response = new Response('an error occurred', {
 					status: 500,
-					headers: corsHeaders,
+					headers: {
+						'Access-Control-Allow-Origin': '*',
+						'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+						'Access-Control-Allow-Headers': '*',
+						'Access-Control-Max-Age': '86400',
+					},
 				});
+				response.headers.append('Vary', 'Origin');
+				return response;
 			} finally {
 				await langfuse.shutdownAsync();
 			}
 		},
 	} satisfies ExportedHandler<Env>
 );
-
 
 /*
 terminal 1
