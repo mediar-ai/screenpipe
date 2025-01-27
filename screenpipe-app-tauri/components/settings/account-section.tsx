@@ -109,16 +109,14 @@ export function AccountSection() {
               });
             }
           }
-          // eg stripe / dev flow 
-          if (url.includes("return") || url.includes("refresh")) {
+          // eg stripe / dev flow
+          if (url.includes("stripe-connect")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
-              const apiKey = new URL(url).searchParams.get("api_key")!;
               if (settings.user) {
                 updateSettings({
                   user: {
                     ...settings.user,
-                    api_key: apiKey, // should not be needed
                     stripe_connected: true,
                   },
                 });
@@ -239,11 +237,6 @@ export function AccountSection() {
       setIsConnectingStripe(false);
     }
   };
-
-  useEffect(() => {
-    const updatedUser = { ...settings.user, stripe_connected: true };
-    updateSettings({ user: updatedUser });
-  }, []);
 
   const updateProfile = async (updates: Partial<typeof settings.user>) => {
     if (!settings.user?.token) return;
@@ -503,7 +496,27 @@ export function AccountSection() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">stripe connect</div>
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      stripe connect
+                      {settings.user?.stripe_connected &&
+                        settings.user?.stripe_account_status && (
+                          <div
+                            className={cn(
+                              "px-2 py-0.5 text-xs rounded-full",
+                              settings.user.stripe_account_status === "pending"
+                                ? "bg-yellow-500/10 text-yellow-500"
+                                : "bg-green-500/10 text-green-500"
+                            )}
+                            title={
+                              settings.user.stripe_account_status === "pending"
+                                ? "go to stripe and complete your account verification (bank account, id verification...)"
+                                : "your stripe account is fully verified and you can start receiving earnings from your pipes"
+                            }
+                          >
+                            {settings.user.stripe_account_status}
+                          </div>
+                        )}
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       receive earnings from your pipes (
                       <a

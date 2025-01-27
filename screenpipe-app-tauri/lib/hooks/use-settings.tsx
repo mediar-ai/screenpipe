@@ -47,6 +47,7 @@ export type User = {
     amount: number;
   };
   stripe_connected?: boolean;
+  stripe_account_status?: "active" | "pending";
   github_username?: string;
   bio?: string;
   website?: string;
@@ -369,9 +370,7 @@ export function useSettings() {
       const data = await response.json();
       console.log("data", data);
       const userData = {
-        api_key: settings.user.api_key,
         ...data.user,
-        stripe_connected: data.user.stripe_connected ?? false,
       } as User;
 
       setSettings({
