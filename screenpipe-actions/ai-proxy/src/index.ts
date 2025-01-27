@@ -1,7 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
 import { verifyToken } from '@clerk/backend';
-import { Anthropic } from '@anthropic-ai/sdk';
+import { createProvider } from './providers';
+import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
 
 // Add cache for subscription status
@@ -134,6 +135,23 @@ export class RateLimiter {
 	}
 }
 
+async function handleChatCompletions(body: RequestBody, env: Env): Promise<Response> {
+	const provider = createProvider(body.model, env);
+  
+	if (body.stream) {
+	  const stream = await provider.createStreamingCompletion(body);
+	  return new Response(stream, {
+		headers: {
+		  'Content-Type': 'text/event-stream',
+		  'Cache-Control': 'no-cache',
+		  Connection: 'keep-alive',
+		},
+	  });
+	}
+  
+	return await provider.createCompletion(body);
+}
+
 export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
@@ -242,254 +260,44 @@ export default Sentry.withSentry(
 					});
 				}
 
-				if (path === '/v1/chat/completions' && request.method === 'POST') {
-					const body = (await request.json()) as {
-						model: string;
-						messages: any[];
-						stream: boolean;
-						response_format?: { type: string };
-						temperature?: number;
-					};
-					const isStreaming = body.stream === true;
-					const isAnthropicModel = body.model.toLowerCase().includes('claude');
-					const isGeminiModel = body.model.toLowerCase().includes('gemini');
+			if (path === '/v1/chat/completions' && request.method === 'POST') {
+				const body = (await request.json()) as RequestBody;
+				const isStreaming = body.stream === true;
 
-					const trace = langfuse.trace({
-						id: 'ai_call_' + Date.now(),
-						name: 'ai_call',
+				const trace = langfuse.trace({
+					id: 'ai_call_' + Date.now(),
+					name: 'ai_call',
+					metadata: {
+					  model: body.model,
+					  streaming: body.stream === true,
+					},
+				});
+
+				try {
+					const response = await handleChatCompletions(body, env);
+					await trace.update({
+      					metadata: {
+						  completionStatus: 'success',
+      					  completionTime: new Date().toISOString(),
+      					  modelUsed: body.model,
+      					  isStreaming: body.stream === true,
+      					},
+						output: response.statusText,
+					});
+					return response;
+				  } catch (error: any) {
+					await trace.update({
 						metadata: {
-							expectJson: body.response_format?.type === 'json_object',
-							streaming: isStreaming,
-							provider: isAnthropicModel ? 'anthropic' : isGeminiModel ? 'gemini' : 'openai',
+						  completionStatus: 'error',
+						  errorTime: new Date().toISOString(),
+						  errorType: error.name,
+						  errorMessage: error.message,
 						},
+						output: error.message,
 					});
-
-					const generation = trace.generation({
-						name: 'completion',
-						model: body.model,
-						modelParameters: {
-							temperature: body.temperature,
-							streaming: isStreaming,
-						},
-						input: JSON.stringify(body.messages),
-					});
-
-					// Convert messages to Anthropic format if needed
-					const anthropicMessages = isAnthropicModel
-						? {
-								messages: body.messages.map((msg) => ({
-									role: msg.role === 'user' ? 'user' : 'assistant',
-									content: msg.content,
-								})),
-								model: body.model,
-								stream: isStreaming,
-								temperature: body.temperature,
-								max_tokens: 8192,
-						  }
-						: null;
-
-					if (isStreaming) {
-						const { readable, writable } = new TransformStream();
-						const writer = writable.getWriter();
-
-						ctx.waitUntil(
-							(async () => {
-								try {
-									if (isAnthropicModel) {
-										const anthropic = new Anthropic({
-											apiKey: env.ANTHROPIC_API_KEY,
-										});
-
-										try {
-											const stream = await anthropic.messages.create({
-												messages: body.messages.map((msg) => ({
-													role: msg.role === 'user' ? 'user' : 'assistant',
-													content: msg.content,
-												})),
-												model: body.model,
-												stream: true,
-												max_tokens: 4096,
-											});
-
-											for await (const chunk of stream) {
-												if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-													const openaiChunk = {
-														choices: [
-															{
-																delta: {
-																	content: chunk.delta.text,
-																},
-															},
-														],
-													};
-													await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
-												}
-											}
-
-											await writer.write(new TextEncoder().encode('data: [DONE]\n\n'));
-										} catch (error) {
-											console.error('Error in Anthropic stream:', error);
-											throw error;
-										}
-									} else if (isGeminiModel) {
-										const apiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-											method: 'POST',
-											headers: {
-												Authorization: `Bearer ${env.GEMINI_API_KEY}`,
-												'Content-Type': 'application/json',
-											},
-											body: JSON.stringify(body),
-										});
-
-										if (!apiResponse.ok) {
-											const errorData = await apiResponse.json();
-											throw new Error(`API error: ${JSON.stringify(errorData)}`);
-										}
-
-										const reader = apiResponse.body?.getReader();
-										if (!reader) {
-											throw new Error('Failed to get reader from API response');
-										}
-
-										while (true) {
-											const { done, value } = await reader.read();
-											if (done) break;
-											await writer.write(value);
-										}
-									} else {
-										// Original OpenAI format - keep the fetch call only for OpenAI
-										const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-											method: 'POST',
-											headers: {
-												Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-												'Content-Type': 'application/json',
-											},
-											body: JSON.stringify(body),
-										});
-
-										if (!apiResponse.ok) {
-											const errorData = await apiResponse.json();
-											throw new Error(`API error: ${JSON.stringify(errorData)}`);
-										}
-
-										const reader = apiResponse.body?.getReader();
-										if (!reader) {
-											throw new Error('Failed to get reader from API response');
-										}
-
-										while (true) {
-											const { done, value } = await reader.read();
-											if (done) break;
-											await writer.write(value);
-										}
-									}
-
-									generation.end({
-										completionStartTime: new Date(),
-										output: 'Streaming response completed',
-									});
-								} catch (error: any) {
-									console.error('Error in API stream:', error);
-									generation.end({
-										completionStartTime: new Date(),
-										output: error.message,
-									});
-									await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
-								} finally {
-									await writer.close();
-								}
-							})()
-						);
-
-						return new Response(readable, {
-							headers: {
-								...corsHeaders,
-								'Content-Type': 'text/event-stream',
-								'Cache-Control': 'no-cache',
-								Connection: 'keep-alive',
-							},
-						});
-					} else {
-						// Non-streaming response
-						try {
-							const apiResponse = await fetch(
-								isAnthropicModel
-									? 'https://api.anthropic.com/v1/messages'
-									: isGeminiModel
-									? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-									: 'https://api.openai.com/v1/chat/completions',
-								{
-									method: 'POST',
-									headers: {
-										...(isAnthropicModel
-											? {
-													'x-api-key': env.ANTHROPIC_API_KEY,
-													'anthropic-version': '2023-06-01',
-											  }
-											: isGeminiModel
-											? {
-													Authorization: `Bearer ${env.GEMINI_API_KEY}`,
-											  }
-											: {
-													Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-											  }),
-										'Content-Type': 'application/json',
-									},
-									body: JSON.stringify(isAnthropicModel ? anthropicMessages : body),
-								}
-							);
-
-							if (!apiResponse.ok) {
-								const errorData = await apiResponse.json();
-								throw new Error(`API error: ${JSON.stringify(errorData)}`);
-							}
-
-							const data: any = await apiResponse.json();
-
-							// Handle both OpenAI-style and Anthropic-style responses
-							const content = isAnthropicModel
-								? // Anthropic format: either content array or direct message
-								  data.content?.[0]?.text || data.choices?.[0]?.message?.content || ''
-								: // OpenAI format
-								  data.choices?.[0]?.message?.content || '';
-
-							const normalizedResponse = {
-								choices: [
-									{
-										message: {
-											content: content,
-										},
-									},
-								],
-							};
-
-							generation.end({
-								completionStartTime: new Date(),
-								output: normalizedResponse.choices[0]?.message?.content || '',
-							});
-
-							return new Response(JSON.stringify(normalizedResponse), {
-								headers: {
-									...corsHeaders,
-									'Content-Type': 'application/json',
-								},
-							});
-						} catch (error: any) {
-							console.error('Error in API request:', error);
-							generation.end({
-								completionStartTime: new Date(),
-								output: error.message,
-							});
-							return new Response(JSON.stringify({ error: error.message }), {
-								status: 500,
-								headers: {
-									...corsHeaders,
-									'Content-Type': 'application/json',
-								},
-							});
-						}
-					}
-				}
+					throw error;
+				  }
+			}
 
 				if (path === '/v1/listen' && request.method === 'POST') {
 					// Get the raw body instead of form data
@@ -558,19 +366,6 @@ export default Sentry.withSentry(
 	} satisfies ExportedHandler<Env>
 );
 
-interface Env {
-	OPENAI_API_KEY: string;
-	LANGFUSE_PUBLIC_KEY: string;
-	LANGFUSE_SECRET_KEY: string;
-	ANTHROPIC_API_KEY: string;
-	DEEPGRAM_API_KEY: string;
-	RATE_LIMITER: DurableObjectNamespace;
-	GEMINI_API_KEY: string;
-	NODE_ENV?: string;
-	SUPABASE_URL: string;
-	SUPABASE_ANON_KEY: string;
-	CLERK_SECRET_KEY: string;
-}
 
 /*
 terminal 1
