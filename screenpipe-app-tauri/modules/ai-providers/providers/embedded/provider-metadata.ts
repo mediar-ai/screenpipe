@@ -3,14 +3,24 @@ import { AvailableAiProviders } from "../../types/available-providers";
 import { ProviderMetadata } from "../../types/provider-metadata";
 import { EmbeddedSetupForm } from "./setup-form";
 
-
-export const EmbeddedLLMState = {
-    RUNNING: "RUNNING",
+export const SidecarState = {
+    UNKNOWN: "UNKNOWN",
+    INACTIVE: "INACTIVE",
+    ACTIVE: "ACTIVE",
     ERROR: "ERROR",
-    IDLE: "IDLE"
 } as const
 
-export type EmbeddedLLMState = keyof typeof EmbeddedLLMState
+export type SidecarState = keyof typeof SidecarState
+
+export const ModelState = {
+    UNKNOWN: "UNKNOWN",
+    INACTIVE: "INACTIVE",
+    RUNNING: "RUNNING",
+    ERROR: "ERROR"
+} as const
+
+export type ModelState = keyof typeof ModelState
+
 
 export const EmbeddedAiProvider: ProviderMetadata = {
     type: AvailableAiProviders.EMBEDDED,

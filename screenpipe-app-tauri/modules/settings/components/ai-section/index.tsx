@@ -5,6 +5,7 @@ import { AiProviderSelect } from "@/modules/form/components/fields/ai-provider-s
 import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
 import { RegularProviderSetupForm } from "./provider-setup-forms";
 import { EmbeddedControlCenter } from "./embedded-llm/control-center";
+import { LLMProvider } from "./embedded-llm/context";
 
 const AISection = () => {
   const { settings } = useSettings();
@@ -31,10 +32,12 @@ const AISection = () => {
             setAiProvider={setAiProvider}
           />
         )
-      : <EmbeddedControlCenter
-          aiProvider={aiProvider}
-          setAiProvider={setAiProvider}
-        />
+      : <LLMProvider isActiveProvider={settings.aiProviderType === AvailableAiProviders.EMBEDDED}>
+          <EmbeddedControlCenter
+            aiProvider={aiProvider}
+            setAiProvider={setAiProvider}
+          />
+        </LLMProvider>
     }
      
     </div>
