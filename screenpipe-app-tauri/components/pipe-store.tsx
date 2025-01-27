@@ -55,6 +55,20 @@ export const PipeStore: React.FC = () => {
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
+  // Add debounced search tracking
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery) {
+        posthog.capture("search_pipes", {
+          query: searchQuery,
+          results_count: filteredPipes.length,
+        });
+      }
+    }, 1000); // Debounce for 1 second
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, filteredPipes.length]);
+
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
@@ -231,7 +245,6 @@ export const PipeStore: React.FC = () => {
     onComplete?: () => void
   ) => {
     try {
-
       if (!checkLogin(settings.user)) return;
 
       // Keep the pipe in its current position by updating its status
