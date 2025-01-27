@@ -38,17 +38,13 @@ export function TooltipDefault({
     children: React.ReactElement,
     hideTooltip?: boolean
 }) {
-    const open = React.useMemo(() => {
-      return hideTooltip ? !hideTooltip : undefined
-    },[hideTooltip])
-
     return (
         <TooltipProvider>
-            <Tooltip open={open}>
+            <Tooltip>
                 <TooltipTrigger asChild>
                   {children}
                 </TooltipTrigger>
-                <TooltipContent side={side} className="max-w-[300px]">
+                <TooltipContent side={side} className="z-[5000] max-w-[300px] text-center">
                   <p>
                       {text}
                   </p>

@@ -68,7 +68,7 @@ export function LLMProvider({
     },
   });
 
-  const { mutateAsync: checkSidecarStatus, isPending: checkIsPending } = useMutation({
+  const { mutate: checkSidecarStatus, isPending: checkIsPending } = useMutation({
     mutationFn: async () => {
       posthog.capture("check_ollama_sidecar");
       toast({
@@ -98,18 +98,20 @@ export function LLMProvider({
     },
   });
 
-  const { mutateAsync: stopSidecar, isPending: stopIsPending } = useMutation({
+  const { mutate: stopSidecar, isPending: stopIsPending } = useMutation({
     mutationFn: async () => {
       await invoke("stop_ollama_sidecar");
     },
     onSuccess: () => {
       setSidecarStatus(SidecarState.INACTIVE)
+      setModelStatus(ModelState.INACTIVE)
       toast({
         title: "ai stopped",
         description: "the embedded ai has been shut down",
       });
     },
     onError: (e) => {
+      setModelStatus(ModelState.INACTIVE)
       setSidecarStatus(SidecarState.ERROR)
       console.error("error stopping ai:", e);
       toast({
@@ -120,7 +122,7 @@ export function LLMProvider({
     },
   });
 
-  const { mutateAsync: startModel, isPending: runIsPending } = useMutation({
+  const { mutate: startModel, isPending: runIsPending } = useMutation({
     mutationFn: async () => {
       posthog.capture("run_ollama_model_sidecar");
       toast({
@@ -155,7 +157,7 @@ export function LLMProvider({
     },
   });
 
-  const { mutateAsync: checkModelStatus, isPending: modelCheckIsPending } = useMutation({
+  const { mutate: checkModelStatus, isPending: modelCheckIsPending } = useMutation({
     mutationFn: async () => {
       posthog.capture("check_ollama_sidecar");
       toast({
@@ -185,7 +187,7 @@ export function LLMProvider({
     },
   });
 
-  const { mutateAsync: stopModel, isPending: modelStopIsPending } = useMutation({
+  const { mutate: stopModel, isPending: modelStopIsPending } = useMutation({
     mutationFn: async () => {
       await invoke("stop_ollama_sidecar");
     },
@@ -210,13 +212,13 @@ export function LLMProvider({
   async function handleSidecarAction() {
     switch (sidecarStatus) {
       case SidecarState.UNKNOWN:
-        await checkSidecarStatus();
+        checkSidecarStatus();
         break;
       case SidecarState.INACTIVE:
-        await startSidecar();
+        startSidecar();
         break;
       case SidecarState.ACTIVE:
-        await stopSidecar();
+        stopSidecar();
         break;
       default:
         break;
@@ -226,13 +228,13 @@ export function LLMProvider({
   async function handleModelAction() {
     switch (modelStatus) {
       case ModelState.UNKNOWN:
-        await checkModelStatus();
+        checkModelStatus();
         break;
       case ModelState.INACTIVE:
-        await startModel();
+        startModel();
         break;
       case ModelState.RUNNING:
-        await stopModel();
+        stopModel();
         break;
       default:
         break;
@@ -248,7 +250,7 @@ export function LLMProvider({
       handleSidecarAction()
     }
 
-    if (sidecarStatus === SidecarState.ACTIVE && modelStatus === ModelState.UNKNOWN) {
+    if (modelStatus === ModelState.UNKNOWN) {
       handleModelAction()
     }
   }, [sidecarStatus, modelStatus])

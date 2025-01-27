@@ -1,6 +1,6 @@
 import type { GroupBase, Props, SingleValue, MultiValue } from "react-select"
 import CreatableSelect from 'react-select/creatable';
-import SelectReact from 'react-select';
+import SelectReact, { StylesConfig } from 'react-select';
 import * as React from "react"
 
 export type SelectProps<
@@ -27,6 +27,16 @@ const Select = <
       isClearable
       isSearchable
       {...restProps}
+      styles={{
+        'control': (css) => {
+          console.log({css})
+          return {
+            ...css,
+            backgroundColor: 'hsl(0, 0%, 100%)',
+            borderStyle: 'hidden',
+          }
+        }
+      }}
     />
   );
 };

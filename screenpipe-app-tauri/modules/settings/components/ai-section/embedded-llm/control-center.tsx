@@ -7,7 +7,7 @@ import { getSetupFormAndPersistedValues } from "@/modules/ai-providers/utils/get
 import Form from "@/modules/form/components/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { LLMStatus } from "./llm-status";
+import { StatusDisplay } from "./status-display";
 import { LLMLogFiles } from "./log-files";
 import {  ModelState } from "@/modules/ai-providers/providers/embedded/provider-metadata";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import { Input } from "@/components/ui/input";
 import { SidecarState } from '../../../../ai-providers/providers/embedded/provider-metadata';
 import { useForm } from "react-hook-form";
 import { FormField } from "@/components/ui/form";
+import { getOllamaModels } from "@/modules/ai-providers/providers/native-llama/utils";
+import Select from "@/components/select";
 
 export function EmbeddedControlCenter({
     aiProvider,
@@ -104,6 +106,13 @@ function SidecarController() {
     form.reset()
   }
 
+  const tooltipTexts = {
+    [SidecarState.INACTIVE]: 'screenpipe\'s sidecar is currently not running',
+    [SidecarState.ERROR]: 'there was an issue while running the sidecar',
+    [SidecarState.ACTIVE]: `sidecar is currently exposed at port: ${settings.embeddedLLM.port}`,
+    [SidecarState.UNKNOWN]: 'we\'re checking sidecar status'
+  }
+
   return (
         <div className="border rounded-md flex flex-col space-y-4 p-4">
           <div className="flex flex-col justify-between w-full space-y-1">
@@ -115,7 +124,10 @@ function SidecarController() {
             </p>
           </div>
           <div className="flex space-x-3">
-            <LLMStatus status={sidecarStatus}/>
+            <StatusDisplay 
+              status={sidecarStatus}
+              text={tooltipTexts[sidecarStatus]}
+            />
             <form 
               className="w-[70%]"
               onSubmit={(event) => {
@@ -148,38 +160,54 @@ function SidecarController() {
                 />
                 {form.formState.isDirty && (
                   <div className="absolute right-0 flex justify-center">
-                    <button 
-                      type="button"
-                      className="h-10 w-10 flex justify-center items-center hover:cursor-pointer"
-                      onClick={resetForm}
-                    >
-                      <Eraser className="w-4 h-4"/>
-                    </button>
-                    <button className="h-10 w-10 flex justify-center items-center hover:cursor-pointer">
-                      <Save className="w-4 h-4"/>
-                    </button>
+                    <TooltipDefault
+                      text={'erase changes'}
+                    > 
+                      <button 
+                        type="button"
+                        className="h-10 w-10 flex justify-center items-center hover:cursor-pointer"
+                        onClick={resetForm}
+                      >
+                        <Eraser className="w-4 h-4"/>
+                      </button>
+                    </TooltipDefault>
+                    <TooltipDefault
+                      text={'save changes'}
+                    > 
+                      <button className="h-10 w-10 flex justify-center items-center hover:cursor-pointer">
+                        <Save className="w-4 h-4"/>
+                      </button>
+                    </TooltipDefault>
                   </div>
                 )}
               </div>
             </form>
-            <Button
-              variant={'outline'}
-              size={'icon'} 
-              className="w-[10%]"
-              disabled={isPlayButtonDisabled}
-              onClick={handleSidecarAction}
-            >
-              <Play/>
-            </Button>
-            <Button 
-              variant={'outline'}
-              size={'icon'} 
-              className="w-[10%]"
-              disabled={isPauseButtonDisabled}
-              onClick={handleSidecarAction}
-            >
-              <Pause/>
-            </Button>
+            <TooltipDefault
+              text={'initiate screenpipe\'s sidecar'}
+            > 
+              <Button
+                variant={'outline'}
+                size={'icon'} 
+                className="w-[10%]"
+                disabled={isPlayButtonDisabled}
+                onClick={handleSidecarAction}
+              >
+                <Play/>
+              </Button>
+            </TooltipDefault>
+            <TooltipDefault
+              text={'stop screenpipe\'s sidecar'}
+            > 
+              <Button 
+                variant={'outline'}
+                size={'icon'} 
+                className="w-[10%]"
+                disabled={isPauseButtonDisabled}
+                onClick={handleSidecarAction}
+              >
+                <Pause/>
+              </Button>
+            </TooltipDefault>
           </div>
         </div>
   )
@@ -188,8 +216,14 @@ function SidecarController() {
 function ModelController() {
   const { settings } = useSettings()
   const { sidecarStatus, modelStatus, handleModelAction } = useLLM()
+  
+  const {data: availableModels} = useQuery({
+    queryKey: ['sidecar', 'models'],
+    queryFn: async () => await getOllamaModels(settings.embeddedLLM.port.toString()),
+    enabled: sidecarStatus === SidecarState.ACTIVE
+  })
 
-  const inputDisabled = useMemo(() => {
+  const selectDisabled = useMemo(() => {
     if (sidecarStatus !== SidecarState.ACTIVE) {
       return true
     }
@@ -227,6 +261,12 @@ function ModelController() {
     }
   })
 
+  const tooltipTexts = {
+    [ModelState.INACTIVE]: 'no model is currently running',
+    [ModelState.ERROR]: 'there was an issue while running the model',
+    [ModelState.RUNNING]: `${settings.embeddedLLM.model} is currently running`,
+    [ModelState.UNKNOWN]: 'we\'re checking model status'
+  }
 
   return (
     <div className="border rounded-md relative">
@@ -240,7 +280,10 @@ function ModelController() {
           </p>
         </div>
         <div className="flex space-x-3">
-          <LLMStatus status={modelStatus}/>
+          <StatusDisplay
+            text={tooltipTexts[modelStatus]}
+            status={modelStatus}
+          />
           <div className="border rounded-md w-[70%] relative flex items-center">
               <div className="px-4 border-r opacity-50">
                 model:
@@ -250,37 +293,55 @@ function ModelController() {
                 name={'model'}
                 control={form.control}
                 render={({ field }) => {
-                  return (
-                    <Input
-                      disabled={inputDisabled}
-                      {...field}
-                      className="pr-10 border-0"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      autoComplete="off"
-                    />
-                  )
+                    const generatedOptions = useMemo(() => {
+                      return availableModels?.map((option) => {
+                        return {
+                          value: option, 
+                          label: option
+                        }
+                      })
+                    },[availableModels])
+
+                    return (
+                      <Select
+                        isDisabled={selectDisabled}
+                        isCreateable
+                        className="w-[100%] !border-none"
+                        options={generatedOptions}
+                        {...field}
+                        onChange={(e) => field.onChange(e?.value)}
+                        value={field.value ? {value: field.value, label: field.value} : undefined}
+                      />
+                    )
                 }}
               />
           </div>
-          <Button
-            variant={'outline'}
-            size={'icon'} 
-            className="w-[10%]"
-            onClick={handleModelAction}
-            disabled={playButtonDisabled}
+          <TooltipDefault
+            text='click to start model'
           >
-            <Play/>
-          </Button>
-          <Button 
-            variant={'outline'}
-            size={'icon'} 
-            className="w-[10%]"
-            onClick={handleModelAction}
-            disabled={pauseButtonDisabled}
+            <Button
+              variant={'outline'}
+              size={'icon'} 
+              className="w-[10%]"
+              onClick={handleModelAction}
+              disabled={playButtonDisabled}
+            >
+              <Play/>
+            </Button>
+          </TooltipDefault>
+          <TooltipDefault
+            text='click to stop model'
           >
-            <Pause/>
-          </Button>
+            <Button 
+              variant={'outline'}
+              size={'icon'} 
+              className="w-[10%]"
+              onClick={handleModelAction}
+              disabled={pauseButtonDisabled}
+            >
+              <Pause/>
+            </Button>
+          </TooltipDefault>
         </div>
       </div>
     </div>

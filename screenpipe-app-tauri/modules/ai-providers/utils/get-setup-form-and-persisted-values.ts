@@ -26,7 +26,7 @@ export async function getSetupFormAndPersistedValues({
         // Find aiModel field and inject options
         formWithoutOptions.fields.forEach((field, index) => {
             if (!field.typeMeta.isRegular && field.key === 'aiModel') {
-                formWithoutOptions.fields[index].typeMeta.options = ollamaModels.models.map((model) => model.name)
+                formWithoutOptions.fields[index].typeMeta.options = ollamaModels
             }
         })
 
