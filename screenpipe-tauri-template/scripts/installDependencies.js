@@ -153,75 +153,6 @@ if (platform == "linux") {
 }
 
 if (platform == "windows") {
-	console.log("Copying screenpipe binary...");
-
-	const potentialPaths = [
-		path.join(
-			import.meta.dirname,
-			"..",
-			"..",
-			"target",
-			"release",
-			"screenpipe.exe"
-		),
-		path.join(
-			import.meta.dirname,
-			"..",
-			"..",
-			"target",
-			"x86_64-pc-windows-msvc",
-			"release",
-			"screenpipe.exe"
-		),
-		path.join(
-			import.meta.dirname,
-			"..",
-			"target",
-			"release",
-			"screenpipe.exe"
-		),
-		path.join(
-			import.meta.dirname,
-			"..",
-			"..",
-			"target",
-			"release",
-			"screenpipe.exe"
-		),
-		"D:\\a\\screenpipe\\screenpipe\\target\\release\\screenpipe.exe",
-	];
-
-	let copied = false;
-	for (const screenpipeSrc of potentialPaths) {
-		if (process.env["SKIP_SCREENPIPE_SETUP"]) {
-			copied = true;
-			break;
-		}
-		const screenpipeDest = path.join(
-			binDir,
-			"screenpipe-x86_64-pc-windows-msvc.exe"
-		);
-		try {
-			await fs.copyFile(screenpipeSrc, screenpipeDest);
-			console.log(
-				`Screenpipe binary copied successfully from ${screenpipeSrc}`
-			);
-			copied = true;
-			break;
-		} catch (error) {
-			console.warn(
-				`Failed to copy screenpipe binary from ${screenpipeSrc}:`,
-				error
-			);
-		}
-	}
-
-	if (!copied) {
-		console.error(
-			"Failed to copy screenpipe binary from any potential path."
-		);
-	}
-
 	if (!existsSync(config.ffmpegRealname)) {
 		await download(
 			config.windows.ffmpegUrl,
@@ -270,50 +201,6 @@ async function getMostRecentBinaryPath(targetArch, paths) {
 }
 
 if (platform == "macos") {
-	const architectures = ["arm64", "x86_64"];
-	for (const arch of architectures) {
-		if (process.env["SKIP_SCREENPIPE_SETUP"]) {
-			break;
-		}
-		console.log(`Setting up screenpipe bin for ${arch}...`);
-		if (arch === "arm64") {
-			const paths = [
-				"../../target/aarch64-apple-darwin/release/screenpipe",
-				"../../target/release/screenpipe",
-			];
-			const mostRecentPath = await getMostRecentBinaryPath(
-				"arm64",
-				paths
-			);
-			if (mostRecentPath) {
-				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
-				console.log(
-					`Copied most recent arm64 screenpipe binary from ${mostRecentPath}`
-				);
-			} else {
-				console.error("No suitable arm64 screenpipe binary found");
-			}
-		} else if (arch === "x86_64") {
-			const paths = [
-				"../../target/x86_64-apple-darwin/release/screenpipe",
-				"../../target/release/screenpipe",
-			];
-			const mostRecentPath = await getMostRecentBinaryPath(
-				"x86_64",
-				paths
-			);
-			if (mostRecentPath) {
-				await $`cp ${mostRecentPath} bin/screenpipe-x86_64-apple-darwin`;
-				console.log(
-					`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`
-				);
-			} else {
-				console.error("No suitable x86_64 screenpipe binary found");
-			}
-		}
-		console.log(`screenpipe for ${arch} set up successfully.`);
-	}
-
 	if (!existsSync(config.ffmpegRealname)) {
 		await download(
 			config.macos.ffmpegUrl,
