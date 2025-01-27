@@ -91,15 +91,6 @@ export function RegularProviderSetupForm({
         }
     })
     
-    const componentsVisibility = useMemo(() => {
-        if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !settings.user.token) {
-          return {showForm: false, showLoginStep: true}
-        }
-
-
-        return { showForm: true }
-    },[aiProvider, settings.user, isLoading])
-    
     async function submitChanges(values: Partial<Settings>) {
         await credentialValidation(values)
         await updateSettingsAsync({
