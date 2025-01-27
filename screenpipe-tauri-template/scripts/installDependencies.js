@@ -174,36 +174,6 @@ if (platform == "windows") {
 	}
 }
 
-async function getMostRecentBinaryPath(targetArch, paths) {
-	const validPaths = await Promise.all(
-		paths.map(async (path) => {
-			if (existsSync(path)) {
-				const { stdout } = await $`file ${path}`.quiet();
-				const binaryArch = stdout.includes("arm64")
-					? "arm64"
-					: stdout.includes("x86_64")
-					? "x86_64"
-					: null;
-				if (binaryArch === targetArch) {
-					const stat = await fs.stat(path);
-					return { path, mtime: stat.mtime };
-				}
-			}
-			return null;
-		})
-	);
-
-	const filteredPaths = validPaths.filter(Boolean);
-
-	if (filteredPaths.length === 0) {
-		return null;
-	}
-
-	return filteredPaths.reduce((mostRecent, current) =>
-		current.mtime > mostRecent.mtime ? current : mostRecent
-	).path;
-}
-
 if (platform == "macos") {
 	if (!existsSync(config.ffmpegRealname)) {
 		await download(
