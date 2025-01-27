@@ -174,7 +174,7 @@ export class PipeApi {
       const data = (await response.json()) as PipeDownloadResponse;
       return data;
     } catch (error) {
-      console.error("error downloading pipe:", error);
+      console.warn("error downloading pipe:", error);
       throw error;
     }
   }

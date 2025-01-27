@@ -109,7 +109,6 @@ export const PipeStore: React.FC = () => {
     if (!settings.user?.token) return;
     const pipeApi = await PipeApi.create(settings.user!.token!);
     const purchaseHistory = await pipeApi.getUserPurchaseHistory();
-    console.log("purchase history", purchaseHistory);
     setPurchaseHistory(purchaseHistory);
   };
 
@@ -232,7 +231,6 @@ export const PipeStore: React.FC = () => {
     onComplete?: () => void
   ) => {
     try {
-      console.log("user", settings.user);
 
       if (!checkLogin(settings.user)) return;
 
@@ -423,12 +421,10 @@ export const PipeStore: React.FC = () => {
         throw new Error(data.error);
       }
 
-      console.log("data", data);
       toast({
         title: `pipe ${endpoint}d`,
       });
       const installedPipes = await fetchInstalledPipes();
-      console.log("installedPipes", installedPipes);
 
       const pp = installedPipes?.find((p) => p.config.id === pipe.id);
       const port = pp?.config.port;
@@ -729,8 +725,6 @@ export const PipeStore: React.FC = () => {
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             fetchPurchaseHistory();
-
-            console.log("pipes", pipes);
           }
         }
       });
