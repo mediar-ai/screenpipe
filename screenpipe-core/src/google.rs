@@ -1,3 +1,4 @@
+#![allow(clippy::all, dead_code, unused_variables, unused_mut)]
 mod google_module {
 
     use anyhow::{Error as E, Result};

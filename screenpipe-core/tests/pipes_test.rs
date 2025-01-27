@@ -2,7 +2,6 @@
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use reqwest;
     use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
     use serde_json::json;
     use std::sync::Arc;
@@ -50,7 +49,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "simple_pipe", code).await;
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_ok());
     }
 
@@ -68,7 +67,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "http_pipe", code).await;
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_ok());
     }
 
@@ -85,7 +84,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "error_pipe", code).await;
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_err());
     }
 
@@ -104,7 +103,7 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "file_pipe", code).await;
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_ok());
 
         // Verify that the file was created and contains the expected content
@@ -224,16 +223,12 @@ mod tests {
 
         let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_plain", &plain_text_code).await;
         std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(
-            &pipe_dir.to_string_lossy().to_string(),
-            screenpipe_dir.clone(),
-        )
-        .await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir.clone()).await;
         assert!(result.is_ok(), "Plain text email test failed: {:?}", result);
 
         let pipe_dir = setup_test_pipe(&temp_dir, "email_test_pipe_html", &html_code).await;
         std::env::set_current_dir(&pipe_dir).unwrap();
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_ok(), "HTML email test failed: {:?}", result);
     }
 
@@ -284,7 +279,7 @@ mod tests {
         // Change the working directory to the pipe directory
         std::env::set_current_dir(&pipe_dir).unwrap();
 
-        let result = run_pipe(&pipe_dir.to_string_lossy().to_string(), screenpipe_dir).await;
+        let result = run_pipe(&pipe_dir.to_string_lossy(), screenpipe_dir).await;
         assert!(result.is_ok(), "Pipe execution failed: {:?}", result);
 
         // Additional checks
@@ -437,7 +432,7 @@ mod tests {
             for _ in 0..12 {
                 // Advance time by 5 minutes
                 let mut now = mock_now.lock().await;
-                *now = *now + chrono::Duration::minutes(5);
+                *now += chrono::Duration::minutes(5);
 
                 // Record the request
                 requests.lock().await.push(*now);
@@ -495,7 +490,7 @@ mod tests {
             .unwrap()
             .as_secs();
         assert!(
-            time_diff >= 300 && time_diff <= 301,
+            (300..=301).contains(&time_diff),
             "Unexpected time difference: {}",
             time_diff
         );

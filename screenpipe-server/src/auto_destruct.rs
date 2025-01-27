@@ -77,7 +77,7 @@ pub async fn watch_pid(pid: u32) -> bool {
         #[cfg(not(target_os = "windows"))]
         {
             let output = Command::new("ps")
-                .args(&["-p", &pid.to_string()])
+                .args(["-p", &pid.to_string()])
                 .output()
                 .expect("failed to execute process check command");
 

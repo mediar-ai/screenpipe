@@ -7,7 +7,7 @@ license = ""
 repository = ""
 default-run = "screenpipe-app"
 edition = "2021"
-rust-version = "1.75" 
+rust-version = "1.84"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,7 +15,8 @@ rust-version = "1.75"
 tauri-build = { version = "=2.0.3", features = [] }
 
 [dependencies]
-tauri = { version = "=2.1.1", features = [ "protocol-asset",
+tauri = { version = "=2.1.1", features = [
+  "protocol-asset",
   "macos-private-api",
   "tray-icon",
   "devtools",
@@ -60,8 +61,6 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-appender = "0.2.3"
 
 
-
-
 anyhow = "1.0.71"
 
 # System information
@@ -71,7 +70,7 @@ sysinfo = "=0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6.0"    # or your current version
+axum = "0.6.0" # or your current version
 
 
 dirs = "5.0.1"
@@ -119,6 +118,7 @@ cudart = []
 metal = []
 mkl = []
 llm = []
+cargo-clippy = []
 default = ["custom-protocol"]
 
 # DO NOT REMOVE!!

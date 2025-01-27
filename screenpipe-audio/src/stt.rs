@@ -2,7 +2,6 @@ use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
-use crate::{resample, DeviceControl};
 pub use crate::segments::prepare_segments;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
@@ -10,21 +9,22 @@ use crate::{
     whisper::{process_with_whisper, WhisperModel},
     AudioDevice, AudioTranscriptionEngine,
 };
+use crate::{resample, DeviceControl};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
+use dashmap::DashMap;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
-    path::PathBuf,
+    path::Path,
     sync::Arc,
     sync::Mutex as StdMutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
-use dashmap::DashMap;
 
 pub fn stt_sync(
     audio: &[f32],
@@ -153,7 +153,7 @@ pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
+    output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
     audio_devices_control: Option<Arc<DashMap<AudioDevice, DeviceControl>>>,
@@ -179,7 +179,7 @@ pub async fn create_whisper_channel(
     let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
-    let output_path = output_path.clone();
+    let output_path = output_path.to_path_buf();
 
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
     let segmentation_model_path = get_or_download_model(PyannoteModel::Segmentation).await?;

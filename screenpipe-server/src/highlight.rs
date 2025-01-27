@@ -1,6 +1,4 @@
-use std::{
-    borrow::Cow, error::Error,sync::Arc, time::Duration 
-};
+use std::{borrow::Cow, error::Error, sync::Arc, time::Duration};
 
 pub use opentelemetry::trace::Span as SpanTrait;
 use opentelemetry::{
@@ -8,9 +6,7 @@ use opentelemetry::{
     trace::{Status, TraceContextExt, Tracer as _},
     KeyValue,
 };
-use opentelemetry_otlp::{
-     OtlpTracePipeline, SpanExporterBuilder, WithExportConfig,
-};
+use opentelemetry_otlp::{OtlpTracePipeline, SpanExporterBuilder, WithExportConfig};
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     resource::Resource,
@@ -37,19 +33,17 @@ pub enum HighlightError {
     Trace(TraceError),
 }
 
-
-
 impl From<TraceError> for HighlightError {
     fn from(value: TraceError) -> Self {
         HighlightError::Trace(value)
     }
 }
 
-
 pub mod otel {
     pub use opentelemetry::KeyValue;
 }
 
+#[derive(Default)]
 pub struct HighlightConfig {
     /// Your highlight.io Project ID
     pub project_id: String,
@@ -59,17 +53,6 @@ pub struct HighlightConfig {
 
     /// The version of your app. We recommend setting this to the most recent deploy SHA of your app.
     pub service_version: Option<String>,
-
-}
-
-impl Default for HighlightConfig {
-    fn default() -> Self {
-        Self {
-            project_id: Default::default(),
-            service_name: Default::default(),
-            service_version: Default::default(),
-        }
-    }
 }
 
 struct HighlightInner {
@@ -84,9 +67,7 @@ impl Highlight {
     fn install_pipelines(
         tracing: OtlpTracePipeline<SpanExporterBuilder>,
     ) -> Result<Tracer, HighlightError> {
-        Ok(
-            tracing.install_batch(opentelemetry_sdk::runtime::Tokio)?,
-        )
+        Ok(tracing.install_batch(opentelemetry_sdk::runtime::Tokio)?)
     }
 
     fn get_default_resource(config: &HighlightConfig) -> Resource {
@@ -107,9 +88,7 @@ impl Highlight {
         Resource::new(attrs)
     }
 
-    fn make_install_pipelines(
-        config: &HighlightConfig,
-    ) -> Result<Tracer, HighlightError> {
+    fn make_install_pipelines(config: &HighlightConfig) -> Result<Tracer, HighlightError> {
         let tracing = opentelemetry_otlp::new_pipeline()
             .tracing()
             .with_trace_config(
@@ -142,14 +121,10 @@ impl Highlight {
         global::set_text_map_propagator(TraceContextPropagator::new());
         let tracer = Self::make_install_pipelines(&config)?;
 
-        let h = Highlight(Arc::new(HighlightInner {
-            config,
-            tracer,
-        }));
+        let h = Highlight(Arc::new(HighlightInner { config, tracer }));
 
         Ok(h)
     }
-    
 
     /// Capture an error with session info
     ///
@@ -181,10 +156,7 @@ impl Highlight {
     ///
     /// Explicitly captures any type with trait Error and sends it to Highlight.
     pub fn capture_error(&self, err: &str) {
-        let e = std::io::Error::new(
-		std::io::ErrorKind::Other,
-            err
-	    );
+        let e = std::io::Error::new(std::io::ErrorKind::Other, err);
         self.capture_error_with_session(&e, None, None);
     }
 
@@ -207,4 +179,3 @@ impl Highlight {
         global::shutdown_tracer_provider();
     }
 }
-

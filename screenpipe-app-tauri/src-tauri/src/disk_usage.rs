@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
-use tracing::info;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use sysinfo::{System, SystemExt, DiskExt};
+use sysinfo::{DiskExt, System, SystemExt};
+use tracing::info;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiskUsage {
@@ -79,12 +79,15 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         let path = entry.path();
         if path.is_dir() {
             let size = directory_size(&path).map_err(|e| e.to_string())?;
-            pipes.push((path.file_name().unwrap().to_string_lossy().to_string(), readable(size)));
+            pipes.push((
+                path.file_name().unwrap().to_string_lossy().to_string(),
+                readable(size),
+            ));
         }
     }
 
-    let total_data_size = directory_size(&screenpipe_dir).map_err(|e| e.to_string())?;
-    let total_media_size= directory_size(&data_dir).map_err(|e| e.to_string())?;
+    let total_data_size = directory_size(screenpipe_dir).map_err(|e| e.to_string())?;
+    let total_media_size = directory_size(&data_dir).map_err(|e| e.to_string())?;
     let total_pipes_size = directory_size(&pipes_dir).map_err(|e| e.to_string())?;
     let total_cache_size = directory_size(&cache_dir).map_err(|e| e.to_string())?;
 
@@ -124,7 +127,7 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
             total_media_size: readable(total_media_size),
         },
         total_data_size: readable(total_data_size + total_cache_size),
-        total_cache_size: readable(total_cache_size), 
+        total_cache_size: readable(total_cache_size),
         avaiable_space: readable(avaiable_space),
     };
 

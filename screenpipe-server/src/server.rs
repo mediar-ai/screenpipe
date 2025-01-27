@@ -1160,7 +1160,7 @@ pub(crate) async fn add_to_database(
                     let output_dir = state.screenpipe_dir.join("data");
                     let time = Utc::now();
                     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let video_file_path = PathBuf::from(output_dir)
+                    let video_file_path = output_dir
                         .join(format!("{}_{}.mp4", device_name, formatted_time))
                         .to_str()
                         .expect("Failed to create valid path")
@@ -1816,7 +1816,10 @@ async fn semantic_search_handler(
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 
-    debug!("semantic search for '{}' with limit {} and threshold {}", query.text, limit, threshold);
+    debug!(
+        "semantic search for '{}' with limit {} and threshold {}",
+        query.text, limit, threshold
+    );
 
     // Generate embedding for search text
     let embedding = match generate_embedding(&query.text, 0).await {
@@ -1831,7 +1834,11 @@ async fn semantic_search_handler(
     };
 
     // Search database for similar embeddings
-    match state.db.search_similar_embeddings(embedding, limit, threshold).await {
+    match state
+        .db
+        .search_similar_embeddings(embedding, limit, threshold)
+        .await
+    {
         Ok(results) => {
             debug!("found {} similar results", results.len());
             Ok(JsonResponse(results))
@@ -1928,7 +1935,7 @@ async fn stream_frames_handler(
         };
 
         // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
+        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
 
         // Calculate center timestamp
         let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
@@ -2244,4 +2251,3 @@ MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
 echo "Merged Video Path: $MERGED_VIDEO_PATH"
 
 */
-

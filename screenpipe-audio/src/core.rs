@@ -23,11 +23,12 @@ lazy_static! {
     );
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
+    #[default]
     WhisperLargeV3Turbo,
     WhisperLargeV3,
 }
@@ -41,12 +42,6 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
             AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
         }
-    }
-}
-
-impl Default for AudioTranscriptionEngine {
-    fn default() -> Self {
-        AudioTranscriptionEngine::WhisperLargeV3Turbo
     }
 }
 
@@ -400,7 +395,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
 
     #[cfg(not(target_os = "macos"))]

@@ -367,7 +367,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
-    if data_dir != "default" && data_dir != "" {
+    if data_dir != "default" && !data_dir.is_empty() {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
