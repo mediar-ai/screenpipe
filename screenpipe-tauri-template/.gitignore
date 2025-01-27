@@ -22,8 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-src-tauri/bin/screenpipe-aarch64-apple-darwin
-src-tauri/bin/screenpipe-x86_64-pc-windows-msvc.exe
-src-tauri/bin/screenpipe-x86_64-unknown-linux-gnu
+bin
+lib
 
 node_modules

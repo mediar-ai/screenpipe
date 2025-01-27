@@ -7,19 +7,19 @@ This template should help get you started developing with Screenpipe, Tauri, Rea
 1. Install dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 2. Start the development server
 
 ```bash
-npm run tauri dev
+bun tauri dev
 ```
 
 ## Building the Tauri app for production
 
 ```bash
-npm run tauri build
+bun tauri build
 ```
 
 ## Recommended IDE Setup

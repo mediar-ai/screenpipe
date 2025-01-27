@@ -7,32 +7,6 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-// https://github.com/tauri-apps/tauri/discussions/3273#discussioncomment-9729103
-// fn kill_process(child: &mut Child) -> Result<(), Box<dyn std::error::Error>> {
-//     #[cfg(unix)]
-//     {
-//         let pid = child.id().to_string();
-//         println!("Sending INT signal to process with PID: {}", pid);
-
-//         let mut kill = StdCommand::new("kill")
-//             .args(["-s", "SIGINT", &pid])
-//             .spawn()?;
-//         kill.wait()?;
-//     }
-
-//     #[cfg(windows)]
-//     {
-//         let pid = child.id().to_string();
-//         println!("Sending taskkill to process with PID: {}", pid);
-
-//         let mut kill = StdCommand::new("taskkill")
-//             .args(["/PID", &pid, "/F"])
-//             .spawn()?;
-//         kill.wait()?;
-//     }
-
-//     Ok(())
-
 struct ChildCommands(Option<CommandChild>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,9 +18,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![greet]);
     let app = builder
         .build(tauri::generate_context!()).unwrap();
-
-    // Download latest ffmpeg version
-    ffmpeg_sidecar::download::auto_download().unwrap();
 
     // Start the actual Tauri app
     let mut child_commands = ChildCommands(None);

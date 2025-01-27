@@ -1,0 +1,11 @@
+{
+	"bundle": {
+		"externalBin": ["bin/screenpipe", "bin/bun", "bin/ollama"],
+		"resources": ["lib/ollama/*"],
+		"linux": {
+			"deb": {
+				"depends": ["tesseract-ocr", "libtesseract-dev", "ffmpeg"]
+			}
+		}
+	}
+}

@@ -8,14 +8,13 @@
 		"build": "tsc && vite build",
 		"preview": "vite preview",
 		"tauri": "tauri",
-		"postinstall": "cd scripts && node installDependencies.js"
+		"postinstall": "cd scripts && bun installDependencies.js"
 	},
 	"dependencies": {
 		"@screenpipe/browser": "^0.1.24",
 		"@tauri-apps/api": "^2",
 		"@tauri-apps/plugin-opener": "^2",
 		"@tauri-apps/plugin-shell": "^2.2.0",
-		"extract-zip": "^2.0.1",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1"
 	},
@@ -26,10 +25,13 @@
 		"@vitejs/plugin-react": "^4.3.4",
 		"dotenv": "^16.4.7",
 		"tar": "^7.4.3",
+		"extract-zip": "^2.0.1",
 		"typescript": "~5.6.2",
-		"vite": "^6.0.3"
+		"vite": "^6.0.3",
+		"@types/bun": "latest"
 	},
 	"engines": {
 		"node": ">=20.18.1"
-	}
+	},
+	"module": "index.ts"
 }

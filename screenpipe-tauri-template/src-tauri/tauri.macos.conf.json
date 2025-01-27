@@ -1,0 +1,16 @@
+{
+	"bundle": {
+		"macOS": {
+			"entitlements": "entitlements.plist",
+			"hardenedRuntime": true,
+			"exceptionDomain": "screenpi.pe",
+			"provisioningProfile": null
+		},
+		"externalBin": [
+			"bin/screenpipe",
+			"bin/bun",
+			"bin/ollama",
+			"bin/ui_monitor"
+		]
+	}
+}

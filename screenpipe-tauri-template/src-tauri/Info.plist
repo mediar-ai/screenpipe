@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Screenpipe requires microphone access to record audio.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Screenpipe requires screen capture access to record the screen.</string>
+    <key>CGRequestScreenCaptureAccess</key>
+    <string>Screenpipe requires screen capture access to record the screen.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Screenpipe requires camera access to capture video.</string>
+    <key>NSSystemExtensionUsageDescription</key>
+    <string>Screenpipe requires system extension access to capture audio output.</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Screenpipe needs accessibility permissions to monitor UI elements and their interactions.</string>
+</dict>
+</plist>

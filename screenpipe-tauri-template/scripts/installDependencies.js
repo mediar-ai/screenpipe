@@ -1,5 +1,5 @@
-import { extract as tarExtract } from "tar";
-import zipExtract from "extract-zip";
+import { $ } from "bun";
+import fs from "fs/promises";
 import {
 	mkdirSync,
 	existsSync,
@@ -7,36 +7,46 @@ import {
 	rmSync,
 	createWriteStream,
 } from "fs";
-import { join } from "path";
+import os from "os";
+import path from "path";
+import { config as dotEnv } from "dotenv";
 import { finished } from "stream/promises";
 import { Readable } from "stream";
-import { config } from "dotenv";
-config({ path: join(import.meta.dirname, ".pub.env") });
+import { extract as tarExtract } from "tar";
+import zipExtract from "extract-zip";
+dotEnv({ path: path.join(import.meta.dirname, ".pub.env") });
+
+process.chdir(path.join(import.meta.dirname, "../src-tauri"));
+const cwd = process.cwd();
+const binDir = path.join(cwd, "bin");
+
+if (!existsSync(binDir)) {
+	mkdirSync(binDir);
+}
 
 async function download(url, path) {
 	const res = await fetch(url);
 	const fileStream = createWriteStream(path, { flags: "wx" });
 	return finished(Readable.fromWeb(res.body).pipe(fileStream));
 }
-// Create bin directory if it doesn't exist to store the Tauri sidecar binaries
-const binDir = join(import.meta.dirname, "../", "src-tauri", "bin");
-if (!existsSync(binDir)) {
-	mkdirSync(binDir);
-}
 
-// Clean up old screenpipe binaries, if any
-const windowsScreenpipe = join(binDir, "screenpipe-x86_64-pc-windows-msvc.exe");
-const linuxScreenpipe = join(binDir, "screenpipe-x86_64-unknown-linux-gnu");
-const macScreenpipe = join(binDir, "screenpipe-aarch64-apple-darwin");
+const windowsScreenpipe = path.join(
+	binDir,
+	"screenpipe-x86_64-pc-windows-msvc.exe"
+);
+const linuxScreenpipe = path.join(
+	binDir,
+	"screenpipe-x86_64-unknown-linux-gnu"
+);
+const macScreenpipe = path.join(binDir, "screenpipe-aarch64-apple-darwin");
 if (existsSync(windowsScreenpipe)) rmSync(windowsScreenpipe, { force: true });
 if (existsSync(linuxScreenpipe)) rmSync(linuxScreenpipe, { force: true });
 if (existsSync(macScreenpipe)) rmSync(macScreenpipe, { force: true });
 
-const linuxTar = join(binDir, "screenpipe-linux.tar.gz");
-const windowsZip = join(binDir, "screenpipe-windows.zip");
-const macTar = join(binDir, "screenpipe-mac.tar.gz");
+const linuxTar = path.join(binDir, "screenpipe-linux.tar.gz");
+const windowsZip = path.join(binDir, "screenpipe-windows.zip");
+const macTar = path.join(binDir, "screenpipe-mac.tar.gz");
 try {
-	// Download all screenpipe archives
 	const linuxDownload = download(
 		`https://github.com/mediar-ai/screenpipe/releases/download/v${process.env.SCREENPIPE_VERSION}/screenpipe-${process.env.SCREENPIPE_VERSION}-x86_64-unknown-linux-gnu.tar.gz`,
 		linuxTar
@@ -56,14 +66,14 @@ try {
 		cwd: binDir,
 	});
 	renameSync(
-		join(binDir, "bin", "screenpipe"),
-		join(binDir, "screenpipe-x86_64-unknown-linux-gnu")
+		path.join(binDir, "bin", "screenpipe"),
+		path.join(binDir, "screenpipe-x86_64-unknown-linux-gnu")
 	);
 
 	await zipExtract(windowsZip, { dir: binDir });
 	renameSync(
-		join(binDir, "bin", "screenpipe.exe"),
-		join(binDir, "screenpipe-x86_64-pc-windows-msvc.exe")
+		path.join(binDir, "bin", "screenpipe.exe"),
+		path.join(binDir, "screenpipe-x86_64-pc-windows-msvc.exe")
 	);
 
 	await tarExtract({
@@ -71,11 +81,10 @@ try {
 		cwd: binDir,
 	});
 	renameSync(
-		join(binDir, "bin", "screenpipe"),
-		join(binDir, "screenpipe-aarch64-apple-darwin")
+		path.join(binDir, "bin", "screenpipe"),
+		path.join(binDir, "screenpipe-aarch64-apple-darwin")
 	);
 } finally {
-	// Clean up downloaded archives and extra directories
 	if (existsSync(linuxTar)) {
 		rmSync(linuxTar, { force: true, recursive: true });
 	}
@@ -85,7 +94,495 @@ try {
 	if (existsSync(macTar)) {
 		rmSync(macTar, { force: true, recursive: true });
 	}
-	if (existsSync(join(binDir, "bin"))) {
-		rmSync(join(binDir, "bin"), { force: true, recursive: true });
+	if (existsSync(path.join(binDir, "bin"))) {
+		rmSync(path.join(binDir, "bin"), { force: true, recursive: true });
 	}
 }
+
+const platform = {
+	win32: "windows",
+	darwin: "macos",
+	linux: "linux",
+}[os.platform()];
+
+const config = {
+	ffmpegRealname: "ffmpeg",
+	windows: {
+		ffmpegName: "ffmpeg-7.0.2-full_build-shared",
+		ffmpegUrl:
+			"https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.0.2-full_build-shared.7z",
+		vcpkgPackages: ["opencl", "onnxruntime-gpu"],
+	},
+	linux: {
+		aptPackages: [
+			"tesseract-ocr",
+			"libtesseract-dev",
+			"ffmpeg",
+			"pkg-config",
+			"build-essential",
+			"libglib2.0-dev",
+			"libgtk-3-dev",
+			"libwebkit2gtk-4.1-dev",
+			"clang",
+			"cmake",
+			"libavutil-dev",
+			"libavformat-dev",
+			"libavfilter-dev",
+			"libavdevice-dev",
+			"libasound2-dev",
+			"libxdo-dev",
+		],
+	},
+	macos: {
+		ffmpegName: "ffmpeg-7.0-macOS-default",
+		ffmpegUrl:
+			"https://master.dl.sourceforge.net/project/avbuild/macOS/ffmpeg-7.0-macOS-default.tar.xz?viasf=1",
+	},
+};
+
+if (platform == "linux") {
+	try {
+		await $`sudo apt-get update`;
+
+		for (const name of config.linux.aptPackages) {
+			await $`sudo apt-get install -y ${name}`;
+		}
+	} catch (error) {
+		console.error("error installing apps via apt, %s", error.message);
+	}
+}
+
+if (platform == "windows") {
+	console.log("Copying screenpipe binary...");
+
+	const potentialPaths = [
+		path.join(
+			import.meta.dirname,
+			"..",
+			"..",
+			"target",
+			"release",
+			"screenpipe.exe"
+		),
+		path.join(
+			import.meta.dirname,
+			"..",
+			"..",
+			"target",
+			"x86_64-pc-windows-msvc",
+			"release",
+			"screenpipe.exe"
+		),
+		path.join(
+			import.meta.dirname,
+			"..",
+			"target",
+			"release",
+			"screenpipe.exe"
+		),
+		path.join(
+			import.meta.dirname,
+			"..",
+			"..",
+			"target",
+			"release",
+			"screenpipe.exe"
+		),
+		"D:\\a\\screenpipe\\screenpipe\\target\\release\\screenpipe.exe",
+	];
+
+	let copied = false;
+	for (const screenpipeSrc of potentialPaths) {
+		if (process.env["SKIP_SCREENPIPE_SETUP"]) {
+			copied = true;
+			break;
+		}
+		const screenpipeDest = path.join(
+			binDir,
+			"screenpipe-x86_64-pc-windows-msvc.exe"
+		);
+		try {
+			await fs.copyFile(screenpipeSrc, screenpipeDest);
+			console.log(
+				`Screenpipe binary copied successfully from ${screenpipeSrc}`
+			);
+			copied = true;
+			break;
+		} catch (error) {
+			console.warn(
+				`Failed to copy screenpipe binary from ${screenpipeSrc}:`,
+				error
+			);
+		}
+	}
+
+	if (!copied) {
+		console.error(
+			"Failed to copy screenpipe binary from any potential path."
+		);
+	}
+
+	if (!existsSync(config.ffmpegRealname)) {
+		await download(
+			config.windows.ffmpegUrl,
+			path.join(binDir, `${config.windows.ffmpegName}.7z`)
+		);
+		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${path.join(
+			binDir,
+			config.windows.ffmpegName
+		)}.7z`;
+		await $`mv ${path.join(binDir, config.windows.ffmpegName)} ${path.join(
+			binDir,
+			config.ffmpegRealname
+		)}`;
+		await $`rm -rf ${path.join(binDir, config.windows.ffmpegName)}.7z`;
+	}
+}
+
+async function getMostRecentBinaryPath(targetArch, paths) {
+	const validPaths = await Promise.all(
+		paths.map(async (path) => {
+			if (existsSync(path)) {
+				const { stdout } = await $`file ${path}`.quiet();
+				const binaryArch = stdout.includes("arm64")
+					? "arm64"
+					: stdout.includes("x86_64")
+					? "x86_64"
+					: null;
+				if (binaryArch === targetArch) {
+					const stat = await fs.stat(path);
+					return { path, mtime: stat.mtime };
+				}
+			}
+			return null;
+		})
+	);
+
+	const filteredPaths = validPaths.filter(Boolean);
+
+	if (filteredPaths.length === 0) {
+		return null;
+	}
+
+	return filteredPaths.reduce((mostRecent, current) =>
+		current.mtime > mostRecent.mtime ? current : mostRecent
+	).path;
+}
+
+if (platform == "macos") {
+	const architectures = ["arm64", "x86_64"];
+	for (const arch of architectures) {
+		if (process.env["SKIP_SCREENPIPE_SETUP"]) {
+			break;
+		}
+		console.log(`Setting up screenpipe bin for ${arch}...`);
+		if (arch === "arm64") {
+			const paths = [
+				"../../target/aarch64-apple-darwin/release/screenpipe",
+				"../../target/release/screenpipe",
+			];
+			const mostRecentPath = await getMostRecentBinaryPath(
+				"arm64",
+				paths
+			);
+			if (mostRecentPath) {
+				await $`cp ${mostRecentPath} screenpipe-aarch64-apple-darwin`;
+				console.log(
+					`Copied most recent arm64 screenpipe binary from ${mostRecentPath}`
+				);
+			} else {
+				console.error("No suitable arm64 screenpipe binary found");
+			}
+		} else if (arch === "x86_64") {
+			const paths = [
+				"../../target/x86_64-apple-darwin/release/screenpipe",
+				"../../target/release/screenpipe",
+			];
+			const mostRecentPath = await getMostRecentBinaryPath(
+				"x86_64",
+				paths
+			);
+			if (mostRecentPath) {
+				await $`cp ${mostRecentPath} bin/screenpipe-x86_64-apple-darwin`;
+				console.log(
+					`Copied most recent x86_64 screenpipe binary from ${mostRecentPath}`
+				);
+			} else {
+				console.error("No suitable x86_64 screenpipe binary found");
+			}
+		}
+		console.log(`screenpipe for ${arch} set up successfully.`);
+	}
+
+	if (!existsSync(config.ffmpegRealname)) {
+		await download(
+			config.macos.ffmpegUrl,
+			path.join(binDir, `${config.macos.ffmpegName}.tar.xz`)
+		);
+		await $`tar xf ${path.join(binDir, config.macos.ffmpegName)}.tar.xz`;
+		await $`mv ${config.macos.ffmpegName} ${path.join(
+			binDir,
+			config.ffmpegRealname
+		)}`;
+		await $`rm ${path.join(binDir, config.macos.ffmpegName)}.tar.xz`;
+	} else {
+		console.log("FFMPEG already exists");
+	}
+
+	console.log("Moved and renamed ffmpeg binary for externalBin");
+
+	console.log("Setting up Swift UI monitoring...");
+	try {
+		const swiftSrc = path.join(
+			cwd,
+			"../../screenpipe-vision/src/ui_monitoring_macos.swift"
+		);
+		const architectures = ["arm64", "x86_64"];
+
+		for (const arch of architectures) {
+			console.log(`Compiling Swift UI monitor for ${arch}...`);
+
+			const binaryName = `ui_monitor-${
+				arch === "arm64" ? "aarch64" : "x86_64"
+			}-apple-darwin`;
+			const outputPath = path.join(binDir, binaryName);
+
+			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
+
+			console.log(`Swift UI monitor for ${arch} compiled successfully`);
+			await fs.chmod(outputPath, 0o755);
+		}
+	} catch (error) {
+		console.error("Error setting up Swift UI monitoring:", error);
+		console.log("Current working directory:", cwd);
+		console.log(
+			"Expected Swift source path:",
+			path.join(
+				cwd,
+				"../../screenpipe-vision/src/ui_monitoring_macos.swift"
+			)
+		);
+		throw error;
+	}
+}
+
+async function installOllamaSidecar() {
+	const ollamaVersion = "v0.3.14";
+
+	let ollamaExe, ollamaUrl;
+
+	if (platform === "windows") {
+		ollamaExe = "ollama-x86_64-pc-windows-msvc.exe";
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-windows-amd64.zip`;
+	} else if (platform === "macos") {
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-darwin`;
+	} else if (platform === "linux") {
+		ollamaExe = "ollama-x86_64-unknown-linux-gnu";
+		ollamaUrl = `https://github.com/ollama/ollama/releases/download/${ollamaVersion}/ollama-linux-amd64.tgz`;
+	} else {
+		throw new Error("Unsupported platform");
+	}
+
+	if (
+		(platform === "macos" &&
+			existsSync(path.join(binDir, "ollama-aarch64-apple-darwin")) &&
+			existsSync(path.join(binDir, "ollama-x86_64-apple-darwin"))) ||
+		(platform !== "macos" && existsSync(path.join(binDir, ollamaExe)))
+	) {
+		console.log("ollama sidecar already exists. skipping installation.");
+		return;
+	}
+
+	try {
+		await fs.mkdir(binDir, { recursive: true });
+		const downloadPath = path.join(binDir, path.basename(ollamaUrl));
+
+		console.log("Downloading Ollama...");
+		await download(ollamaUrl, downloadPath);
+
+		console.log("Extracting Ollama...");
+		if (platform === "windows") {
+			await $`powershell -command "Expand-Archive -Path '${downloadPath}' -DestinationPath '${binDir}'"`;
+			await fs.rename(
+				path.join(binDir, "ollama.exe"),
+				path.join(binDir, ollamaExe)
+			);
+		} else if (platform === "linux") {
+			await $`tar -xzf "${downloadPath}" -C "${binDir}"`;
+			await fs.rename(
+				path.join(binDir, "bin/ollama"),
+				path.join(binDir, ollamaExe)
+			);
+			await fs.rename(
+				path.join(binDir, "lib"),
+				path.join(binDir, "..", "lib")
+			);
+		} else if (platform === "macos") {
+			await fs.copyFile(
+				downloadPath,
+				path.join(binDir, "ollama-aarch64-apple-darwin")
+			);
+			await fs.copyFile(
+				downloadPath,
+				path.join(binDir, "ollama-x86_64-apple-darwin")
+			);
+		}
+
+		console.log("Setting permissions...");
+		if (platform === "linux") {
+			await fs.chmod(path.join(binDir, ollamaExe), "755");
+		} else if (platform === "macos") {
+			await fs.chmod(
+				path.join(binDir, "ollama-aarch64-apple-darwin"),
+				"755"
+			);
+			await fs.chmod(
+				path.join(binDir, "ollama-x86_64-apple-darwin"),
+				"755"
+			);
+		}
+
+		console.log("Cleaning up...");
+		if (platform !== "macos") {
+			await fs.unlink(downloadPath);
+			await fs.rmdir(path.join(binDir, "bin"), { recursive: true });
+		}
+
+		if (platform === "windows") {
+			const libDir = path.join(binDir, "lib", "ollama");
+			const oldLibs = [
+				"cublas64_11.dll",
+				"cublasLt64_11.dll",
+				"cudart64_110.dll",
+				"ggml_cuda_v11.dll",
+				"rocblas",
+				"rocblas.dll",
+				"ggml_rocm.dll",
+			];
+
+			for (const lib of oldLibs) {
+				try {
+					const libPath = path.join(libDir, lib);
+					const stat = await fs.stat(libPath);
+					if (stat.isDirectory()) {
+						await fs.rm(libPath, { recursive: true, force: true });
+					} else {
+						await fs.unlink(libPath);
+					}
+					console.log(`removed old library: ${lib}`);
+				} catch (error) {
+					console.warn(`failed to remove ${lib}:`, error.message);
+				}
+			}
+		}
+
+		console.log("ollama sidecar installed successfully");
+	} catch (error) {
+		console.error("error installing ollama sidecar:", error);
+		throw error;
+	}
+}
+
+async function copyBunBinary() {
+	console.log("checking bun binary for tauri...");
+
+	let bunSrc, bunDest1, bunDest2;
+	if (platform === "windows") {
+		const npmGlobalPrefix = (await $`npm config get prefix`.text()).trim();
+		console.log("npm global prefix:", npmGlobalPrefix);
+
+		let bunPathFromSystem;
+		try {
+			bunPathFromSystem = (await $`where.exe bun`.text())
+				.trim()
+				.split("\n")[0];
+		} catch {
+			try {
+				bunPathFromSystem = (await $`which bun`.text()).trim();
+			} catch {
+				console.log("could not find bun using where.exe or which");
+			}
+		}
+
+		if (bunPathFromSystem) {
+			console.log(
+				"found bun using system command at:",
+				bunPathFromSystem
+			);
+		}
+
+		const possibleBunPaths = [
+			bunPathFromSystem,
+			path.join(os.homedir(), ".bun", "bin", "bun.exe"),
+			path.join(npmGlobalPrefix, "node_modules", "bun", "bin", "bun.exe"),
+			path.join(npmGlobalPrefix, "bun.exe"),
+			path.join(npmGlobalPrefix, "bin", "bun.exe"),
+			path.join(os.homedir(), "AppData", "Local", "bun", "bun.exe"),
+			"C:\\Program Files\\bun\\bun.exe",
+			"C:\\Program Files (x86)\\bun\\bun.exe",
+			"bun.exe",
+		].filter(Boolean);
+
+		console.log("searching bun in these locations:");
+		possibleBunPaths.forEach((p) => console.log("- " + p));
+
+		bunSrc = null;
+		for (const possiblePath of possibleBunPaths) {
+			try {
+				await fs.access(possiblePath);
+				console.log("found bun at:", possiblePath);
+				bunSrc = possiblePath;
+				break;
+			} catch {
+				continue;
+			}
+		}
+
+		if (!bunSrc) {
+			throw new Error(
+				"Could not find bun.exe in any expected location. Please check if bun is installed correctly"
+			);
+		}
+
+		bunDest1 = path.join(binDir, "bun-x86_64-pc-windows-msvc.exe");
+		console.log("copying bun from:", bunSrc);
+		console.log("copying bun to:", bunDest1);
+	} else if (platform === "macos") {
+		bunSrc = path.join(os.homedir(), ".bun", "bin", "bun");
+		bunDest1 = path.join(binDir, "bun-aarch64-apple-darwin");
+		bunDest2 = path.join(binDir, "bun-x86_64-apple-darwin");
+	} else if (platform === "linux") {
+		bunSrc = path.join(os.homedir(), ".bun", "bin", "bun");
+		bunDest1 = path.join(binDir, "bun-x86_64-unknown-linux-gnu");
+	}
+
+	if (existsSync(bunDest1)) {
+		console.log("bun binary already exists for tauri.");
+		return;
+	}
+
+	try {
+		await fs.access(bunSrc);
+		await copyFile(bunSrc, bunDest1);
+		console.log(
+			`bun binary copied successfully from ${bunSrc} to ${bunDest1}`
+		);
+
+		if (platform === "macos") {
+			await copyFile(bunSrc, bunDest2);
+			console.log(`bun binary also copied to ${bunDest2}`);
+		}
+	} catch (error) {
+		console.error("failed to copy bun binary:", error);
+		console.error("source path:", bunSrc);
+		process.exit(1);
+	}
+}
+
+async function copyFile(src, dest) {
+	await fs.copyFile(src, dest);
+	await fs.chmod(dest, 0o755);
+}
+
+await copyBunBinary();
+await installOllamaSidecar().catch(console.error);
