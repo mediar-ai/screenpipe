@@ -215,15 +215,13 @@ export function AccountSection() {
         (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
         "https://screenpi.pe";
       // const host = `${BASE_URL}/api/dev-stripe`;
-      const host = `https://screenpi.pe/api/dev-stripe`;
+      const host = `https://screenpi.pe/api/dev/stripe-connect`;
       const response = await fetch(host, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${settings.user?.token}`,
         },
-        body: JSON.stringify({
-          user_id: settings.user?.id,
-        }),
       });
 
       const { url } = await response.json();
@@ -356,109 +354,29 @@ export function AccountSection() {
           </div>
         </div>
 
-        <Separator className="my-6" />
+        {settings.user?.token && (
+          <>
+            <Separator className="my-6" />
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-1.5">
-            <h4 className="text-lg font-medium">developer tools</h4>
-            <p className="text-sm text-muted-foreground">
-              build and sell custom pipes
-            </p>
-          </div>
-        </div>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1.5">
+                <h4 className="text-lg font-medium">developer access</h4>
+                <p className="text-sm text-muted-foreground">
+                  get api key to start building pipes
+                </p>
+              </div>
+            </div>
 
-        <div className="space-y-6">
-          <div className="flex flex-col space-y-6">
             <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      className="rounded-md"
-                      src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
-                      alt=""
-                    />
+                  <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                    <Key className="w-4 h-4 text-gray-900/60" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-sm font-medium">stripe connect</div>
-                    <p className="text-xs text-muted-foreground">
-                      receive earnings from your pipes (
-                      <a
-                        href={`mailto:louis@screenpi.pe?subject=${encodeURIComponent(
-                          "i want to create and monetize a pipe"
-                        )}&body=${encodeURIComponent(
-                          "hi louis,\n\nI'm interested in creating a pipe for screenpipe.\n\n- what I want to build:\n- I'm a programmer: [yes/no]\n- my github: "
-                        )}`}
-                        className="underline hover:text-primary"
-                        target="_blank"
-                      >
-                        email louis@screenpi.pe
-                      </a>{" "}
-                      for private beta access)
-                    </p>
-                  </div>
-                </div>
-                {settings.user?.api_key ? (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="h-9"
-                      onClick={() => openUrl("https://dashboard.stripe.com/")}
-                    >
-                      manage
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9"
-                      onClick={() => {
-                        if (settings.user) {
-                          const updatedUser = {
-                            ...settings.user,
-                            api_key: undefined,
-                            stripe_connected: false,
-                          };
-                          updateSettings({ user: updatedUser });
-                          toast({
-                            title: "stripe disconnected",
-                            description:
-                              "your stripe account has been disconnected",
-                          });
-                        }
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleConnectStripe}
-                    className="h-9"
-                    disabled={isConnectingStripe || !settings.user?.id}
-                  >
-                    {isConnectingStripe ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      "connect"
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-            {settings.user?.api_key && (
-              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
-                      <Key className="w-4 h-4 text-gray-900/60" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-medium">api key</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium">api key</div>
+                      {settings.user?.api_key && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -471,61 +389,183 @@ export function AccountSection() {
                             <Eye className="h-3 w-3" />
                           )}
                         </Button>
-                      </div>
+                      )}
+                    </div>
+                    {settings.user?.api_key ? (
                       <p className="text-xs font-mono text-muted-foreground">
                         {showApiKey
-                          ? settings.user?.api_key
-                          : settings.user?.api_key?.replace(/./g, "*")}
+                          ? settings.user.api_key
+                          : settings.user.api_key.replace(/./g, "*")}
                       </p>
-                    </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        no api key yet - generate one to start building
+                      </p>
+                    )}
                   </div>
+                </div>
+                {settings.user?.api_key ? (
                   <Button
                     variant="secondary"
                     size="sm"
                     className="h-9"
                     onClick={() => {
-                      if (settings.user?.api_key) {
-                        navigator.clipboard.writeText(settings.user.api_key);
-                        toast({
-                          title: "copied to clipboard",
-                          description:
-                            "your api key has been copied to your clipboard",
-                        });
-                      }
+                      navigator.clipboard.writeText(settings.user.api_key!);
+                      toast({
+                        title: "copied to clipboard",
+                        description:
+                          "your api key has been copied to your clipboard",
+                      });
                     }}
-                    disabled={!settings.user?.api_key}
                   >
                     copy
                   </Button>
-                </div>
-              </div>
-            )}
-            <div className="space-y-4">
-              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
-                      <BookOpen className="w-4 h-4 text-gray-900/60" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">documentation</div>
-                      <p className="text-xs text-muted-foreground">
-                        learn how to build and publish custom pipes
-                      </p>
-                    </div>
-                  </div>
-                  <a
-                    href="https://docs.screenpi.pe/docs/plugins"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9"
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(
+                          "https://screenpi.pe/api/dev/create",
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${settings.user?.token}`,
+                            },
+                          }
+                        );
+
+                        if (!response.ok)
+                          throw new Error("failed to generate api key");
+
+                        const { api_key } = await response.json();
+                        if (settings.user) {
+                          const updatedUser = { ...settings.user, api_key };
+                          updateSettings({ user: updatedUser });
+                          toast({
+                            title: "api key generated",
+                            description: "you can now start building pipes",
+                          });
+                        }
+                      } catch (error) {
+                        console.error("failed to generate api key:", error);
+                        toast({
+                          title: "generation failed",
+                          description: "couldn't generate api key",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                   >
-                    read docs
-                    <ArrowUpRight className="w-3 h-3" />
-                  </a>
-                </div>
+                    generate
+                  </Button>
+                )}
               </div>
             </div>
+            <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                    <BookOpen className="w-4 h-4 text-gray-900/60" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">documentation</div>
+                    <p className="text-xs text-muted-foreground">
+                      learn how to build and publish custom pipes
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href="https://docs.screenpi.pe/docs/plugins"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"
+                >
+                  read docs
+                  <ArrowUpRight className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="rounded-md"
+                  src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
+                  alt=""
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium">stripe connect</div>
+                <p className="text-xs text-muted-foreground">
+                  receive earnings from your pipes (
+                  <a
+                    href="https://discord.gg/dU9EBuw7Uq"
+                    className="underline hover:text-primary"
+                    target="_blank"
+                  >
+                    dm @louis030195
+                  </a>{" "}
+                  for any questions)
+                </p>
+              </div>
+            </div>
+            {settings.user?.api_key ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-9"
+                  onClick={() => openUrl("https://dashboard.stripe.com/")}
+                >
+                  manage
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => {
+                    if (settings.user) {
+                      const updatedUser = {
+                        ...settings.user,
+                        api_key: undefined,
+                        stripe_connected: false,
+                      };
+                      updateSettings({ user: updatedUser });
+                      toast({
+                        title: "stripe disconnected",
+                        description:
+                          "your stripe account has been disconnected",
+                      });
+                    }
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleConnectStripe}
+                className="h-9"
+                disabled={isConnectingStripe || !settings.user?.id}
+              >
+                {isConnectingStripe ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  "connect"
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
