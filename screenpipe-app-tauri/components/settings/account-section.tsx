@@ -529,126 +529,132 @@ export function AccountSection() {
           </div>
         </div>
 
-        <Separator className="my-6" />
+        {settings.user?.api_key && (
+          <>
+            <Separator className="my-6" />
 
-        <div className="flex items-center justify-between">
-          <div className="space-y-1.5">
-            <h4 className="text-lg font-medium">developer profile</h4>
-            <p className="text-sm text-muted-foreground">
-              {settings.user?.api_key
-                ? "customize your public developer profile, this will help us approve your pipe faster and help you get more users"
-                : "connect your stripe account first to customize your developer profile"}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="bio">bio</Label>
-              <Textarea
-                id="bio"
-                placeholder="tell us about yourself..."
-                className="resize-none"
-                rows={3}
-                value={profileForm.bio}
-                disabled={!settings.user?.api_key}
-                onChange={(e) =>
-                  setProfileForm((prev) => ({ ...prev, bio: e.target.value }))
-                }
-                autoCorrect="off"
-                autoComplete="off"
-                autoCapitalize="off"
-              />
+            <div className="flex items-center justify-between">
+              <div className="space-y-1.5">
+                <h4 className="text-lg font-medium">developer profile</h4>
+                <p className="text-sm text-muted-foreground">
+                  customize your public developer profile, this will help us
+                  approve your pipe faster and help you get more users
+                </p>
+              </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="github">github username</Label>
-              <Input
-                id="github"
-                placeholder="username"
-                disabled={!settings.user?.api_key}
-                value={profileForm.github_username}
-                onChange={(e) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    github_username: e.target.value,
-                  }))
-                }
-                autoCorrect="off"
-                autoComplete="off"
-                autoCapitalize="off"
-              />
+            <div className="space-y-6">
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="bio">bio</Label>
+                  <Textarea
+                    id="bio"
+                    placeholder="tell us about yourself..."
+                    className="resize-none"
+                    rows={3}
+                    value={profileForm.bio}
+                    disabled={!settings.user?.api_key}
+                    onChange={(e) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        bio: e.target.value,
+                      }))
+                    }
+                    autoCorrect="off"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="github">github username</Label>
+                  <Input
+                    id="github"
+                    placeholder="username"
+                    disabled={!settings.user?.api_key}
+                    value={profileForm.github_username}
+                    onChange={(e) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        github_username: e.target.value,
+                      }))
+                    }
+                    autoCorrect="off"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="website">website</Label>
+                  <Input
+                    id="website"
+                    type="url"
+                    placeholder="https://..."
+                    value={profileForm.website}
+                    disabled={!settings.user?.api_key}
+                    onChange={(e) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        website: e.target.value,
+                      }))
+                    }
+                    autoCorrect="off"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="contact">additional contact</Label>
+                  <Input
+                    id="contact"
+                    placeholder="discord, twitter, etc..."
+                    value={profileForm.contact}
+                    disabled={!settings.user?.api_key}
+                    onChange={(e) =>
+                      setProfileForm((prev) => ({
+                        ...prev,
+                        contact: e.target.value,
+                      }))
+                    }
+                    autoCorrect="off"
+                    autoComplete="off"
+                    autoCapitalize="off"
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    className="w-full"
+                    disabled={!settings.user?.api_key}
+                    onClick={async () => {
+                      if (!settings.user) return;
+
+                      await updateProfile(profileForm);
+
+                      // Update the main settings after successful profile update
+                      if (settings.user) {
+                        const updatedUser = {
+                          ...settings.user,
+                          ...profileForm,
+                        };
+                        updateSettings({ user: updatedUser });
+                      }
+
+                      toast({
+                        title: "profile updated",
+                        description: "your developer profile has been saved",
+                      });
+                    }}
+                  >
+                    save changes
+                  </Button>
+                </div>
+              </div>
             </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="website">website</Label>
-              <Input
-                id="website"
-                type="url"
-                placeholder="https://..."
-                value={profileForm.website}
-                disabled={!settings.user?.api_key}
-                onChange={(e) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    website: e.target.value,
-                  }))
-                }
-                autoCorrect="off"
-                autoComplete="off"
-                autoCapitalize="off"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="contact">additional contact</Label>
-              <Input
-                id="contact"
-                placeholder="discord, twitter, etc..."
-                value={profileForm.contact}
-                disabled={!settings.user?.api_key}
-                onChange={(e) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    contact: e.target.value,
-                  }))
-                }
-                autoCorrect="off"
-                autoComplete="off"
-                autoCapitalize="off"
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                className="w-full"
-                disabled={!settings.user?.api_key}
-                onClick={async () => {
-                  if (!settings.user) return;
-
-                  await updateProfile(profileForm);
-
-                  // Update the main settings after successful profile update
-                  if (settings.user) {
-                    const updatedUser = {
-                      ...settings.user,
-                      ...profileForm,
-                    };
-                    updateSettings({ user: updatedUser });
-                  }
-
-                  toast({
-                    title: "profile updated",
-                    description: "your developer profile has been saved",
-                  });
-                }}
-              >
-                save changes
-              </Button>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
