@@ -112,7 +112,7 @@ export function RegularProviderSetupForm({
       )
     }
 
-    if ((aiProvider === AvailableAiProviders.NATIVE_OLLAMA) && !isLoading && !data?.setupForm) {
+    if ((aiProvider === AvailableAiProviders.NATIVE_OLLAMA) && !data?.setupForm) {
       return (
         <InstructionsBanner
           title="looks like your ollama server is not running"
