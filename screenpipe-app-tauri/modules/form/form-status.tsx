@@ -7,7 +7,7 @@ export const FormStatus = <FormValues extends FieldValues>({
     isDirty: externalIsDirty,
     reset
 } : {
-    reset: UseFormReset<FormValues>,
+    reset(): void,
     isDirty?: boolean
 }) => {
     const { isDirty } = useFormState()

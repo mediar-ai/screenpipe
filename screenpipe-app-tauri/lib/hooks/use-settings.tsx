@@ -141,7 +141,7 @@ const DEFAULT_SETTINGS: Settings = {
   embeddedLLM: {
     enabled: false,
     model: "llama3.2:1b-instruct-q4_K_M",
-    port: 11434,
+    port: 11435,
   },
   enableBeta: false,
   isFirstTimeUser: true,

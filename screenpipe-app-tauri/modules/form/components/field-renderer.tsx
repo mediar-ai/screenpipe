@@ -102,6 +102,7 @@ export const FormFieldRenderer = ({
       return (
         <Select
           isCreateable
+          isSpecial
           className="w-[100%]"
           options={options}
           {...field}

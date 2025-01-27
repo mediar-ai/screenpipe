@@ -6,10 +6,9 @@ import { AvailableAiProviders } from "@/modules/ai-providers/types/available-pro
 import { getSetupFormAndPersistedValues } from "@/modules/ai-providers/utils/get-setup-form-and-persisted-values";
 import Form from "@/modules/form/components/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { open as openUrl } from "@tauri-apps/plugin-shell"
 import { ExternalLinkIcon } from "lucide-react";
-import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useUser } from "../account-section";
 
 export function RegularProviderSetupForm({

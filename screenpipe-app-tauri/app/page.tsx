@@ -173,13 +173,15 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    if (settings.userId) {
-      posthog?.identify(settings.userId, {
-        os: platform(),
-      });
-    }
-  }, [settings.userId, posthog]);
+  // useEffect(() => {
+
+  //   console.log({settings})
+  //   if (settings.userId) {
+  //     posthog?.identify(settings.userId, {
+  //       os: platform(),
+  //     });
+  //   }
+  // }, [settings.userId, posthog]);
 
   useEffect(() => {
     const checkScreenPermissionRestart = async () => {
@@ -197,7 +199,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center flex-1">
       <NotificationHandler />
-      {showOnboarding ? (
+      {false ? (
         <Onboarding />
       ) : (
         <>
@@ -205,9 +207,9 @@ export default function Home() {
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <Header />
-          <div className=" w-[90%]">
+          {/* <div className=" w-[90%]">
             <PipeStore />
-          </div>
+          </div> */}
         </>
       )}
     </div>

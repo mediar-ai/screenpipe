@@ -7,7 +7,7 @@ export type SelectProps<
   Option,
   IsMulti extends boolean = false,
   Group extends GroupBase<Option> = GroupBase<Option>
-> = Props<Option, IsMulti, Group> & { isCreateable?: boolean };
+> = Props<Option, IsMulti, Group> & { isCreateable?: boolean, isSpecial?: boolean };
 
 
 const Select = <
@@ -17,26 +17,27 @@ const Select = <
 >({
   components,
   isCreateable,
+  isSpecial,
   ...props
 }: SelectProps<Option, IsMulti, Group>) => {
   const { menuPlacement = "auto", ...restProps } = props;
 
   const Comp = isCreateable ? CreatableSelect : SelectReact
+  const styles: StylesConfig<Option, IsMulti, Group> | undefined  = isSpecial ? {
+    'control': (css) => {
+      return {
+        ...css,
+        backgroundColor: 'hsl(0, 0%, 100%)',
+        borderStyle: 'hidden',
+      }
+    }
+  } : undefined
+
   return (
     <Comp
-      isClearable
       isSearchable
       {...restProps}
-      styles={{
-        'control': (css) => {
-          console.log({css})
-          return {
-            ...css,
-            backgroundColor: 'hsl(0, 0%, 100%)',
-            borderStyle: 'hidden',
-          }
-        }
-      }}
+      styles={styles}
     />
   );
 };

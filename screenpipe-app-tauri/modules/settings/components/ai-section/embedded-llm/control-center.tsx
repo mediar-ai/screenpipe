@@ -21,6 +21,7 @@ import { useForm } from "react-hook-form";
 import { FormField } from "@/components/ui/form";
 import { getOllamaModels } from "@/modules/ai-providers/providers/native-llama/utils";
 import Select from "@/components/select";
+import { FormStatus } from "@/modules/form/form-status";
 
 export function EmbeddedControlCenter({
     aiProvider,
@@ -29,8 +30,29 @@ export function EmbeddedControlCenter({
     aiProvider: AvailableAiProviders,
     setAiProvider: React.Dispatch<React.SetStateAction<AvailableAiProviders>>
 }) {
-    return (
+  const {settings, updateSettings} = useSettings()
+  return (
       <div className="flex flex-col space-y-3">
+        {settings.aiProviderType !== aiProvider 
+        ? (
+          <div className="flex w-full justify-end items-center space-x-2">
+              <p className="opacity-50 font-[200] font-sans">
+                  unsaved edits!
+              </p>
+
+            <TooltipDefault text="reset to saved values">
+                  <Button
+                      variant={'ghost'} 
+                      type='button'
+                      size={'icon'}
+                      onClick={() => setAiProvider(settings.aiProviderType)}
+                  >
+                      <Eraser className="h-5 w-5" strokeWidth={1.5}/>
+                  </Button>
+              </TooltipDefault> 
+          </div>
+        ) 
+        : null }
         <InstructionsBanner/>
         <SidecarController/>
         <ModelController/>
@@ -354,6 +376,7 @@ function ModelController() {
                         <Select
                           isDisabled={selectDisabled}
                           isCreateable
+                          isSpecial
                           className="w-[100%] !border-none"
                           options={generatedOptions}
                           {...field}
@@ -418,73 +441,5 @@ function ModelController() {
         </div>
       </div>
     </div>
-  )
-}
-
-function EmbeddedSetupForm({
-  aiProvider,
-} : {
-  aiProvider: AvailableAiProviders,
-}) {
-  const { settings, updateSettings } = useSettings()
-
-  const { data } = useQuery({
-    queryKey: ['setupForm', AvailableAiProviders.EMBEDDED],
-    queryFn: async () => {
-        const result = await getSetupFormAndPersistedValues({
-          activeAiProvider: settings.aiProviderType,
-          selectedAiProvider: AvailableAiProviders.EMBEDDED,
-          settings
-        })
-        return result
-    }
-  })
-
-  const { 
-      mutateAsync: updateSettingsAsync, 
-      isPending: updateSettingsAsyncPending
-  } = useMutation({
-      mutationFn: async (values: Partial<Settings>) => {
-        updateSettings({
-          ...values
-        });
-      },
-      onSuccess: () => {
-        toast({
-          title: "ai provider info updated",
-        });
-      }, 
-      onError: (e) => {
-        toast({
-          title: "ai provider update failed!",
-          description: e.message ? e.message : 'please try again.',
-          variant: 'destructive'
-        });
-      }
-  })
-
-  async function submitChanges(values: {port: string}) {
-    await updateSettingsAsync({
-      embeddedLLM: {
-        port: parseInt(values.port, 10),
-        model: settings.embeddedLLM.model,
-        enabled: true
-      }
-    })
-  }
-
-  return (
-    <>
-      {data?.setupForm &&
-          <Form
-            controlledShowSubmitButton={false}
-            defaultValues={data.defaultValues}
-            isLoading={updateSettingsAsyncPending}
-            onSubmit={submitChanges}
-            key={aiProvider}
-            form={data.setupForm}
-          />
-      }
-    </>
   )
 }
