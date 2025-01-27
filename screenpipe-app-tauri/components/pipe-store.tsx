@@ -82,6 +82,9 @@ export const PipeStore: React.FC = () => {
           ?.config,
         has_purchased: purchaseHistory.some((p) => p.plugin_id === plugin.id),
         is_core_pipe: corePipes.includes(plugin.name),
+        is_enabled: installedPipes.some(
+          (p) => p.config?.id === plugin.id && p.config?.enabled
+        ),
       }));
 
       const customPipes = installedPipes
@@ -834,6 +837,7 @@ export const PipeStore: React.FC = () => {
                 onPurchase={handlePurchasePipe}
                 isLoadingPurchase={loadingPurchases.has(pipe.id)}
                 isLoadingInstall={loadingInstalls.has(pipe.id)}
+                onToggle={handleTogglePipe}
               />
             ))}
           </div>
