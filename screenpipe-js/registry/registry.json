@@ -1,0 +1,19 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "screenpipe",
+  "homepage": "https://screenpi.pe",
+  "items": [
+    {
+      "name": "use-health",
+      "type": "registry:hook",
+      "description": "check screenpipe's health",
+      "dependencies": [ "lodash", "@types/lodash" ],
+      "files": [
+        {
+          "path": "./registry/hooks/use-health.ts",
+          "type": "registry:hook"
+        }
+      ]
+    }
+  ]
+}
