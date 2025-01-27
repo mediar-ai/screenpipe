@@ -1,0 +1,13 @@
+{
+    "use-health": {
+        "name": "use-health",
+        "location": "test",
+        "target": "",
+        "dependencies": [
+            "any"
+        ],
+        "devDependencies":[
+            "any"
+        ]
+    }
+}
