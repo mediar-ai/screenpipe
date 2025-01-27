@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Add this at the very top to suppress the Buffer deprecation warning
+process.removeAllListeners("warning");
+
 import fs from "fs-extra";
 import path from "path";
 import { select, input } from "@inquirer/prompts";
@@ -150,8 +153,12 @@ async function main() {
 
     console.log("\nto get started:");
     console.log(chalk.cyan(`cd ${directory}`));
-    console.log(chalk.cyan("bun install    # or use: npm install, pnpm install, yarn"));
-    console.log(chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev"));
+    console.log(
+      chalk.cyan("bun install    # or use: npm install, pnpm install, yarn")
+    );
+    console.log(
+      chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev")
+    );
 
     console.log(
       "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"

@@ -12,7 +12,7 @@ import {
 } from "./ui/tooltip";
 import { Layers, Layout, RefreshCw } from "lucide-react";
 import { toast } from "./ui/use-toast";
-import { Pipe } from "./pipe-store";
+import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
 import {
   Select,
@@ -30,7 +30,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen } from "lucide-react";
 
 type PipeConfigFormProps = {
-  pipe: Pipe;
+  pipe: PipeWithStatus;
   onConfigSave: (config: Record<string, any>) => void;
 };
 
@@ -46,20 +46,23 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   pipe,
   onConfigSave,
 }) => {
-  const [config, setConfig] = useState(pipe.config);
+  const [config, setConfig] = useState(pipe.installed_config);
 
   useEffect(() => {
-    setConfig(pipe.config);
+    setConfig(pipe.installed_config);
   }, [pipe]);
 
   const handleInputChange = (name: string, value: any) => {
     if (!config) return;
-    setConfig((prevConfig) => ({
-      ...prevConfig,
-      fields: prevConfig?.fields?.map((field: FieldConfig) =>
-        field.name === name ? { ...field, value } : field
-      ),
-    }));
+    setConfig((prevConfig) => {
+      if (!prevConfig) return prevConfig;
+      return {
+        ...prevConfig,
+        fields: prevConfig.fields?.map((field: FieldConfig) =>
+          field.name === name ? { ...field, value } : field
+        ),
+      };
+    });
   };
 
   const renderConfigInput = (field: FieldConfig) => {
@@ -353,95 +356,103 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
   return (
     <div className="space-y-6">
       <h3 className="text-lg font-semibold">pipe configuration</h3>
-      
-      {config?.is_nextjs && (
-        <div className="space-y-2">
-          <Label htmlFor="port" className="font-medium">
-            port (number)
-          </Label>
-          <div className="flex items-center space-x-2">
-            <Input
-              id="port"
-              type="number"
-              value={config.port ?? ''}
-              onChange={(e) => setConfig(prev => prev ? {
-                ...prev,
-                port: parseInt(e.target.value) || 3000
-              } : prev)}
-              onWheel={(e) => e.preventDefault()}
-              step="1"
-              min="1"
-              max="65535"
-              autoCorrect="off"
-              spellCheck="false"
-            />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setConfig(prev => prev ? {...prev, port: 3000} : prev)}
-                    className="h-8 w-8"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Reset to default (3000)</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <MemoizedReactMarkdown
-            className="prose prose-sm break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
-            remarkPlugins={[remarkGfm, remarkMath]}
-            components={{
-              p({ children }) {
-                return <p className="mb-2 last:mb-0">{children}</p>;
-              },
-              a({ node, href, children, ...props }) {
-                return (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    {...props}
-                  >
-                    {children}
-                  </a>
-                );
-              },
-              code({ node, className, children, ...props }) {
-                const content = String(children).replace(/\n$/, "");
-                const match = /language-(\w+)/.exec(className || "");
 
-                if (!match) {
-                  return (
-                    <code
-                      className="px-1 py-0.5 rounded-sm font-mono text-sm"
-                      {...props}
-                    >
-                      {content}
-                    </code>
-                  );
-                }
-
-                return (
-                  <CodeBlock
-                    key={Math.random()}
-                    language={(match && match[1]) || ""}
-                    value={content}
-                    {...props}
-                  />
-                );
-              },
-            }}
-          >
-            Port number for this pipe. If the selected port is already in use when starting the pipe, a random available port will be automatically assigned.
-          </MemoizedReactMarkdown>
+      <div className="space-y-2">
+        <Label htmlFor="port" className="font-medium">
+          port (number)
+        </Label>
+        <div className="flex items-center space-x-2">
+          <Input
+            id="port"
+            type="number"
+            value={config?.port ?? ""}
+            onChange={(e) =>
+              setConfig((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      port: parseInt(e.target.value) || 3000,
+                    }
+                  : prev
+              )
+            }
+            onWheel={(e) => e.preventDefault()}
+            step="1"
+            min="1"
+            max="65535"
+            autoCorrect="off"
+            spellCheck="false"
+          />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() =>
+                    setConfig((prev) => (prev ? { ...prev, port: 3000 } : prev))
+                  }
+                  className="h-8 w-8"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Reset to default (3000)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
-      )}
+        <MemoizedReactMarkdown
+          className="prose prose-sm break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
+          remarkPlugins={[remarkGfm, remarkMath]}
+          components={{
+            p({ children }) {
+              return <p className="mb-2 last:mb-0">{children}</p>;
+            },
+            a({ node, href, children, ...props }) {
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  {...props}
+                >
+                  {children}
+                </a>
+              );
+            },
+            code({ node, className, children, ...props }) {
+              const content = String(children).replace(/\n$/, "");
+              const match = /language-(\w+)/.exec(className || "");
+
+              if (!match) {
+                return (
+                  <code
+                    className="px-1 py-0.5 rounded-sm font-mono text-sm"
+                    {...props}
+                  >
+                    {content}
+                  </code>
+                );
+              }
+
+              return (
+                <CodeBlock
+                  key={Math.random()}
+                  language={(match && match[1]) || ""}
+                  value={content}
+                  {...props}
+                />
+              );
+            },
+          }}
+        >
+          Port number for this pipe. If the selected port is already in use when
+          starting the pipe, a random available port will be automatically
+          assigned.
+        </MemoizedReactMarkdown>
+      </div>
 
       {config?.fields?.map((field: FieldConfig) => (
         <div key={field.name} className="space-y-2">
@@ -498,9 +509,9 @@ export const PipeConfigForm: React.FC<PipeConfigFormProps> = ({
           </MemoizedReactMarkdown>
         </div>
       ))}
-        <Button type="submit" onClick={() => onConfigSave(config || {})}>
-          save configuration
-        </Button>
+      <Button type="submit" onClick={() => onConfigSave(config || {})}>
+        save configuration
+      </Button>
     </div>
   );
 };

@@ -558,7 +558,7 @@ async function installOllamaSidecar() {
 
 // Near the end of the script, call these functions
 await copyBunBinary();
-await installOllamaSidecar().catch(console.error);
+// await installOllamaSidecar().catch(console.error);
 
 // --dev or --build
 const action = process.argv?.[2]

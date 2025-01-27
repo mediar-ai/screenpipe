@@ -1,38 +1,34 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 import {
-  HelpCircle,
   RefreshCw,
-  Coins,
   UserCog,
   ExternalLinkIcon,
+  Key,
+  EyeOff,
+  Eye,
+  ArrowUpRight,
+  BookOpen,
+  X,
 } from "lucide-react";
 
 import { toast } from "@/components/ui/use-toast";
-import { invoke } from "@tauri-apps/api/core";
 
-import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
-import {
-  onOpenUrl,
-  getCurrent as getCurrentDeepLinkUrls,
-} from "@tauri-apps/plugin-deep-link";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { invoke } from "@tauri-apps/api/core";
+import { PricingToggle } from "./pricing-toggle";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 function PlanCard({
   title,
@@ -44,7 +40,7 @@ function PlanCard({
 }: {
   title: string;
   price: string;
-  features: string[];
+  features: (string | JSX.Element)[];
   isActive?: boolean;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -84,11 +80,16 @@ function PlanCard({
 }
 
 export function AccountSection() {
-  const { user, loadUser } = useUser();
-  const { settings, updateSettings } = useSettings();
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const { settings, updateSettings, loadUser } = useSettings();
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(true);
+  const [profileForm, setProfileForm] = useState({
+    bio: "",
+    github_username: "",
+    website: "",
+    contact: "",
+  });
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -99,6 +100,8 @@ export function AccountSection() {
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
+              await loadUser(apiKey);
+
               toast({
                 title: "logged in!",
                 description: "your api key has been set",
@@ -108,9 +111,16 @@ export function AccountSection() {
           if (url.includes("return") || url.includes("refresh")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
-              if (user) {
-                const updatedUser = { ...user, stripe_connected: true };
-                updateSettings({ user: updatedUser });
+              const apiKey = new URL(url).searchParams.get("api_key")!;
+              if (settings.user) {
+                updateSettings({
+                  user: {
+                    ...settings.user,
+                    api_key: apiKey,
+                    stripe_connected: true,
+                  },
+                });
+                loadUser(settings.user.token!);
               }
               toast({
                 title: "stripe connected!",
@@ -136,55 +146,60 @@ export function AccountSection() {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, [settings.user?.token, loadUser, updateSettings]);
+  }, [settings.user?.token, updateSettings]);
 
-  const handleRefreshCredits = async () => {
-    if (!settings.user?.token) return;
-
-    setIsRefreshing(true);
-    try {
-      await loadUser(settings.user.token);
-      toast({
-        title: "credits refreshed",
-        description: "your credit balance has been updated",
-      });
-    } catch (error) {
-      toast({
-        title: "failed to refresh credits",
-        description: "please try again later",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const clientRefId = `${user?.id}&customer_email=${encodeURIComponent(
-    user?.email ?? ""
+  const clientRefId = `${settings.user?.id}&customer_email=${encodeURIComponent(
+    settings.user?.email ?? ""
   )}`;
 
   const plans = [
     {
-      title: "monthly",
-      price: "$30/mo",
-      features: [
-        "15 credits/mo",
-        "unlimited screenpipe cloud",
-        "priority support",
-      ],
-      url: `https://buy.stripe.com/5kA6p79qefweacg5kJ?client_reference_id=${clientRefId}`,
-    },
-    {
-      title: "one-time",
-      price: "$50",
-      features: ["50 credits", "never expires", "priority support"],
-      url: `https://buy.stripe.com/eVaeVD45UbfYeswcNd?client_reference_id=${clientRefId}`,
+      title: settings.user?.cloud_subscribed
+        ? "your subscription"
+        : "subscription",
+      price: settings.user?.cloud_subscribed
+        ? "active"
+        : isAnnual
+        ? "$200/year"
+        : "$20/mo",
+      features: settings.user?.cloud_subscribed
+        ? [
+            "unlimited screenpipe cloud",
+            "priority support",
+            <a
+              key="portal"
+              href={`https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
+                settings.user?.email || ""
+              )}`}
+              className="text-primary hover:underline cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                openUrl(
+                  `https://billing.stripe.com/p/login/3cs6pT8Qbd846yc9AA?email=${encodeURIComponent(
+                    settings.user?.email || ""
+                  )}`
+                );
+              }}
+            >
+              manage subscription
+            </a>,
+          ]
+        : [
+            "unlimited screenpipe cloud",
+            "priority support",
+            isAnnual ? "17% discount applied" : "switch to annual for 17% off",
+          ],
+      url: isAnnual
+        ? "https://buy.stripe.com/eVadRzfOCgAi5W0fZu" +
+          `?client_reference_id=${clientRefId}`
+        : "https://buy.stripe.com/7sIdRzbym4RA98c7sX" +
+          `?client_reference_id=${clientRefId}`,
     },
     {
       title: "enterprise",
       price: "book a call",
       features: [
-        "enterprise process intelligence & process mining",
+        "enterprise screen search engine",
         "dedicated support",
         "consulting",
         "custom features",
@@ -196,20 +211,25 @@ export function AccountSection() {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const host = "https://screenpi.pe/api/dev-stripe";
+      const BASE_URL =
+        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+        "https://screenpi.pe";
+      // const host = `${BASE_URL}/api/dev-stripe`;
+      const host = `https://screenpi.pe/api/dev-stripe`;
       const response = await fetch(host, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          user_id: user?.id,
+          user_id: settings.user?.id,
         }),
       });
 
       const { url } = await response.json();
       await openUrl(url);
     } catch (error) {
+      console.warn("failed to connect stripe", error);
       toast({
         title: "failed to connect stripe",
         description: "please try again later",
@@ -219,6 +239,56 @@ export function AccountSection() {
       setIsConnectingStripe(false);
     }
   };
+
+  useEffect(() => {
+    const updatedUser = { ...settings.user, stripe_connected: true };
+    updateSettings({ user: updatedUser });
+  }, []);
+
+  const updateProfile = async (updates: Partial<typeof settings.user>) => {
+    if (!settings.user?.token) return;
+
+    try {
+      const response = await fetch(
+        "https://screenpi.pe/api/plugins/dev-profile",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${settings.user.api_key}`,
+          },
+          body: JSON.stringify(updates),
+        }
+      );
+
+      if (!response.ok) throw new Error("failed to update profile");
+    } catch (error) {
+      console.error("failed to update profile:", error);
+      toast({
+        title: "update failed",
+        description: "couldn't save your profile changes",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
+
+  useEffect(() => {
+    if (settings.user) {
+      setProfileForm({
+        bio: settings.user.bio || "",
+        github_username: settings.user.github_username || "",
+        website: settings.user.website || "",
+        contact: settings.user.contact || "",
+      });
+    }
+  }, []);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -248,79 +318,11 @@ export function AccountSection() {
 
       <div className="space-y-8">
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Coins className="w-4 h-4 text-muted-foreground" />
-              <h4 className="text-sm font-medium">credits & usage</h4>
-              <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-                {user?.credits?.amount || 0} available
-              </Badge>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleRefreshCredits}
-              disabled={isRefreshing}
-              className="h-8 w-8"
-            >
-              <RefreshCw
-                className={cn("w-4 h-4", { "animate-spin": isRefreshing })}
-              />
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-medium text-muted-foreground">
-                screenpipe api key
-              </Label>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 cursor-help text-muted-foreground/50" />
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[280px]">
-                    <p className="text-xs leading-relaxed">
-                      your key syncs credits and settings across devices. you
-                      can find it in your dashboard.{" "}
-                      <span className="text-destructive font-medium">
-                        keep it private.
-                      </span>
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-
-            <div className="flex gap-2">
-              <Input
-                value={settings.user?.token || ""}
-                onChange={(e) => {
-                  updateSettings({
-                    user: { token: e.target.value },
-                  });
-                }}
-                placeholder="enter your api key"
-                className="font-mono text-sm bg-secondary/30"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  loadUser(settings.user?.token || "");
-                  toast({ title: "key updated" });
-                }}
-              >
-                verify
-              </Button>
-            </div>
-          </div>
-
-          <Separator className="my-6" />
-
           <div className="grid gap-4">
             <div className="space-y-6">
-              <h4 className="text-lg font-medium">active plan</h4>
+              <h4 className="text-lg font-medium">plans</h4>
+
+              <PricingToggle isAnnual={isAnnual} onToggle={setIsAnnual} />
 
               <div className="flex flex-col gap-4">
                 {plans.map((plan) => (
@@ -329,23 +331,27 @@ export function AccountSection() {
                     title={plan.title}
                     price={plan.price}
                     features={plan.features}
-                    isSelected={selectedPlan === plan.title}
-                    onSelect={() => setSelectedPlan(plan.title)}
+                    onSelect={async () => {
+                      if (plan.title.toLowerCase() === "enterprise") {
+                        openUrl(plan.url);
+                        return;
+                      }
+
+                      if (!settings.user?.id) {
+                        toast({
+                          title: "not logged in",
+                          description: "please login first to subscribe",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      if (!settings.user?.cloud_subscribed) {
+                        openUrl(plan.url);
+                      }
+                    }}
                   />
                 ))}
               </div>
-
-              {selectedPlan && (
-                <Button
-                  className="w-full text-white"
-                  onClick={() => {
-                    const plan = plans.find((p) => p.title === selectedPlan);
-                    if (plan) openUrl(plan.url);
-                  }}
-                >
-                  Checkout
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -393,55 +399,253 @@ export function AccountSection() {
                     </p>
                   </div>
                 </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleConnectStripe}
-                  className="h-9"
-                  // disabled={true} // for now
-                  disabled={isConnectingStripe || user?.stripe_connected}
-                >
-                  {isConnectingStripe ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : user?.stripe_connected ? (
-                    "connected ✓"
-                  ) : (
-                    "connect"
-                  )}
-                </Button>
+                {settings.user?.api_key ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => openUrl("https://dashboard.stripe.com/")}
+                    >
+                      manage
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => {
+                        if (settings.user) {
+                          const updatedUser = {
+                            ...settings.user,
+                            api_key: undefined,
+                            stripe_connected: false,
+                          };
+                          updateSettings({ user: updatedUser });
+                          toast({
+                            title: "stripe disconnected",
+                            description:
+                              "your stripe account has been disconnected",
+                          });
+                        }
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleConnectStripe}
+                    className="h-9"
+                    disabled={isConnectingStripe || !settings.user?.id}
+                  >
+                    {isConnectingStripe ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "connect"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
-
+            {settings.user?.api_key && (
+              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                      <Key className="w-4 h-4 text-gray-900/60" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium">api key</div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 hover:bg-transparent"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-3 w-3" />
+                          ) : (
+                            <Eye className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs font-mono text-muted-foreground">
+                        {showApiKey
+                          ? settings.user?.api_key
+                          : settings.user?.api_key?.replace(/./g, "*")}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9"
+                    onClick={() => {
+                      if (settings.user?.api_key) {
+                        navigator.clipboard.writeText(settings.user.api_key);
+                        toast({
+                          title: "copied to clipboard",
+                          description:
+                            "your api key has been copied to your clipboard",
+                        });
+                      }
+                    }}
+                    disabled={!settings.user?.api_key}
+                  >
+                    copy
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="space-y-4">
-              <div className="p-4 border border-border/50 rounded-lg bg-secondary/5">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm text-muted-foreground">
-                    estimated earnings
-                  </span>
-                  <span className="text-lg font-mono">$1,385.00</span>
-                </div>
-                <div className="h-[60px] w-full flex items-end gap-1">
-                  {[40, 35, 55, 45, 60, 75, 65].map((height, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 bg-gray-900/20"
-                      style={{ height: `${height}%` }}
-                    />
-                  ))}
-                </div>
-                <div className="mt-2 text-xs text-center text-muted-foreground">
-                  pending payout - coming soon
+              <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 flex items-center justify-center bg-gray-900/10 rounded-md">
+                      <BookOpen className="w-4 h-4 text-gray-900/60" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">documentation</div>
+                      <p className="text-xs text-muted-foreground">
+                        learn how to build and publish custom pipes
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://docs.screenpi.pe/docs/plugins"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors rounded-md bg-secondary hover:bg-secondary/80"
+                  >
+                    read docs
+                    <ArrowUpRight className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  publish your pipe with cli
-                </Label>
-                <div className="font-mono text-xs bg-gray-50 rounded-lg p-4 border border-border/50">
-                  $ screenpipe publish my-awesome-pipe
-                </div>
-              </div>
+        <Separator className="my-6" />
+
+        <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
+            <h4 className="text-lg font-medium">developer profile</h4>
+            <p className="text-sm text-muted-foreground">
+              {settings.user?.api_key
+                ? "customize your public developer profile, this will help us approve your pipe faster and help you get more users"
+                : "connect your stripe account first to customize your developer profile"}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="bio">bio</Label>
+              <Textarea
+                id="bio"
+                placeholder="tell us about yourself..."
+                className="resize-none"
+                rows={3}
+                value={profileForm.bio}
+                disabled={!settings.user?.api_key}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({ ...prev, bio: e.target.value }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="github">github username</Label>
+              <Input
+                id="github"
+                placeholder="username"
+                disabled={!settings.user?.api_key}
+                value={profileForm.github_username}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    github_username: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="website">website</Label>
+              <Input
+                id="website"
+                type="url"
+                placeholder="https://..."
+                value={profileForm.website}
+                disabled={!settings.user?.api_key}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    website: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="contact">additional contact</Label>
+              <Input
+                id="contact"
+                placeholder="discord, twitter, etc..."
+                value={profileForm.contact}
+                disabled={!settings.user?.api_key}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    contact: e.target.value,
+                  }))
+                }
+                autoCorrect="off"
+                autoComplete="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                className="w-full"
+                disabled={!settings.user?.api_key}
+                onClick={async () => {
+                  if (!settings.user) return;
+
+                  await updateProfile(profileForm);
+
+                  // Update the main settings after successful profile update
+                  if (settings.user) {
+                    const updatedUser = {
+                      ...settings.user,
+                      ...profileForm,
+                    };
+                    updateSettings({ user: updatedUser });
+                  }
+
+                  toast({
+                    title: "profile updated",
+                    description: "your developer profile has been saved",
+                  });
+                }}
+              >
+                save changes
+              </Button>
             </div>
           </div>
         </div>

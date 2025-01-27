@@ -1167,6 +1167,98 @@ mod pipes {
         use std::net::TcpListener;
         TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
+
+    pub async fn download_pipe_private(pipe_name: &str, source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
+        info!("processing private pipe from zip: {}", source);
+
+        let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
+        debug!("destination directory: {:?}", dest_dir);
+
+        // Create temp directory for download
+        let temp_dir = dest_dir.with_extension("_temp");
+        tokio::fs::create_dir_all(&temp_dir).await?;
+
+        // Download zip file
+        debug!("downloading zip file from: {}", source);
+        let client = Client::new();
+        let response = client.get(source).send().await?;
+        let zip_content = response.bytes().await?;
+
+        // Create temporary zip file
+        let temp_zip = temp_dir.join("temp.zip");
+        tokio::fs::write(&temp_zip, &zip_content).await?;
+
+        // Unzip the file using tokio spawn_blocking to handle sync operations
+        debug!("unzipping file to temp directory");
+        let temp_zip_path = temp_zip.clone();
+        let temp_dir_path = temp_dir.clone();
+        
+        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+            let zip_file = std::fs::File::open(&temp_zip_path)?;
+            let mut archive = zip::ZipArchive::new(zip_file)?;
+            
+            for i in 0..archive.len() {
+                let mut file = archive.by_index(i)?;
+                let name = file.name().to_string();
+                let outpath = temp_dir_path.join(&name);
+                let ends_with_slash = name.ends_with('/');
+                if ends_with_slash {
+                    std::fs::create_dir_all(&outpath)?;
+                } else {
+                    if let Some(p) = outpath.parent() {
+                        if !p.exists() {
+                            std::fs::create_dir_all(p)?;
+                        }
+                    }
+                    let mut outfile = std::fs::File::create(&outpath)?;
+                    std::io::copy(&mut file, &mut outfile)?;
+                }
+            }
+            Ok(())
+        }).await??;
+
+        // Remove the temporary zip file
+        tokio::fs::remove_file(&temp_zip).await?;
+
+        // Move temp dir to final location
+        if dest_dir.exists() {
+            tokio::fs::remove_dir_all(&dest_dir).await?;
+        }
+        tokio::fs::rename(&temp_dir, &dest_dir).await?;
+
+        // Check if it's a Next.js project
+        let package_json_path = dest_dir.join("package.json");
+        let is_nextjs = if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            package_data["dependencies"].get("next").is_some()
+        } else {
+            false
+        };
+
+        // Find bun path
+        let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
+
+        // Run bun install
+        info!("installing dependencies");
+        retry_install(&bun_path, &dest_dir, 3).await?;
+
+        if is_nextjs {
+            info!("detected next.js project, starting in production mode");
+            // Update pipe.json to indicate it's a Next.js project
+            let pipe_json_path = dest_dir.join("pipe.json");
+            if pipe_json_path.exists() {
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+                pipe_config["is_nextjs"] = json!(true);
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
+            }
+        }
+
+        info!("pipe downloaded and set up successfully at: {:?}", dest_dir);
+        Ok(dest_dir)
+    }
 }
 
 #[cfg(feature = "pipes")]

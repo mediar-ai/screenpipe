@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import {
   Select,
   SelectContent,
@@ -37,6 +38,7 @@ import {
   AlertCircle,
   SpeechIcon,
   ChevronsUpDown,
+  Bot,
 } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -239,6 +241,7 @@ export function SearchChat() {
   const [offset, setOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const { settings } = useSettings();
+  const { isAvailable, error } = useAiProvider(settings);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [minLength, setMinLength] = useState(50);
   const [maxLength, setMaxLength] = useState(10000);
@@ -430,10 +433,11 @@ export function SearchChat() {
     !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
 
   const handleExampleSelect = async (example: ExampleSearch) => {
-    if (isAiDisabled){
+    if (isAiDisabled) {
       toast({
         title: "error",
-        description: "your selected ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
+        description:
+          "your selected ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
         variant: "destructive",
       });
       return;
@@ -750,10 +754,11 @@ export function SearchChat() {
   };
 
   const handleSearch = async (newOffset = 0, overrides: any = {}) => {
-    if (isAiDisabled){
+    if (isAiDisabled) {
       toast({
         title: "error",
-        description: "your ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
+        description:
+          "your ai provider is screenpipe-cloud. consider login in app to use screenpipe-cloud",
         duration: 3000,
         variant: "destructive",
       });
@@ -1292,8 +1297,12 @@ export function SearchChat() {
               <span>
                 <Button
                   onClick={() => handleSearch(0)}
-                  disabled={(isLoading || isAiDisabled || !health 
-                    || health?.status === "error")}
+                  disabled={
+                    isLoading ||
+                    isAiDisabled ||
+                    !health ||
+                    health?.status === "error"
+                  }
                   className="disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
@@ -1313,10 +1322,11 @@ export function SearchChat() {
             {(!health || health?.status === "error" || isAiDisabled) && (
               <TooltipContent>
                 <p>
-                  {(isAiDisabled && isServerDown) ? (
+                  {isAiDisabled && isServerDown ? (
                     <>
                       <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
-                      you don't have access to screenpipe-cloud <br /> and screenpipe server is down!
+                      you don't have access to screenpipe-cloud <br /> and
+                      screenpipe server is down!
                     </>
                   ) : isServerDown ? (
                     <>
@@ -1326,7 +1336,8 @@ export function SearchChat() {
                   ) : isAiDisabled ? (
                     <>
                       <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
-                      you don't have access to screenpipe-cloud :( <br/> please consider login!
+                      you don't have access to screenpipe-cloud :( <br /> please
+                      consider login!
                     </>
                   ) : (
                     ""
@@ -1802,18 +1813,40 @@ export function SearchChat() {
               className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
             >
               <div className="relative flex-grow flex items-center space-x-2">
-                <Input
-                  ref={floatingInputRef}
-                  type="text"
-                  placeholder="ask a question about the results..."
-                  value={floatingInput}
-                  disabled={
-                    calculateSelectedContentLength() > MAX_CONTENT_LENGTH || isAiDisabled
-                  }
-                  onChange={(e) => setFloatingInput(e.target.value)}
-                  className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
-                />
-
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <div className="text-muted-foreground">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>using {settings.aiModel}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip open={!isAvailable}>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1">
+                        <Input
+                          ref={floatingInputRef}
+                          type="text"
+                          placeholder="ask a question about the results..."
+                          value={floatingInput}
+                          disabled={ 
+                            calculateSelectedContentLength() > MAX_CONTENT_LENGTH || isAiDisabled || !isAvailable
+                          }
+                          onChange={(e) => setFloatingInput(e.target.value)}
+                          className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+                        />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      <p className="text-sm text-destructive">{error}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Select
                   value={selectedAgent.id}
                   onValueChange={(value) =>

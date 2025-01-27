@@ -2,7 +2,7 @@ use anyhow::Result;
 use killport::cli::Mode;
 use killport::killport::{Killport, KillportOperations};
 use killport::signal::KillportSignal;
-use screenpipe_core::{download_pipe, PipeState};
+use screenpipe_core::{download_pipe, download_pipe_private, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -22,6 +22,7 @@ pub struct PipeInfo {
     pub config: Value,
     pub source: String,
     pub port: Option<u16>,
+    pub is_nextjs: bool,
 }
 
 struct PipeHandle {
@@ -164,6 +165,10 @@ impl PipeManager {
                 .get("port")
                 .and_then(Value::as_u64)
                 .and_then(|p| u16::try_from(p).ok()),
+            is_nextjs: config
+                .get("is_nextjs")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }
     }
 
@@ -216,9 +221,65 @@ impl PipeManager {
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 
+    pub async fn download_pipe_private(
+        &self,
+        url: &str,
+        pipe_name: &str,
+        pipe_id: &str,
+    ) -> Result<String> {
+        let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
+
+        let package_json_path = pipe_dir.join("package.json");
+        let version = if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            package_data["version"]
+                .as_str()
+                .unwrap_or("1.0.0")
+                .to_string()
+        } else {
+            "1.0.0".to_string()
+        };
+
+        // update the config with the source url and version
+        self.update_config(
+            &pipe_dir.file_name().unwrap().to_string_lossy(),
+            serde_json::json!({
+                "source": "store",
+                "version": version,
+                "id": pipe_id,
+            }),
+        )
+        .await?;
+
+        info!(
+            "pipe {} downloaded",
+            pipe_dir.file_name().unwrap().to_string_lossy()
+        );
+
+        Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
+    }
+
     pub async fn purge_pipes(&self) -> Result<()> {
+        // First, get all running pipes
+        let pipes = self.list_pipes().await;
+
+        // Stop all running pipes
+        for pipe in pipes {
+            if pipe.enabled {
+                debug!("stopping pipe {} before purge", pipe.id);
+                self.stop_pipe(&pipe.id).await?;
+            }
+        }
+
+        // Wait for all pipes to stop
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        // Then remove the directory
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
+
+        debug!("all pipes purged");
         Ok(())
     }
 

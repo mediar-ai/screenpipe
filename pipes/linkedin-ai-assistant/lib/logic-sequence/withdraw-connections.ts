@@ -141,10 +141,12 @@ async function withdrawOldInvitations(page: Page): Promise<boolean> {
       if (!timeText) continue;
 
       const isOldEnough = timeText.includes('month') || 
-        (timeText.includes('week') && parseInt(timeText) >= 2);
+        (timeText.toLowerCase().includes('sent') && 
+         timeText.includes('week') && 
+         parseInt(timeText.match(/\d+/)?.[0] || '0') >= 2);
 
       if (isOldEnough) {
-        console.log(`found old invitation for ${profileUrl}: ${timeText}`);
+        console.log(`found old invitation to withdraw - age: ${timeText}`);
         foundOldInvitation = true;
 
         // Re-query the withdraw button

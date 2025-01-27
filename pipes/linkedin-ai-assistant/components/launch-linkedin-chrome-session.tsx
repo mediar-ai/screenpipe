@@ -13,6 +13,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import * as Sentry from "@sentry/nextjs";
 // import { pipe } from "@screenpipe/js";
 
 interface Props {
@@ -38,48 +39,58 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
     };
   }, [loginCheckInterval]);
 
-  const addLog = (message: string) => {
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', { 
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-    
-    // Clean up embedded timestamps in the message
-    const cleanMessage = message.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z - /, '');
-    setLogs(prev => [...prev, `${time} - ${cleanMessage}`]);
+  const logger = {
+    log: (message: string) => {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      setLogs(prev => [...prev, `${time} - ${message}`]);
+    },
+    error: (message: string) => {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      console.error(message);
+      setLogs(prev => [...prev, `${time} - error: ${message}`]);
+    }
   };
 
   const killChrome = async () => {
     try {
-      addLog('killing chrome...');
+      logger.log('killing chrome...');
       const response = await fetch('/api/chrome', { method: 'DELETE' });
       const data = await response.json();
       if (data.logs) {
-        data.logs.forEach((log: string) => addLog(log));
+        data.logs.forEach((log: string) => logger.log(log));
       }
       setStatus('idle');
-      addLog('chrome killed');
+      logger.log('chrome killed');
     } catch (error) {
-      addLog(`error killing chrome: ${error}`);
-      console.error('failed to kill chrome:', error);
+      logger.error(`failed to kill chrome: ${error}`);
     }
   };
 
   const launchChrome = async () => {
     try {
-      await killChrome();
       setStatus('connecting');
       setError(null);
 
-      // Get screen dimensions from browser
+      await killChrome();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const screenDims = {
         width: window.screen.availWidth,
         height: window.screen.availHeight
       };
-      addLog(`screen dimensions: ${screenDims.width}x${screenDims.height}`);
+      logger.log(`screen dimensions: ${screenDims.width}x${screenDims.height}`);
 
       const response = await fetch('/api/chrome', { 
         method: 'POST',
@@ -88,16 +99,16 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       });
       const data = await response.json();
       if (data.logs) {
-        data.logs.forEach((log: string) => addLog(log));
+        data.logs.forEach((log: string) => logger.log(log));
       }
       if (!response.ok) {
         throw new Error(data.error || 'Failed to launch chrome');
       }
 
-      // Start polling the server-side API for debugger URL
+      await new Promise(resolve => setTimeout(resolve, 2000));
       pollDebuggerStatus();
     } catch (error) {
-      console.error('failed to launch chrome:', error);
+      logger.error(`failed to launch chrome: ${error}`);
       setStatus('error');
       setError(error instanceof Error ? error.message : String(error));
     }
@@ -109,32 +120,30 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
 
     while (attempts < maxAttempts) {
       try {
-        addLog('polling debugger status...');
+        logger.log('polling debugger status...');
         const response = await fetch('/api/chrome/status');
         const data = await response.json();
         
-        // Add logs from the status endpoint
         if (data.logs) {
-          data.logs.forEach((log: string) => addLog(log));
+          data.logs.forEach((log: string) => logger.log(log));
         }
         
-        addLog(`poll response: ${JSON.stringify(data)}`);
+        logger.log(`poll response: ${JSON.stringify(data)}`);
 
         if (data.status === 'connected') {
-          addLog('debugger connected, proceeding to linkedin');
+          logger.log('debugger connected, proceeding to linkedin');
           setStatus('connected');
           await navigateToLinkedIn();
           return;
         }
-        addLog(`not connected yet, attempt ${attempts + 1}/${maxAttempts}`);
+        logger.log(`not connected yet, attempt ${attempts + 1}/${maxAttempts}`);
       } catch (error) {
-        addLog(`poll error: ${error}`);
-        console.error('error checking debugger status:', error);
+        logger.error(`poll error: ${error}`);
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
       attempts++;
     }
-    addLog('max polling attempts reached, setting error state');
+    logger.log('max polling attempts reached, setting error state');
     setStatus('error');
   };
 
@@ -149,9 +158,8 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
       if (!response.ok) throw new Error('Failed to check login status');
       const data = await response.json();
       
-      // Add log handling
       if (data.logs) {
-        data.logs.forEach((log: string) => addLog(log));
+        data.logs.forEach((log: string) => logger.log(log));
       }
 
       const isLoggedIn = data.isLoggedIn;
@@ -166,7 +174,7 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
         setLoginCheckInterval(interval);
       }
     } catch (error) {
-      console.error('failed to check login status:', error);
+      logger.error('failed to check login status:');
       if (loginCheckInterval) {
         clearInterval(loginCheckInterval);
         setLoginCheckInterval(null);
@@ -176,7 +184,6 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
 
   const navigateToLinkedIn = async () => {
     try {
-      // First get the wsUrl from status endpoint
       const statusResponse = await fetch('/api/chrome/status');
       const statusData = await statusResponse.json();
       
@@ -198,17 +205,15 @@ export function LaunchLinkedInChromeSession({ loginStatus, setLoginStatus }: Pro
         throw new Error(error.details || 'Failed to navigate');
       }
 
-      // Missing: We need to handle the response data and logs here
       const data = await response.json();
       if (data.logs) {
-        data.logs.forEach((log: string) => addLog(log));
+        data.logs.forEach((log: string) => logger.log(log));
       }
 
-      // Add login status check after navigation
       setLoginStatus('checking');
       await checkLoginStatus(statusData.wsUrl);
     } catch (error) {
-      console.error('failed to navigate:', error);
+      logger.error('failed to navigate:');
     }
   };
 
