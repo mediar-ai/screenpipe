@@ -90,7 +90,8 @@ export function LLMProvider({
         title: "embedded ai server is running",
       });
     },
-    onError: () => {
+    onError: (e) => {
+      console.error("embedded ai model error:", { e });
       setSidecarStatus(SidecarState.INACTIVE)
       toast({
         title: "embedded ai server is not running",
@@ -126,29 +127,27 @@ export function LLMProvider({
     mutationFn: async () => {
       posthog.capture("run_ollama_model_sidecar");
       toast({
-        title: "checking embedded ai server",
+        title: `initiating ${settings.embeddedLLM.model} model`,
       });
 
-      try {
-        const result = await invoke("run_ollama_model_sidecar", {
-          settings: {
-            enabled: settings.embeddedLLM.enabled,
-            model: settings.embeddedLLM.model,
-            port: settings.embeddedLLM.port,
-          },
-        });
-        return result;
-      } catch (e: any) {
-        console.error("embedded ai sidecar model error:", { e });
-        throw new Error(e.message);
-      }
+      const result = await invoke("run_ollama_model_sidecar", {
+        settings: {
+          enabled: settings.embeddedLLM.enabled,
+          model: settings.embeddedLLM.model,
+          port: settings.embeddedLLM.port,
+        },
+      });
+      return result as string;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      setModelStatus(ModelState.RUNNING)
       toast({
-        title: "embedded ai model is running",
+        title: `${settings.embeddedLLM.model} wants to tell you a joke:`,
+        description: result
       });
     },
     onError: () => {
+      setModelStatus(ModelState.ERROR)
       toast({
         title: "there was an issue",
         description: "the chosen model couldn't run. check the console for more details",
@@ -243,7 +242,7 @@ export function LLMProvider({
 
   const isPending = useMemo(() => {
     return stopIsPending || runIsPending || checkIsPending || startIsPending || modelCheckIsPending || modelStopIsPending;
-  }, [stopIsPending, runIsPending, checkIsPending, startIsPending]);
+  }, [ stopIsPending, runIsPending, checkIsPending, startIsPending, modelCheckIsPending, modelStopIsPending ]);
 
   useEffect(() => {
     if (sidecarStatus === SidecarState.UNKNOWN) {

@@ -53,6 +53,7 @@ function SidecarController() {
     if (sidecarStatus === SidecarState.ACTIVE || sidecarStatus === SidecarState.UNKNOWN || form.formState.isDirty) {
       return true
     }
+    
 
     return false
   }, [sidecarStatus, form.formState.isDirty])
@@ -214,13 +215,19 @@ function SidecarController() {
 }
 
 function ModelController() {
-  const { settings } = useSettings()
+  const { settings, updateSettings } = useSettings()
   const { sidecarStatus, modelStatus, handleModelAction } = useLLM()
   
   const {data: availableModels} = useQuery({
     queryKey: ['sidecar', 'models'],
     queryFn: async () => await getOllamaModels(settings.embeddedLLM.port.toString()),
     enabled: sidecarStatus === SidecarState.ACTIVE
+  })
+
+  const form = useForm({
+    defaultValues: {
+      model: settings.embeddedLLM.model
+    }
   })
 
   const selectDisabled = useMemo(() => {
@@ -236,12 +243,12 @@ function ModelController() {
       return true
     }
 
-    if (modelStatus === ModelState.RUNNING || modelStatus === ModelState.ERROR) {
+    if (modelStatus === ModelState.RUNNING || modelStatus === ModelState.ERROR || form.formState.isDirty) {
       return true
     }
 
     return false
-  }, [sidecarStatus, modelStatus])
+  }, [sidecarStatus, modelStatus, form.formState.isDirty])
 
   const pauseButtonDisabled = useMemo(() => {
     if (sidecarStatus !== SidecarState.ACTIVE) {
@@ -255,17 +262,48 @@ function ModelController() {
     return false
   }, [sidecarStatus, modelStatus])
 
-  const form = useForm({
-    defaultValues: {
-      model: settings.embeddedLLM.model
-    }
-  })
-
   const tooltipTexts = {
     [ModelState.INACTIVE]: 'no model is currently running',
     [ModelState.ERROR]: 'there was an issue while running the model',
     [ModelState.RUNNING]: `${settings.embeddedLLM.model} is currently running`,
     [ModelState.UNKNOWN]: 'we\'re checking model status'
+  }
+
+  const { 
+    mutateAsync: updateSettingsAsync, 
+    isPending: updateSettingsAsyncPending
+  } = useMutation({
+      mutationFn: async (values: Partial<Settings>) => {
+        updateSettings({
+          ...values
+        });
+      },
+      onSuccess: () => {
+        toast({
+          title: "sidecar default port updated",
+        });
+      }, 
+      onError: (e) => {
+        toast({
+          title: "form submission failed!",
+          description: e.message ? e.message : 'please try again.',
+          variant: 'destructive'
+        });
+      }
+  })
+
+  async function handleFormSubmit(values: { model: string }) {
+    await updateSettingsAsync({
+      embeddedLLM: {
+        port: settings.embeddedLLM.port,
+        model: values.model,
+        enabled: true
+      }
+    })
+
+    form.reset({
+      model: values.model
+    })
   }
 
   return (
@@ -284,38 +322,73 @@ function ModelController() {
             text={tooltipTexts[modelStatus]}
             status={modelStatus}
           />
-          <div className="border rounded-md w-[70%] relative flex items-center">
-              <div className="px-4 border-r opacity-50">
-                model:
-              </div>
-              <FormField
-                key={'model'}
-                name={'model'}
-                control={form.control}
-                render={({ field }) => {
-                    const generatedOptions = useMemo(() => {
-                      return availableModels?.map((option) => {
-                        return {
-                          value: option, 
-                          label: option
-                        }
-                      })
-                    },[availableModels])
+          <form 
+            className="w-[70%]"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+    
+              form
+                .handleSubmit(handleFormSubmit)(event)
+            }}
+          >
+            <div className="border rounded-md relative flex items-center">
+                <div className="px-4 border-r opacity-50">
+                  model:
+                </div>
+                <FormField
+                  key={'model'}
+                  name={'model'}
+                  control={form.control}
+                  render={({ field }) => {
+                      const generatedOptions = useMemo(() => {
+                        return availableModels?.map((option) => {
+                          return {
+                            value: option, 
+                            label: option
+                          }
+                        })
+                      },[availableModels])
 
-                    return (
-                      <Select
-                        isDisabled={selectDisabled}
-                        isCreateable
-                        className="w-[100%] !border-none"
-                        options={generatedOptions}
-                        {...field}
-                        onChange={(e) => field.onChange(e?.value)}
-                        value={field.value ? {value: field.value, label: field.value} : undefined}
-                      />
-                    )
-                }}
-              />
-          </div>
+                      return (
+                        <Select
+                          isDisabled={selectDisabled}
+                          isCreateable
+                          className="w-[100%] !border-none"
+                          options={generatedOptions}
+                          {...field}
+                          onChange={(e) => field.onChange(e?.value)}
+                          value={field.value ? {value: field.value, label: field.value} : undefined}
+                        />
+                      )
+                  }}
+                />
+                {form.formState.isDirty && (
+                  <div className="absolute bg-[white] h-[90%] top-0 right-0 flex justify-center">
+                    <TooltipDefault
+                      text={'erase changes'}
+                    > 
+                      <button 
+                        type="button"
+                        className="h-10 w-10 flex justify-center items-center hover:cursor-pointer"
+                        onClick={() => form.reset()}
+                      >
+                        <Eraser className="w-4 h-4"/>
+                      </button>
+                    </TooltipDefault>
+                    <TooltipDefault
+                      text={'save changes'}
+                    > 
+                      <button className="h-10 w-10 flex justify-center items-center hover:cursor-pointer">
+                        <Save className="w-4 h-4"/>
+                      </button>
+                    </TooltipDefault>
+                  </div>
+                )}
+            </div>
+          </form>
+
+          
           <TooltipDefault
             text='click to start model'
           >
