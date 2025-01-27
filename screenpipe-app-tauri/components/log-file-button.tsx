@@ -25,8 +25,11 @@ import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 import { open } from "@tauri-apps/plugin-shell";
-import { getVersion } from '@tauri-apps/api/app';
-import { version as osVersion, platform as osPlatform } from '@tauri-apps/plugin-os';
+import { getVersion } from "@tauri-apps/api/app";
+import {
+  version as osVersion,
+  platform as osPlatform,
+} from "@tauri-apps/plugin-os";
 
 const LogContent = ({
   content,
@@ -237,9 +240,10 @@ export const LogFileButton = ({
 
     setIsSending(true);
     try {
-      const BASE_URL =
-        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
-        "https://screenpi.pe";
+      // const BASE_URL =
+      //   (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+      //   "https://screenpi.pe";
+      const BASE_URL = "https://screenpi.pe";
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
 
@@ -269,7 +273,14 @@ export const LogFileButton = ({
       const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, identifier, type, os, os_version, app_version }),
+        body: JSON.stringify({
+          path,
+          identifier,
+          type,
+          os,
+          os_version,
+          app_version,
+        }),
       });
 
       const {
