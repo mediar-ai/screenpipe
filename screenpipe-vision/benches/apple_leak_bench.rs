@@ -1,4 +1,3 @@
-use cidre::ns;
 use criterion::{criterion_group, criterion_main, Criterion};
 use image::GenericImageView;
 use memory_stats::memory_stats;
@@ -39,8 +38,7 @@ fn apple_ocr_benchmark(c: &mut Criterion) {
                     }
                 }
 
-                let result =
-                    perform_ocr_apple(&image, &ns::ArrayMut::<ns::String>::with_capacity(0));
+                let result = perform_ocr_apple(&image, &[]);
                 assert!(
                     result.0.contains("receiver_count"),
                     "OCR failed: {:?}",

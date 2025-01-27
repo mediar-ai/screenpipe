@@ -17,7 +17,9 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
     "@clerk/backend": "^1.21.3",
-    "@sentry/cloudflare": "^8.51.0",
-    "langfuse-node": "^3.27.0"
+    "@google/generative-ai": "^0.21.0",
+    "langfuse-node": "^3.27.0",
+    "openai": "^4.80.1",
+    "@sentry/cloudflare": "^8.51.0"
   }
 }

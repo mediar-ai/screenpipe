@@ -64,7 +64,7 @@ impl ResourceMonitor {
             total_cpu += process.cpu_usage();
 
             // Iterate through all processes to find children
-            for (_child_pid, child_process) in sys.processes() {
+            for child_process in sys.processes().values() {
                 if child_process.parent() == Some(sysinfo::Pid::from_u32(pid)) {
                     total_memory += child_process.memory() as f64;
                     total_cpu += child_process.cpu_usage();
@@ -161,7 +161,7 @@ impl ResourceMonitor {
     #[cfg(target_os = "macos")]
     fn get_npu_usage(&self) -> Option<f32> {
         let output = Command::new("ioreg")
-            .args(&["-r", "-c", "AppleARMIODevice", "-n", "ane0"])
+            .args(["-r", "-c", "AppleARMIODevice", "-n", "ane0"])
             .output()
             .ok()?;
 

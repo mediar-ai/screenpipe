@@ -14,7 +14,7 @@ resolver = "2"
 
 
 [workspace.package]
-version = "0.2.28"
+version = "0.2.29"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"

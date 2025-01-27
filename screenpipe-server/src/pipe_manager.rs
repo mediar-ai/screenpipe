@@ -146,7 +146,7 @@ impl PipeManager {
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
-            .unwrap_or_else(|_| Value::Null);
+            .unwrap_or(Value::Null);
 
         PipeInfo {
             id: pipe_id,

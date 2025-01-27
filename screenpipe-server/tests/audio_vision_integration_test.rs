@@ -1,4 +1,3 @@
-use reqwest;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
@@ -56,7 +55,7 @@ async fn test_screen_capture_to_api_delay() {
 
     // Mac M3 max: Time elapsed: 33.516971916s
     // Mac M3 max: Time elapsed: 153.62804525s
-    
+
     // You can add assertions here if needed
     // assert!(elapsed_time < Duration::from_secs(30), "Test took too long");
 }

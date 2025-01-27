@@ -28,6 +28,7 @@ pub struct VideoCapture {
 }
 
 impl VideoCapture {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         output_path: &str,
         fps: f64,

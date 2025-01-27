@@ -4,7 +4,6 @@ use axum::{
     Router,
 };
 use chrono::Utc;
-use crossbeam::queue::SegQueue;
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
@@ -155,7 +154,7 @@ async fn test_add_tags_and_search() {
                 assert!(audio.tags.contains(&"audio".to_string()));
             }
             ContentItem::UI(_) => {
-                assert!(false);
+                unreachable!()
             }
         }
     }
