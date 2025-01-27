@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Button } from "./ui/button";
-import { FileText, Copy, AppWindow } from "lucide-react";
+import { FileText, Copy, AppWindow, Loader, X, Upload } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
 import { cn } from "@/lib/utils";
@@ -18,13 +18,15 @@ import {
   DialogContent,
   DialogDescription,
 } from "./ui/dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ScrollArea } from "./ui/scroll-area";
 import { invoke } from "@tauri-apps/api/core";
 import React from "react";
 import { LogViewer, LogViewerSearch } from "@patternfly/react-log-viewer";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core";
 import { open } from "@tauri-apps/plugin-shell";
+import { getVersion } from '@tauri-apps/api/app';
+import { version as osVersion, platform as osPlatform } from '@tauri-apps/plugin-os';
 
 const LogContent = ({
   content,
@@ -81,6 +83,75 @@ const LogContent = ({
 };
 LogContent.displayName = "LogContent";
 
+const ShareLogButton = ({
+  onShare,
+  isSending,
+}: {
+  onShare: () => void;
+  isSending: boolean;
+}) => {
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={onShare}
+      disabled={isSending}
+      className="gap-2 group relative"
+    >
+      {isSending ? (
+        <>
+          <Loader className="h-3.5 w-3.5 animate-spin" />
+          <span>sharing...</span>
+        </>
+      ) : (
+        <>
+          <Upload className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
+          <span>share logs</span>
+        </>
+      )}
+    </Button>
+  );
+};
+
+const ShareLinkDisplay = ({
+  shareLink,
+  onCopy,
+  onClose,
+}: {
+  shareLink: string;
+  onCopy: () => void;
+  onClose: () => void;
+}) => {
+  return (
+    <div className="flex items-center gap-2 bg-secondary/30 px-3 py-2 rounded-lg border border-secondary animate-in fade-in slide-in-from-top-4">
+      <div className="flex items-center gap-2 flex-1">
+        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+        <span className="text-sm font-mono">{shareLink}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 hover:bg-secondary/50 transition-colors"
+          onClick={onCopy}
+          title="Copy share link"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 hover:bg-secondary/50 transition-colors text-muted-foreground"
+          onClick={onClose}
+          title="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export const LogFileButton = ({
   className,
   isAppLog = false,
@@ -92,11 +163,15 @@ export const LogFileButton = ({
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
+  const { settings } = useSettings();
 
   const [isOpen, setIsOpen] = useState(false);
   const [logPath, setLogPath] = useState("");
   const [logContent, setLogContent] = useState("");
   const [logFiles, setLogFiles] = useState<LogFile[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [shareLink, setShareLink] = useState("");
+  const [machineId, setMachineId] = useState("");
 
   interface LogFile {
     name: string;
@@ -133,10 +208,84 @@ export const LogFileButton = ({
   const handleShowLog = async () => {
     const files = await getLogFiles();
     setLogFiles(files);
+
+    // Find most recent app log or fall back to first file
+    const appLog = files
+      .filter((f) => f.name.toLowerCase().includes("app"))
+      .sort((a, b) => b.modified_at - a.modified_at)[0];
+
     if (files.length > 0) {
-      await loadLogContent(files[0].path);
+      await loadLogContent(appLog?.path || files[0].path);
     }
     setIsOpen(true);
+  };
+
+  useEffect(() => {
+    const loadMachineId = async () => {
+      let id = localStorage.getItem("machineId");
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem("machineId", id);
+      }
+      setMachineId(id);
+    };
+    loadMachineId();
+  }, []);
+
+  const sendLogs = async () => {
+    if (!logContent) return;
+
+    setIsSending(true);
+    try {
+      const BASE_URL =
+        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+        "https://screenpi.pe";
+      const identifier = settings.user?.id || machineId;
+      const type = settings.user?.id ? "user" : "machine";
+
+      // Get signed URL
+      const signedRes = await fetch(`${BASE_URL}/api/logs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, type }),
+      });
+
+      const {
+        data: { signedUrl, path },
+      } = await signedRes.json();
+
+      // Upload log content
+      await fetch(signedUrl, {
+        method: "PUT",
+        body: logContent,
+        headers: { "Content-Type": "text/plain" },
+      });
+
+      const os = osPlatform();
+      const os_version = osVersion();
+      const app_version = await getVersion();
+
+      // Confirm upload
+      const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, identifier, type, os, os_version, app_version }),
+      });
+
+      const {
+        data: { id },
+      } = await confirmRes.json();
+      setShareLink(`${BASE_URL}/logs/${id}`);
+    } catch (err) {
+      console.error("log sharing failed:", err);
+      toast({
+        title: "sharing failed",
+        description: "could not upload logs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -174,10 +323,26 @@ export const LogFileButton = ({
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-[90vw] h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>log files</DialogTitle>
-            <DialogDescription>
-              select a log file from the list to view its contents
-            </DialogDescription>
+            <div className="flex flex-row justify-between items-start w-full">
+              <div>
+                <DialogTitle>log files</DialogTitle>
+                <DialogDescription>
+                  <span>select a log file from the list</span>
+                </DialogDescription>
+              </div>
+              <div className="flex mr-8">
+                {!shareLink && (
+                  <ShareLogButton onShare={sendLogs} isSending={isSending} />
+                )}
+              </div>
+            </div>
+            {shareLink && (
+              <ShareLinkDisplay
+                shareLink={shareLink}
+                onCopy={() => copyToClipboard(shareLink)}
+                onClose={() => setShareLink("")}
+              />
+            )}
           </DialogHeader>
 
           {logFiles.length === 0 ? (
@@ -224,11 +389,17 @@ export const LogFileButton = ({
                       <LogContent content={logContent} filePath={logPath} />
                     </div>
                     <div className="flex items-center justify-between px-2 py-1 bg-secondary/50 rounded-md">
-                      <code className="text-sm font-mono">{logPath}</code>
+                      <code
+                        className="text-sm font-mono truncate max-w-[70%]"
+                        title={logPath}
+                      >
+                        {logPath}
+                      </code>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => copyToClipboard(logContent)}
+                        className="text-muted-foreground hover:text-primary"
                       >
                         <Copy className="h-3 w-3" />
                       </Button>
