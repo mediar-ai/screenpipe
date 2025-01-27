@@ -11,17 +11,109 @@ import { StatusDisplay } from "./status-display";
 import { LLMLogFiles } from "./log-files";
 import {  ModelState } from "@/modules/ai-providers/providers/embedded/provider-metadata";
 import { Button } from "@/components/ui/button";
-import Spinner from "@/components/ui/spinner";
 import { useLLM } from "./context";
-import { InstructionsBanner } from "./instructions-banner";
-import { Eraser, EyeOff, Pause, Play, Save } from "lucide-react";
+import { InfoBannerData, InstructionsBanner } from "./instructions-banner";
+import { Eraser, Info, Pause, Play, Save, TriangleAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { SidecarState } from '../../../../ai-providers/providers/embedded/provider-metadata';
 import { useForm } from "react-hook-form";
 import { FormField } from "@/components/ui/form";
 import { getOllamaModels } from "@/modules/ai-providers/providers/native-llama/utils";
 import Select from "@/components/select";
-import { FormStatus } from "@/modules/form/form-status";
+
+
+type SidecarInfo = Record<SidecarState, InfoBannerData>
+const sidecarInfo: SidecarInfo = {
+    [SidecarState.UNKNOWN]: {
+        title: 'we\'re checking screenpipe\'s sidecar status.',
+        description: 'this may take a few seconds.',
+        icon: TriangleAlert
+    },
+    [SidecarState.INACTIVE]: {
+        title: 'screenpipe\'s sidecar is not running',
+        description: 'to make screenpipe\'s embedded ai your ai provider, you need to start it first',
+        icon: Info
+    },
+    [SidecarState.ACTIVE]: {
+        title: 'sidecar is running',
+        description: 'please make sure your ollama server is not running',
+        icon: Info
+    },
+    [SidecarState.ERROR]: {
+        title: 'sidecar is running',
+        description: 'please make sure your ollama server is not running',
+        icon: Info
+    },
+    // [EmbeddedLLMState.RUNNING]: {
+    //     icon: Info,
+    //     title: 'screenpipe embedded ai is running',
+    //     description: 'would you like to make screenpipe embedded ai your default ai provider?',
+    //     button: () => {
+    //         const { sidecarStatus } = useLLM()
+    //         const { updateSettings, settings } = useSettings()
+
+    //         const { 
+    //             mutateAsync: handleAiProviderUpdate, 
+    //             isPending
+    //         } = useMutation({
+    //             mutationFn: async () => {
+    //                 if (sidecarStatus !== EmbeddedLLMState.RUNNING) return
+    //                 updateSettings({
+    //                     aiProviderType: AvailableAiProviders.EMBEDDED,
+    //                     aiUrl: `http://localhost:${settings.embeddedLLM.port}/v1`,
+    //                     aiModel: settings.embeddedLLM.model
+    //                 })
+    //             },
+    //             onSuccess: () => {
+    //               toast({
+    //                 title: "ai provider info updated",
+    //               });
+    //             }, 
+    //             onError: (e) => {
+    //               toast({
+    //                 title: "ai provider update failed!",
+    //                 description: e.message ? e.message : 'please try again.',
+    //                 variant: 'destructive'
+    //               });
+    //             }
+    //         })
+    //         return (
+    //             <div>
+    //                 <Button 
+    //                     className="min-w-[100px]" 
+    //                     onClick={async () => await handleAiProviderUpdate()}
+    //                 >
+    //                     {isPending ? <Spinner/> : 'yes'}
+    //                 </Button>
+    //             </div>
+    //         )
+    //     }
+    // }
+}
+
+type ModelInfo = Record<ModelState, InfoBannerData> 
+const modelInfo: ModelInfo = {
+    [ModelState.UNKNOWN]: {
+        title: 'we\'re checking model status.',
+        description: 'this may take a few seconds.',
+        icon: TriangleAlert
+    },
+    [ModelState.INACTIVE]: {
+        title: 'screenpipe\'s sidecar is not running a model',
+        description: 'to make screenpipe\'s embedded ai your ai provider, you need to start it first',
+        icon: Info
+    },
+    [ModelState.RUNNING]: {
+        title: 'model is running',
+        description: 'would you like to make embedded ai your default provider?',
+        icon: Info
+    },
+    [ModelState.ERROR]: {
+        title: 'model is running',
+        description: 'would you like to make embedded ai your default provider?',
+        icon: Info
+    },
+}
 
 export function EmbeddedControlCenter({
     aiProvider,
@@ -30,7 +122,25 @@ export function EmbeddedControlCenter({
     aiProvider: AvailableAiProviders,
     setAiProvider: React.Dispatch<React.SetStateAction<AvailableAiProviders>>
 }) {
-  const {settings, updateSettings} = useSettings()
+  const { settings } = useSettings()
+  const { sidecarStatus, modelStatus, isPending } = useLLM()
+  
+  const { icon, title, description } = useMemo(() => {
+      if (sidecarStatus !== SidecarState.ACTIVE) {
+          return {
+              icon: sidecarInfo[sidecarStatus].icon,
+              title: sidecarInfo[sidecarStatus].title,
+              description: sidecarInfo[sidecarStatus].description
+          }
+      }
+
+      return {
+          icon: modelInfo[modelStatus].icon,
+          title: modelInfo[modelStatus].title,
+          description: modelInfo[modelStatus].description
+      }
+  }, [sidecarStatus, modelStatus])
+
   return (
       <div className="flex flex-col space-y-3">
         {settings.aiProviderType !== aiProvider 
@@ -53,7 +163,12 @@ export function EmbeddedControlCenter({
           </div>
         ) 
         : null }
-        <InstructionsBanner/>
+        <InstructionsBanner
+            icon={icon}
+            title={title}
+            description={description}
+            isPending={isPending}
+        />
         <SidecarController/>
         <ModelController/>
         <LLMLogFiles/>

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { toast, useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import { Settings, useSettings } from "@/lib/hooks/use-settings";
 import { AiProviders } from "@/modules/ai-providers/providers";
 import { AvailableAiProviders } from "@/modules/ai-providers/types/available-providers";
@@ -8,8 +8,12 @@ import Form from "@/modules/form/components/form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { open as openUrl } from "@tauri-apps/plugin-shell"
-import { ExternalLinkIcon } from "lucide-react";
+import { ExternalLinkIcon, TriangleAlert } from "lucide-react";
 import { useUser } from "../account-section";
+import { InputSkeleton } from "@/components/ui/input";
+import { TextareaSkeleton } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { InstructionsBanner } from "./embedded-llm/instructions-banner";
 
 export function RegularProviderSetupForm({
     aiProvider,
@@ -21,7 +25,7 @@ export function RegularProviderSetupForm({
     const { toast } = useToast();
     const { settings, updateSettings } = useSettings()
 
-    const { data } = useQuery({
+    const { data, isLoading } = useQuery({
         queryKey: ['setupForm', aiProvider],
         queryFn: async () => {
             const result = await getSetupFormAndPersistedValues({
@@ -32,7 +36,7 @@ export function RegularProviderSetupForm({
             return result
         }
     })
-    
+
     const { 
         mutateAsync: updateSettingsAsync, 
         isPending: updateSettingsAsyncPending
@@ -91,43 +95,61 @@ export function RegularProviderSetupForm({
         if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !settings.user.token) {
           return {showForm: false, showLoginStep: true}
         }
-    
+
+
         return { showForm: true }
-    },[aiProvider, settings.user])
+    },[aiProvider, settings.user, isLoading])
     
     async function submitChanges(values: Partial<Settings>) {
-      if (aiProvider !== AvailableAiProviders.EMBEDDED) {
         await credentialValidation(values)
         await updateSettingsAsync({
           ...values, 
           aiProviderType: aiProvider
         })
-      } else {
-        await updateSettingsAsync({
-          embeddedLLM: {
-            ...values as any
-          }
-        })
-      }
+    }
+
+    if (isLoading) {
+      return (
+        <>
+          <InputSkeleton/>
+          <InputSkeleton/>
+          <TextareaSkeleton/>
+          <div className="animate-pulse">
+            <Slider disabled/>
+          </div>
+        </>
+      )
+    }
+
+    if ((aiProvider === AvailableAiProviders.NATIVE_OLLAMA) && !isLoading && !data?.setupForm) {
+      return (
+        <InstructionsBanner
+          title="looks like your ollama server is not running"
+          icon={TriangleAlert}
+          description="please initiate the server and try again"
+          isPending={false}
+        />
+      )
+    }
+
+    if (aiProvider === AvailableAiProviders.SCREENPIPE_CLOUD && !settings.user.token) {
+      <ScreenpipeLogin/>
     }
 
     return (
         <>
-         {componentsVisibility.showLoginStep && (
-            <ScreenpipeLogin/>
-          )}
-            {(data?.setupForm && componentsVisibility.showForm)  &&
-              <Form
-                isDirty={!(aiProvider === settings.aiProviderType)}
-                defaultValues={data.defaultValues}
-                isLoading={updateSettingsAsyncPending || credentialValidationPending}
-                onSubmit={submitChanges}
-                onReset={async () => setAiProvider(settings.aiProviderType)}
-                key={aiProvider}
-                form={data.setupForm}
-              />
-            }
-        </>
+        {data?.setupForm &&
+          <Form
+            isDirty={!(aiProvider === settings.aiProviderType)}
+            defaultValues={data.defaultValues}
+            isLoading={updateSettingsAsyncPending || credentialValidationPending}
+            onSubmit={submitChanges}
+            onReset={async () => setAiProvider(settings.aiProviderType)}
+            key={aiProvider}
+            form={data.setupForm}
+          />
+        }
+      </>
     )
 }
 
