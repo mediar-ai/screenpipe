@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { LiveTranscription } from "@/components/live-transcription";
+import { MeetingHistory } from "@/components/meeting-history";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +31,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <main>{children}</main>
+        <main className="container mx-auto p-4">
+          <Tabs defaultValue="live" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="live">live transcription</TabsTrigger>
+              <TabsTrigger value="history">meeting history</TabsTrigger>
+            </TabsList>
+            <TabsContent value="live" className="mt-4">
+              <LiveTranscription />
+            </TabsContent>
+            <TabsContent value="history" className="mt-4">
+              <MeetingHistory />
+            </TabsContent>
+          </Tabs>
+        </main>
         <Toaster />
       </body>
     </html>

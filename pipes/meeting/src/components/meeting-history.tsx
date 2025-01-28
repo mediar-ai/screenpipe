@@ -156,7 +156,7 @@ const extensions = [
   }),
 ];
 
-export default function MeetingHistory() {
+export function MeetingHistory() {
   const { settings } = useSettings();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
