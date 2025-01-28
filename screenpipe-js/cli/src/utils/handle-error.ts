@@ -34,9 +34,6 @@ export function handleError(error: unknown) {
 
 export const ERRORS = {
   MISSING_DIR_OR_EMPTY_PIPE: "1",
-  EXISTING_CONFIG: "2",
-  MISSING_CONFIG: "3",
-  FAILED_CONFIG_READ: "4",
-  COMPONENT_NOT_FOUND: "5",
-  BUILD_MISSING_REGISTRY_FILE: "6"
+  COMPONENT_NOT_FOUND: "2",
+  BUILD_MISSING_REGISTRY_FILE: "3"
 } as const
