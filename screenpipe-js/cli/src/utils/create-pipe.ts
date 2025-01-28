@@ -5,13 +5,8 @@ import path from 'path';
 // import { main } from '@screenpipe/create-pipe';
 
 export async function createPipe(
-  options: any
+  cwd: string
 ){
-    options = {
-      srcDir: false,
-      ...options,
-    }
-
     let projectType: "next" = "next"
     let projectName: string = "my-app"
   
@@ -20,7 +15,7 @@ export async function createPipe(
             type: "select",
             name: "type",
             message: `The path ${highlighter.info(
-              options.cwd
+              cwd
             )} does not contain a package.json file.\n  Would you like to start a new project?`,
             choices: [
               { title: "Next.js", value: "next" },
@@ -43,17 +38,17 @@ export async function createPipe(
     projectName = name
     projectType = type
 
-    const projectPath = `${options.cwd}/${projectName}`
+    const projectPath = `${cwd}/${projectName}`
 
     // Check if path is writable.
     try {
-      await fs.access(options.cwd, fs.constants.W_OK)
+      await fs.access(cwd, fs.constants.W_OK)
     } catch (error) {
       logger.break()
-      logger.error(`The path ${highlighter.info(options.cwd)} is not writable.`)
+      logger.error(`The path ${highlighter.info(cwd)} is not writable.`)
       logger.error(
         `It is likely you do not have write permissions for this folder or the path ${highlighter.info(
-          options.cwd
+          cwd
         )} does not exist.`
       )
       logger.break()
@@ -61,7 +56,7 @@ export async function createPipe(
     }
 
     // Check if project already exists
-    if (fs.existsSync(path.resolve(options.cwd, projectName, "package.json"))) {
+    if (fs.existsSync(path.resolve(cwd, projectName, "package.json"))) {
       logger.break()
       logger.error(
         `A project with the name ${highlighter.info(projectName)} already exists.`
