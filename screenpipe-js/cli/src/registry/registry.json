@@ -2,12 +2,31 @@
     "use-health": {
         "name": "use-health",
         "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-health-check.tsx",
-        "target": "./hooks/use-settings.tsx",
+        "target": "./src/hooks/use-health.tsx",
         "dependencies": [
             "lodash"
         ],
         "devDependencies": [
             "@types/lodash"
+        ]
+    },
+    "use-settings": {
+        "name": "use-settings",
+        "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-settings.tsx",
+        "target": "./src/hooks/use-settings.ts",
+        "dependencies": [
+            "@screenpipe/browser"
+        ],
+        "registryDependencies": [
+            "route-settings"
+        ]
+    },
+    "route-settings": {
+        "name": "route-settings",
+        "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/app/api/settings/route.ts",
+        "target": "./src/app/api/settings/route.tsx",
+        "dependencies": [
+            "@screenpipe/js"
         ]
     }
 }
