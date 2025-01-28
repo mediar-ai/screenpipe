@@ -8,7 +8,7 @@ import { getRegistry } from "../registry/api";
 export async function promptForRegistryComponents(
     options: z.infer<typeof addOptionsSchema>
   ) {
-    const registryIndex = await getRegistry(options.cwd)
+    const registryIndex = await getRegistry()
 
     if (!registryIndex) {
       logger.break()

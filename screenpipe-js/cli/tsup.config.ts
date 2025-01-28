@@ -1,4 +1,6 @@
 import { defineConfig } from "tsup"
+import path from 'path';
+import fs from 'fs';
 
 export default defineConfig({
   clean: true,
