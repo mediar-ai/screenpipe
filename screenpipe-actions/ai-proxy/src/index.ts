@@ -1,9 +1,10 @@
-import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
 import { verifyToken } from '@clerk/backend';
 import { createProvider } from './providers';
 import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
+import { Deepgram } from '@deepgram/sdk';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
 class SubscriptionCache {
@@ -37,7 +38,6 @@ class SubscriptionCache {
 const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
-	console.log('validating user id has cloud sub', userId);
 	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
@@ -186,6 +186,47 @@ async function handleOptions(request: Request) {
 	});
 }
 
+async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
+	const webSocketPair = new WebSocketPair();
+	const [client, server] = Object.values(webSocketPair);
+	server.accept();
+
+	const requestId = crypto.randomUUID();
+	const deepgram = createClient(env.DEEPGRAM_API_KEY);
+	const live = deepgram.listen.live({
+		model: 'nova-2',
+		options: {
+			headers: {
+				'X-Request-Id': requestId,
+			},
+		},
+	});
+
+	server.addEventListener('message', (event) => {
+		if (live.getReadyState() === WebSocket.OPEN) {
+			live.send(event.data);
+		}
+	});
+
+	live.on(LiveTranscriptionEvents.Transcript, (data) => {
+		if (server.readyState === WebSocket.OPEN) {
+			server.send(JSON.stringify(data));
+		}
+	});
+
+	server.addEventListener('close', () => live.requestClose());
+
+	return new Response(null, {
+		status: 101,
+		webSocket: client,
+		headers: {
+			'Access-Control-Allow-Origin': '*',
+			'Access-Control-Allow-Headers': '*',
+			'X-Request-Id': requestId,
+		},
+	});
+}
+
 export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
@@ -255,7 +296,8 @@ export default Sentry.withSentry(
 				// Add auth check for protected routes
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
-					if (!authHeader?.startsWith('Bearer ')) {
+					console.log('authHeader', authHeader);
+					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
 						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
 							headers: {
@@ -271,13 +313,15 @@ export default Sentry.withSentry(
 					}
 
 					const token = authHeader.split(' ')[1];
+					console.log('token', token);
 					// First try to validate as a user ID with subscription
 					let isValid = await validateSubscription(env, token);
+					console.log('isValid', isValid);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
-						isValid = await verifyClerkToken(env, token);
+						console.log('isValid2', isValid);
 					}
 
 					if (!isValid) {
@@ -295,6 +339,8 @@ export default Sentry.withSentry(
 						return response;
 					}
 				}
+
+				console.log('path', path);
 
 				if (path === '/test') {
 					const response = new Response('ai proxy is working!', {
@@ -352,62 +398,9 @@ export default Sentry.withSentry(
 					}
 				}
 
-				if (path === '/v1/listen' && request.method === 'POST') {
-					// Get the raw body instead of form data
-					const audioBuffer = await request.arrayBuffer();
-					const languages = request.headers.get('detect_language')?.split(',') || [];
-					const sampleRate = request.headers.get('sample_rate') || '16000';
-					try {
-						const deepgramResponse = await fetch(
-							'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&sample_rate=' +
-								sampleRate +
-								(languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
-							{
-								method: 'POST',
-								headers: {
-									Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-									'Content-Type': 'audio/wav', // Set correct content type
-								},
-								body: audioBuffer,
-							}
-						);
-
-						if (!deepgramResponse.ok) {
-							const errorData = await deepgramResponse.json();
-							throw new Error(`Deepgram API error: ${JSON.stringify(errorData)}`);
-						}
-
-						const data = await deepgramResponse.json();
-						const response = new Response(JSON.stringify(data), {
-							headers: {
-								'Access-Control-Allow-Origin': '*',
-								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-								'Access-Control-Allow-Headers': '*',
-								'Content-Type': 'application/json',
-							},
-						});
-						response.headers.append('Vary', 'Origin');
-						return response;
-					} catch (error: any) {
-						console.error('Error in Deepgram request:', error);
-						const response = new Response(
-							JSON.stringify({
-								error: error.message,
-								details: error.stack,
-							}),
-							{
-								status: 500,
-								headers: {
-									'Access-Control-Allow-Origin': '*',
-									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
-									'Access-Control-Allow-Headers': '*',
-									'Content-Type': 'application/json',
-								},
-							}
-						);
-						response.headers.append('Vary', 'Origin');
-						return response;
-					}
+				if (path === '/v1/listen' && request.headers.get('Upgrade') === 'websocket') {
+					console.log('websocket request');
+					return await handleWebSocketUpgrade(request, env);
 				}
 
 				const response = new Response('not found', {
