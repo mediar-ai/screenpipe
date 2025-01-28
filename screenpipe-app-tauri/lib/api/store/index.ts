@@ -8,6 +8,7 @@ export interface PipeStorePlugin {
   price: number | null;
   status: string | null;
   created_at: string | null;
+  source_code: string | null;
   developer_accounts: {
     developer_name: string;
   };

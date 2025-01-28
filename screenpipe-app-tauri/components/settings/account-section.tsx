@@ -96,6 +96,7 @@ export function AccountSection() {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
+          // eg. user flow
           if (url.includes("api_key=")) {
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
@@ -108,15 +109,14 @@ export function AccountSection() {
               });
             }
           }
-          if (url.includes("return") || url.includes("refresh")) {
+          // eg stripe / dev flow
+          if (url.includes("stripe-connect")) {
             console.log("stripe connect url:", url);
             if (url.includes("/return")) {
-              const apiKey = new URL(url).searchParams.get("api_key")!;
               if (settings.user) {
                 updateSettings({
                   user: {
                     ...settings.user,
-                    api_key: apiKey,
                     stripe_connected: true,
                   },
                 });
@@ -237,11 +237,6 @@ export function AccountSection() {
       setIsConnectingStripe(false);
     }
   };
-
-  useEffect(() => {
-    const updatedUser = { ...settings.user, stripe_connected: true };
-    updateSettings({ user: updatedUser });
-  }, []);
 
   const updateProfile = async (updates: Partial<typeof settings.user>) => {
     if (!settings.user?.token) return;
@@ -489,85 +484,103 @@ export function AccountSection() {
                 </a>
               </div>
             </div>
-          </>
-        )}
-
-        <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  className="rounded-md"
-                  src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
-                  alt=""
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-sm font-medium">stripe connect</div>
-                <p className="text-xs text-muted-foreground">
-                  receive earnings from your pipes (
-                  <a
-                    href="https://discord.gg/dU9EBuw7Uq"
-                    className="underline hover:text-primary"
-                    target="_blank"
+            <div className="p-5 border border-border/50 rounded-lg bg-background/50 hover:bg-background/80 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 flex items-center justify-center bg-[#635BFF]/10 rounded-md">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      className="rounded-md"
+                      src="https://images.stripeassets.com/fzn2n1nzq965/HTTOloNPhisV9P4hlMPNA/cacf1bb88b9fc492dfad34378d844280/Stripe_icon_-_square.svg?q=80&w=1082"
+                      alt=""
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium flex items-center gap-2">
+                      stripe connect
+                      {settings.user?.stripe_connected &&
+                        settings.user?.stripe_account_status && (
+                          <div
+                            className={cn(
+                              "px-2 py-0.5 text-xs rounded-full",
+                              settings.user.stripe_account_status === "pending"
+                                ? "bg-yellow-500/10 text-yellow-500"
+                                : "bg-green-500/10 text-green-500"
+                            )}
+                            title={
+                              settings.user.stripe_account_status === "pending"
+                                ? "go to stripe and complete your account verification (bank account, id verification...)"
+                                : "your stripe account is fully verified and you can start receiving earnings from your pipes"
+                            }
+                          >
+                            {settings.user.stripe_account_status}
+                          </div>
+                        )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      receive earnings from your pipes (
+                      <a
+                        href="https://discord.gg/dU9EBuw7Uq"
+                        className="underline hover:text-primary"
+                        target="_blank"
+                      >
+                        dm @louis030195
+                      </a>{" "}
+                      for any questions)
+                    </p>
+                  </div>
+                </div>
+                {settings.user?.stripe_connected ? (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-9"
+                      onClick={() => openUrl("https://dashboard.stripe.com/")}
+                    >
+                      manage
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => {
+                        if (settings.user) {
+                          const updatedUser = {
+                            ...settings.user,
+                            stripe_connected: false,
+                          };
+                          updateSettings({ user: updatedUser });
+                          toast({
+                            title: "stripe disconnected",
+                            description:
+                              "your stripe account has been disconnected",
+                          });
+                        }
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleConnectStripe}
+                    className="h-9"
+                    disabled={isConnectingStripe || !settings.user?.id}
                   >
-                    dm @louis030195
-                  </a>{" "}
-                  for any questions)
-                </p>
+                    {isConnectingStripe ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "connect"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
-            {settings.user?.api_key ? (
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-9"
-                  onClick={() => openUrl("https://dashboard.stripe.com/")}
-                >
-                  manage
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9"
-                  onClick={() => {
-                    if (settings.user) {
-                      const updatedUser = {
-                        ...settings.user,
-                        api_key: undefined,
-                        stripe_connected: false,
-                      };
-                      updateSettings({ user: updatedUser });
-                      toast({
-                        title: "stripe disconnected",
-                        description:
-                          "your stripe account has been disconnected",
-                      });
-                    }
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleConnectStripe}
-                className="h-9"
-                disabled={isConnectingStripe || !settings.user?.id}
-              >
-                {isConnectingStripe ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  "connect"
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
+          </>
+        )}
 
         {settings.user?.api_key && (
           <>
