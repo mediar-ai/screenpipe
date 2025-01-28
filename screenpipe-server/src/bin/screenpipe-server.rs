@@ -135,10 +135,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Sentry only if telemetry is enabled
     let _sentry_guard = if !cli.disable_telemetry {
+        // check if SENTRY_RELEASE_NAME_APPEND is set
+        let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
+        let release_name = format!(
+            "{:?}{}",
+            sentry::release_name!(),
+            sentry_release_name_append
+        );
         Some(sentry::init((
             "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
             sentry::ClientOptions {
-                release: sentry::release_name!(),
+                release: Some(release_name.into()),
+                traces_sample_rate: 0.1,
                 ..Default::default()
             }
         )))

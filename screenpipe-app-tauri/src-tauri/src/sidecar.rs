@@ -405,6 +405,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             }
         }
 
+        c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
+
         let c = c.args(&args);
 
         let (_, child) = c.spawn().map_err(|e| {
@@ -434,6 +436,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
         }
     }
+
+    c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
     let c = c.args(&args);
 
