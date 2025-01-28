@@ -50,7 +50,9 @@ export const add = new Command()
 
       // If the current directory is not a pipe, create one
       if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-        await createPipe(options)
+        logger.warn('you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.')
+        return
+        // await createPipe(options)
       }
 
       // Add components to the directory

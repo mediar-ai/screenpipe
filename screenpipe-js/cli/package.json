@@ -5,7 +5,13 @@
   "module": "index.ts",
   "license": "MIT",
   "type": "module",
-  "bin": "./dist/index.js",
+  "bin": {
+    "screenpipe": "./dist/index.js"
+  },
+  "author": "oliverqx",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsup"
   },

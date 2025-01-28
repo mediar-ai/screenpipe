@@ -2,6 +2,7 @@ import prompts from "prompts"
 import fs from "fs-extra"
 import { highlighter, logger } from "./logger";
 import path from 'path';
+// import { main } from '@screenpipe/create-pipe';
 
 export async function createPipe(
   options: any
@@ -72,7 +73,7 @@ export async function createPipe(
 
     if (projectType === "next") {
       // TODO: look into pipes cli
-      // createNextProject()
+      // main
     }
 
     return {
