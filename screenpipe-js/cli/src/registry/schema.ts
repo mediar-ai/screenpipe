@@ -9,6 +9,10 @@ export const registryComponentSchema = z.object({
   registryDependencies: z.array(z.string()).optional(),
   devDependencies: z.array(z.string()).optional()
 })
+export type ComponentSchema = z.infer<typeof registryComponentSchema>
+
+export const registrySchema = z.record(z.string(), registryComponentSchema)
+export type RegistrySchema = z.infer<typeof registrySchema>
 
 export const registryResolvedComponentsTreeSchema = registryComponentSchema.pick({
   dependencies: true,
@@ -22,7 +26,3 @@ export const registryResolvedComponentsTreeSchema = registryComponentSchema.pick
     }))
   })
 )
-export type ComponentSchema = z.infer<typeof registryComponentSchema>
-
-export const registrySchema = z.record(z.string(), registryComponentSchema)
-export type RegistrySchema = z.infer<typeof registrySchema>
