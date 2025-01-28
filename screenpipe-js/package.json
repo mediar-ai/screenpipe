@@ -1,0 +1,32 @@
+{
+  "name": "@screenpipe/dev",
+  "version": "1.1.2",
+  "description": "screenpipe development CLI",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "screenpipe-dev": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node && chmod +x ./dist/index.js && bun link",
+    "start": "bun run dist/index.js",
+    "dev": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@drizzle-team/brocli": "^0.11.0",
+    "archiver": "^7.0.1",
+    "chalk": "^5.4.1",
+    "commander": "^11.1.0",
+    "inquirer": "^12.3.2",
+    "simple-git": "^3.27.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/node": "^20.11.5",
+    "bun-types": "latest",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
