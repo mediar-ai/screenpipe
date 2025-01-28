@@ -54,7 +54,13 @@ export function LiveTranscription() {
             {chunks.map((chunk, i) => (
               <div key={i} className="text-sm">
                 <span className="text-gray-500">
-                  {new Date(chunk.timestamp).toLocaleTimeString()} [{chunk.isInput ? 'mic' : 'speaker'}]
+                  {new Date(chunk.timestamp).toLocaleTimeString()} 
+                  [{chunk.isInput ? 'mic' : 'speaker'}]
+                  {chunk.speaker !== undefined && (
+                    <span className="ml-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                      speaker {chunk.speaker}
+                    </span>
+                  )}
                 </span>
                 <span className="ml-2">{chunk.text}</span>
               </div>

@@ -25,7 +25,8 @@ export function useRecentChunks() {
             timestamp: content.timestamp || new Date().toISOString(),
             text: content.transcription || '',
             isInput: content.deviceType?.toLowerCase() === 'input',
-            device: content.deviceName || 'unknown'
+            device: content.deviceName || 'unknown',
+            speaker: content.speaker?.id
           }
         })
         .reverse()
