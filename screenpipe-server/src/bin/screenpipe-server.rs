@@ -13,7 +13,6 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
     handle_index_command,
-    highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
@@ -184,12 +183,6 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-
-    let h = Highlight::init(HighlightConfig {
-        project_id: String::from("82688"),
-        ..Default::default()
-    })
-    .expect("Failed to initialize Highlight.io");
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
@@ -911,12 +904,11 @@ async fn main() -> anyhow::Result<()> {
     if !cli.disable_telemetry {
         println!(
             "{}",
-            "warning: telemetry is enabled. only error-level data will be sent to highlight.io.\n\
+            "warning: telemetry is enabled. only error-level data will be sent.\n\
             to disable, use the --disable-telemetry flag."
                 .bright_yellow()
         );
     } else {
-        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services.".bright_green()
@@ -1043,7 +1035,6 @@ async fn main() -> anyhow::Result<()> {
         drop(audio_runtime);
     });
 
-    h.shutdown();
     info!("shutdown complete");
 
     Ok(())
