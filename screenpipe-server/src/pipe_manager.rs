@@ -298,6 +298,21 @@ impl PipeManager {
         }
     }
 
+    #[cfg(windows)]
+    use windows::Win32::Foundation::HANDLE;
+    #[cfg(windows)]
+    fn terminate_process(process: &mut HANDLE, exit_code: u32) {
+        use windows::Win32::System::Threading::{
+            INFINITE, TerminateProcess, WaitForSingleObject,
+        };
+        use windows::Win32::Foundation::CloseHandle;
+        unsafe {
+            let _ = TerminateProcess(process, exit_code);
+            WaitForSingleObject(process, INFINITE);
+            CloseHandle(process);
+        }
+    }
+
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
@@ -359,7 +374,7 @@ impl PipeManager {
                                 false,
                                 pid as u32,
                             ) {
-                                let _ = TerminateProcess(h_process, 1);
+                                let _ = terminate_process(h_process, 1);
                             }
                         }
                     }
