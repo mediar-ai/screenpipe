@@ -33,7 +33,6 @@ export const add = new Command()
   .option("-p, --path <path>", "the path to add the component to.")
   .action(async (components, opts) => {
     try {
-      
       const options = addOptionsSchema.parse({
         components,
         cwd: path.resolve(opts.cwd),

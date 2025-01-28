@@ -24,7 +24,7 @@
     "route-settings": {
         "name": "route-settings",
         "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/app/api/settings/route.ts",
-        "target": "./src/app/api/settings/route.tsx",
+        "target": "./src/app/api/settings/route.ts",
         "dependencies": [
             "@screenpipe/js"
         ]
