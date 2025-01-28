@@ -64,7 +64,7 @@ export function Settings() {
       title: "Restarting Screenpipe",
       description: "Please wait while we restart Screenpipe",
     });
-    await invoke("kill_all_sreenpipes");
+    await invoke("kill_all_screenpipes");
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 

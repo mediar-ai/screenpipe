@@ -51,7 +51,7 @@ pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::kill_all_screenpipes;
 pub use sidecar::spawn_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
@@ -660,7 +660,7 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes,
+            kill_all_screenpipes,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
@@ -811,7 +811,7 @@ async fn main() {
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
                             if let Err(e) =
-                                kill_all_sreenpipes(state, app_handle_clone.clone()).await
+                                kill_all_screenpipes(state, app_handle_clone.clone()).await
                             {
                                 error!("Error stopping recordings during quit: {}", e);
                             }
@@ -839,7 +839,7 @@ async fn main() {
                         let app_handle = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
                             let state = app_handle.state::<SidecarState>();
-                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                            if let Err(err) = kill_all_screenpipes(state, app_handle.clone()).await {
                                 error!("Failed to stop recording: {}", err);
                                 let _ = app_handle
                                     .notification()
@@ -872,7 +872,7 @@ async fn main() {
 
                         tokio::task::block_in_place(move || {
                             Handle::current().block_on(async move {
-                                if let Err(err) = sidecar::kill_all_sreenpipes(
+                                if let Err(err) = sidecar::kill_all_screenpipes(
                                     app_handle.state::<SidecarState>(),
                                     app_handle.clone(),
                                 )

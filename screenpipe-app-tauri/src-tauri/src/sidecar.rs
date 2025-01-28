@@ -80,7 +80,7 @@ impl User {
 }
 
 #[tauri::command]
-pub async fn kill_all_sreenpipes(
+pub async fn kill_all_screenpipes(
     state: State<'_, SidecarState>,
     _app: tauri::AppHandle,
 ) -> Result<(), String> {
