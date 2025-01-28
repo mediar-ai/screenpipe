@@ -1,5 +1,4 @@
-import { highlighter } from "@/src/utils/highlighter"
-import { logger } from "@/src/utils/logger"
+import { highlighter, logger } from "@/src/utils/logger"
 import { z } from "zod"
 
 export function handleError(error: unknown) {
@@ -32,3 +31,12 @@ export function handleError(error: unknown) {
   logger.break()
   process.exit(1)
 }
+
+export const ERRORS = {
+  MISSING_DIR_OR_EMPTY_PIPE: "1",
+  EXISTING_CONFIG: "2",
+  MISSING_CONFIG: "3",
+  FAILED_CONFIG_READ: "4",
+  COMPONENT_NOT_FOUND: "5",
+  BUILD_MISSING_REGISTRY_FILE: "6"
+} as const

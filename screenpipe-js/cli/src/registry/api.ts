@@ -3,7 +3,6 @@ import { logger } from "../utils/logger";
 import { registryResolvedComponentsTreeSchema, RegistrySchema, registrySchema } from "./schema";
 import registry from "./registry.json";
 import deepmerge from "deepmerge";
-import { z } from "zod";
 
 export async function getRegistry() {
     try {
@@ -94,7 +93,12 @@ export async function registryResolveItemsTree(
       devDependencies: deepmerge.all(
         componentArray.map((item) => item.devDependencies ?? [])
       ),
-      locations: componentArray.map((item) => item.location),
+      files: componentArray.map((item) => {
+        return {
+          src: item.src, 
+          target: item.target
+        }
+      }),
       docs,
     })
   } catch (error) {

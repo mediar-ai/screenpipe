@@ -2,10 +2,9 @@ import path from "path"
 import { Command } from "commander"
 import { z } from "zod"
 import { logger } from "../utils/logger"
-import { handleError } from "../utils/handle-error"
+import { handleError, ERRORS } from "../utils/handle-error"
 import { promptForRegistryComponents } from "../utils/prompt-for-component"
 import { preFlightAdd } from "../preflights/preflight-add"
-import * as ERRORS from '@/src/utils/errors';
 import { createPipe } from "../utils/create-pipe"
 import { addComponents } from "../utils/add-components"
 
@@ -41,17 +40,21 @@ export const add = new Command()
         ...opts,
       })
 
+      // If there are no components, ask the user which ones they want.
       if (!options.components?.length) {
           options.components = await promptForRegistryComponents(options)
       }
 
-        const result = await preFlightAdd(options)
+      // Before addig check a few things
+      const result = await preFlightAdd(options)
 
-        if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-          await createPipe(options)
-        }
+      // If the current directory is not a pipe, create one
+      if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
+        await createPipe(options)
+      }
 
-        await addComponents(options.components, options)
+      // Add components to the directory
+      await addComponents(options.components, options)
     } catch (error) {
       logger.break()
       handleError(error)

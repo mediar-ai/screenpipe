@@ -50,5 +50,6 @@ export async function promptForRegistryComponents(
       handleError(new Error("Something went wrong. Please try again."))
       return []
     }
+    
     return result.data
   }

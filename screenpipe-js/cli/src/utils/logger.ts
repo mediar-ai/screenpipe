@@ -1,4 +1,11 @@
-import { highlighter } from "@/src/utils/highlighter"
+import { cyan, green, red, yellow } from "kleur/colors"
+
+export const highlighter = {
+  error: red,
+  warn: yellow,
+  info: cyan,
+  success: green,
+}
 
 export const logger = {
   error(...args: unknown[]) {
@@ -19,4 +26,18 @@ export const logger = {
   break() {
     console.log("")
   },
+}
+
+import ora, { type Options } from "ora"
+
+export function spinner(
+    text: Options["text"],
+    options?: {
+      silent?: boolean
+    }
+  ) {
+    return ora({
+      text,
+      isSilent: options?.silent,
+    })
 }

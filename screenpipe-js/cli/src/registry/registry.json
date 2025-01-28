@@ -1,13 +1,13 @@
 {
     "use-health": {
         "name": "use-health",
-        "location": "test",
-        "target": "",
+        "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-health-check.tsx",
+        "target": "./hooks/use-settings.tsx",
         "dependencies": [
-            "any"
+            "lodash"
         ],
-        "devDependencies":[
-            "any"
+        "devDependencies": [
+            "@types/lodash"
         ]
     }
 }

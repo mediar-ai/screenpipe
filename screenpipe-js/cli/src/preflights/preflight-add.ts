@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import * as ERRORS from '@/src/utils/errors';
 import { addOptionsSchema } from '../commands/add';
 import { z } from 'zod';
+import { ERRORS } from '../utils/handle-error';
 
 export async function preFlightAdd(options: z.infer<typeof addOptionsSchema>) {
   const errors: Record<string, boolean> = {}

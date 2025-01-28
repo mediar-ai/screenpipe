@@ -1,7 +1,6 @@
 import prompts from "prompts"
-import { highlighter } from "./highlighter"
 import fs from "fs-extra"
-import { logger } from "./logger";
+import { highlighter, logger } from "./logger";
 import path from 'path';
 
 export async function createPipe(
