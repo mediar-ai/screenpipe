@@ -7,6 +7,7 @@ import {
   UserIcon,
   Loader2,
   Power,
+  ArrowUpCircle,
 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
@@ -103,7 +104,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={handleOpenWindow}
-                    className="hover:bg-muted font-medium no-card-hover"
+                    className="hover:bg-muted font-medium relative no-card-hover"
                   >
                     <Puzzle className="h-3.5 w-3.5 mr-2" />
                     open
@@ -188,6 +189,15 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 <Download className="h-3 w-3" />
                 <span className="relative z-10 font-mono">source</span>
               </motion.a>
+            )}
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 font-mono text-xs">
+              v{pipe.installed_config?.version}
+            </span>
+            {pipe.has_update && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 font-mono text-xs animate-pulse">
+                <ArrowUpCircle className="h-3 w-3" />
+                update
+              </span>
             )}
           </div>
         )}

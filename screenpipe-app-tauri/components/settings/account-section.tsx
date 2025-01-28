@@ -86,10 +86,10 @@ export function AccountSection() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
   const [profileForm, setProfileForm] = useState({
-    bio: "",
-    github_username: "",
-    website: "",
-    contact: "",
+    bio: settings.user?.bio || "",
+    github_username: settings.user?.github_username || "",
+    website: settings.user?.website || "",
+    contact: settings.user?.contact || "",
   });
 
   useEffect(() => {
@@ -266,15 +266,17 @@ export function AccountSection() {
     }
   };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
+  console.log(settings.user);
 
+  // Initialize form only once when user data first loads
   useEffect(() => {
-    if (settings.user) {
+    if (
+      settings.user &&
+      !profileForm.bio &&
+      !profileForm.github_username &&
+      !profileForm.website &&
+      !profileForm.contact
+    ) {
       setProfileForm({
         bio: settings.user.bio || "",
         github_username: settings.user.github_username || "",
@@ -282,7 +284,14 @@ export function AccountSection() {
         contact: settings.user.contact || "",
       });
     }
-  }, []);
+  }, [settings.user]); // Only run when settings.user changes
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
 
   return (
     <div className="w-full space-y-6 py-4">
