@@ -83,7 +83,6 @@ colored = "2.0"
 
 # Completions
 clap_complete_command = "0.6.1"
-atty = "0.2"
 
 # Plugins
 tower = { version = "0.5", features = ["util"] }
