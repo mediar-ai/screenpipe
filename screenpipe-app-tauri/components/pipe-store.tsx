@@ -108,6 +108,8 @@ export const PipeStore: React.FC = () => {
             installed_config: p.config,
             has_purchased: true,
             is_core_pipe: false,
+            is_enabled: p.config?.enabled || false,
+            source_code: p.config?.source || "",
           };
         });
 
