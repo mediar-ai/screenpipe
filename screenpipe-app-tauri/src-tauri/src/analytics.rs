@@ -84,7 +84,23 @@ impl AnalyticsManager {
         loop {
             interval.tick().await;
             if *self.enabled.lock().await {
-                if let Err(e) = self.send_event("app_still_running", None).await {
+                // Get health status
+                let health_status = match self.check_recording_health().await {
+                    Ok(status) => status,
+                    Err(e) => {
+                        error!("failed to check recording health: {}", e);
+                        json!({
+                            "is_healthy": false,
+                            "frame_status": "error",
+                            "audio_status": "error",
+                            "ui_status": "error",
+                            "error": e.to_string()
+                        })
+                    }
+                };
+
+                // Send periodic event with health data
+                if let Err(e) = self.send_event("app_still_running", Some(health_status)).await {
                     error!("failed to send periodic posthog event: {}", e);
                 }
 
@@ -94,6 +110,40 @@ impl AnalyticsManager {
                 }
             }
         }
+    }
+
+    async fn check_recording_health(&self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        let health_url = format!("{}/health", self.local_api_base_url);
+        let response = self.client.get(&health_url).send().await?;
+        
+        if !response.status().is_success() {
+            return Ok(json!({
+                "is_healthy": false,
+                "frame_status": "error",
+                "audio_status": "error",
+                "ui_status": "error",
+                "error": format!("Health check failed with status: {}", response.status())
+            }));
+        }
+
+        let health: serde_json::Value = response.json().await?;
+        
+        // Extract relevant status fields
+        let frame_status = health["frame_status"].as_str().unwrap_or("unknown");
+        let audio_status = health["audio_status"].as_str().unwrap_or("unknown");
+        let ui_status = health["ui_status"].as_str().unwrap_or("unknown");
+        
+        // Consider healthy if all enabled systems are "ok"
+        let is_healthy = (frame_status == "ok" || frame_status == "disabled") &&
+                        (audio_status == "ok" || audio_status == "disabled") &&
+                        (ui_status == "ok" || ui_status == "disabled");
+
+        Ok(json!({
+            "is_healthy": is_healthy,
+            "frame_status": frame_status,
+            "audio_status": audio_status,
+            "ui_status": ui_status
+        }))
     }
 
     async fn track_enabled_pipes(&self) -> Result<(), Box<dyn std::error::Error>> {
