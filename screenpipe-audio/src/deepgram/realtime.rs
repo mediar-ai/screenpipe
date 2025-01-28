@@ -12,13 +12,14 @@ use deepgram::common::stream_response::StreamResponse;
 use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
 use screenpipe_core::Language;
-use screenpipe_events::send_event;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
+use tracing::error;
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
@@ -27,6 +28,7 @@ pub async fn stream_transcription_deepgram(
         stream.subscribe().await,
         stream.device.clone(),
         stream.device_config.sample_rate().0,
+        realtime_transcription_sender,
         is_running,
         languages,
         deepgram_api_key,
@@ -40,6 +42,7 @@ pub async fn start_deepgram_stream(
     stream: Receiver<Vec<f32>>,
     device: Arc<AudioDevice>,
     sample_rate: u32,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
     _languages: Vec<Language>,
     deepgram_api_key: Option<String>,
@@ -81,6 +84,7 @@ pub async fn start_deepgram_stream(
                 if let Ok(Some(result)) = result {
                     handle_transcription(
                         result,
+                        realtime_transcription_sender.clone(),
                         device_clone.clone(),
                     ).await;
                 }
@@ -111,7 +115,11 @@ fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, R
     rx
 }
 
-async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) {
+async fn handle_transcription(
+    result: StreamResponse,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
+    device: Arc<AudioDevice>,
+) {
     if let StreamResponse::TranscriptResponse {
         channel, is_final, ..
     } = result
@@ -119,21 +127,24 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
         let is_input = device.device_type == DeviceType::Input;
-
         let speaker = res.words.first().and_then(|word| word.speaker);
 
         if !text.is_empty() {
-            let _ = send_event(
-                "transcription",
-                RealtimeTranscriptionEvent {
-                    timestamp: chrono::Utc::now(),
-                    device: device.to_string(),
-                    transcription: text.to_string(),
-                    is_final,
-                    is_input,
-                    speaker,
-                },
-            );
+            match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
+                timestamp: chrono::Utc::now(),
+                device: device.to_string(),
+                transcription: text.to_string(),
+                is_final,
+                is_input,
+                speaker,
+            }) {
+                Ok(_) => {}
+                Err(e) => {
+                    if !e.to_string().contains("channel closed") {
+                        error!("Error sending transcription event: {}", e);
+                    }
+                }
+            }
         }
     }
 }

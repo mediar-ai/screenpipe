@@ -52,17 +52,16 @@ export function LiveTranscription() {
         ) : (
           <div className="space-y-2 relative p-4">
             {chunks.map((chunk, i) => (
-              <div key={i} className="text-sm">
-                <span className="text-gray-500">
+              <div key={i} className="text-sm mb-2">
+                <span className="text-gray-500 text-xs">
                   {new Date(chunk.timestamp).toLocaleTimeString()} 
-                  [{chunk.isInput ? 'mic' : 'speaker'}]
                   {chunk.speaker !== undefined && (
-                    <span className="ml-1 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                    <span className="ml-1 px-1.5 py-0.5 bg-gray-100 rounded-sm">
                       speaker {chunk.speaker}
                     </span>
                   )}
                 </span>
-                <span className="ml-2">{chunk.text}</span>
+                <div className="mt-1">{chunk.text}</div>
               </div>
             ))}
             {serviceStatus === 'available' && (

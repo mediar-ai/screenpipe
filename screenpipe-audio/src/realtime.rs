@@ -2,16 +2,24 @@ use crate::{deepgram::stream_transcription_deepgram, AudioStream};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use screenpipe_core::Language;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::{atomic::AtomicBool, Arc};
+use tokio::sync::broadcast;
 
 pub async fn realtime_stt(
     stream: Arc<AudioStream>,
     languages: Vec<Language>,
+    realtime_transcription_sender: Arc<broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
-    stream_transcription_deepgram(stream, languages, is_running, deepgram_api_key).await?;
+    stream_transcription_deepgram(
+        stream,
+        realtime_transcription_sender,
+        languages,
+        is_running,
+        deepgram_api_key,
+    ).await?;
 
     Ok(())
 }

@@ -3,7 +3,7 @@ export interface TranscriptionChunk {
   text: string
   isInput: boolean
   device: string
-  speaker?: number  // Optional because some chunks might not have speaker info
+  speaker?: number  // Add optional speaker field
 }
 
 export type ServiceStatus = 'available' | 'forbidden' | 'unavailable' | 'no_subscription' 

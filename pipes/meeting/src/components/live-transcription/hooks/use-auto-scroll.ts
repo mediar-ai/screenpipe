@@ -18,11 +18,11 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
         top: element.scrollHeight,
         behavior: 'smooth'
       })
-      console.log('scrolled to bottom:', {
-        scrollHeight: element.scrollHeight,
-        clientHeight: element.clientHeight,
-        scrollTop: element.scrollTop
-      })
+    //   console.log('scrolled to bottom:', {
+    //     scrollHeight: element.scrollHeight,
+    //     clientHeight: element.clientHeight,
+    //     scrollTop: element.scrollTop
+    //   })
     })
   }
 
@@ -34,12 +34,12 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
     const isAtBottom = 
       Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop) < 50
     
-    console.log('scroll event:', {
-      isAtBottom,
-      scrollHeight: element.scrollHeight,
-      clientHeight: element.clientHeight,
-      scrollTop: element.scrollTop
-    })
+    // console.log('scroll event:', {
+    //   isAtBottom,
+    //   scrollHeight: element.scrollHeight,
+    //   clientHeight: element.clientHeight,
+    //   scrollTop: element.scrollTop
+    // })
     
     setShouldAutoScroll(isAtBottom)
   }
@@ -51,7 +51,7 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
       return
     }
 
-    console.log('new chunks arrived, scrolling to bottom')
+    // console.log('new chunks arrived, scrolling to bottom')
     scrollToBottom()
   }, [chunks, shouldAutoScroll])
 
