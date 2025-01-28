@@ -14,7 +14,7 @@ for non technical users or those who want to get started quickly, we recommend g
 <Tabs items={['macos & linux', 'windows']}>
   <Tab>
     ```bash copy
-    curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+    curl -fsSL get.screenpi.pe/cli | sh
     screenpipe
     # make sure to allow permissions on macos (screen, mic)
     ```
@@ -22,7 +22,7 @@ for non technical users or those who want to get started quickly, we recommend g
   <Tab>
     ```powershell copy
     # run as administrator
-    irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+    iwr get.screenpi.pe/cli.ps1 | iex
     # in a new terminal
     screenpipe.exe
     ```
@@ -94,29 +94,7 @@ cargo build --release --features metal
 ./target/release/screenpipe
 ```
 
-
-add this to your vscode settings in the root of the project `.vscode/settings.json`:
-
-```json copy
-{
-   "rust-analyzer.cargo.features": [
-      "metal",
-      "pipes"
-   ],
-   "rust-analyzer.server.extraEnv": {
-      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
-      "SCREENPIPE_APP_DEV": "true"
-   },
-   "rust-analyzer.cargo.extraEnv": {
-      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
-      "SCREENPIPE_APP_DEV": "true"
-   },
-   "terminal.integrated.env.osx": {
-      "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
-      "SCREENPIPE_APP_DEV": "true"
-   }
-}
-```
+6. to build the desktop app:
 
 ```bash copy
 cd screenpipe-app-tauri
