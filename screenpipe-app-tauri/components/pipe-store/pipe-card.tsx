@@ -14,6 +14,7 @@ import { PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
+import posthog from "posthog-js";
 
 interface PipeCardProps {
   pipe: PipeWithStatus;
@@ -120,9 +121,15 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                   if (pipe.is_paid && !pipe.has_purchased) {
                     setIsLoading(true);
                     onPurchase(pipe, () => setIsLoading(false));
+                    posthog.capture("pipe_purchase", {
+                      pipe_id: pipe.id,
+                    });
                   } else {
                     setIsLoading(true);
                     onInstall(pipe, () => setIsLoading(false));
+                    posthog.capture("pipe_install", {
+                      pipe_id: pipe.id,
+                    });
                   }
                 }}
                 className="font-medium no-card-hover"

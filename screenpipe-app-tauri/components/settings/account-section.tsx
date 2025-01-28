@@ -338,6 +338,7 @@ export function AccountSection() {
                     features={plan.features}
                     onSelect={async () => {
                       if (plan.title.toLowerCase() === "enterprise") {
+                        posthog.capture("enterprise_plan_selected");
                         openUrl(plan.url);
                         return;
                       }
@@ -351,6 +352,7 @@ export function AccountSection() {
                         return;
                       }
                       if (!settings.user?.cloud_subscribed) {
+                        posthog.capture("cloud_plan_selected");
                         openUrl(plan.url);
                       }
                     }}
