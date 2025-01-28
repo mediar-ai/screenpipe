@@ -298,14 +298,6 @@ impl PipeManager {
         }
     }
 
-    #[cfg(windows)]
-    fn terminate_process(process: &mut HANDLE, exit_code: u32) {
-        
-        unsafe {
-            
-        }
-    }
-
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
