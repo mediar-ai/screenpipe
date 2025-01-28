@@ -5,7 +5,7 @@ use clap_complete_command::Shell;
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
 
@@ -288,7 +288,7 @@ impl Cli {
         let mut cmd = Self::command();
         
         // Check for terminal output
-        if atty::is(atty::Stream::Stdout) {
+        if io::stdout().is_terminal() {
             let shell_instructions = match shell {
                 Shell::Bash => 
                     "For Bash:\n\
