@@ -398,6 +398,64 @@ export default Sentry.withSentry(
 					}
 				}
 
+				if (path === '/v1/listen' && request.method === 'POST') {
+					// Get the raw body instead of form data
+					const audioBuffer = await request.arrayBuffer();
+					const languages = request.headers.get('detect_language')?.split(',') || [];
+					const sampleRate = request.headers.get('sample_rate') || '16000';
+					try {
+						const deepgramResponse = await fetch(
+							'https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&sample_rate=' +
+								sampleRate +
+								(languages.length > 0 ? '&' + languages.map((lang) => `detect_language=${lang}`).join('&') : ''),
+							{
+								method: 'POST',
+								headers: {
+									Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
+									'Content-Type': 'audio/wav', // Set correct content type
+								},
+								body: audioBuffer,
+							}
+						);
+
+						if (!deepgramResponse.ok) {
+							const errorData = await deepgramResponse.json();
+							throw new Error(`Deepgram API error: ${JSON.stringify(errorData)}`);
+						}
+
+						const data = await deepgramResponse.json();
+						const response = new Response(JSON.stringify(data), {
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Content-Type': 'application/json',
+							},
+						});
+						response.headers.append('Vary', 'Origin');
+						return response;
+					} catch (error: any) {
+						console.error('Error in Deepgram request:', error);
+						const response = new Response(
+							JSON.stringify({
+								error: error.message,
+								details: error.stack,
+							}),
+							{
+								status: 500,
+								headers: {
+									'Access-Control-Allow-Origin': '*',
+									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+									'Access-Control-Allow-Headers': '*',
+									'Content-Type': 'application/json',
+								},
+							}
+						);
+						response.headers.append('Vary', 'Origin');
+						return response;
+					}
+				}
+
 				if (path === '/v1/listen' && request.headers.get('Upgrade') === 'websocket') {
 					console.log('websocket request');
 					return await handleWebSocketUpgrade(request, env);
