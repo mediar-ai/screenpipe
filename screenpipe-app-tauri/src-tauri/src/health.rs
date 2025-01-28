@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
+use tauri::{path::BaseDirectory, Manager};
 use tokio::time::{interval, Duration};
 
 #[derive(Debug, Deserialize)]
@@ -42,12 +43,22 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                         last_status = current_status.to_string();
                         if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                             let icon_path = if current_status == "unhealthy" {
-                                "assets/screenpipe-logo-tray-failed.png"
+                                app.path()
+                                    .resolve(
+                                        "assets/screenpipe-logo-tray-failed.png",
+                                        BaseDirectory::Resource,
+                                    )
+                                    .expect("failed to resolve icon path")
                             } else {
-                                "assets/screenpipe-logo-tray-black.png"
+                                app.path()
+                                    .resolve(
+                                        "assets/screenpipe-logo-tray-black.png",
+                                        BaseDirectory::Resource,
+                                    )
+                                    .expect("failed to resolve icon path")
                             };
                             let _ = main_tray
-                                .set_icon(Some(tauri::image::Image::from_path(icon_path).unwrap()))
+                                .set_icon(Some(tauri::image::Image::from_path(&icon_path).unwrap()))
                                 .and_then(|_| main_tray.set_icon_as_template(true));
                         }
                     }
@@ -57,13 +68,15 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                         println!("health check failed: {}", e);
                         last_status = "error".to_string();
                         if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
+                            let icon_path = app
+                                .path()
+                                .resolve(
+                                    "assets/screenpipe-logo-tray-failed.png",
+                                    BaseDirectory::Resource,
+                                )
+                                .expect("failed to resolve icon path");
                             let _ = main_tray
-                                .set_icon(Some(
-                                    tauri::image::Image::from_path(
-                                        "assets/screenpipe-logo-tray-failed.png",
-                                    )
-                                    .unwrap(),
-                                ))
+                                .set_icon(Some(tauri::image::Image::from_path(&icon_path).unwrap()))
                                 .and_then(|_| main_tray.set_icon_as_template(true));
                         }
                     }
