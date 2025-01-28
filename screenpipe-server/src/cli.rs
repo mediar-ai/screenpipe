@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::io::{self, IsTerminal};
 
 use clap::{Parser, Subcommand, CommandFactory};
 use clap_complete_command::Shell;
