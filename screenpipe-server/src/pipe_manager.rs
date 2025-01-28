@@ -15,9 +15,6 @@ use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-#[cfg(windows)]
-use windows::Win32::Foundation::HANDLE;
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
     pub id: String,
@@ -303,14 +300,9 @@ impl PipeManager {
 
     #[cfg(windows)]
     fn terminate_process(process: &mut HANDLE, exit_code: u32) {
-        use windows::Win32::System::Threading::{
-            INFINITE, TerminateProcess, WaitForSingleObject,
-        };
-        use windows::Win32::Foundation::CloseHandle;
+        
         unsafe {
-            let _ = TerminateProcess(process, exit_code);
-            WaitForSingleObject(process, INFINITE);
-            CloseHandle(process);
+            
         }
     }
 
@@ -366,8 +358,10 @@ impl PipeManager {
                     }
                     #[cfg(windows)]
                     {
+                        use windows::Win32::Foundation::CloseHandle;
                         use windows::Win32::System::Threading::{
                             OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
+                            INFINITE, WaitForSingleObject
                         };
                         unsafe {
                             if let Ok(h_process) = OpenProcess(
@@ -375,8 +369,10 @@ impl PipeManager {
                                 false,
                                 pid as u32,
                             ) {
-                                let _ = terminate_process(h_process, 1);
-                            }
+                                let _ = TerminateProcess(h_process, 1);
+                                WaitForSingleObject(h_process, INFINITE);
+                                CloseHandle(h_process);
+                           }
                         }
                     }
                 }
