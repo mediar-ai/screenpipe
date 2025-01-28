@@ -29,18 +29,28 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}
       >
-        <main className="container mx-auto p-4">
-          <Tabs defaultValue="live" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="live">live transcription</TabsTrigger>
-              <TabsTrigger value="history">meeting history</TabsTrigger>
+        <main className="h-full p-4">
+          <Tabs defaultValue="live" className="h-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-2 p-1 bg-gray-100">
+              <TabsTrigger 
+                value="live" 
+                className="data-[state=active]:bg-black data-[state=active]:text-white"
+              >
+                live transcription
+              </TabsTrigger>
+              <TabsTrigger 
+                value="history"
+                className="data-[state=active]:bg-black data-[state=active]:text-white"
+              >
+                meeting history
+              </TabsTrigger>
             </TabsList>
-            <TabsContent value="live" className="mt-4">
+            <TabsContent value="live" className="flex-1 mt-4">
               <LiveTranscription />
             </TabsContent>
-            <TabsContent value="history" className="mt-4">
+            <TabsContent value="history" className="flex-1 mt-4">
               <MeetingHistory />
             </TabsContent>
           </Tabs>
