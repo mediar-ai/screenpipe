@@ -165,7 +165,7 @@ if (platform == "windows") {
 		await $`'C:\\Program Files\\7-Zip\\7z.exe' x ${path.join(
 			binDir,
 			config.windows.ffmpegName
-		)}.7z`;
+		)}.7z -o${binDir} `;
 		await $`mv ${path.join(binDir, config.windows.ffmpegName)} ${path.join(
 			binDir,
 			config.ffmpegRealname
