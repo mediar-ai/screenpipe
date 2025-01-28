@@ -1031,16 +1031,12 @@ async fn main() {
             app.manage(server_shutdown_tx);
 
             // Start health check service
-            // macos only
-            #[cfg(target_os = "macos")]
-            {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = start_health_check(app_handle).await {
-                        error!("Failed to start health check service: {}", e);
-                    }
-                });
-            }
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = start_health_check(app_handle).await {
+                    error!("Failed to start health check service: {}", e);
+                }
+            });
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);

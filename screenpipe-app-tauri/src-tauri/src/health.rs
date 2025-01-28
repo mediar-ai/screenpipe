@@ -42,9 +42,9 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                         last_status = current_status.to_string();
                         if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
                             let icon_path = if current_status == "unhealthy" {
-                                "icons/screenpipe-logo-tray-failed.png"
+                                "assets/screenpipe-logo-tray-failed.png"
                             } else {
-                                "icons/screenpipe-logo-tray-black.png"
+                                "assets/screenpipe-logo-tray-black.png"
                             };
                             let _ = main_tray
                                 .set_icon(Some(tauri::image::Image::from_path(icon_path).unwrap()))
@@ -60,7 +60,7 @@ pub async fn start_health_check(app: tauri::AppHandle) -> Result<()> {
                             let _ = main_tray
                                 .set_icon(Some(
                                     tauri::image::Image::from_path(
-                                        "icons/screenpipe-logo-tray-failed.png",
+                                        "assets/screenpipe-logo-tray-failed.png",
                                     )
                                     .unwrap(),
                                 ))
