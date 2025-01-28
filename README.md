@@ -96,13 +96,13 @@
 macos, linux:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+curl -fsSL get.screenpi.pe/cli | sh
 ```
 
 or on windows
 
 ```bash
-irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+iwr get.screenpi.pe/cli.ps1 | iex
 ```
 
 then
