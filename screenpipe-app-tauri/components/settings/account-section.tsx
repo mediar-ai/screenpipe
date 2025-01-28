@@ -93,6 +93,10 @@ export function AccountSection() {
   });
 
   useEffect(() => {
+    if (!settings.user?.email) {
+      posthog.capture("app_login");
+    }
+
     const setupDeepLink = async () => {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
@@ -265,8 +269,6 @@ export function AccountSection() {
       });
     }
   };
-
-  console.log(settings.user);
 
   // Initialize form only once when user data first loads
   useEffect(() => {
