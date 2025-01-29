@@ -6,7 +6,8 @@ import {
   publishCommand,
   registerCommand,
   listVersionsCommand,
-  createCommand
+  createCommand,
+  addComponentCommand
 } from "./commands";
 
 run(
@@ -14,6 +15,7 @@ run(
     loginCommand,
     logoutCommand,
     createCommand,
+    addComponentCommand,
     registerCommand,
     publishCommand,
     listVersionsCommand,
