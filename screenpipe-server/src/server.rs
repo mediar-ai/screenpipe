@@ -10,9 +10,10 @@ use futures::{
     Stream,
 };
 use image::ImageFormat::{self};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl};
 
 use crate::{
-    core::VisionDeviceControl,
+    core::DeviceManager,
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
@@ -28,14 +29,13 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices,
-    realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
+    realtime::RealtimeTranscriptionEvent,
 };
 use screenpipe_vision::OcrEngine;
 use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
@@ -43,7 +43,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::{net::TcpListener, sync::broadcast};
+use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -59,9 +59,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    pub audio_devices_tx: Arc<broadcast::Sender<(AudioDevice, DeviceControl)>>,
-    pub vision_devices_tx: Arc<broadcast::Sender<(u32, VisionDeviceControl)>>,
-    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub device_manager: Arc<DeviceManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -191,7 +189,7 @@ pub struct AudioContent {
     pub offset_index: i64,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: DeviceType,
+    pub device_type: AudioDeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -843,8 +841,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
-    vision_devices_tx: Arc<tokio::sync::broadcast::Sender<(u32, VisionDeviceControl)>>,
+    device_manager: Arc<DeviceManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -860,8 +857,7 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
-        vision_devices_tx: Arc<tokio::sync::broadcast::Sender<(u32, VisionDeviceControl)>>,
+        device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -874,8 +870,7 @@ impl Server {
         Server {
             db,
             addr,
-            audio_devices_tx,
-            vision_devices_tx,
+            device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -889,7 +884,6 @@ impl Server {
 
     pub async fn start<F>(
         self,
-        device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
         enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
@@ -898,9 +892,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            audio_devices_tx: self.audio_devices_tx,
-            vision_devices_tx: self.vision_devices_tx,
-            devices_status: device_status,
+            device_manager: self.device_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -1128,7 +1120,7 @@ async fn add_transcription_to_db(
 
     let device = AudioDevice {
         name: device_name.to_string(),
-        device_type: DeviceType::Input,
+        device_type: AudioDeviceType::Input,
     };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
@@ -1659,7 +1651,7 @@ async fn sse_transcription_handler(
 pub struct AudioDeviceControlRequest {
     device_name: String,
     #[serde(default)]
-    device_type: Option<DeviceType>,
+    device_type: Option<AudioDeviceType>,
 }
 
 #[derive(Serialize)]
@@ -1675,7 +1667,7 @@ async fn start_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1700,11 +1692,12 @@ async fn start_audio_device(
     }
 
     let control = DeviceControl {
+        device: screenpipe_core::DeviceType::Audio(device.clone()),
         is_running: true,
         is_paused: false,
     };
 
-    let _ = state.audio_devices_tx.send((device.clone(), control));
+    let _ = state.device_manager.update_device(control).await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1718,7 +1711,7 @@ async fn stop_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1742,13 +1735,14 @@ async fn stop_audio_device(
         ));
     }
 
-    let _ = state.audio_devices_tx.send((
-        device.clone(),
-        DeviceControl {
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1870,6 +1864,7 @@ async fn start_vision_device(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VisionDeviceControlRequest>,
 ) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("starting vision device: {}", payload.device_id);
     // Validate device exists
     let monitors = list_monitors().await;
     if !monitors.iter().any(|m| m.id() == payload.device_id) {
@@ -1882,13 +1877,15 @@ async fn start_vision_device(
         ));
     }
 
-    let _ = state.vision_devices_tx.send((
-        payload.device_id,
-        VisionDeviceControl {
+    debug!("starting vision device: {}", payload.device_id);
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
             is_running: true,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(VisionDeviceControlResponse {
         success: true,
@@ -1900,6 +1897,7 @@ async fn stop_vision_device(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<VisionDeviceControlRequest>,
 ) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("stopping vision device: {}", payload.device_id);
     // Validate device exists
     let monitors = list_monitors().await;
     if !monitors.iter().any(|m| m.id() == payload.device_id) {
@@ -1912,13 +1910,16 @@ async fn stop_vision_device(
         ));
     }
 
-    let _ = state.vision_devices_tx.send((
-        payload.device_id,
-        VisionDeviceControl {
+    debug!("stopping vision device: {}", payload.device_id);
+
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
             is_running: false,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(VisionDeviceControlResponse {
         success: true,

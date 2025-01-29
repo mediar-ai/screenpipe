@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
@@ -146,7 +146,7 @@ impl DatabaseManager {
         .bind(Utc::now())
         .bind(transcription_engine)
         .bind(&device.name)
-        .bind(device.device_type == DeviceType::Input)
+        .bind(device.device_type == AudioDeviceType::Input)
         .bind(speaker_id)
         .bind(start_time)
         .bind(end_time)
@@ -902,9 +902,9 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 device_name: raw.device_name,
                 device_type: if raw.is_input_device {
-                    DeviceType::Input
+                    AudioDeviceType::Input
                 } else {
-                    DeviceType::Output
+                    AudioDeviceType::Output
                 },
                 speaker,
                 start_time: raw.start_time,
