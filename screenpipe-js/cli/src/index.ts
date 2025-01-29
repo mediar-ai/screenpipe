@@ -7,7 +7,7 @@ import {
   registerCommand,
   listVersionsCommand,
   createCommand,
-  addComponentCommand
+  componentsCommands
 } from "./commands";
 
 run(
@@ -15,7 +15,7 @@ run(
     loginCommand,
     logoutCommand,
     createCommand,
-    addComponentCommand,
+    componentsCommands,
     registerCommand,
     publishCommand,
     listVersionsCommand,

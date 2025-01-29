@@ -6,7 +6,7 @@ import { promptForRegistryComponents } from "./utils/prompt-for-component";
 import { preFlightAdd } from "./preflights/preflight-add";
 import { addComponents } from "./utils/add-components";
 
-export const addComponentCommand = command({
+export const componentsCommands = command({
   name: "components",
   desc: "commands to interact with screenpipe's components",
   subcommands: [
