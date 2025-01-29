@@ -17,16 +17,24 @@ export function useRecentChunks() {
       
       console.log('recent chunks:', results)
       
+      if (!results) {
+        console.log('no results returned from queryScreenpipe')
+        setChunks([])
+        return
+      }
+
       const recentChunks: TranscriptionChunk[] = results.data
         .filter((item: any) => item.type === 'Audio' && item.content)
         .map((item: any) => {
           const content = item.content
+          console.log('processing chunk content:', content)
           return {
             timestamp: content.timestamp || new Date().toISOString(),
             text: content.transcription || '',
             isInput: content.deviceType?.toLowerCase() === 'input',
             device: content.deviceName || 'unknown',
-            speaker: content.speaker?.id
+            speaker: content.speaker?.id,
+            error: content.error
           }
         })
         .reverse()
