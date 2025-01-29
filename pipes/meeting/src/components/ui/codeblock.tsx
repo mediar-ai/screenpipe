@@ -4,7 +4,7 @@
 "use client";
 
 import { FC, memo } from "react";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter/dist/esm/prism';
+import Prism from 'react-syntax-highlighter/dist/esm/prism'
 import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import { useCopyToClipboard } from "@/lib/hooks/use-copy-to-clipboard";
@@ -117,7 +117,7 @@ const CodeBlock: FC<Props> = memo(({ language, value }) => {
           </Button>
         </div>
       </div>
-      <SyntaxHighlighter
+      <Prism
         language={language}
         style={coldarkDark}
         PreTag="div"
@@ -139,7 +139,7 @@ const CodeBlock: FC<Props> = memo(({ language, value }) => {
         }}
       >
         {value}
-      </SyntaxHighlighter>
+      </Prism>
     </div>
   );
 });
