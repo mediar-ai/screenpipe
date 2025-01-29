@@ -789,17 +789,17 @@ export function RecordingSettings() {
               <div className="flex flex-col space-y-6">
                 <div className="flex flex-col space-y-2">
                   <Label
-                  htmlFor="monitorIds"
-                  className="flex items-center space-x-2"
+                    htmlFor="monitorIds"
+                    className="flex items-center space-x-2"
                   >
-                  <Monitor className="h-4 w-4" />
-                  <span>monitors</span>
+                    <Monitor className="h-4 w-4" />
+                    <span>monitors</span>
                   </Label>
                   <MultiSelect
                     options={
                       availableMonitors.map((monitor) => ({
                         value: monitor.id.toString(),
-                        label: `${monitor.name} - ${monitor.width}x${monitor.height} ${monitor.is_default ? "(default)" : ""}`,
+                        label: `${monitor.id}. ${monitor.name} - ${monitor.width}x${monitor.height} ${monitor.is_default ? "(default)" : ""}`,
                       }))
                     }
                     defaultValue={settings.monitorIds}
