@@ -13,6 +13,8 @@ import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import posthog from "posthog-js";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -328,6 +330,18 @@ export function useSettings() {
     (actions) => actions.resetSettings
   );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
+
+  useEffect(() => {
+    if (settings.user?.id) {
+      posthog.identify(settings.user?.id, {
+        email: settings.user?.email,
+        name: settings.user?.name,
+        github_username: settings.user?.github_username,
+        website: settings.user?.website,
+        contact: settings.user?.contact,
+      });
+    }
+  }, [settings.user?.id]);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();

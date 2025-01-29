@@ -271,16 +271,20 @@ export default Sentry.withSentry(
 					}
 
 					const token = authHeader.split(' ')[1];
+					console.log('validating token:', token.slice(0, 10) + '...');
+
 					// First try to validate as a user ID with subscription
 					let isValid = await validateSubscription(env, token);
+					console.log('subscription validation result:', isValid);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
-						isValid = await verifyClerkToken(env, token);
+						console.log('clerk validation result:', isValid);
 					}
 
 					if (!isValid) {
+						console.log('all validation attempts failed');
 						const response = new Response(JSON.stringify({ error: 'invalid subscription' }), {
 							status: 401,
 							headers: {

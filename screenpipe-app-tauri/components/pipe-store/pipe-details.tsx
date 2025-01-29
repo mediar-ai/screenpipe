@@ -76,6 +76,14 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
           <Badge variant={"outline"} className="font-mono text-xs">
             by {pipe.developer_accounts.developer_name}
           </Badge>
+          {pipe.has_update && (
+            <Badge
+              variant="default"
+              className="bg-gray-800 text-xs animate-pulse"
+            >
+              update available
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -157,7 +165,11 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>update pipe</p>
+                            {pipe.has_update ? (
+                              <p>update available! click to update pipe</p>
+                            ) : (
+                              <p>check for updates</p>
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

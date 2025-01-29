@@ -13,7 +13,6 @@ use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
     handle_index_command,
-    highlight::{Highlight, HighlightConfig},
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
@@ -136,10 +135,18 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Sentry only if telemetry is enabled
     let _sentry_guard = if !cli.disable_telemetry {
+        // check if SENTRY_RELEASE_NAME_APPEND is set
+        let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
+        let release_name = format!(
+            "{:?}{}",
+            sentry::release_name!(),
+            sentry_release_name_append
+        );
         Some(sentry::init((
             "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
             sentry::ClientOptions {
-                release: sentry::release_name!(),
+                release: Some(release_name.into()),
+                traces_sample_rate: 0.1,
                 ..Default::default()
             }
         )))
@@ -184,12 +191,6 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-
-    let h = Highlight::init(HighlightConfig {
-        project_id: String::from("82688"),
-        ..Default::default()
-    })
-    .expect("Failed to initialize Highlight.io");
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
@@ -911,12 +912,11 @@ async fn main() -> anyhow::Result<()> {
     if !cli.disable_telemetry {
         println!(
             "{}",
-            "warning: telemetry is enabled. only error-level data will be sent to highlight.io.\n\
+            "warning: telemetry is enabled. only error-level data will be sent.\n\
             to disable, use the --disable-telemetry flag."
                 .bright_yellow()
         );
     } else {
-        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services.".bright_green()
@@ -1043,7 +1043,6 @@ async fn main() -> anyhow::Result<()> {
         drop(audio_runtime);
     });
 
-    h.shutdown();
     info!("shutdown complete");
 
     Ok(())

@@ -1,11 +1,13 @@
+use chrono;
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use sysinfo::{DiskExt, System, SystemExt};
 use tracing::info;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiskUsage {
     pub pipes: DiskUsedByPipes,
     pub media: DiskUsedByMedia,
@@ -14,17 +16,23 @@ pub struct DiskUsage {
     pub avaiable_space: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiskUsedByPipes {
     pub pipes: Vec<(String, String)>, // why not pipes' size??
     pub total_pipes_size: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DiskUsedByMedia {
     pub videos_size: String,
     pub audios_size: String,
     pub total_media_size: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CachedDiskUsage {
+    pub timestamp: i64,
+    pub usage: DiskUsage,
 }
 
 pub fn get_cache_dir() -> Result<Option<PathBuf>, String> {
@@ -62,7 +70,28 @@ pub fn readable(size: u64) -> String {
 }
 
 pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {
-    info!("Getting total disk usage, path {:?}", screenpipe_dir);
+    let cache_dir = match get_cache_dir()? {
+        Some(dir) => dir,
+        None => return Err("Cache directory not found".to_string()),
+    };
+    let cache_file = cache_dir.join("screenpipe").join("disk_usage.json");
+
+    // Check if cache exists and is recent
+    if let Ok(content) = fs::read_to_string(&cache_file) {
+        if let Ok(cached) = serde_json::from_str::<CachedDiskUsage>(&content) {
+            let now = chrono::Utc::now().timestamp();
+            let two_days = 2 * 24 * 60 * 60; // 2 days in seconds
+            if now - cached.timestamp < two_days {
+                return Ok(Some(cached.usage));
+            }
+        }
+    }
+
+    // Calculate new disk usage
+    info!(
+        "Cache miss or expired, calculating disk usage for path {:?}",
+        screenpipe_dir
+    );
     let mut pipes = Vec::new();
     let mut total_video_size = 0;
     let mut total_audio_size = 0;
@@ -130,6 +159,18 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         total_cache_size: readable(total_cache_size),
         avaiable_space: readable(avaiable_space),
     };
+
+    // Cache the result
+    let cached = CachedDiskUsage {
+        timestamp: chrono::Utc::now().timestamp(),
+        usage: disk_usage.clone(),
+    };
+
+    if let Err(e) = fs::create_dir_all(&cache_dir) {
+        info!("Failed to create cache directory: {}", e);
+    } else if let Err(e) = fs::write(&cache_file, serde_json::to_string_pretty(&cached).unwrap()) {
+        info!("Failed to write cache file: {}", e);
+    }
 
     Ok(Some(disk_usage))
 }

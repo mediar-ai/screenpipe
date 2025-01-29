@@ -47,18 +47,6 @@ thiserror = "1"
 
 #opentelemetry
 sentry = { workspace = true }
-opentelemetry = "0.21"
-opentelemetry-appender-tracing = "0.2"
-opentelemetry-otlp = { version = "0.14", features = [
-    "http-proto",
-    "reqwest-rustls",
-    "tokio",
-    "reqwest-client",
-] }
-opentelemetry_sdk = { version = "0.21", default-features = false, features = [
-    "rt-tokio",
-] }
-opentelemetry-semantic-conventions = "0.13"
 
 # Server
 axum = "0.7.5"
@@ -166,7 +154,7 @@ path = "src/bin/screenpipe-server.rs"
 
 
 [package.metadata.cargo-machete]
-ignored = ["url", "opentelemetry-appender-tracing"]
+ignored = ["url"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }
