@@ -45,5 +45,15 @@
     "registryDependencies": [
       "use-sql-autocomplete"
     ]
+  },
+  "use-search-history": {
+    "name": "use-search-history",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/data-table/src/lib/hooks/use-search-history.tsx",
+    "target": "./src/hooks/use-search-history.tsx",
+    "dependencies": [
+      "localforage"
+    ],
+    "devDependencies": [],
+    "registryDependencies": []
   }
 }
