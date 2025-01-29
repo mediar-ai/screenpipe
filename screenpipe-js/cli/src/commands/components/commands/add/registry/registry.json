@@ -53,6 +53,14 @@
     "dependencies": [
       "localforage"
     ],
+    "registryDependencies": [],
+    "devDependencies": []
+  },
+  "keyword-cloud": {
+    "name": "keyword-cloud",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/pipe-simple-nextjs/components/keyword-cloud.tsx",
+    "target": "./src/components/keyword-cloud.tsx",
+    "dependencies": [],
     "devDependencies": [],
     "registryDependencies": []
   }
