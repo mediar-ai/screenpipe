@@ -29,7 +29,6 @@ use std::{
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
@@ -149,20 +148,16 @@ pub async fn continuous_capture(
         monitor_id
     );
 
+    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
+
     loop {
-        let monitor = match get_monitor_by_id(monitor_id).await {
-            Some(m) => m,
-            None => {
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
         let capture_result =
             match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
                 Ok((image, window_images, image_hash, _capture_duration)) => {
                     debug!(
                         "Captured screenshot on monitor {} with hash: {}",
-                        monitor_id, image_hash
+                        monitor.id(),
+                        image_hash
                     );
                     Some((image, window_images, image_hash))
                 }

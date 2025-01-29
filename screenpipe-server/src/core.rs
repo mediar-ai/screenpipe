@@ -24,6 +24,12 @@ use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 
+#[derive(Clone, Debug)]
+pub struct VisionDeviceControl {
+    pub is_running: bool,
+    pub is_paused: bool,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
@@ -31,19 +37,18 @@ pub async fn start_continuous_recording(
     fps: f64,
     audio_chunk_duration: Duration,
     video_chunk_duration: Duration,
-    vision_control: Arc<AtomicBool>,
+    vision_devices_control: Arc<DashMap<u32, VisionDeviceControl>>,
     audio_devices_control: Arc<DashMap<AudioDevice, DeviceControl>>,
     audio_disabled: bool,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
-    monitor_ids: Vec<u32>,
     use_pii_removal: bool,
     vision_disabled: bool,
     vad_engine: CliVadEngine,
     vision_handle: &Handle,
     audio_handle: &Handle,
-    ignored_windows: &[String],
-    include_windows: &[String],
+    ignored_windows: Vec<String>,
+    include_windows: Vec<String>,
     deepgram_api_key: Option<String>,
     vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
@@ -53,47 +58,35 @@ pub async fn start_continuous_recording(
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 ) -> Result<()> {
-    debug!("Starting video recording for monitor {:?}", monitor_ids);
-    let video_tasks = if !vision_disabled {
-        monitor_ids
-            .iter()
-            .map(|&monitor_id| {
-                let db_manager_video = Arc::clone(&db);
-                let output_path_video = Arc::clone(&output_path);
-                let is_running_video = Arc::clone(&vision_control);
-                let ocr_engine = Arc::clone(&ocr_engine);
-                let ignored_windows_video = ignored_windows.to_vec();
-                let include_windows_video = include_windows.to_vec();
-                let realtime_vision_sender_clone = realtime_vision_sender.clone();
+    let output_path_clone = output_path.clone();
+    let languages_clone = languages.clone();
+    let db_clone = db.clone();
+    let vision_devices_control_clone = vision_devices_control.clone();
+    let ocr_engine_clone = ocr_engine.clone();
 
-                let languages = languages.clone();
-
-                debug!("Starting video recording for monitor {}", monitor_id);
-                vision_handle.spawn(async move {
-                    record_video(
-                        db_manager_video,
-                        output_path_video,
-                        fps,
-                        is_running_video,
-                        ocr_engine,
-                        monitor_id,
-                        use_pii_removal,
-                        &ignored_windows_video,
-                        &include_windows_video,
-                        video_chunk_duration,
-                        languages.clone(),
-                        capture_unfocused_windows,
-                        realtime_vision_sender_clone,
-                    )
-                    .await
-                })
-            })
-            .collect::<Vec<_>>()
+    let video_task = if !vision_disabled {
+        vision_handle.spawn(async move {
+            record_vision(
+                vision_devices_control_clone,
+                ocr_engine_clone,
+                db_clone,
+                output_path_clone,
+                fps,
+                languages_clone,
+                capture_unfocused_windows,
+                realtime_vision_sender,
+                ignored_windows,
+                include_windows,
+                video_chunk_duration,
+                use_pii_removal,
+            )
+            .await
+        })
     } else {
-        vec![vision_handle.spawn(async move {
+        vision_handle.spawn(async move {
             tokio::time::sleep(Duration::from_secs(60)).await;
             Ok(())
-        })]
+        })
     };
 
     let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
@@ -150,14 +143,8 @@ pub async fn start_continuous_recording(
         })
     };
 
-    // Join all video tasks
-    let video_results = join_all(video_tasks);
-
-    // Handle any errors from the tasks
-    for (i, result) in video_results.await.into_iter().enumerate() {
-        if let Err(e) = result {
-            error!("Video recording error for monitor {}: {:?}", i, e);
-        }
+    if let Err(e) = video_task.await {
+        error!("Video recording error: {:?}", e);
     }
     if let Err(e) = audio_task.await {
         error!("Audio recording error: {:?}", e);
@@ -175,13 +162,70 @@ pub async fn start_continuous_recording(
     Ok(())
 }
 
+async fn record_vision(
+    vision_devices_control: Arc<DashMap<u32, VisionDeviceControl>>,
+    ocr_engine: Arc<OcrEngine>,
+    db: Arc<DatabaseManager>,
+    output_path: Arc<String>,
+    fps: f64,
+    languages: Vec<Language>,
+    capture_unfocused_windows: bool,
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
+    ignored_windows: Vec<String>,
+    include_windows: Vec<String>,
+    video_chunk_duration: Duration,
+    use_pii_removal: bool,
+) -> Result<()> {
+    loop {
+        // Iterate over DashMap entries and process each device
+        for entry in vision_devices_control.iter() {
+            let monitor_id = *entry.key();
+            let device_control = entry.value().clone();
+
+            if !device_control.is_running {
+                continue;
+            }
+
+            let device_control = Arc::new(device_control);
+            let db_manager_video = Arc::clone(&db);
+            let output_path_video = Arc::clone(&output_path);
+            let ocr_engine = Arc::clone(&ocr_engine);
+            let ignored_windows_video = ignored_windows.to_vec();
+            let include_windows_video = include_windows.to_vec();
+            let realtime_vision_sender_clone = realtime_vision_sender.clone();
+
+            let languages = languages.clone();
+
+            debug!("Starting video recording for monitor {}", monitor_id);
+            tokio::spawn(async move {
+                record_video(
+                    db_manager_video,
+                    output_path_video,
+                    fps,
+                    ocr_engine,
+                    device_control,
+                    monitor_id,
+                    use_pii_removal,
+                    &ignored_windows_video,
+                    &include_windows_video,
+                    video_chunk_duration,
+                    languages.clone(),
+                    capture_unfocused_windows,
+                    realtime_vision_sender_clone,
+                )
+                .await
+            });
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn record_video(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    is_running: Arc<AtomicBool>,
     ocr_engine: Arc<OcrEngine>,
+    device_control: Arc<VisionDeviceControl>,
     monitor_id: u32,
     use_pii_removal: bool,
     ignored_windows: &[String],
@@ -228,7 +272,11 @@ async fn record_video(
         capture_unfocused_windows,
     );
 
-    while is_running.load(Ordering::SeqCst) {
+    loop {
+        if !device_control.is_running {
+            break;
+        }
+
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db.insert_frame(&device_name, None).await {

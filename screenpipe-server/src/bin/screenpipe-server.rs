@@ -12,6 +12,7 @@ use screenpipe_audio::{
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    core::VisionDeviceControl,
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -21,14 +22,8 @@ use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
-    env, fs,
-    io::Write,
-    net::SocketAddr,
-    ops::Deref,
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
+    collections::HashMap, env, fs, io::Write, net::SocketAddr, ops::Deref, path::PathBuf,
+    sync::Arc, time::Duration,
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
@@ -478,10 +473,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db_server = db.clone();
 
-    // Channel for controlling the recorder ! TODO RENAME SHIT
-    let vision_control = Arc::new(AtomicBool::new(true));
-
-    let vision_control_server_clone = vision_control.clone();
+    let vision_devices_control = Arc::new(DashMap::new());
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
@@ -490,6 +482,15 @@ async fn main() -> anyhow::Result<()> {
     } else {
         cli.monitor_id.clone()
     };
+
+    // Initialize vision devices control based on user selected monitors
+    for monitor_id in monitor_ids.clone() {
+        let device_control = VisionDeviceControl {
+            is_running: true,
+            is_paused: false,
+        };
+        vision_devices_control.insert(monitor_id, device_control);
+    }
 
     let languages = cli.unique_languages().unwrap();
     let languages_clone = languages.clone();
@@ -508,9 +509,7 @@ async fn main() -> anyhow::Result<()> {
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
-    let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
     let realtime_audio_devices_clone = realtime_audio_devices.clone();
@@ -528,6 +527,7 @@ async fn main() -> anyhow::Result<()> {
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
+    let vision_devices_control_clone = vision_devices_control.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -542,19 +542,18 @@ async fn main() -> anyhow::Result<()> {
                     fps,
                     audio_chunk_duration,
                     Duration::from_secs(cli.video_chunk_duration),
-                    vision_control_clone.clone(),
+                    vision_devices_control_clone.clone(),
                     audio_devices_control_recording.clone(),
                     cli.disable_audio,
                     Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
-                    monitor_ids_clone.clone(),
                     cli.use_pii_removal,
                     cli.disable_vision,
                     vad_engine_clone,
                     &vision_handle,
                     &audio_handle,
-                    &cli.ignored_windows,
-                    &cli.included_windows,
+                    cli.ignored_windows.clone(),
+                    cli.included_windows.clone(),
                     cli.deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
@@ -604,15 +603,17 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let (audio_devices_tx, _) = broadcast::channel(100);
+    let (vision_devices_tx, _) = broadcast::channel(100);
     let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
+    let vision_devices_tx_clone = Arc::new(vision_devices_tx.clone());
 
     let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
-        vision_control_server_clone,
         audio_devices_tx_clone,
+        vision_devices_tx_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -661,6 +662,41 @@ async fn main() -> anyhow::Result<()> {
             }
             Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
         }
+    }
+
+    let mut rx = vision_devices_tx.subscribe();
+    let vision_devices_control_clone = vision_devices_control.clone();
+    tokio::spawn(async move {
+        while let Ok((device, control)) = rx.recv().await {
+            if let Err(e) =
+                handle_vision_device_update(device, control, &vision_devices_control_clone).await
+            {
+                error!("Device update failed: {}", e);
+                continue;
+            }
+        }
+    });
+
+    async fn handle_vision_device_update(
+        device: u32,
+        control: VisionDeviceControl,
+        devices_control: &DashMap<u32, VisionDeviceControl>,
+    ) -> anyhow::Result<()> {
+        let monitors = list_monitors().await;
+
+        if !monitors.iter().any(|m| m.id() == device) {
+            return Err(anyhow::anyhow!(
+                "attempted to control non-existent device: {}",
+                device
+            ));
+        }
+
+        devices_control.insert(device.clone(), control.clone());
+        info!(
+            "Device state changed: {} - running: {}",
+            device, control.is_running
+        );
+        Ok(())
     }
 
     // print screenpipe in gradient
