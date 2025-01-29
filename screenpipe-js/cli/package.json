@@ -17,12 +17,18 @@
     "archiver": "^7.0.1",
     "chalk": "^5.4.1",
     "commander": "^11.1.0",
+    "fs-extra": "^11.3.0",
+    "ignore": "^7.0.3",
     "inquirer": "^12.3.2",
-    "simple-git": "^3.27.0"
+    "ora": "^8.1.1",
+    "simple-git": "^3.27.0",
+    "unzip-stream": "^0.3.4"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.3",
+    "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.11.5",
+    "@types/unzip-stream": "^0.3.4",
     "bun-types": "latest",
     "typescript": "^5.3.3"
   },
