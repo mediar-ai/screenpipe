@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { TabsWrapper } from "@/components/tabs-wrapper"
+import { BackendTest } from "@/components/backend-test"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,8 +28,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}>
+        <BackendTest />
         <main className="h-full p-4">
           <TabsWrapper />
+          {children}
         </main>
         <Toaster />
       </body>
