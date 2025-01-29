@@ -11,11 +11,20 @@ export function useTranscriptionStream(
   const { toast } = useToast()
 
   const startTranscription = async () => {
-    if (streamingRef.current) return
+    if (streamingRef.current) {
+      console.log('transcription already streaming');
+      return;
+    }
     
     try {
-      streamingRef.current = true
-      const eventSource = new EventSource('http://localhost:3030/sse/transcriptions')
+      console.log('starting transcription stream...');
+      streamingRef.current = true;
+      const eventSource = new EventSource('http://localhost:3030/sse/transcriptions');
+      
+      eventSource.onopen = () => {
+        console.log('sse connection opened');
+      };
+      
       let currentChunk: TranscriptionChunk | null = null
       
       eventSource.onmessage = (event) => {
@@ -53,21 +62,22 @@ export function useTranscriptionStream(
       }
 
       eventSource.onerror = (error) => {
-        console.error("transcription stream error:", error)
-        eventSource.close()
-        streamingRef.current = false
+        console.error("sse error:", error);
+        eventSource.close();
+        streamingRef.current = false;
         if (serviceStatus === 'available') {
           toast({
             title: "transcription error",
             description: "failed to stream audio. retrying...",
             variant: "destructive"
-          })
-          setTimeout(startTranscription, 1000)
+          });
+          console.log('scheduling retry...');
+          setTimeout(startTranscription, 1000);
         }
       }
     } catch (error) {
-      console.error("transcription stream error:", error)
-      streamingRef.current = false
+      console.error("failed to start transcription:", error);
+      streamingRef.current = false;
     }
   }
 
