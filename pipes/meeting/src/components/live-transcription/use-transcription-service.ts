@@ -14,7 +14,7 @@ export function useTranscriptionService() {
   return {
     chunks,
     serviceStatus,
-    isLoading,
+    isLoadingRecent: isLoading,
     fetchRecentChunks,
     checkService: checkServiceAndStart,
     getStatusMessage
