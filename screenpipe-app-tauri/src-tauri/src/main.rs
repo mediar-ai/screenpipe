@@ -1,9 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use analytics::AnalyticsManager;
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
+use serde_json::json;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -33,7 +35,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
-use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
@@ -64,7 +65,7 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-use tauri_plugin_sentry::{sentry};
+use tauri_plugin_sentry::sentry;
 mod health;
 use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -368,8 +369,10 @@ async fn list_pipes() -> anyhow::Result<Value> {
     Ok(response)
 }
 
-
-pub fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+pub fn get_base_dir(
+    app: &tauri::AppHandle,
+    custom_path: Option<String>,
+) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
@@ -950,24 +953,23 @@ async fn main() {
                 .unwrap_or(true);
 
             let unique_id = store
-                .get("userId")
+                .get("user.id")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| {
-                    let new_id = Uuid::new_v4().to_string();
-                    store.set(
-                        "userId".to_string(),
-                        serde_json::Value::String(new_id.clone()),
-                    );
-                    store.save().unwrap();
-                    new_id
-                });
+                .unwrap_or_default();
+
+            let email = store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default();
 
             if is_analytics_enabled {
                 match start_analytics(
                     unique_id,
+                    email,
                     posthog_api_key,
                     interval_hours,
                     "http://localhost:3030".to_string(),
+                    base_dir.clone(),
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -1061,11 +1063,40 @@ async fn main() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
+            // Send app started event
+            let app_handle = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_started",
+                            Some(json!({
+                                "startup_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
 
-            // Add this to shut down the server
+            // Send app closed event before shutdown
+            let app_handle_v2 = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle_v2.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_closed",
+                            Some(json!({
+                                "shutdown_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
+
+            // Shutdown server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 drop(server_shutdown_tx.send(()));
             }

@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.29.4"
+version = "0.29.5"
 description = ""
 authors = ["you"]
 license = ""
@@ -83,6 +83,8 @@ tauri-plugin-sentry = "0.4.0"
 notify = "8.0.0"
 futures = "0.3.30"
 async-stream = "0.3"
+
+chrono = "0.4.39"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-cli = "2.0.0"

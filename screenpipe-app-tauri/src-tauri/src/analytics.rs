@@ -2,6 +2,7 @@ use log::{error, info, warn};
 use reqwest::Client;
 use serde_derive::Deserialize;
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use sysinfo::{System, SystemExt};
@@ -12,27 +13,33 @@ pub struct AnalyticsManager {
     client: Client,
     posthog_api_key: String,
     distinct_id: String,
+    email: String,
     interval: Duration,
     enabled: Arc<Mutex<bool>>,
     api_host: String,
     local_api_base_url: String,
+    screenpipe_dir_path: PathBuf,
 }
 
 impl AnalyticsManager {
     pub fn new(
         posthog_api_key: String,
         distinct_id: String,
+        email: String,
         interval_hours: u64,
         local_api_base_url: String,
+        screenpipe_dir_path: PathBuf,
     ) -> Self {
         Self {
             client: Client::new(),
             posthog_api_key,
             distinct_id,
+            email,
             interval: Duration::from_secs(interval_hours * 3600),
             enabled: Arc::new(Mutex::new(!cfg!(debug_assertions))),
             api_host: "https://eu.i.posthog.com".to_string(),
             local_api_base_url,
+            screenpipe_dir_path,
         }
     }
 
@@ -54,6 +61,7 @@ impl AnalyticsManager {
             "properties": {
                 "distinct_id": self.distinct_id,
                 "$lib": "rust-reqwest",
+                "$email": self.email,
                 "os_name": system.name().unwrap_or_default(),
                 "os_version": system.os_version().unwrap_or_default(),
                 "kernel_version": system.kernel_version().unwrap_or_default(),
@@ -62,6 +70,26 @@ impl AnalyticsManager {
                 "total_memory": system.total_memory(),
             },
         });
+
+        // Add disk usage information
+        if let Ok(Some(disk_usage)) = crate::disk_usage::disk_usage(&self.screenpipe_dir_path).await
+        {
+            if let Some(payload_props) = payload["properties"].as_object_mut() {
+                payload_props.extend(
+                    json!({
+                        "disk_total_data_size": disk_usage.total_data_size,
+                        "disk_total_cache_size": disk_usage.total_cache_size,
+                        "disk_available_space": disk_usage.avaiable_space,
+                        "disk_media_videos_size": disk_usage.media.videos_size,
+                        "disk_media_audios_size": disk_usage.media.audios_size,
+                        "disk_total_pipes_size": disk_usage.pipes.total_pipes_size,
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                );
+            }
+        }
 
         if let Some(props) = properties {
             if let Some(payload_props) = payload["properties"].as_object_mut() {
@@ -100,7 +128,10 @@ impl AnalyticsManager {
                 };
 
                 // Send periodic event with health data
-                if let Err(e) = self.send_event("app_still_running", Some(health_status)).await {
+                if let Err(e) = self
+                    .send_event("app_still_running", Some(health_status))
+                    .await
+                {
                     error!("failed to send periodic posthog event: {}", e);
                 }
 
@@ -112,10 +143,12 @@ impl AnalyticsManager {
         }
     }
 
-    async fn check_recording_health(&self) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    async fn check_recording_health(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
         let health_url = format!("{}/health", self.local_api_base_url);
         let response = self.client.get(&health_url).send().await?;
-        
+
         if !response.status().is_success() {
             return Ok(json!({
                 "is_healthy": false,
@@ -127,16 +160,16 @@ impl AnalyticsManager {
         }
 
         let health: serde_json::Value = response.json().await?;
-        
+
         // Extract relevant status fields
         let frame_status = health["frame_status"].as_str().unwrap_or("unknown");
         let audio_status = health["audio_status"].as_str().unwrap_or("unknown");
         let ui_status = health["ui_status"].as_str().unwrap_or("unknown");
-        
+
         // Consider healthy if all enabled systems are "ok"
-        let is_healthy = (frame_status == "ok" || frame_status == "disabled") &&
-                        (audio_status == "ok" || audio_status == "disabled") &&
-                        (ui_status == "ok" || ui_status == "disabled");
+        let is_healthy = (frame_status == "ok" || frame_status == "disabled")
+            && (audio_status == "ok" || audio_status == "disabled")
+            && (ui_status == "ok" || ui_status == "disabled");
 
         Ok(json!({
             "is_healthy": is_healthy,
@@ -169,9 +202,11 @@ impl AnalyticsManager {
 
 pub fn start_analytics(
     unique_id: String,
+    email: String,
     posthog_api_key: String,
     interval_hours: u64,
     local_api_base_url: String,
+    screenpipe_dir_path: PathBuf,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
     let is_debug = std::env::var("TAURI_ENV_DEBUG").unwrap_or("false".to_string()) == "true";
     if cfg!(debug_assertions) || is_debug {
@@ -179,16 +214,20 @@ pub fn start_analytics(
         return Ok(Arc::new(AnalyticsManager::new(
             posthog_api_key,
             unique_id,
+            email,
             interval_hours,
             local_api_base_url,
+            screenpipe_dir_path,
         )));
     }
 
     let analytics_manager = Arc::new(AnalyticsManager::new(
         posthog_api_key,
         unique_id,
+        email,
         interval_hours,
         local_api_base_url,
+        screenpipe_dir_path,
     ));
 
     // Send initial event at boot
