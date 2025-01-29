@@ -32,7 +32,7 @@
   "use-sql-autocomplete": {
     "name": "use-sql-autocomplete",
     "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
-    "target": "./src/hooks/use-sql-autocomplete.ts",
+    "target": "./src/hooks/use-sql-autocomplete.ts"
   },
   "sql-autocomplete-input": {
     "name": "sql-autocomplete-input",
