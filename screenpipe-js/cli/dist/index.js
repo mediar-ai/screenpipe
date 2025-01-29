@@ -68001,7 +68001,7 @@ var bgMagenta = init(45, 49);
 var bgCyan = init(46, 49);
 var bgWhite = init(47, 49);
 
-// src/commands/add/utils/logger.ts
+// src/commands/components/commands/add/utils/logger.ts
 var highlighter = {
   error: red,
   warn: yellow,
@@ -72025,7 +72025,7 @@ var z = /* @__PURE__ */ Object.freeze({
   ZodError
 });
 
-// src/commands/add/utils/handle-error.ts
+// src/commands/components/commands/add/utils/handle-error.ts
 function handleError(error) {
   logger.error(`Something went wrong. Please check the error below for more details.`);
   logger.error(`If the problem persists, please open an issue on GitHub.`);
@@ -72057,10 +72057,10 @@ var ERRORS = {
   BUILD_MISSING_REGISTRY_FILE: "3"
 };
 
-// src/commands/add/utils/prompt-for-component.ts
+// src/commands/components/commands/add/utils/prompt-for-component.ts
 var import_prompts3 = __toESM(require_prompts3(), 1);
 
-// src/commands/add/registry/schema.ts
+// src/commands/components/commands/add/registry/schema.ts
 var registryComponentSchema = z.object({
   name: z.string(),
   src: z.string(),
@@ -72083,7 +72083,7 @@ var registryResolvedComponentsTreeSchema = registryComponentSchema.pick({
   }))
 }));
 
-// src/commands/add/registry/registry.json
+// src/commands/components/commands/add/registry/registry.json
 var registry_default = {
   "use-health": {
     name: "use-health",
@@ -72117,7 +72117,7 @@ var registry_default = {
   }
 };
 
-// src/commands/add/registry/api.ts
+// src/commands/components/commands/add/registry/api.ts
 var import_deepmerge = __toESM(require_cjs2(), 1);
 async function getRegistry() {
   try {
@@ -72196,7 +72196,7 @@ async function registryResolveItemsTree(names) {
   }
 }
 
-// src/commands/add/utils/prompt-for-component.ts
+// src/commands/components/commands/add/utils/prompt-for-component.ts
 async function promptForRegistryComponents(all) {
   const registryIndex = await getRegistry();
   if (!registryIndex) {
@@ -72232,7 +72232,7 @@ async function promptForRegistryComponents(all) {
   return result.data;
 }
 
-// src/commands/add/preflights/preflight-add.ts
+// src/commands/components/commands/add/preflights/preflight-add.ts
 import fs5 from "fs";
 import path4 from "path";
 async function preFlightAdd(cwd) {
@@ -78752,7 +78752,7 @@ var {
   getCancelSignal: getCancelSignal2
 } = getIpcExport();
 
-// src/commands/add/utils/updaters/update-dependencies.ts
+// src/commands/components/commands/add/utils/updaters/update-dependencies.ts
 async function updateDependencies(dependencies, cwd, options) {
   dependencies = Array.from(new Set(dependencies));
   if (!dependencies?.length) {
@@ -78776,13 +78776,13 @@ async function updateDependencies(dependencies, cwd, options) {
   dependenciesSpinner?.succeed();
 }
 
-// src/commands/add/utils/updaters/update-files.ts
+// src/commands/components/commands/add/utils/updaters/update-files.ts
 var import_fs_extra3 = __toESM(require_lib(), 1);
 import path10 from "path";
 var import_prompts4 = __toESM(require_prompts3(), 1);
 import { existsSync } from "fs";
 
-// src/commands/add/utils/download-file-from-github.ts
+// src/commands/components/commands/add/utils/download-file-from-github.ts
 var import_fs_extra2 = __toESM(require_lib(), 1);
 async function fetchFileFromGitHubAPI(apiUrl, outputPath) {
   try {
@@ -78798,7 +78798,7 @@ async function fetchFileFromGitHubAPI(apiUrl, outputPath) {
   }
 }
 
-// src/commands/add/utils/updaters/update-files.ts
+// src/commands/components/commands/add/utils/updaters/update-files.ts
 async function updateFiles(componentLocations, options) {
   if (!componentLocations?.length) {
     return {
@@ -78888,7 +78888,7 @@ async function updateFiles(componentLocations, options) {
   };
 }
 
-// src/commands/add/utils/add-components.ts
+// src/commands/components/commands/add/utils/add-components.ts
 async function addComponents(components, options) {
   const registrySpinner = spinner(`Checking registry.`, {
     silent: options.silent
@@ -78913,37 +78913,143 @@ async function addComponents(components, options) {
   });
 }
 
-// src/commands/add/index.ts
+// src/commands/components/commands/add/add.ts
 var addComponentCommand = command({
+  name: "add",
+  desc: "add components and dependencies to your pipe",
+  options: {
+    components: string().desc("name of the pipe"),
+    path: string().desc("the path to add the component to."),
+    silent: boolean().desc("mute output.").default(false),
+    overwrite: boolean().desc("overwrite existing files.").default(false),
+    cwd: string().desc("the working directory. defaults to the current directory.").default(process.cwd())
+  },
+  handler: async (opts) => {
+    try {
+      let components;
+      if (!opts?.components?.length) {
+        components = await promptForRegistryComponents();
+      } else {
+        components = [opts.components];
+      }
+      const result = await preFlightAdd(opts.cwd);
+      if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
+        logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
+        process.exit(1);
+      }
+      await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });
+    } catch (error) {
+      logger.break();
+      handleError(error);
+    }
+  }
+});
+
+// src/commands/components/commands/register.ts
+var import_prompts5 = __toESM(require_prompts3(), 1);
+var import_fs_extra4 = __toESM(require_lib(), 1);
+async function writeJsonToFile(filePath, data) {
+  try {
+    await import_fs_extra4.default.promises.writeFile(filePath, JSON.stringify(data, null, 2), "utf8");
+    logger.success(`component registry successfully updated.`);
+  } catch (error) {
+    if (error) {
+      if (error instanceof Error) {
+        if (error.message === "No such file or directory") {
+          logger.break();
+          logger.warn("this command can only be called from within the screenpipe-js/cli of screenpipe's repository");
+          process.exit(1);
+        }
+      }
+    }
+    logger.break();
+    handleError("critical: could not save information to registry");
+    process.exit(1);
+  }
+}
+var registerComponentCommand = command({
+  name: "register",
+  desc: "register a new component in screenpipe's component registry",
+  options: {
+    name: string().desc("name of the component"),
+    src: string().desc("github url for the component."),
+    target: string().desc("path where file should be created.")
+  },
+  handler: async (opts) => {
+    try {
+      if (!opts.name) {
+        const { name } = await import_prompts5.default({
+          type: "text",
+          name: "name",
+          message: "what's your component's name?",
+          instructions: false
+        });
+        opts.name = name;
+      }
+      if (!opts.src) {
+        const { src } = await import_prompts5.default({
+          type: "text",
+          name: "src",
+          message: "where should we download the component from?",
+          hint: "url with the following pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. see README for more info."
+        });
+        opts.src = src;
+      }
+      if (!opts.target) {
+        const { target } = await import_prompts5.default({
+          type: "text",
+          name: "target",
+          message: "where shosuld the component be created?"
+        });
+        opts.target = target;
+      }
+      if (!opts.name?.length || !opts.src?.length || !opts.target?.length) {
+        logger.break();
+        handleError("invalid component");
+        process.exit(1);
+      }
+      const { deps } = await import_prompts5.default({
+        type: "list",
+        name: "deps",
+        message: "type all of the component's runtime dependencies by name, separated by a comma",
+        separator: ","
+      });
+      const { devDeps } = await import_prompts5.default({
+        type: "list",
+        name: "devDeps",
+        message: "type all of the component's dev dependencies by name, separated by a comma",
+        separator: ","
+      });
+      const componentObject = {
+        name: opts.name,
+        src: opts.src,
+        target: opts.target,
+        dependencies: deps.length ? deps : undefined,
+        devDependencies: devDeps.length ? devDeps : undefined
+      };
+      const currentRegistry = await getRegistry();
+      if (!currentRegistry) {
+        logger.break();
+        handleError("critical: build is missing registry file.");
+        process.exit(1);
+      }
+      currentRegistry[opts.name] = componentObject;
+      await writeJsonToFile("./src/commands/components/commands/add/registry/registry.json", currentRegistry);
+      logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.");
+    } catch (error) {
+      logger.break();
+      handleError(error);
+    }
+  }
+});
+
+// src/commands/components/index.ts
+var componentsCommands = command({
   name: "components",
   desc: "commands to interact with screenpipe's components",
   subcommands: [
-    command({
-      name: "add",
-      desc: "add components and dependencies to your pipe",
-      options: {
-        components: string().desc("name of the pipe")
-      },
-      handler: async (opts) => {
-        try {
-          let components;
-          if (!opts?.components?.length) {
-            components = await promptForRegistryComponents();
-          } else {
-            components = [opts.components];
-          }
-          const result = await preFlightAdd(opts.cwd);
-          if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-            logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
-            return;
-          }
-          await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });
-        } catch (error) {
-          logger.break();
-          handleError(error);
-        }
-      }
-    })
+    addComponentCommand,
+    registerComponentCommand
   ]
 });
 // src/index.ts
@@ -78951,7 +79057,7 @@ run([
   loginCommand,
   logoutCommand,
   createCommand,
-  addComponentCommand,
+  componentsCommands,
   registerCommand,
   publishCommand,
   listVersionsCommand
