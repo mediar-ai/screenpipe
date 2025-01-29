@@ -78915,34 +78915,36 @@ async function addComponents(components, options) {
 
 // src/commands/add/index.ts
 var addComponentCommand = command({
-  name: "add",
-  desc: "add components and dependencies to your pipe",
-  options: {
-    components: string().desc("name of the pipe"),
-    path: string().desc("the path to add the component to."),
-    silent: boolean().desc("mute output.").default(false),
-    overwrite: boolean().desc("overwrite existing files.").default(false),
-    cwd: string().desc("the working directory. defaults to the current directory.").default(process.cwd())
-  },
-  handler: async (opts) => {
-    try {
-      let components;
-      if (!opts.components?.length) {
-        components = await promptForRegistryComponents();
-      } else {
-        components = [opts.components];
+  name: "components",
+  desc: "commands to interact with screenpipe's components",
+  subcommands: [
+    command({
+      name: "add",
+      desc: "add components and dependencies to your pipe",
+      options: {
+        components: string().desc("name of the pipe")
+      },
+      handler: async (opts) => {
+        try {
+          let components;
+          if (!opts?.components?.length) {
+            components = await promptForRegistryComponents();
+          } else {
+            components = [opts.components];
+          }
+          const result = await preFlightAdd(opts.cwd);
+          if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
+            logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
+            return;
+          }
+          await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });
+        } catch (error) {
+          logger.break();
+          handleError(error);
+        }
       }
-      const result = await preFlightAdd(opts.cwd);
-      if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-        logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
-        return;
-      }
-      await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });
-    } catch (error) {
-      logger.break();
-      handleError(error);
-    }
-  }
+    })
+  ]
 });
 // src/index.ts
 run([
