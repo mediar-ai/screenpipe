@@ -77,30 +77,30 @@ export const registerComponentCommand = command({
           type: "list",
           name: "deps",
           message: "type all of the component's runtime dependencies by name, separated by a comma",
-          separator: ','
+          separator: ',',
         })
 
         const { devDeps } = await prompts({
           type: "list",
           name: "devDeps",
           message: "type all of the component's dev dependencies by name, separated by a comma",
-          separator: ','
+          separator: ',',
         })
 
         const { registryDeps } = await prompts({
           type: "list",
           name: "registryDeps",
           message: "type all of the component's registry dependencies by name, separated by a comma",
-          separator: ','
+          separator: ',',
         })
 
-        const componentObject: ComponentSchema = {
+        const componentObject:  ComponentSchema = {
           name: opts.name as string,
           src: opts.src as string,
           target: opts.target as string,
-          dependencies: deps.length ? deps : undefined,
-          devDependencies: devDeps.length ? devDeps : undefined,
-          registryDependencies: registryDeps.length ? registryDeps : undefined
+          dependencies: (deps as string[]).filter(item => item !== ""),
+          devDependencies: (devDeps as string[]).filter(item => item !== ""),
+          registryDependencies: (registryDeps as string[]).filter(item => item !== "")
         }
         
         const currentRegistry = await getRegistry()
