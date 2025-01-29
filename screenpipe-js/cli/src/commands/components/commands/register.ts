@@ -61,7 +61,7 @@ export const registerComponentCommand = command({
           const { target } = await prompts({
             type: "text",
             name: "target",
-            message: "where shosuld the component be created?",
+            message: "where should the component be created?",
           })
 
           opts.target = target
@@ -87,13 +87,22 @@ export const registerComponentCommand = command({
           separator: ','
         })
 
+        const { registryDeps } = await prompts({
+          type: "list",
+          name: "registryDeps",
+          message: "type all of the component's registry dependencies by name, separated by a comma",
+          separator: ','
+        })
+
         const componentObject: ComponentSchema = {
           name: opts.name as string,
           src: opts.src as string,
           target: opts.target as string,
           dependencies: deps.length ? deps : undefined,
-          devDependencies: devDeps.length ? devDeps : undefined
+          devDependencies: devDeps.length ? devDeps : undefined,
+          registryDependencies: registryDeps.length ? registryDeps : undefined
         }
+        
         const currentRegistry = await getRegistry()
         if (!currentRegistry) {
           logger.break()

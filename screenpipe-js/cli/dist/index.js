@@ -72114,6 +72114,23 @@ var registry_default = {
     dependencies: [
       "@screenpipe/js"
     ]
+  },
+  "use-sql-autocomplete": {
+    name: "use-sql-autocomplete",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    target: "./src/hooks/use-sql-autocomplete.ts"
+  },
+  "sql-autocomplete-input": {
+    name: "sql-autocomplete-input",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    target: "./src/components/sql-autocomplete-input.ts",
+    dependencies: [
+      "cmdk",
+      "lucide-react"
+    ],
+    registryDependencies: [
+      "use-sql-autocomplete"
+    ]
   }
 };
 
@@ -78999,7 +79016,7 @@ var registerComponentCommand = command({
         const { target } = await import_prompts5.default({
           type: "text",
           name: "target",
-          message: "where shosuld the component be created?"
+          message: "where should the component be created?"
         });
         opts.target = target;
       }
@@ -79020,12 +79037,19 @@ var registerComponentCommand = command({
         message: "type all of the component's dev dependencies by name, separated by a comma",
         separator: ","
       });
+      const { registryDeps } = await import_prompts5.default({
+        type: "list",
+        name: "registryDeps",
+        message: "type all of the component's registry dependencies by name, separated by a comma",
+        separator: ","
+      });
       const componentObject = {
         name: opts.name,
         src: opts.src,
         target: opts.target,
         dependencies: deps.length ? deps : undefined,
-        devDependencies: devDeps.length ? devDeps : undefined
+        devDependencies: devDeps.length ? devDeps : undefined,
+        registryDependencies: registryDeps.length ? registryDeps : undefined
       };
       const currentRegistry = await getRegistry();
       if (!currentRegistry) {
