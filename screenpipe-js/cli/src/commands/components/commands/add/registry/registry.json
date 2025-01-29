@@ -61,6 +61,16 @@
     "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/pipe-simple-nextjs/components/keyword-cloud.tsx",
     "target": "./src/components/keyword-cloud.tsx",
     "dependencies": [],
+    "registryDependencies": [],
+    "devDependencies": []
+  },
+  "use-ai-provider": {
+    "name": "use-ai-provider",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
+    "target": "./src/hooks/use-ai-provider.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
     "devDependencies": [],
     "registryDependencies": []
   }
