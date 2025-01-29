@@ -3,6 +3,7 @@ import { z } from "zod";
 export const registryComponentSchema = z.object({
   name: z.string(),
   src: z.string(),
+  internal: z.boolean().optional(),
   docs: z.string().optional(),
   target: z.string(),
   dependencies: z.array(z.string()).optional(),
