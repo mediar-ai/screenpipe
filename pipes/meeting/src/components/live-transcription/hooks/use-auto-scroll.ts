@@ -4,6 +4,7 @@ import { TranscriptionChunk } from '../types'
 export function useAutoScroll(chunks: TranscriptionChunk[]) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const lastStateRef = useRef(true)
 
   const scrollToBottom = () => {
     const element = scrollRef.current
@@ -18,11 +19,6 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
         top: element.scrollHeight,
         behavior: 'smooth'
       })
-    //   console.log('scrolled to bottom:', {
-    //     scrollHeight: element.scrollHeight,
-    //     clientHeight: element.clientHeight,
-    //     scrollTop: element.scrollTop
-    //   })
     })
   }
 
@@ -34,26 +30,20 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
     const isAtBottom = 
       Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop) < 50
     
-    // console.log('scroll event:', {
-    //   isAtBottom,
-    //   scrollHeight: element.scrollHeight,
-    //   clientHeight: element.clientHeight,
-    //   scrollTop: element.scrollTop
-    // })
+    if (isAtBottom !== lastStateRef.current) {
+      console.log('auto-scroll:', isAtBottom ? 'enabled' : 'disabled')
+      lastStateRef.current = isAtBottom
+    }
     
     setShouldAutoScroll(isAtBottom)
   }
 
   // Auto-scroll when new chunks arrive
   useEffect(() => {
-    if (!shouldAutoScroll) {
-      console.log('auto-scroll disabled')
-      return
+    if (shouldAutoScroll) {
+      scrollToBottom()
     }
-
-    // console.log('new chunks arrived, scrolling to bottom')
-    scrollToBottom()
   }, [chunks, shouldAutoScroll])
 
-  return { scrollRef, onScroll }
+  return { scrollRef, onScroll, isScrolledToBottom: shouldAutoScroll }
 } 
