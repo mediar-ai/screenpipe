@@ -17,6 +17,7 @@ use screenpipe_server::{
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::video_input_device::list_video_devices;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
@@ -365,9 +366,14 @@ async fn main() -> anyhow::Result<()> {
     }
     let all_monitors = list_monitors().await;
     if cli.list_monitors {
+        let video_devices = list_video_devices().await;
         println!("available monitors:");
         for monitor in all_monitors.iter() {
             println!("  {}. {:?}", monitor.id(), monitor);
+        }
+        println!("available video input devices:");
+        for device in video_devices.iter() {
+            println!("  {}. {}", device.id, device.name);
         }
         return Ok(());
     }

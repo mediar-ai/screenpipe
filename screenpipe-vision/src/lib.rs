@@ -5,6 +5,7 @@ pub mod custom_ocr;
 #[cfg(target_os = "windows")]
 pub mod microsoft;
 pub mod monitor;
+pub mod video_input_device;
 #[cfg(target_os = "macos")]
 pub mod run_ui_monitoring_macos;
 pub mod tesseract;
