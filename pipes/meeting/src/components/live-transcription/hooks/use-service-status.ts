@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { pipe } from "@screenpipe/browser"
 import { ServiceStatus } from '../types'
 
 export function useServiceStatus() {
@@ -7,34 +6,33 @@ export function useServiceStatus() {
 
   const checkService = async (startTranscription: () => Promise<void>) => {
     try {
-      console.log('checking service availability')
+      console.log('checking service availability via backend')
       
-      if (!pipe?.streamTranscriptions) {
-        console.error('transcription service not available')
+      const response = await fetch('http://localhost:3030/sse/transcriptions')
+      console.log('response status:', response.status)
+      
+      if (!response.ok) {
+        console.error('backend returned error status:', response.status)
         setServiceStatus('unavailable')
         return
       }
-
-      try {
-        const testChunk = await pipe.streamTranscriptions().next()
-        console.log('test transcription result:', testChunk)
-        
-        if (testChunk.value?.error?.includes('invalid subscription')) {
-          console.error('invalid subscription')
-          setServiceStatus('no_subscription')
-        } else {
-          console.log('service available, starting transcription')
-          setServiceStatus('available')
-          startTranscription()
-        }
-      } catch (error) {
-        if (error instanceof Error && 
-            error.message.toLowerCase().includes('invalid subscription')) {
-          setServiceStatus('no_subscription')
-        } else {
-          setServiceStatus('available')
-          startTranscription()
-        }
+      
+      // Since this is an SSE endpoint, we should see a text/event-stream content type
+      console.log('response content-type:', response.headers.get('content-type'))
+      
+      const status = await response.json()
+      console.log('service status response:', status)
+      
+      if (status.error?.includes('invalid subscription')) {
+        console.log('invalid subscription detected')
+        setServiceStatus('no_subscription')
+      } else if (status.available) {
+        console.log('service available, starting transcription')
+        setServiceStatus('available')
+        startTranscription()
+      } else {
+        console.log('service unavailable')
+        setServiceStatus('unavailable')
       }
     } catch (error) {
       console.error('service check failed:', error)
