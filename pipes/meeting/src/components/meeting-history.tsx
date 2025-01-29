@@ -174,6 +174,7 @@ export function MeetingHistory() {
   const [isStartingRecording, setIsStartingRecording] = useState(false);
   const [isStreamingAvailable, setIsStreamingAvailable] =
     useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadMeetings();
@@ -208,7 +209,7 @@ export function MeetingHistory() {
   }, []);
 
   async function loadMeetings() {
-    setLoading(true);
+    setIsLoading(true);
     try {
       console.log("loading meetings from storage");
       const storedMeetings = await getItem("meetings");
@@ -221,7 +222,7 @@ export function MeetingHistory() {
       console.error("failed to load meetings:", err);
       setError("failed to load meetings");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }
 
@@ -771,35 +772,9 @@ export function MeetingHistory() {
     }
   };
 
-  const recordingButton = (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div>
-            <Button
-              onClick={startRecording}
-              disabled={isStartingRecording || !isStreamingAvailable}
-              variant="outline"
-              size="sm"
-              className="ml-4"
-            >
-              {isStartingRecording ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <FileText className="h-4 w-4 mr-2" />
-              )}
-              start recording
-            </Button>
-          </div>
-        </TooltipTrigger>
-        {!isStreamingAvailable && (
-          <TooltipContent>
-            <p>streaming service not available</p>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
-  );
+  if (isLoading) {
+    return <div>loading meetings...</div>;
+  }
 
   return (
     <Card>
@@ -816,7 +791,20 @@ export function MeetingHistory() {
                 meeting and conversation history
               </h2>
               {!liveMeeting ? (
-                recordingButton
+                <Button
+                  onClick={startRecording}
+                  disabled={isStartingRecording || !isStreamingAvailable}
+                  variant="default"
+                  size="sm"
+                  className="ml-4"
+                >
+                  {isStartingRecording ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                  )}
+                  new meeting
+                </Button>
               ) : (
                 <div className="flex items-center gap-2">
                   <Popover>
@@ -887,7 +875,7 @@ export function MeetingHistory() {
                       disabled={isRefreshing}
                       size="sm"
                       variant="outline"
-                      className="text-xs "
+                      className="text-xs"
                     >
                       {isRefreshing ? (
                         <RefreshCw className="h-4 w-4 animate-spin" />
