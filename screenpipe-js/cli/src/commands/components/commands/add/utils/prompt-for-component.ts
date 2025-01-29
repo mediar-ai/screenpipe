@@ -25,7 +25,7 @@ export async function promptForRegistryComponents(
       message: "Which components would you like to add?",
       hint: "Space to select. A to toggle all. Enter to submit.",
       instructions: false,
-      choices: Object.values(registryIndex)
+      choices: Object.values(registryIndex).filter((item) => item.internal !== true)
         .map((entry) => ({
           title: entry.name,
           value: entry.name,
