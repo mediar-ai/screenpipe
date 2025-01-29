@@ -4,9 +4,9 @@ import { Credentials } from "../utils/credentials";
 import { API_BASE_URL } from "../constants";
 import { colors, symbols } from "../utils/colors";
 
-export const createCommand = command({
-  name: "create",
-  desc: "Create a new pipe",
+export const registerCommand = command({
+  name: "register",
+  desc: "register a new pipe",
   options: {
     name: string().required().desc("name of the pipe"),
     paid: boolean().desc("set this flag to create a paid pipe"),
