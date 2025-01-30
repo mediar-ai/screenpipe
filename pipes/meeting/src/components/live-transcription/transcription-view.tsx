@@ -1,9 +1,18 @@
 'use client'
 
-import { Loader2, ArrowDown } from "lucide-react"
+import { Loader2, ArrowDown, LayoutList, Layout } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { TranscriptionChunk, ServiceStatus } from "./types"
+import { ChunkOverlay } from "./chunk-overlay"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { DialogFooter } from "@/components/ui/dialog"
+import { addVocabularyEntry } from './hooks/use-vocabulary-storage'
+import { improveTranscription } from './hooks/use-transcription-ai'
+import { useMeetingContext } from './hooks/use-meeting-context'
+import { Settings } from "@/lib/hooks/use-settings"
+import { cn } from "@/lib/utils"
 
 interface TranscriptionViewProps {
     chunks: TranscriptionChunk[]
@@ -14,6 +23,7 @@ interface TranscriptionViewProps {
     onScroll: () => void
     isAutoScrollEnabled: boolean
     isScrolledToBottom: boolean
+    settings: Settings
 }
 
 export function TranscriptionView({
@@ -24,8 +34,12 @@ export function TranscriptionView({
     scrollRef,
     onScroll,
     isAutoScrollEnabled,
-    isScrolledToBottom
+    isScrolledToBottom,
+    settings
 }: TranscriptionViewProps) {
+    const { title, notes } = useMeetingContext()
+    const [viewMode, setViewMode] = useState<'overlay' | 'sidebar' | 'timestamp'>('overlay')
+    const [useOverlay, setUseOverlay] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
     const [nameModalOpen, setNameModalOpen] = useState(false)
     const [selectedSpeaker, setSelectedSpeaker] = useState<number | null>(null)
@@ -33,6 +47,14 @@ export function TranscriptionView({
     const [customSpeaker, setCustomSpeaker] = useState<string>('')
     const [speakerMappings, setSpeakerMappings] = useState<Record<number, string | number>>({})
     const [editedChunks, setEditedChunks] = useState<Record<number, string>>({})
+    const [selectedText, setSelectedText] = useState('')
+    const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null)
+    const [vocabDialogOpen, setVocabDialogOpen] = useState(false)
+    const [vocabEntry, setVocabEntry] = useState('')
+    const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null)
+    const [improvingChunks, setImprovingChunks] = useState<Record<number, boolean>>({})
+    const [recentlyImproved, setRecentlyImproved] = useState<Record<number, boolean>>({})
+    const lastProcessedChunkRef = useRef<number>(-1)
 
     // moved from index.tsx
     const uniqueSpeakers = useMemo(() => {
@@ -112,85 +134,222 @@ export function TranscriptionView({
         }))
     }
 
-    // Add color mapping function
-    const getSpeakerColor = (speaker: number | string) => {
-        // Using a set of accessible colors
-        const colors = [
-            'text-blue-600',
-            'text-red-600',
-            'text-green-600',
-            'text-purple-600',
-            'text-orange-600',
-            'text-teal-600',
-            'text-pink-600',
-            'text-indigo-600',
-        ]
-        
-        // Use consistent hash function for speaker to color mapping
-        const hash = typeof speaker === 'number' 
-            ? speaker 
-            : speaker.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-        
-        return colors[Math.abs(hash) % colors.length]
+    // Add selection handler
+    const handleSelection = () => {
+        const selection = window.getSelection()
+        if (!selection || selection.isCollapsed) {
+            setSelectedText('')
+            setSelectionPosition(null)
+            return
+        }
+
+        const text = selection.toString().trim()
+        if (text) {
+            const range = selection.getRangeAt(0)
+            const rect = range.getBoundingClientRect()
+            setSelectedText(text)
+            setSelectionPosition({ x: rect.left, y: rect.top })
+        }
     }
+
+    // Update vocabulary handler to open dialog
+    const addToVocabulary = () => {
+        console.log('opening vocabulary dialog for:', selectedText)
+        setVocabEntry(selectedText)
+        setVocabDialogOpen(true)
+        setSelectionPosition(null)
+    }
+
+    // Handle saving vocabulary
+    const handleSaveVocab = async () => {
+        try {
+            console.log('saving vocabulary:', selectedText, 'as', vocabEntry)
+            await addVocabularyEntry(selectedText, vocabEntry)
+            
+            setNotification({ message: "added to vocabulary", type: 'success' })
+            setTimeout(() => setNotification(null), 2000)
+            setVocabDialogOpen(false)
+            setSelectedText('')
+            setVocabEntry('')
+        } catch (error) {
+            console.error('failed to save vocabulary:', error)
+            setNotification({ message: "failed to save vocabulary", type: 'error' })
+            setTimeout(() => setNotification(null), 2000)
+        }
+    }
+
+    // Process previous merged chunk when a new one arrives
+    useEffect(() => {
+        const currentChunkIndex = mergeChunks.length - 1
+        const previousChunkIndex = currentChunkIndex - 1
+
+        // Only process if we have a previous chunk and haven't processed it yet
+        if (previousChunkIndex >= 0 && 
+            previousChunkIndex > lastProcessedChunkRef.current && 
+            !improvingChunks[previousChunkIndex]) {
+            
+            const improveChunk = async () => {
+                setImprovingChunks(prev => ({ ...prev, [previousChunkIndex]: true }))
+                
+                try {
+                    const chunk = mergeChunks[previousChunkIndex]
+                    console.log('improving previous merged chunk:', chunk.text)
+                    
+                    const contextChunks = mergeChunks.slice(
+                        Math.max(0, previousChunkIndex - 4), 
+                        previousChunkIndex + 1
+                    )
+                    
+                    const improved = await improveTranscription(
+                        chunk.text,
+                        {
+                            meetingTitle: title,
+                            recentChunks: contextChunks,
+                            notes,
+                        },
+                        settings
+                    )
+
+                    if (improved !== chunk.text) {
+                        console.log('chunk improved:', improved)
+                        handleTextEdit(previousChunkIndex, improved)
+                        // Set recently improved flag and clear it after animation
+                        setRecentlyImproved(prev => ({ ...prev, [previousChunkIndex]: true }))
+                        setTimeout(() => {
+                            setRecentlyImproved(prev => ({ ...prev, [previousChunkIndex]: false }))
+                        }, 1000)
+                    }
+                    
+                    lastProcessedChunkRef.current = previousChunkIndex
+                } catch (error) {
+                    console.error('failed to improve chunk:', error)
+                } finally {
+                    setImprovingChunks(prev => ({ ...prev, [previousChunkIndex]: false }))
+                }
+            }
+
+            improveChunk()
+        }
+    }, [mergeChunks, title, notes, settings])
 
     return (
         <>
-            <div
-                ref={scrollRef}
-                onScroll={onScroll}
-                className="flex-1 overflow-y-auto bg-card"
-            >
-                {chunks.length === 0 ? (
-                    <div className="flex items-center justify-center h-full text-gray-500">
-                        {isLoading ? (
-                            <div className="flex flex-col items-center gap-2">
-                                <Loader2 className="h-6 w-6 animate-spin" />
-                                <p>loading transcriptions...</p>
-                            </div>
-                        ) : (
-                            <p>{getStatusMessage()}</p>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-2 relative p-4">
-                        {mergeChunks.map((chunk, i) => (
-                            <div key={i} className="text-sm mb-2 group relative">
-                                <div className="absolute -left-1 -top-5 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 px-1.5 py-0.5 rounded text-xs text-gray-500 z-10 pointer-events-none">
-                                    {new Date(chunk.timestamp).toLocaleTimeString()}
-                                    {chunk.speaker !== undefined && (
-                                        <button
-                                            onClick={() => {
-                                                if (chunk.speaker !== undefined) {
-                                                    setSelectedSpeaker(chunk.speaker)
-                                                    setMergeModalOpen(true)
-                                                }
-                                            }}
-                                            className={`ml-1 px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded-sm transition-colors pointer-events-auto ${
-                                                chunk.speaker !== undefined ? getSpeakerColor(getDisplaySpeaker(chunk.speaker)) : ''
-                                            }`}
-                                        >
-                                            {formatSpeaker(getDisplaySpeaker(chunk.speaker))}
-                                        </button>
+            <div className="relative h-full flex flex-col">
+                <div
+                    ref={scrollRef}
+                    onScroll={onScroll}
+                    onMouseUp={handleSelection}
+                    className="flex-1 overflow-y-auto bg-card min-h-0"
+                >
+                    {mergeChunks.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                            {isLoading ? (
+                                <div className="flex flex-col items-center gap-2">
+                                    <Loader2 className="h-6 w-6 animate-spin" />
+                                    <p>loading transcriptions...</p>
+                                </div>
+                            ) : (
+                                <p>{getStatusMessage()}</p>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-2 relative p-4">
+                            <button
+                                onClick={() => setViewMode(prev => {
+                                    if (prev === 'overlay') return 'sidebar'
+                                    if (prev === 'sidebar') return 'timestamp'
+                                    return 'overlay'
+                                })}
+                                className="absolute top-2 right-2 p-2 hover:bg-gray-100 rounded-md transition-colors z-10"
+                                title={`switch to ${viewMode === 'overlay' ? 'sidebar' : viewMode === 'sidebar' ? 'timestamp' : 'overlay'} view`}
+                            >
+                                {viewMode === 'overlay' ? <LayoutList className="h-4 w-4" /> : viewMode === 'sidebar' ? <Layout className="h-4 w-4" /> : <Layout className="h-4 w-4" />}
+                            </button>
+                            {mergeChunks.map((chunk, i) => (
+                                <div key={i} className="text-sm mb-2 group relative">
+                                    {viewMode === 'overlay' ? (
+                                        <>
+                                            <ChunkOverlay
+                                                timestamp={chunk.timestamp}
+                                                speaker={chunk.speaker}
+                                                displaySpeaker={chunk.speaker !== undefined ? getDisplaySpeaker(chunk.speaker) : 0}
+                                                onSpeakerClick={() => {
+                                                    if (chunk.speaker !== undefined) {
+                                                        setSelectedSpeaker(chunk.speaker)
+                                                        setMergeModalOpen(true)
+                                                    }
+                                                }}
+                                            />
+                                            <div className="relative">
+                                                <div
+                                                    contentEditable
+                                                    suppressContentEditableWarning
+                                                    onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
+                                                    className={cn(
+                                                        "outline-none focus:ring-1 focus:ring-gray-200 rounded px-1 -mx-1",
+                                                        improvingChunks[i] && "animate-shimmer bg-gradient-to-r from-transparent via-gray-100/50 to-transparent bg-[length:200%_100%]",
+                                                        recentlyImproved[i] && "animate-glow"
+                                                    )}
+                                                >
+                                                    {editedChunks[i] ?? chunk.text}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : viewMode === 'timestamp' ? (
+                                        <div className="flex gap-1">
+                                            <div className="w-16 flex-shrink-0 text-xs text-gray-500">
+                                                <div>{new Date(chunk.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                                {chunk.speaker !== undefined && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedSpeaker(chunk.speaker!)
+                                                            setMergeModalOpen(true)
+                                                        }}
+                                                        className="hover:bg-gray-100 rounded-sm transition-colors"
+                                                    >
+                                                        {formatSpeaker(getDisplaySpeaker(chunk.speaker))}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div
+                                                contentEditable
+                                                suppressContentEditableWarning
+                                                onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
+                                                className="outline-none focus:ring-1 focus:ring-gray-200 rounded flex-1"
+                                            >
+                                                {editedChunks[i] ?? chunk.text}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex gap-1">
+                                            <div className="w-16 flex-shrink-0 text-xs text-gray-500 flex items-start">
+                                                {chunk.speaker !== undefined && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedSpeaker(chunk.speaker!)
+                                                            setMergeModalOpen(true)
+                                                        }}
+                                                        className="hover:bg-gray-100 rounded-sm transition-colors text-left w-full"
+                                                    >
+                                                        {formatSpeaker(getDisplaySpeaker(chunk.speaker))}
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div
+                                                contentEditable
+                                                suppressContentEditableWarning
+                                                onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
+                                                className="outline-none focus:ring-1 focus:ring-gray-200 rounded flex-1"
+                                            >
+                                                {editedChunks[i] ?? chunk.text}
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
-                                <div
-                                    contentEditable
-                                    suppressContentEditableWarning
-                                    onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
-                                    className={`outline-none focus:ring-1 focus:ring-gray-200 rounded px-1 -mx-1 ${
-                                        chunk.speaker !== undefined ? getSpeakerColor(getDisplaySpeaker(chunk.speaker)) : ''
-                                    }`}
-                                >
-                                    {editedChunks[i] ?? chunk.text}
-                                </div>
-                            </div>
-                        ))}
-                        {serviceStatus === 'available' && (
-                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-gray-200 to-transparent animate-pulse" />
-                        )}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {!isAutoScrollEnabled && !isScrolledToBottom && serviceStatus === 'available' && (
@@ -199,6 +358,21 @@ export function TranscriptionView({
                     className="absolute bottom-4 right-4 p-2 bg-black text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors"
                 >
                     <ArrowDown className="h-4 w-4" />
+                </button>
+            )}
+
+            {/* Add vocabulary button */}
+            {selectedText && selectionPosition && (
+                <button
+                    onClick={addToVocabulary}
+                    style={{
+                        position: 'fixed',
+                        left: `${selectionPosition.x}px`,
+                        top: `${selectionPosition.y - 30}px`,
+                    }}
+                    className="px-2 py-1 bg-black text-white text-xs rounded shadow-lg hover:bg-gray-800 transition-colors"
+                >
+                    add to vocabulary
                 </button>
             )}
 
@@ -299,6 +473,36 @@ export function TranscriptionView({
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <Dialog open={vocabDialogOpen} onOpenChange={setVocabDialogOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>add to vocabulary</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-4">
+                        <Input
+                            value={vocabEntry}
+                            onChange={(e) => setVocabEntry(e.target.value)}
+                            placeholder="enter corrected text"
+                        />
+                        <DialogFooter>
+                            <Button onClick={handleSaveVocab}>
+                                save
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {notification && (
+                <div 
+                    className={`fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-md text-sm ${
+                        notification.type === 'success' ? 'bg-black text-white' : 'bg-red-500 text-white'
+                    }`}
+                >
+                    {notification.message}
+                </div>
+            )}
         </>
     )
 } 
