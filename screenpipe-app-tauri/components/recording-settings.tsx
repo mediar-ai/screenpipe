@@ -202,10 +202,7 @@ export function RecordingSettings() {
       try {
         // Fetch monitors
         const monitorsResponse = await fetch(
-          "http://localhost:3030/vision/list",
-          {
-            method: "POST",
-          }
+          "http://localhost:3030/vision/list"
         );
         if (!monitorsResponse.ok) {
           throw new Error("Failed to fetch monitors");
@@ -342,52 +339,6 @@ export function RecordingSettings() {
     } finally {
       setIsUpdating(false);
     }
-  };
-
-  const handleAddIgnoredWindow = (value: string) => {
-    const lowerCaseValue = value.toLowerCase();
-    if (
-      value &&
-      !settings.ignoredWindows
-        .map((w) => w.toLowerCase())
-        .includes(lowerCaseValue)
-    ) {
-      handleSettingsChange({
-        ignoredWindows: [...settings.ignoredWindows, value],
-        includedWindows: settings.includedWindows.filter(
-          (w) => w.toLowerCase() !== lowerCaseValue
-        ),
-      });
-    }
-  };
-
-  const handleRemoveIgnoredWindow = (value: string) => {
-    handleSettingsChange({
-      ignoredWindows: settings.ignoredWindows.filter((w) => w !== value),
-    });
-  };
-
-  const handleAddIncludedWindow = (value: string) => {
-    const lowerCaseValue = value.toLowerCase();
-    if (
-      value &&
-      !settings.includedWindows
-        .map((w) => w.toLowerCase())
-        .includes(lowerCaseValue)
-    ) {
-      handleSettingsChange({
-        includedWindows: [...settings.includedWindows, value],
-        ignoredWindows: settings.ignoredWindows.filter(
-          (w) => w.toLowerCase() !== lowerCaseValue
-        ),
-      });
-    }
-  };
-
-  const handleRemoveIncludedWindow = (value: string) => {
-    handleSettingsChange({
-      includedWindows: settings.includedWindows.filter((w) => w !== value),
-    });
   };
 
   const handleAudioTranscriptionModelChange = (value: string) => {
@@ -786,6 +737,23 @@ export function RecordingSettings() {
 
           {!settings.disableVision && (
             <>
+              <div className="flex items-center justify-between mb-4">
+                <div className="space-y-1">
+                  <h4 className="font-medium">use all monitors</h4>
+                  <p className="text-sm text-muted-foreground">
+                    automatically detect and record all monitors, including
+                    newly connected ones
+                  </p>
+                </div>
+                <Switch
+                  id="useAllMonitors"
+                  checked={settings.useAllMonitors}
+                  onCheckedChange={(checked) =>
+                    handleSettingsChange({ useAllMonitors: checked })
+                  }
+                />
+              </div>
+
               <div className="flex flex-col space-y-6">
                 <div className="flex flex-col space-y-2">
                   <Label
@@ -796,22 +764,29 @@ export function RecordingSettings() {
                     <span>monitors</span>
                   </Label>
                   <MultiSelect
-                    options={
-                      availableMonitors.map((monitor) => ({
-                        value: monitor.id.toString(),
-                        label: `${monitor.id}. ${monitor.name} - ${monitor.width}x${monitor.height} ${monitor.is_default ? "(default)" : ""}`,
-                      }))
-                    }
+                    options={availableMonitors.map((monitor) => ({
+                      value: monitor.id.toString(),
+                      label: `${monitor.id}. ${monitor.name} - ${
+                        monitor.width
+                      }x${monitor.height} ${
+                        monitor.is_default ? "(default)" : ""
+                      }`,
+                    }))}
                     defaultValue={settings.monitorIds}
                     onValueChange={(values) =>
                       values.length === 0
                         ? handleSettingsChange({ disableVision: true })
                         : handleSettingsChange({ monitorIds: values })
                     }
-                    placeholder="select monitors"
+                    placeholder={
+                      settings.useAllMonitors
+                        ? "all monitors will be used"
+                        : "select monitors"
+                    }
                     variant="default"
                     modalPopover={true}
                     animation={2}
+                    disabled={settings.useAllMonitors}
                   />
                 </div>
 

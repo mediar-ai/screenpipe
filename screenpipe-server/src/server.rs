@@ -1849,9 +1849,15 @@ async fn semantic_search_handler(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct VisionDeviceControlRequest {
     device_id: u32,
+}
+
+impl VisionDeviceControlRequest {
+    pub fn new(device_id: u32) -> Self {
+        Self { device_id }
+    }
 }
 
 #[derive(Serialize)]

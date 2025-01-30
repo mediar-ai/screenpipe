@@ -255,6 +255,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let use_all_monitors = store
+        .get("useAllMonitors")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -374,6 +379,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if enable_realtime_audio_transcription {
         args.push("--enable-realtime-audio-transcription");
+    }
+
+    if use_all_monitors {
+        args.push("--use-all-monitors");
     }
 
     let disable_vision = store

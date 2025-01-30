@@ -15,6 +15,7 @@ use screenpipe_core::AudioDevice;
 use screenpipe_core::DeviceControl;
 use screenpipe_core::DeviceType;
 use screenpipe_server::core::DeviceManager;
+use screenpipe_server::VisionDeviceControlRequest;
 use screenpipe_server::{
     cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
     core::{AudioConfig, RealtimeConfig, RecordingConfig, VisionConfig},
@@ -27,8 +28,14 @@ use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap, env, fs, io::Write, net::SocketAddr, ops::Deref, path::PathBuf,
-    sync::Arc, time::Duration,
+    collections::{HashMap, HashSet},
+    env, fs,
+    io::Write,
+    net::SocketAddr,
+    ops::Deref,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
@@ -1108,6 +1115,76 @@ async fn main() -> anyhow::Result<()> {
                     _ = shutdown_rx.recv() => {
                         info!("received shutdown signal, stopping ui monitoring");
                         break;
+                    }
+                }
+            }
+        });
+    }
+
+    if cli.use_all_monitors && !cli.disable_vision {
+        let client = reqwest::Client::new();
+        let port = cli.port;
+        let mut shutdown_rx = shutdown_tx.subscribe();
+
+        tokio::spawn(async move {
+            // Start all available monitors immediately
+            let initial_monitors: HashSet<u32> =
+                list_monitors().await.into_iter().map(|m| m.id()).collect();
+
+            for monitor_id in &initial_monitors {
+                info!("starting monitor: {}", monitor_id);
+                let _ = client
+                    .post(format!("http://127.0.0.1:{}/vision/start", port))
+                    .json(&VisionDeviceControlRequest::new(*monitor_id))
+                    .send()
+                    .await
+                    .map_err(|e| error!("failed to start monitor {}: {}", monitor_id, e));
+            }
+
+            let mut previous_monitors = initial_monitors;
+
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        info!("stopping monitor polling due to shutdown signal");
+                        break;
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                        let current_monitors: HashSet<u32> = list_monitors()
+                            .await
+                            .into_iter()
+                            .map(|m| m.id())
+                            .collect();
+
+                        // Handle new monitors
+                        for monitor_id in current_monitors.difference(&previous_monitors) {
+                            info!("new monitor detected: {}", monitor_id);
+
+                            // Start recording the new monitor using the API
+                            let _ = client
+                                .post(format!("http://127.0.0.1:{}/vision/start", port))
+                                .json(&VisionDeviceControlRequest::new(*monitor_id))
+                                .send()
+                                .await
+                                .map_err(|e| error!("failed to start new monitor {}: {}", monitor_id, e));
+                        }
+
+                        // Handle removed monitors
+                        for monitor_id in previous_monitors.difference(&current_monitors) {
+                            info!("monitor removed: {}", monitor_id);
+
+                            // Stop recording the removed monitor using the API
+                            let _ = client
+                                .post(format!("http://127.0.0.1:{}/vision/stop", port))
+                                .json(&VisionDeviceControlRequest::new(*monitor_id))
+                                .send()
+                                .await
+                                .map_err(|e| {
+                                    error!("failed to stop removed monitor {}: {}", monitor_id, e)
+                                });
+                        }
+
+                        previous_monitors = current_monitors;
                     }
                 }
             }
