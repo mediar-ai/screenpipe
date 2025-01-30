@@ -12,12 +12,11 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
-use log::{debug, error, info};
+use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::{AudioDevice, DeviceControl, DeviceType, Language};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     path::Path,
     sync::Arc,
@@ -156,11 +155,10 @@ pub async fn create_whisper_channel(
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
-    mut device_control_rx: tokio::sync::watch::Receiver<DeviceControl>,
+    device_control_rx: tokio::sync::watch::Receiver<DeviceControl>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
-    Arc<AtomicBool>, // Shutdown flag
 )> {
     let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
     let (input_sender, input_receiver): (
@@ -177,8 +175,6 @@ pub async fn create_whisper_channel(
     };
     vad_engine.set_sensitivity(vad_sensitivity);
     let vad_engine = Arc::new(Mutex::new(vad_engine));
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.to_path_buf();
 
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
@@ -193,28 +189,22 @@ pub async fn create_whisper_channel(
     let embedding_manager = EmbeddingManager::new(usize::MAX);
 
     tokio::spawn(async move {
+        // HACK: mm ideally this should use device manager's state ...
         let mut device_states: HashMap<String, bool> = HashMap::new();
 
         loop {
-            if shutdown_flag_clone.load(Ordering::Relaxed) {
-                info!("Whisper channel shutting down");
-                break;
-            }
-
-            // Update device states from control channel
-            while let Ok(_) = device_control_rx.changed().await {
-                let control = device_control_rx.borrow().clone();
-                if let DeviceType::Audio(device) = control.device {
-                    device_states.insert(device.to_string(), control.is_running);
-                }
-            }
-
-            debug!("Waiting for input from input_receiver");
-
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
+                            // Get latest device state before processing
+                            if let Ok(_) = device_control_rx.has_changed() {
+                                let control = device_control_rx.borrow().clone();
+                                if let DeviceType::Audio(device) = control.device {
+                                    device_states.insert(device.to_string(), control.is_running);
+                                }
+                            }
+
                             // Check device state
                             if !device_states.get(&audio.device.to_string()).copied().unwrap_or(false) {
                                 debug!("Skipping audio processing for stopped device: {}", audio.device);
@@ -301,7 +291,7 @@ pub async fn create_whisper_channel(
         }
     });
 
-    Ok((input_sender, output_receiver, shutdown_flag))
+    Ok((input_sender, output_receiver))
 }
 
 #[allow(clippy::too_many_arguments)]
