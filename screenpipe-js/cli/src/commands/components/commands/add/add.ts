@@ -1,4 +1,4 @@
-import { boolean, command, GenericCommandHandler, OutputType, string } from "@drizzle-team/brocli";
+import { boolean, command, GenericCommandHandler, OutputType, positional, string } from "@drizzle-team/brocli";
 import { logger } from "./utils/logger";
 import { ERRORS, handleError } from "./utils/handle-error";
 import { promptForRegistryComponents } from "./utils/prompt-for-component";
@@ -9,7 +9,7 @@ export const addComponentCommand = command({
     name: "add",
     desc: "add components and dependencies to your pipe",
     options: {
-      components: string().desc("name of the pipe"),
+      components: positional().desc("list of components by name"),
       path: string().desc("the path to add the component to."),
       silent: boolean().desc("mute output.").default(false),
       overwrite: boolean().desc("overwrite existing files.").default(false),
