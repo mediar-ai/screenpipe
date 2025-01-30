@@ -52,12 +52,16 @@ pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String>
             &offset_str,
             "-i",
             file_path,
+            "-vf",
+            "scale=iw*0.75:ih*0.75", // Scale down to 75% of original size
             "-vframes",
             "1",
             "-f",
             "image2pipe",
-            "-vcodec",
-            "png",
+            "-c:v",
+            "mjpeg", // Use JPEG instead of PNG for smaller size
+            "-q:v",
+            "10", // Compression quality (2-31, lower is better quality)
             "-",
         ])
         .stdout(std::process::Stdio::piped())

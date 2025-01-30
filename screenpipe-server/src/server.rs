@@ -1,28 +1,31 @@
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket},
+        Json, Path, Query, State, WebSocketUpgrade,
+    },
     http::StatusCode,
     response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
     routing::{get, post},
     serve, Router,
 };
+
 use futures::{
     future::{try_join, try_join_all},
-    Stream,
+    SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
 
 use crate::{
-    db_types::{ContentType, SearchResult, Speaker, TagContentType},
+    db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
-    video_cache::{FrameCache, TimeSeriesFrame},
+    video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
         merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
-use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
@@ -37,15 +40,22 @@ use std::{
     collections::HashMap,
     convert::Infallible,
     net::SocketAddr,
+    num::NonZeroUsize,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use tokio::{net::TcpListener, sync::broadcast};
+use lru::LruCache;
+
+use tokio::{
+    net::TcpListener,
+    sync::{broadcast, mpsc, Mutex},
+    time::timeout,
+};
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -71,6 +81,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
+    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
     pub realtime_transcription_enabled: bool,
     pub realtime_transcription_sender:
         Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
@@ -882,6 +893,13 @@ impl Server {
             } else {
                 None
             },
+            frame_image_cache: if enable_frame_cache {
+                Some(Arc::new(Mutex::new(LruCache::new(
+                    NonZeroUsize::new(100).unwrap(),
+                ))))
+            } else {
+                None
+            },
             realtime_transcription_enabled: self.realtime_transcription_enabled,
             realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
             realtime_vision_sender: self.realtime_vision_sender,
@@ -1329,7 +1347,8 @@ pub struct StreamTimeSeriesResponse {
 #[derive(Debug, Serialize)]
 pub struct DeviceFrameResponse {
     pub device_id: String,
-    pub frame: String, // base64 encoded image
+    // pub frame: String, // base64 encoded image
+    pub frame_id: i64,
     pub metadata: DeviceMetadata,
     pub audio: Vec<AudioData>,
 }
@@ -1362,7 +1381,8 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                 .map(|device_frame| {
                     DeviceFrameResponse {
                         device_id: device_frame.device_id,
-                        frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        // frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        frame_id: device_frame.frame_id,
                         metadata: DeviceMetadata {
                             file_path: device_frame.metadata.file_path,
                             app_name: device_frame.metadata.app_name,
@@ -1875,6 +1895,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
         .route("/semantic-search", get(semantic_search_handler))
+        .route("/frames/:frame_id", get(get_frame_data))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1885,91 +1906,404 @@ pub fn create_router() -> Router<Arc<AppState>> {
     router
 }
 
-// Add the new handler
-async fn stream_frames_handler(
-    Query(request): Query<StreamFramesRequest>,
+pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    info!(
-        "streaming frames from {} to {}",
-        request.start_time, request.end_time
-    );
+    Path(frame_id): Path<i64>,
+) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+    let start_time = Instant::now();
 
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-    let is_descending = request.order.eq(&Order::Descending);
-
-    // Create a stream that will be used for both success and error cases
-    let stream = async_stream::stream! {
-        // Early validation of frame cache
-        let cache = match state.frame_cache.as_ref() {
-            Some(cache) => cache.clone(),
-            None => {
-                // error!("frame cache not initialized");
-                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
-                return;
-            }
-        };
-
-        // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1) as i64;
-
-        // Calculate center timestamp
-        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
-
-        // Use a cancellation token to handle client disconnection
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-
-        // Spawn frame extraction task using get_frames
-        tokio::spawn({
-            let frame_tx = frame_tx.clone();
-            async move {
-                tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), is_descending) => {
-                        if let Err(e) = result {
-                            error!("frame extraction failed: {}", e);
-                            // Send error to client
-                            let _ = frame_tx.send(TimeSeriesFrame {
-                                timestamp: Utc::now(),
-                                frame_data: vec![],
-                                error: Some(format!("frame extraction failed: {}", e)),
-                            }).await;
+    // Add timeout for the entire operation
+    match timeout(Duration::from_secs(5), async {
+        // Try to get frame from cache if enabled
+        if let Some(cache) = &state.frame_image_cache {
+            let cache_result = cache.try_lock();
+            match cache_result {
+                Ok(mut cache) => {
+                    if let Some((frame_data, timestamp)) = cache.get(&frame_id) {
+                        if timestamp.elapsed() < Duration::from_secs(300) {
+                            debug!(
+                                "Cache hit for frame_id: {}. Retrieved in {:?}",
+                                frame_id,
+                                start_time.elapsed()
+                            );
+                            return Ok((StatusCode::OK, JsonResponse(json!({"data": frame_data}))));
                         }
-                    }
-                    _ = cancel_rx => {
-                        debug!("client disconnected, stopping frame stream");
+                        cache.pop(&frame_id);
                     }
                 }
-            }
-        });
-
-        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
-            let _ = tx.send(());  // Signal cancellation when stream is dropped
-        });
-
-        while let Some(timeseries_frame) = frame_rx.recv().await {
-            // Handle potential error in the frame
-            if let Some(error) = timeseries_frame.error {
-                yield Ok(Event::default().data(format!("{{\"error\": \"{}\"}}", error)));
-                break; // Stop streaming on error
-            }
-
-            // Convert frame to response and send
-            match serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
-                Ok(json) => yield Ok(Event::default().data(json)),
-                Err(e) => {
-                    error!("failed to serialize frame: {}", e);
-                    yield Ok(Event::default().data(format!("{{\"error\": \"failed to serialize frame: {}\"}}", e)));
-                    break;
+                Err(_) => {
+                    debug!("Cache lock contention for frame_id: {}", frame_id);
+                    // Continue without cache if lock is held
                 }
             }
         }
-    };
 
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    )
+        // If not in cache or cache disabled, get from database
+        match state.db.get_frame(frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_frame(&file_path, offset_index).await {
+                    Ok(frame_data) => {
+                        // Store in cache if enabled and we can get the lock
+                        if let Some(cache) = &state.frame_image_cache {
+                            if let Ok(mut cache) = cache.try_lock() {
+                                cache.put(frame_id, (frame_data.clone(), Instant::now()));
+                            }
+                        }
+
+                        debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
+
+                        Ok((StatusCode::OK, JsonResponse(json!({"data": frame_data}))))
+                    }
+                    Err(e) => {
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("Failed to extract frame: {}", e),
+                                "frame_id": frame_id,
+                                "file_path": file_path
+                            })),
+                        ))
+                    }
+                }
+            }
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "Frame not found",
+                    "frame_id": frame_id
+                })),
+            )),
+            Err(e) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": frame_id
+                })),
+            )),
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            error!("Request timeout for frame_id: {}", frame_id);
+            Err((
+                StatusCode::REQUEST_TIMEOUT,
+                JsonResponse(json!({
+                    "error": "Request timed out",
+                    "frame_id": frame_id
+                })),
+            ))
+        }
+    }
+}
+
+// Add these new functions before stream_frames_handler
+async fn fetch_and_process_frames(
+    db: Arc<DatabaseManager>,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    frame_tx: mpsc::Sender<TimeSeriesFrame>,
+    is_descending: bool,
+) -> Result<(), anyhow::Error> {
+    let mut chunks = db.find_video_chunks(start_time, end_time).await?;
+
+    // Sort chunks based on order
+    if is_descending {
+        chunks
+            .frames
+            .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+    } else {
+        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+    }
+
+    for chunk in chunks.frames {
+        let frame = create_time_series_frame(chunk);
+        frame_tx.send(frame).await?;
+    }
+
+    Ok(())
+}
+
+fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
+    TimeSeriesFrame {
+        timestamp: chunk.timestamp,
+        frame_data: chunk
+            .ocr_entries
+            .into_iter()
+            .map(|device_data| DeviceFrame {
+                device_id: device_data.device_name,
+                frame_id: chunk.frame_id,
+                image_data: vec![], // Empty since we don't need image data
+                metadata: FrameMetadata {
+                    file_path: device_data.video_file_path,
+                    app_name: device_data.app_name,
+                    window_name: device_data.window_name,
+                    transcription: chunk
+                        .audio_entries
+                        .iter()
+                        .map(|a| a.transcription.clone())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    ocr_text: device_data.text,
+                },
+                audio_entries: chunk
+                    .audio_entries
+                    .iter()
+                    .map(|a| AudioEntry {
+                        transcription: a.transcription.clone(),
+                        device_name: a.device_name.clone(),
+                        is_input: a.is_input,
+                        audio_file_path: a.audio_file_path.clone(),
+                        duration_secs: a.duration_secs,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        error: None,
+    }
+}
+
+//async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
+//    let (sender, mut receiver) = socket.split();
+//    let sender = Arc::new(Mutex::new(sender));
+//    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(1000); // Increased buffer size
+//
+//    // Handle incoming messages for time range requests
+//    let receive_handle = tokio::spawn({
+//        let sender = sender.clone();
+//        let frame_tx = frame_tx.clone();
+//        let state = state.clone();
+//        async move {
+//            let mut batch_timer = tokio::time::interval(Duration::from_millis(100));
+//
+//            while let Some(Ok(msg)) = receiver.next().await {
+//                if let Message::Text(text) = msg {
+//                    match serde_json::from_str::<StreamFramesRequest>(&text) {
+//                        Ok(request) => {
+//                            debug!(
+//                                "streaming frames from {} to {}",
+//                                request.start_time, request.end_time
+//                            );
+//
+//                            if let Some(frame_cache) = state.frame_cache.as_ref() {
+//                                let duration = request.end_time - request.start_time;
+//                                let duration_minutes = duration.num_minutes().max(1);
+//                                let center_timestamp = request.start_time + (duration / 2);
+//
+//                                // Spawn a separate task for frame fetching
+//                                tokio::spawn({
+//                                    let frame_tx = frame_tx.clone();
+//                                    let frame_cache = frame_cache.clone();
+//                                    async move {
+//                                        if let Err(e) = frame_cache
+//                                            .get_frames(
+//                                                center_timestamp,
+//                                                duration_minutes,
+//                                                frame_tx,
+//                                                request.order == Order::Descending,
+//                                            )
+//                                            .await
+//                                        {
+//                                            debug!("failed to get frames: {}", e);
+//                                        }
+//                                    }
+//                                });
+//                            } else {
+//                                let _ = sender
+//                                    .lock()
+//                                    .await
+//                                    .send(Message::Text(
+//                                        json!({"error": "Frame cache is not enabled"}).to_string(),
+//                                    ))
+//                                    .await;
+//                            }
+//                        }
+//                        Err(e) => {
+//                            let _ = sender
+//                                .lock()
+//                                .await
+//                                .send(Message::Text(
+//                                    json!({"error": format!("Invalid request format: {}", e)})
+//                                        .to_string(),
+//                                ))
+//                                .await;
+//                        }
+//                    }
+//                }
+//                batch_timer.tick().await; // Rate limit requests
+//            }
+//        }
+//    });
+//
+//    // Send frames to the client with batching
+//    let send_handle = tokio::spawn(async move {
+//        let mut frame_buffer = Vec::with_capacity(50);
+//        let mut batch_timer = tokio::time::interval(Duration::from_millis(50));
+//
+//        loop {
+//            tokio::select! {
+//                frame = frame_rx.recv() => {
+//                    match frame {
+//                        Some(timeseries_frame) => {
+//                            if let Some(error) = &timeseries_frame.error {
+//                                let _ = sender.lock().await.send(Message::Text(
+//                                    json!({"error": error}).to_string()
+//                                )).await;
+//                                continue;
+//                            }
+//
+//                            frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
+//
+//                            // Send immediately if buffer is full
+//                            if frame_buffer.len() >= 50 {
+//                                if let Ok(json) = serde_json::to_string(&frame_buffer) {
+//                                    let _ = sender.lock().await.send(Message::Text(json)).await;
+//                                }
+//                                frame_buffer.clear();
+//                            }
+//                        }
+//                        None => break,
+//                    }
+//                }
+//                _ = batch_timer.tick() => {
+//                    if !frame_buffer.is_empty() {
+//                        if let Ok(json) = serde_json::to_string(&frame_buffer) {
+//                            let _ = sender.lock().await.send(Message::Text(json)).await;
+//                        }
+//                        frame_buffer.clear();
+//                    }
+//                }
+//            }
+//        }
+//    });
+//
+//    // Wait for either handle to complete
+//    tokio::select! {
+//        _ = receive_handle => debug!("receive handle completed"),
+//        _ = send_handle => debug!("send handle completed"),
+//    }
+//}
+
+async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let db = state.db.clone();
+
+    // Create a buffer for batching frames
+    let mut frame_buffer = Vec::with_capacity(50);
+    let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
+
+    // Handle incoming messages for time range requests
+    let receive_handle = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(text) = msg {
+                match serde_json::from_str::<StreamFramesRequest>(&text) {
+                    Ok(request) => {
+                        debug!(
+                            "streaming frames from {} to {}",
+                            request.start_time, request.end_time
+                        );
+
+                        let frame_tx = frame_tx.clone();
+                        let db = db.clone();
+
+                        tokio::spawn(async move {
+                            if let Err(e) = fetch_and_process_frames(
+                                db,
+                                request.start_time,
+                                request.end_time,
+                                frame_tx,
+                                request.order == Order::Descending,
+                            )
+                            .await
+                            {
+                                error!("frame fetching failed: {}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("failed to parse stream request: {}", e);
+                    }
+                }
+            }
+        }
+    });
+
+    // Send frames to the client with batching
+    let send_handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // Check for new frames
+                frame = frame_rx.recv() => {
+                    match frame {
+                        Some(timeseries_frame) => {
+                            if let Some(error) = timeseries_frame.error {
+                                if let Err(e) = sender
+                                    .send(Message::Text(format!("{{\"error\": \"{}\"}}", error)))
+                                    .await
+                                {
+                                    error!("failed to send error message: {}", e);
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            // Add frame to buffer
+                            frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
+
+                            // If buffer is full, send immediately
+                            if frame_buffer.len() >= 50 {
+                                if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                                    error!("failed to send batch: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                // Timer for flushing partial batches
+                _ = buffer_timer.tick() => {
+                    if !frame_buffer.is_empty() {
+                        if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                            error!("failed to send batch: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wait for either handle to complete
+    tokio::select! {
+        _ = receive_handle => debug!("receive handle completed"),
+        _ = send_handle => debug!("send handle completed"),
+    }
+}
+
+// Helper function to send batched frames
+async fn send_batch(
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+    buffer: &mut Vec<StreamTimeSeriesResponse>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if buffer.is_empty() {
+        return Ok(());
+    }
+
+    // Serialize the batch
+    let json = serde_json::to_string(&buffer)?;
+    sender.send(Message::Text(json)).await?;
+    buffer.clear();
+    Ok(())
+}
+async fn stream_frames_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_stream_frames_socket(socket, state))
 }
 
 // Add this new handler function

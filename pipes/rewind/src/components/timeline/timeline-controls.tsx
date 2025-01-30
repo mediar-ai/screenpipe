@@ -2,7 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
-import { format, isAfter, isSameDay, startOfDay, subDays } from "date-fns";
+import {
+	endOfDay,
+	format,
+	isAfter,
+	isSameDay,
+	startOfDay,
+	subDays,
+} from "date-fns";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo } from "react";
@@ -30,7 +37,7 @@ export function TimelineControls({
 	const jumpDay = (days: number) => {
 		const today = new Date();
 
-		const newDate = new Date(currentDate);
+		const newDate = endOfDay(new Date(currentDate));
 		newDate.setDate(newDate.getDate() + days);
 
 		// Prevent jumping to future dates

@@ -136,6 +136,7 @@ pub struct UiContent {
 
 #[derive(Debug, Clone)]
 pub struct FrameData {
+    pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub offset_index: i64,
     pub ocr_entries: Vec<OCREntry>,

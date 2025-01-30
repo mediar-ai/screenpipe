@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
 import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
@@ -11,22 +11,27 @@ import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
 import { TimelineSearch } from "@/components/timeline/timeline-search";
 import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
-import { endOfDay, isAfter } from "date-fns";
+import { isAfter, isSameDay } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
+import { useTimelineData } from "@/lib/hooks/use-timeline-data";
+import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
+import { TimelineSlider } from "@/components/timeline/timeline";
+import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
 	devices: DeviceFrameResponse[];
 }
 
-interface DeviceFrameResponse {
+export interface DeviceFrameResponse {
 	device_id: string;
+	frame_id: string;
 	frame: string; // base64 encoded image
 	metadata: DeviceMetadata;
 	audio: AudioData[];
 }
 
-interface DeviceMetadata {
+export interface DeviceMetadata {
 	file_path: string;
 	app_name: string;
 	window_name: string;
@@ -43,15 +48,10 @@ export interface AudioData {
 	start_offset: number;
 }
 
-interface TimeRange {
+export interface TimeRange {
 	start: Date;
 	end: Date;
 }
-
-const Order = {
-	Ascending: "ascending",
-	Descending: "descending",
-} as const;
 
 function getTimeArray(
 	timeObj: TimeRange | null | undefined,
@@ -75,31 +75,29 @@ const easeOutCubic = (x: number): number => {
 };
 
 export default function Timeline() {
-	const [currentFrame, setCurrentFrame] = useState<DeviceFrameResponse | null>(
-		null,
-	);
-	const [frames, setFrames] = useState<StreamTimeSeriesResponse[]>([]);
 	const [currentIndex, setCurrentIndex] = useState(0);
-	const [isLoading, setIsLoading] = useState(true);
-	const [message, setMessage] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const eventSourceRef = useRef<EventSource | null>(null);
-	const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-	const [loadedTimeRange, setLoadedTimeRange] = useState<TimeRange | null>(
-		null,
-	);
 	const [isAiPanelExpanded, setIsAiPanelExpanded] = useState(false);
 	const containerRef = useRef<HTMLDivElement | null>(null);
-	const [aiPanelPosition, setAiPanelPosition] = useState({
-		x: 0,
-		y: 0,
-	});
-	const [currentDate, setCurrentDate] = useState(new Date());
-	const [searchResults, setSearchResults] = useState<number[]>([]);
+	const [aiPanelPosition, setAiPanelPosition] = useState({ x: 0, y: 0 });
+	// const [searchResults, setSearchResults] = useState<number[]>([]);
 	const [startAndEndDates, setStartAndEndDates] = useState<TimeRange>({
 		start: new Date(new Date().setHours(0, 0, 0, 0)),
 		end: new Date(),
 	});
+
+	const { currentFrame, setCurrentFrame, imageFrame } = useCurrentFrame(
+		(index) => {
+			setCurrentIndex(index);
+		},
+	);
+
+	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched } =
+		useTimelineStore();
+
+	const { frames, isLoading, error, message, fetchNextDayData } =
+		useTimelineData(currentDate, (frame) => {
+			setCurrentFrame(frame);
+		});
 
 	useEffect(() => {
 		setAiPanelPosition({
@@ -107,160 +105,6 @@ export default function Timeline() {
 			y: window.innerHeight / 4,
 		});
 	}, []);
-
-	const setupEventSource = () => {
-		if (eventSourceRef.current) {
-			eventSourceRef.current.close();
-		}
-
-		setFrames(() => []);
-		setCurrentIndex(() => 0);
-
-		let endTime = new Date(currentDate);
-		if (endTime.getDate() === new Date().getDate()) {
-			endTime.setMinutes(endTime.getMinutes() - 5);
-		} else {
-			endTime = endOfDay(new Date(currentDate));
-		}
-
-		const startTime = new Date(endTime);
-		// startTime.setDate(startTime.getDate() - 7);
-		startTime.setHours(0, 0, 0, 0);
-
-		const order: "ascending" | "descending" = Order.Descending;
-
-		const url = `http://localhost:3030/stream/frames?start_time=${startTime.toISOString()}&end_time=${endTime.toISOString()}&order=${order}`;
-
-		setLoadedTimeRange({
-			start: startTime,
-			end: endTime,
-		});
-
-		console.log("starting stream:", url);
-		setMessage("connecting to the server...");
-
-		const eventSource = new EventSource(url);
-		eventSourceRef.current = eventSource;
-
-		const connectionTimeout = setTimeout(() => {
-			if (eventSource.readyState !== EventSource.OPEN) {
-				console.error(
-					"Connection timeout: Unable to establish connection, make sure screenpipe is running",
-				);
-				setIsLoading(false);
-				setMessage(null);
-				setError("unable to establish connection, is screenpipe running?");
-				eventSource.close();
-			}
-		}, 5000);
-
-		let closestDiff = Infinity;
-		eventSource.onmessage = (event) => {
-			try {
-				const data = JSON.parse(event.data);
-				if (data === "keep-alive-text") {
-					setError((prev) => (prev !== null ? null : prev));
-					setIsLoading((prev) => (prev !== false ? false : prev));
-					setMessage((prev) =>
-						prev !== "please wait..." ? "please wait..." : prev,
-					);
-					return;
-				}
-
-				if (data.timestamp && data.devices) {
-					setFrames((prev) => {
-						const exists = prev.some((f) => f.timestamp === data.timestamp);
-						if (exists) return prev;
-
-						if (prev.length === 0) {
-							const frameTime = new Date(data.timestamp);
-							setLoadedTimeRange((current) => {
-								if (!current) return null;
-								if (order === Order.Descending)
-									return {
-										...current,
-										start: current.start,
-										end: frameTime,
-									};
-								return {
-									...current,
-									start: frameTime,
-									end: current.end,
-								};
-							});
-							return [data];
-						}
-
-						if (order === Order.Descending) {
-							const frameTime = new Date(data.timestamp);
-							const diff = Math.abs(frameTime.getTime() - startTime.getTime());
-							if (diff < closestDiff) {
-								closestDiff = diff;
-								setLoadedTimeRange((current) => ({
-									...current,
-									start: frameTime,
-									end: current?.end || frameTime,
-								}));
-							}
-						}
-
-						// Find the correct insertion index using binary search
-						const timestamp = new Date(data.timestamp).getTime();
-						let left = 0;
-						let right = prev.length;
-
-						while (left < right) {
-							const mid = Math.floor((left + right) / 2);
-							const midTimestamp = new Date(prev[mid].timestamp).getTime();
-
-							if (midTimestamp < timestamp) {
-								right = mid;
-							} else {
-								left = mid + 1;
-							}
-						}
-
-						const newFrames = [...prev];
-						newFrames.splice(left, 0, data);
-						return newFrames;
-					});
-
-					setCurrentFrame((prev) => prev || data.devices[0]);
-					setIsLoading(false);
-					setError(null);
-					setMessage(null);
-				}
-			} catch (error) {
-				console.error("failed to parse frame data:", error);
-			}
-		};
-
-		eventSource.onerror = (error) => {
-			clearTimeout(connectionTimeout);
-			if (eventSource.readyState === EventSource.CLOSED) {
-				console.log("stream ended (expected behavior)", error);
-				setMessage(null);
-				setIsLoading(false);
-				return;
-			}
-
-			console.error("eventsource error:", error);
-		};
-
-		eventSource.addEventListener("close", () => {
-			console.log("stream closed ");
-			setMessage(null);
-			setIsLoading(false);
-		});
-
-		eventSource.onopen = () => {
-			console.log("eventsource connection opened");
-			clearTimeout(connectionTimeout);
-			setError(null);
-			setMessage(null);
-			setIsLoading(true);
-		};
-	};
 
 	useEffect(() => {
 		const getStartEndDates = async () => {
@@ -280,98 +124,115 @@ export default function Timeline() {
 	}, []);
 
 	useEffect(() => {
-		setupEventSource();
-		const currentRetryTimeout = retryTimeoutRef.current;
+		const startTime = new Date(currentDate);
+		startTime.setHours(0, 0, 0, 0);
 
-		return () => {
-			if (eventSourceRef.current) {
-				eventSourceRef.current.close();
-			}
-			if (currentRetryTimeout) {
-				clearTimeout(currentRetryTimeout);
-			}
-			setIsLoading(false);
-			setError(null);
-			setMessage(null);
-		};
+		const endTime = new Date(currentDate);
+		if (endTime.getDate() === new Date().getDate()) {
+			endTime.setMinutes(endTime.getMinutes() - 5);
+		} else {
+			endTime.setHours(23, 59, 59, 999);
+		}
+		fetchTimeRange(startTime, endTime);
 	}, [currentDate]);
+
+	//useEffect(() => {
+	//	setCurrentFrame(null);
+	//	setCurrentIndex(0);
+	//}, [currentDate]);
+
+	useEffect(() => {
+		if (currentFrame) {
+			const frameDate = new Date(currentFrame.timestamp);
+			console.log(frameDate, currentDate);
+			if (!isSameDay(frameDate, currentDate)) {
+				setCurrentDate(frameDate);
+			}
+		}
+	}, [currentFrame, currentDate]);
 
 	const handleScroll = useMemo(
 		() =>
-			throttle((e: WheelEvent) => {
-				// Move these checks outside the throttle to improve performance
-				const isWithinAiPanel =
-					e.target instanceof Node &&
-					document.querySelector(".ai-panel")?.contains(e.target);
-				const isWithinAudioPanel =
-					e.target instanceof Node &&
-					document.querySelector(".audio-transcript-panel")?.contains(e.target);
-				const isWithinTimelineDialog =
-					e.target instanceof Node &&
-					document.querySelector('[role="dialog"]')?.contains(e.target);
+			throttle(
+				(e: WheelEvent) => {
+					// Move these checks outside the throttle to improve performance
+					const isWithinAiPanel =
+						e.target instanceof Node &&
+						document.querySelector(".ai-panel")?.contains(e.target);
+					const isWithinAudioPanel =
+						e.target instanceof Node &&
+						document
+							.querySelector(".audio-transcript-panel")
+							?.contains(e.target);
+					const isWithinTimelineDialog =
+						e.target instanceof Node &&
+						document.querySelector('[role="dialog"]')?.contains(e.target);
 
-				if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
-					return;
-				}
-
-				e.preventDefault();
-				e.stopPropagation();
-
-				// Calculate scroll intensity based on absolute delta
-				const scrollIntensity = Math.abs(e.deltaY);
-				const direction = Math.sign(e.deltaY);
-
-				// Change this if you want limit the index change
-				const limitIndexChange = Infinity;
-
-				// Adjust index change based on scroll intensity
-				const indexChange =
-					direction *
-					Math.min(
-						limitIndexChange,
-						Math.ceil(Math.pow(scrollIntensity / 50, 3.5)),
-					);
-
-				setCurrentIndex((prevIndex) => {
-					const newIndex = Math.min(
-						Math.max(0, Math.floor(prevIndex + indexChange)),
-						frames.length - 1,
-					);
-
-					console.log(newIndex, indexChange, scrollIntensity / 50);
-
-					if (newIndex !== prevIndex && frames[newIndex]) {
-						setCurrentFrame(frames[newIndex].devices[0]);
+					if (isWithinAiPanel || isWithinAudioPanel || isWithinTimelineDialog) {
+						return;
 					}
 
-					return newIndex;
-				});
-			}, 16),
+					e.preventDefault();
+					e.stopPropagation();
+
+					// Calculate scroll intensity based on absolute delta
+					const scrollIntensity = Math.abs(e.deltaY);
+					const direction = Math.sign(e.deltaY);
+
+					// Change this if you want limit the index change
+					const limitIndexChange = Infinity;
+
+					// Adjust index change based on scroll intensity
+					const indexChange =
+						direction *
+						Math.min(
+							limitIndexChange,
+							Math.ceil(Math.pow(scrollIntensity / 50, 1.5)),
+						);
+
+					requestAnimationFrame(() => {
+						setCurrentIndex((prevIndex) => {
+							const newIndex = Math.min(
+								Math.max(0, Math.floor(prevIndex + indexChange)),
+								frames.length - 1,
+							);
+
+							if (newIndex !== prevIndex && frames[newIndex]) {
+								setCurrentFrame(frames[newIndex]);
+							}
+
+							return newIndex;
+						});
+					});
+				},
+				16,
+				{ leading: true, trailing: false },
+			),
 		[frames], // Only depend on frames length changes
 	);
 
-	const timePercentage = useMemo(() => {
-		if (!frames.length || currentIndex >= frames.length || !loadedTimeRange) {
-			return 0;
-		}
-
-		const currentFrame = frames[currentIndex];
-		if (!currentFrame?.timestamp) {
-			return 0;
-		}
-
-		const frameTime = new Date(currentFrame.timestamp);
-		const totalVisibleMilliseconds =
-			loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
-		const currentMilliseconds =
-			frameTime.getTime() - loadedTimeRange.start.getTime();
-
-		const percentage = Math.min(
-			99.5,
-			(currentMilliseconds / totalVisibleMilliseconds) * 100,
-		);
-		return Boolean(percentage) ? percentage : 0;
-	}, [currentIndex, frames, loadedTimeRange]);
+	//	const timePercentage = useMemo(() => {
+	//		if (!frames.length || currentIndex >= frames.length || !loadedTimeRange) {
+	//			return 0;
+	//		}
+	//
+	//		const currentFrame = frames[currentIndex];
+	//		if (!currentFrame?.timestamp) {
+	//			return 0;
+	//		}
+	//
+	//		const frameTime = new Date(currentFrame.timestamp);
+	//		const totalVisibleMilliseconds =
+	//			loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
+	//		const currentMilliseconds =
+	//			frameTime.getTime() - loadedTimeRange.start.getTime();
+	//
+	//		const percentage = Math.min(
+	//			99.8,
+	//			(currentMilliseconds / totalVisibleMilliseconds) * 100,
+	//		);
+	//		return Boolean(percentage) ? percentage : 0;
+	//	}, [currentIndex, frames, loadedTimeRange]);
 
 	useEffect(() => {
 		const preventScroll = (e: WheelEvent) => {
@@ -431,66 +292,32 @@ export default function Timeline() {
 		// Update cursor position
 		setCurrentIndex(closestIndex);
 		if (frames[closestIndex]) {
-			setCurrentFrame(frames[closestIndex].devices[0]);
-			//setCurrentDate(new Date(frames[closestIndex].timestamp));
+			setCurrentFrame(frames[closestIndex]);
+			//	setCurrentDate(new Date(frames[closestIndex].timestamp));
 		}
 	};
 
 	const handleDateChange = (newDate: Date) => {
-		// Ensure we're comparing dates at start of day
-		//const targetStartOfDay = new Date(
-		//	newDate.getFullYear(),
-		//	newDate.getMonth(),
-		//	newDate.getDate(),
-		//	0,
-		//	0,
-		//	0,
-		//	0,
-		//);
+		console.log(hasDateBeenFetched(newDate));
+		if (!hasDateBeenFetched(newDate)) {
+			setCurrentFrame(null);
+			const frameTimeStamp = new Date(newDate);
+			if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
+				return;
+			}
 
-		//let closestIndex = 0;
-		//let closestDiff = Infinity;
+			if (isAfter(startAndEndDates.start.getDate(), newDate.getDate())) {
+				return;
+			}
 
-		const frameTimeStamp = new Date(newDate);
-		if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
-			return;
+			setCurrentDate(newDate);
+		} else {
+			jumpToTime(newDate);
 		}
-
-		if (isAfter(startAndEndDates.start.getDate(), newDate.getDate())) {
-			return;
-		}
-
-		setCurrentDate(newDate);
-
-		//frames.forEach((frame, index) => {
-		//	const frameDate = new Date(frame.timestamp);
-		//	const frameStartOfDay = new Date(
-		//		frameDate.getFullYear(),
-		//		frameDate.getMonth(),
-		//		frameDate.getDate(),
-		//		0,
-		//		0,
-		//		0,
-		//		0,
-		//	);
-
-		//	const diff = Math.abs(
-		//		frameStartOfDay.getTime() - targetStartOfDay.getTime(),
-		//	);
-		//	if (diff < closestDiff) {
-		//		closestDiff = diff;
-		//		closestIndex = index;
-		//	}
-		//});
-
-		//setCurrentIndex(closestIndex);
-		//if (frames[closestIndex]) {
-		//	setCurrentFrame(frames[closestIndex].devices[0]);
-		//}
 	};
 
 	const handleJumpToday = () => {
-		setCurrentDate(new Date());
+		window.location.reload();
 	};
 
 	const animateToIndex = (targetIndex: number, duration: number = 1000) => {
@@ -512,7 +339,7 @@ export default function Timeline() {
 			// Update the frame
 			setCurrentIndex(newIndex);
 			if (frames[newIndex]) {
-				setCurrentFrame(frames[newIndex].devices[0]);
+				setCurrentFrame(frames[newIndex]);
 			}
 
 			// Continue animation if not complete
@@ -524,16 +351,16 @@ export default function Timeline() {
 		requestAnimationFrame(animate);
 	};
 
-	const timeRange = useMemo(
-		() => getTimeArray(loadedTimeRange),
-		[loadedTimeRange],
-	);
+	//	const timeRange = useMemo(
+	//		() => getTimeArray(loadedTimeRange),
+	//		[loadedTimeRange],
+	//	);
 
 	return (
 		<TimelineProvider>
 			<div
 				ref={containerRef}
-				className="fixed inset-0 flex flex-col bg-background text-foreground overflow-hidden relative"
+				className="inset-0 flex flex-col bg-background text-foreground relative"
 				style={{
 					height: "100vh",
 					overscrollBehavior: "none",
@@ -597,7 +424,7 @@ export default function Timeline() {
 					)}
 					{currentFrame && (
 						<img
-							src={`data:image/png;base64,${currentFrame.frame}`}
+							src={`data:image/png;base64,${imageFrame}`}
 							className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
 							alt="Current frame"
 						/>
@@ -611,117 +438,127 @@ export default function Timeline() {
 					)}
 				</div>
 
-				<div className="w-4/5 mx-auto my-8 relative select-none">
-					<div
-						className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative"
-						style={{
-							width: "100%",
-							boxSizing: "border-box",
-						}}
-					>
-						{loadedTimeRange && (
-							<TimelineSelection loadedTimeRange={loadedTimeRange} />
-						)}
-						<div
-							className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-							style={{ left: `${timePercentage}%`, zIndex: 100 }}
-						>
-							<div className="relative -top-6 right-3 z-50 text-[10px] text-muted-foreground whitespace-nowrap">
-								{currentIndex < frames.length &&
-									frames[currentIndex] &&
-									frames[currentIndex].timestamp &&
-									(() => {
-										try {
-											return new Date(
-												frames[currentIndex].timestamp,
-											).toLocaleTimeString(
-												"en-US", // explicitly specify locale
-												{
-													hour: "2-digit",
-													minute: "2-digit",
-													second: "2-digit",
-												},
-											);
-										} catch (e) {
-											console.error("failed to format timestamp:", e);
-											return frames[currentIndex].timestamp; // fallback to raw timestamp
-										}
-									})()}
-							</div>
-						</div>
-						{searchResults.map((frameIndex) => {
-							const percentage = (frameIndex / (frames.length - 1)) * 100;
-							return (
-								<div
-									key={frameIndex}
-									className="absolute top-0 h-full w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-pointer transition-colors"
-									style={{ left: `${percentage}%`, zIndex: 4 }}
-									onClick={() => {
-										animateToIndex(frameIndex);
-										setSearchResults([]); // Clear results after clicking
-									}}
-								>
-									<div className="absolute -top-6 -left-2 text-[10px] text-blue-500 whitespace-nowrap">
-										{new Date(frames[frameIndex].timestamp).toLocaleTimeString(
-											[],
-											{
-												hour: "2-digit",
-												minute: "2-digit",
-											},
-										)}
-									</div>
-								</div>
-							);
-						})}
-					</div>
+				<TimelineSlider
+					frames={frames}
+					currentIndex={currentIndex}
+					onFrameChange={(index) => {
+						setCurrentIndex(index);
+						if (frames[index]) {
+							setCurrentFrame(frames[index]);
+						}
+					}}
+					fetchNextDayData={fetchNextDayData}
+					currentDate={currentDate}
+					startAndEndDates={startAndEndDates}
+				/>
+				{
+					//<div className="w-4/5 mx-auto my-8 relative select-none">
+					//	<div
+					//		className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative overflow-hidden"
+					//		style={{
+					//			width: "100%",
+					//			boxSizing: "border-box",
+					//		}}
+					//	>
+					//		{
+					//			//                     loadedTimeRange && (
+					//			//<TimelineSelection loadedTimeRange={loadedTimeRange} />
+					//			//   )
+					//			//<TimelineSlider frames={frames} />
+					//		}
+					//		<div
+					//			className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
+					//			style={{ left: `${timePercentage}%`, zIndex: 100 }}
+					//		>
+					//			<div className="relative -top-6 right-3 z-50 text-[10px] text-muted-foreground whitespace-nowrap">
+					//				{currentIndex < frames.length &&
+					//					frames[currentIndex] &&
+					//					frames[currentIndex].timestamp &&
+					//					(() => {
+					//						try {
+					//							return new Date(
+					//								frames[currentIndex].timestamp,
+					//							).toLocaleTimeString(
+					//								"en-US", // explicitly specify locale
+					//								{
+					//									hour: "2-digit",
+					//									minute: "2-digit",
+					//									second: "2-digit",
+					//								},
+					//							);
+					//						} catch (e) {
+					//							console.error("failed to format timestamp:", e);
+					//							return frames[currentIndex].timestamp; // fallback to raw timestamp
+					//						}
+					//					})()}
+					//			</div>
+					//		</div>
+					//		{searchResults.map((frameIndex) => {
+					//			const percentage = (frameIndex / (frames.length - 1)) * 100;
+					//			return (
+					//				<div
+					//					key={frameIndex}
+					//					className="absolute top-0 h-full w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-pointer transition-colors"
+					//					style={{ left: `${percentage}%`, zIndex: 4 }}
+					//					onClick={() => {
+					//						animateToIndex(frameIndex);
+					//						setSearchResults([]); // Clear results after clicking
+					//					}}
+					//				>
+					//					<div className="absolute -top-6 -left-2 text-[10px] text-blue-500 whitespace-nowrap">
+					//						{new Date(frames[frameIndex].timestamp).toLocaleTimeString(
+					//							[],
+					//							{
+					//								hour: "2-digit",
+					//								minute: "2-digit",
+					//							},
+					//						)}
+					//					</div>
+					//				</div>
+					//			);
+					//		})}
+					//	</div>
+				}
 
-					<AIPanel
-						position={aiPanelPosition}
-						onPositionChange={setAiPanelPosition}
-						onClose={() => {
-							setIsAiPanelExpanded(false);
-						}}
-						frames={frames}
-						agents={AGENTS}
-						isExpanded={isAiPanelExpanded}
-						onExpandedChange={setIsAiPanelExpanded}
-					/>
-
-					{loadedTimeRange && frames.length > 0 && (
-						<TimelineIconsSection blocks={frames} timeRange={loadedTimeRange} />
-					)}
-
-					<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
-						{timeRange.map((time, i) => {
-							const dateTime = new Date(time);
-							return (
-								<button
-									key={i}
-									className="absolute transform -translate-x-1/2 text-nowrap flex flex-col"
-									style={{
-										left: `${(i * 100) / (timeRange.length - 1)}%`,
-									}}
-									onClick={() => jumpToTime(new Date(time))}
-								>
-									{dateTime.toLocaleTimeString("en-US", {
-										hour: "numeric",
-										minute: "2-digit",
-										hour12: true,
-									})}
-									{
-										//<span className="text-center">
-										//	{dateTime.toLocaleDateString([], {
-										//		weekday: "short",
-										//
-										//		day: "numeric",
-										//	})}
-										//</span>
-									}
-								</button>
-							);
-						})}
-					</div>
-				</div>
+				<AIPanel
+					position={aiPanelPosition}
+					onPositionChange={setAiPanelPosition}
+					onClose={() => {
+						setIsAiPanelExpanded(false);
+					}}
+					frames={frames}
+					agents={AGENTS}
+					isExpanded={isAiPanelExpanded}
+					onExpandedChange={setIsAiPanelExpanded}
+				/>
+				{
+					//	{loadedTimeRange && frames.length > 0 && (
+					//		<TimelineIconsSection blocks={frames} timeRange={loadedTimeRange} />
+					//	)}
+					//
+					//	<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
+					//		{timeRange.map((time, i) => {
+					//			const dateTime = new Date(time);
+					//			return (
+					//				<button
+					//					key={i}
+					//					className="absolute transform -translate-x-1/2 text-nowrap flex flex-col"
+					//					style={{
+					//						left: `${(i * 100) / (timeRange.length - 1)}%`,
+					//					}}
+					//					onClick={() => jumpToTime(new Date(time))}
+					//				>
+					//					{dateTime.toLocaleTimeString("en-US", {
+					//						hour: "numeric",
+					//						minute: "2-digit",
+					//						hour12: true,
+					//					})}
+					//				</button>
+					//			);
+					//		})}
+					//	</div>
+					//  </div>
+				}
 
 				<div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
 					<div className="flex flex-col items-center gap-1">

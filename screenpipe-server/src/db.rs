@@ -1362,43 +1362,172 @@ impl DatabaseManager {
     // ! just merging
     // ! the offset is not quite right but we try to index around frames which is the central human experience and most important sense
     // ! there should be a way to properly sync audio and video indexes
+    //pub async fn find_video_chunks(
+    //    &self,
+    //    start: DateTime<Utc>,
+    //    end: DateTime<Utc>,
+    //) -> Result<TimeSeriesChunk, SqlxError> {
+    //    // First get all frames in time range with their OCR data
+    //    let frames_query = r#"
+    //        SELECT
+    //            f.id,
+    //            f.timestamp,
+    //            f.offset_index,
+    //            ot.text,
+    //            ot.app_name,
+    //            ot.window_name,
+    //            vc.device_name as screen_device,
+    //            vc.file_path as video_path
+    //        FROM frames f
+    //        JOIN video_chunks vc ON f.video_chunk_id = vc.id
+    //        LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+    //        WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+    //        ORDER BY f.timestamp DESC, f.offset_index DESC
+    //    "#;
+
+    //    // Then get audio data that overlaps with these frames
+    //    let audio_query = r#"
+    //        SELECT
+    //            at.timestamp,
+    //            at.transcription,
+    //            at.device as audio_device,
+    //            at.is_input_device,
+    //            ac.file_path as audio_path
+    //        FROM audio_transcriptions at
+    //        JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+    //        WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
+    //        ORDER BY at.timestamp DESC
+    //    "#;
+
+    //    // Execute both queries
+    //    let (frame_rows, audio_rows) = tokio::try_join!(
+    //        sqlx::query(frames_query)
+    //            .bind(start)
+    //            .bind(end)
+    //            .fetch_all(&self.pool),
+    //        sqlx::query(audio_query)
+    //            .bind(start)
+    //            .bind(end)
+    //            .fetch_all(&self.pool)
+    //    )?;
+
+    //    // Process into structured data
+    //    let mut frames_map: BTreeMap<(DateTime<Utc>, i64), FrameData> = BTreeMap::new();
+
+    //    // Process frame/OCR data
+    //    for row in frame_rows {
+    //        let timestamp: DateTime<Utc> = row.get("timestamp");
+    //        let offset_index: i64 = row.get("offset_index");
+    //        let key = (timestamp, offset_index);
+
+    //        let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
+    //            frame_id: row.get("id"),
+    //            timestamp,
+    //            offset_index,
+    //            ocr_entries: Vec::new(),
+    //            audio_entries: Vec::new(),
+    //        });
+
+    //        if let Ok(text) = row.try_get::<String, _>("text") {
+    //            frame_data.ocr_entries.push(OCREntry {
+    //                text,
+    //                app_name: row.get("app_name"),
+    //                window_name: row.get("window_name"),
+    //                device_name: row.get("screen_device"),
+    //                video_file_path: row.get("video_path"),
+    //            });
+    //        }
+    //    }
+
+    //    // Process audio data
+    //    for row in audio_rows {
+    //        let timestamp: DateTime<Utc> = row.get("timestamp");
+
+    //        // Find the closest frame
+    //        if let Some((&key, _)) = frames_map.range(..(timestamp, i64::MAX)).next_back() {
+    //            if let Some(frame_data) = frames_map.get_mut(&key) {
+    //                frame_data.audio_entries.push(AudioEntry {
+    //                    transcription: row.get("transcription"),
+    //                    device_name: row.get("audio_device"),
+    //                    is_input: row.get("is_input_device"),
+    //                    audio_file_path: row.get("audio_path"),
+    //                    // duration_secs: row.get("duration_secs"),
+    //                    duration_secs: 0.0, // TODO
+    //                });
+    //            }
+    //        }
+    //    }
+
+    //    Ok(TimeSeriesChunk {
+    //        frames: frames_map.into_values().rev().collect(),
+    //        start_time: start,
+    //        end_time: end,
+    //    })
+    //}
+
     pub async fn find_video_chunks(
         &self,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<TimeSeriesChunk, SqlxError> {
-        // First get all frames in time range with their OCR data
+        // Get frames with OCR data, grouped by minute to handle multiple monitors
         let frames_query = r#"
+        WITH MinuteGroups AS (
             SELECT
+                f.id,
                 f.timestamp,
                 f.offset_index,
                 ot.text,
                 ot.app_name,
                 ot.window_name,
                 vc.device_name as screen_device,
-                vc.file_path as video_path
+                vc.file_path as video_path,
+                strftime('%Y-%m-%d %H:%M', f.timestamp) as minute_group,
+                ROW_NUMBER() OVER (
+                    PARTITION BY strftime('%Y-%m-%d %H:%M', f.timestamp), ot.app_name, vc.device_name
+                    ORDER BY f.timestamp DESC
+                ) as rn
             FROM frames f
             JOIN video_chunks vc ON f.video_chunk_id = vc.id
             LEFT JOIN ocr_text ot ON f.id = ot.frame_id
             WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-            ORDER BY f.timestamp DESC, f.offset_index DESC
-        "#;
+        )
+        SELECT *
+        FROM MinuteGroups
+        WHERE rn = 1
+        ORDER BY timestamp DESC, offset_index DESC
+    "#;
 
-        // Then get audio data that overlaps with these frames
+        // Get audio data with proper time windows for synchronization
         let audio_query = r#"
+        WITH frame_windows AS (
             SELECT
-                at.timestamp,
-                at.transcription,
-                at.device as audio_device,
-                at.is_input_device,
-                ac.file_path as audio_path
-            FROM audio_transcriptions at
-            JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
-            WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
-            ORDER BY at.timestamp DESC
-        "#;
+                f.timestamp as frame_time,
+                datetime(f.timestamp, '-0.5 seconds') as window_start,
+                datetime(f.timestamp, '+0.5 seconds') as window_end,
+                f.offset_index
+            FROM frames f
+            WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+            GROUP BY f.timestamp
+        )
+        SELECT
+            at.timestamp,
+            at.transcription,
+            at.device as audio_device,
+            at.is_input_device,
+            ac.file_path as audio_path,
+            fw.frame_time as nearest_frame_time,
+            fw.offset_index as frame_offset,
+            CAST((julianday(at.end_time) - julianday(at.start_time)) * 86400 as REAL) as duration_secs
+        FROM audio_transcriptions at
+        JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+        JOIN frame_windows fw
+            ON at.timestamp BETWEEN fw.window_start AND fw.window_end
+        WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
+        ORDER BY at.timestamp DESC
+    "#;
 
-        // Execute both queries
+        // Execute queries in parallel
         let (frame_rows, audio_rows) = tokio::try_join!(
             sqlx::query(frames_query)
                 .bind(start)
@@ -1410,16 +1539,17 @@ impl DatabaseManager {
                 .fetch_all(&self.pool)
         )?;
 
-        // Process into structured data
+        // Process into structured data with device-aware grouping
         let mut frames_map: BTreeMap<(DateTime<Utc>, i64), FrameData> = BTreeMap::new();
 
-        // Process frame/OCR data
+        // Process frame/OCR data with device awareness
         for row in frame_rows {
             let timestamp: DateTime<Utc> = row.get("timestamp");
             let offset_index: i64 = row.get("offset_index");
             let key = (timestamp, offset_index);
 
             let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
+                frame_id: row.get("id"),
                 timestamp,
                 offset_index,
                 ocr_entries: Vec::new(),
@@ -1437,22 +1567,20 @@ impl DatabaseManager {
             }
         }
 
-        // Process audio data
+        // Process audio data with proper synchronization
         for row in audio_rows {
-            let timestamp: DateTime<Utc> = row.get("timestamp");
+            let frame_timestamp: DateTime<Utc> = row.get("nearest_frame_time");
+            let frame_offset: i64 = row.get("frame_offset");
+            let key = (frame_timestamp, frame_offset);
 
-            // Find the closest frame
-            if let Some((&key, _)) = frames_map.range(..(timestamp, i64::MAX)).next_back() {
-                if let Some(frame_data) = frames_map.get_mut(&key) {
-                    frame_data.audio_entries.push(AudioEntry {
-                        transcription: row.get("transcription"),
-                        device_name: row.get("audio_device"),
-                        is_input: row.get("is_input_device"),
-                        audio_file_path: row.get("audio_path"),
-                        // duration_secs: row.get("duration_secs"),
-                        duration_secs: 0.0, // TODO
-                    });
-                }
+            if let Some(frame_data) = frames_map.get_mut(&key) {
+                frame_data.audio_entries.push(AudioEntry {
+                    transcription: row.get("transcription"),
+                    device_name: row.get("audio_device"),
+                    is_input: row.get("is_input_device"),
+                    audio_file_path: row.get("audio_path"),
+                    duration_secs: row.get("duration_secs"),
+                });
             }
         }
 
@@ -1916,7 +2044,7 @@ impl DatabaseManager {
 
         let sql = r#"
             WITH embedding_matches AS (
-                SELECT 
+                SELECT
                     frame_id,
                     vec_distance_cosine(embedding, vec_f32(?1)) as similarity
                 FROM ocr_text_embeddings

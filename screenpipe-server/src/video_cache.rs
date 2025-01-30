@@ -30,6 +30,7 @@ pub struct TimeSeriesFrame {
 #[derive(Debug, Clone)]
 pub struct DeviceFrame {
     pub device_id: String,
+    pub frame_id: i64,
     pub image_data: Vec<u8>,
     pub metadata: FrameMetadata,
     pub audio_entries: Vec<AudioEntry>,
@@ -506,6 +507,7 @@ impl FrameCache {
                     Ok(Some((frame_data, metadata, _))) => {
                         debug!("cache hit for {}", cache_key);
                         timeseries_frame.frame_data.push(DeviceFrame {
+                            frame_id: chunk.frame_id,
                             device_id: device_data.device_name.clone(),
                             image_data: frame_data,
                             metadata,
@@ -746,6 +748,7 @@ async fn extract_frame(
             break;
         }
 
+        let (frame, _) = &tasks[task_index];
         let frame_data = &all_frames[task_index];
         let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
         debug!("processing frame {} with key {}", task_index, cache_key);
@@ -775,6 +778,7 @@ async fn extract_frame(
                 error: None,
                 timestamp: chunk.timestamp,
                 frame_data: vec![DeviceFrame {
+                    frame_id: frame.frame_id,
                     device_id: device_data.device_name.clone(),
                     image_data: frame_data.clone(),
                     metadata: FrameMetadata {
