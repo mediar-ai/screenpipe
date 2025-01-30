@@ -9,7 +9,7 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
   const scrollToBottom = () => {
     const element = scrollRef.current
     if (!element) {
-      console.log('no scroll element found')
+      // console.log('no scroll element found')
       return
     }
 
