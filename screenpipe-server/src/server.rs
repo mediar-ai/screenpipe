@@ -10,8 +10,10 @@ use futures::{
     Stream,
 };
 use image::ImageFormat::{self};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl};
 
 use crate::{
+    core::DeviceManager,
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
@@ -27,25 +29,21 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices,
-    realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
+    realtime::RealtimeTranscriptionEvent,
 };
 use screenpipe_vision::OcrEngine;
 use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     convert::Infallible,
     net::SocketAddr,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
     time::Duration,
 };
 
-use tokio::{net::TcpListener, sync::broadcast};
+use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -61,9 +59,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    pub vision_control: Arc<AtomicBool>,
-    pub audio_devices_tx: Arc<broadcast::Sender<(AudioDevice, DeviceControl)>>,
-    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub device_manager: Arc<DeviceManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -193,7 +189,7 @@ pub struct AudioContent {
     pub offset_index: i64,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: DeviceType,
+    pub device_type: AudioDeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -696,7 +692,11 @@ async fn download_pipe_private_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
-    match state.pipe_manager.download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id).await {
+    match state
+        .pipe_manager
+        .download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id)
+        .await
+    {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
             "data": {
                 "pipe_id": pipe_dir,
@@ -841,8 +841,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    vision_control: Arc<AtomicBool>,
-    audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+    device_manager: Arc<DeviceManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -858,8 +857,7 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        vision_control: Arc<AtomicBool>,
-        audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+        device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -872,8 +870,7 @@ impl Server {
         Server {
             db,
             addr,
-            vision_control,
-            audio_devices_tx,
+            device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -887,7 +884,6 @@ impl Server {
 
     pub async fn start<F>(
         self,
-        device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
         enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
@@ -896,9 +892,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            vision_control: self.vision_control,
-            audio_devices_tx: self.audio_devices_tx,
-            devices_status: device_status,
+            device_manager: self.device_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -1126,7 +1120,7 @@ async fn add_transcription_to_db(
 
     let device = AudioDevice {
         name: device_name.to_string(),
-        device_type: DeviceType::Input,
+        device_type: AudioDeviceType::Input,
     };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
@@ -1657,7 +1651,7 @@ async fn sse_transcription_handler(
 pub struct AudioDeviceControlRequest {
     device_name: String,
     #[serde(default)]
-    device_type: Option<DeviceType>,
+    device_type: Option<AudioDeviceType>,
 }
 
 #[derive(Serialize)]
@@ -1673,7 +1667,7 @@ async fn start_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1698,11 +1692,12 @@ async fn start_audio_device(
     }
 
     let control = DeviceControl {
+        device: screenpipe_core::DeviceType::Audio(device.clone()),
         is_running: true,
         is_paused: false,
     };
 
-    let _ = state.audio_devices_tx.send((device.clone(), control));
+    let _ = state.device_manager.update_device(control).await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1716,7 +1711,7 @@ async fn stop_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1740,13 +1735,14 @@ async fn stop_audio_device(
         ));
     }
 
-    let _ = state.audio_devices_tx.send((
-        device.clone(),
-        DeviceControl {
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1853,6 +1849,84 @@ async fn semantic_search_handler(
     }
 }
 
+#[derive(Deserialize)]
+pub struct VisionDeviceControlRequest {
+    device_id: u32,
+}
+
+#[derive(Serialize)]
+pub struct VisionDeviceControlResponse {
+    success: bool,
+    message: String,
+}
+
+async fn start_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("starting vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("starting vision device: {}", payload.device_id);
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: true,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("started vision device: {}", payload.device_id),
+    }))
+}
+
+async fn stop_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("stopping vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("stopping vision device: {}", payload.device_id);
+
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: false,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("stopped vision device: {}", payload.device_id),
+    }))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1866,7 +1940,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
     let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", post(api_list_monitors))
+        .route("/vision/list", get(api_list_monitors))
         .route(
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
@@ -1874,7 +1948,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
-        .route("/pipes/download-private", post(download_pipe_private_handler))
+        .route(
+            "/pipes/download-private",
+            post(download_pipe_private_handler),
+        )
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
@@ -1900,6 +1977,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
         .route("/semantic-search", get(semantic_search_handler))
+        .route("/vision/start", post(start_vision_device))
+        .route("/vision/stop", post(stop_vision_device))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2033,221 +2112,3 @@ struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
 }
-/*
-
-Curl commands for reference:
-# 1. Basic search query
-curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
-
-# 2. Search with content type filter (OCR)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
-
-# 3. Search with content type filter (Audio)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
-
-# 4. Search with pagination
-curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
-
-# 6. Search with no query (should return all results)
-curl "http://localhost:3030/search?limit=5&offset=0"
-
-// list devices
-// # curl "http://localhost:3030/audio/list" | jq
-
-
-echo "Listing audio devices:"
-curl "http://localhost:3030/audio/list" | jq
-
-
-echo "Searching for content:"
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
-
-curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" | jq
-
-# last 5 w frames
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# 30 min to 25 min ago
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
-
-# Search for content from the last 30 minutes
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for content up to 1 hour ago
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for OCR content from yesterday
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for audio content with a keyword from the beginning of the current month
-curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
-
-curl "http://localhost:3030/search?app_name=cursor"
-curl "http://localhost:3030/search?content_type=audio&min_length=20"
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq .
-
-
-curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-date -u -v-2H +%Y-%m-%dT%H:%M:%SZ
-2024-08-12T06:51:54Z
-date -u -v-1H +%Y-%m-%dT%H:%M:%SZ
-2024-08-12T07:52:17Z
-
-curl 'http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=2024-08-12T06:48:18Z&end_time=2024-08-12T07:48:34Z' | jq .
-
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T04:00:00Z&end_time=2024-08-12T05:00:00Z&content_type=all" | jq .
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T06:43:53Z&end_time=2024-08-12T08:43:53Z&content_type=all" | jq .
-
-curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z&content_type=all' | jq .
-
-
-
-
-
-
-
-
-
-
-
-# First, search for Rust-related content
-curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
-
-# Then, assuming you found a relevant item with id 123, tag it
-curl -X POST "http://localhost:3030/tags/vision/626" \
-     -H "Content-Type: application/json" \
-     -d '{"tags": ["debug"]}'
-
-
-
-
-# List all pipes
-curl "http://localhost:3030/pipes/list" | jq
-
-# Download a new pipe
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "./pipes/pipe-stream-ocr-text"}' | jq
-
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "./pipes/pipe-security-check"}' | jq
-
-
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text"}' | jq
-
-
-# Get info for a specific pipe
-curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
-
-# Run a pipe
-curl -X POST "http://localhost:3030/pipes/enable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
-
-
-
-     curl -X POST "http://localhost:3030/pipes/enable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-security-check"}' | jq
-
-# Stop a pipe
-curl -X POST "http://localhost:3030/pipes/disable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
-
-# Update pipe configuration
-curl -X POST "http://localhost:3030/pipes/update" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "pipe_id": "pipe-stream-ocr-text",
-       "config": {
-         "key": "value",
-         "another_key": "another_value"
-       }
-     }' | jq
-
-
-
-
-
-# Basic search with min_length and max_length
-curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
-
-# Search for OCR content with length constraints
-curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
-
-# Search for audio content with length constraints
-curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
-
-# Search with time range and length constraints
-curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search with app_name and length constraints
-curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
-
-# Search with window_name and length constraints
-curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
-
-# Search for very short content
-curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
-
-# Search for very long content
-curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
-
-
-curl "http://localhost:3030/search?limit=10&offset=0&min_length=500&content_type=audio" | jq
-
-
-# read random data and generate a clip using the merge endpoint
-
-
-# Perform the search and store the response
-
-# First, let's search for some recent video content
-SEARCH_RESPONSE1=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)")
-SEARCH_RESPONSE2=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-40M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-35M +%Y-%m-%dT%H:%M:%SZ)")
-SEARCH_RESPONSE3=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-50M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-45M +%Y-%m-%dT%H:%M:%SZ)")
-
-# Extract the file paths from the search results without creating JSON arrays
-VIDEO_PATHS1=$(echo "$SEARCH_RESPONSE1" | jq -r '.data[].content.file_path' | sort -u)
-VIDEO_PATHS2=$(echo "$SEARCH_RESPONSE2" | jq -r '.data[].content.file_path' | sort -u)
-VIDEO_PATHS3=$(echo "$SEARCH_RESPONSE3" | jq -r '.data[].content.file_path' | sort -u)
-
-# Merge the video paths and create a single JSON array
-MERGED_VIDEO_PATHS=$(echo "$VIDEO_PATHS1"$'\n'"$VIDEO_PATHS2"$'\n'"$VIDEO_PATHS3" | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-
-# Create the JSON payload for merging videos
-MERGE_PAYLOAD=$(jq -n \
-  --argjson video_paths "$MERGED_VIDEO_PATHS" \
-  '{
-    video_paths: $video_paths
-  }')
-
-echo "Merge Payload: $MERGE_PAYLOAD"
-
-# Send the merge request and store the response
-MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
-  -H "Content-Type: application/json" \
-  -d "$MERGE_PAYLOAD")
-
-echo "Merge Response: $MERGE_RESPONSE"
-
-# Extract the merged video path from the response
-MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
-
-echo "Merged Video Path: $MERGED_VIDEO_PATH"
-
-*/

@@ -1,7 +1,6 @@
 use crate::{
     deepgram::CUSTOM_DEEPGRAM_API_TOKEN, realtime::RealtimeTranscriptionEvent, AudioStream,
 };
-use crate::{AudioDevice, DeviceType};
 use anyhow::Result;
 use bytes::BufMut;
 use bytes::Bytes;
@@ -11,6 +10,8 @@ use deepgram::common::options::Encoding;
 use deepgram::common::stream_response::StreamResponse;
 use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
+use screenpipe_core::AudioDevice;
+use screenpipe_core::AudioDeviceType;
 use screenpipe_core::Language;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
@@ -126,7 +127,7 @@ async fn handle_transcription(
     {
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
-        let is_input = device.device_type == DeviceType::Input;
+        let is_input = device.device_type == AudioDeviceType::Input;
 
         if !text.is_empty() {
             match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
