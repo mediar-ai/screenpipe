@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { LiveTranscription } from "@/components/live-transcription"
-import { MeetingHistory } from "@/components/meeting-history"
+import { LiveTranscription } from "@/components/live-transcription/new-meeting"
+import { MeetingHistory } from "@/components/meeting-history/meeting-history"
 
 export function TabsWrapper() {
   const [showTabs, setShowTabs] = useState(false)
 
   return (
-    <Tabs defaultValue="live" className="h-full flex flex-col">
+    <Tabs defaultValue="history" className="h-full flex flex-col">
       <div 
         className="relative h-4 flex justify-center"
         onMouseEnter={() => setShowTabs(true)}
