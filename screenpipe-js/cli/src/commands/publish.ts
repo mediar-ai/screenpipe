@@ -70,7 +70,7 @@ function archiveStandardProject(
 
 export const publishCommand = command({
   name: "publish",
-  desc: "Deploy new pipe (includes pricing for paid)",
+  desc: "publish or update a pipe to the store",
   options: {
     name: string().required().desc("name of the pipe"),
     verbose: boolean().desc("enable verbose logging").default(false),
