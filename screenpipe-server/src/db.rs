@@ -990,13 +990,11 @@ impl DatabaseManager {
                     FROM audio_transcriptions_fts
                     JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id          
                     WHERE {}
-                        AND (?2 IS NULL OR frames.timestamp >= ?2)
-                        AND (?3 IS NULL OR frames.timestamp <= ?3)
-                        AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                        AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR ocr_text.text_length >= ?6)
-                        AND (?7 IS NULL OR ocr_text.text_length <= ?7)
-                        AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
+                        AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+                        AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
+                        AND (?6 IS NULL OR audio_transcriptions.text_length >= ?6)
+                        AND (?7 IS NULL OR audio_transcriptions.text_length <= ?7)
+                        AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
                     "#,
                     if query.is_empty() {
                         "1=1"
