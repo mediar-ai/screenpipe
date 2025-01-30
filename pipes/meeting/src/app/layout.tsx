@@ -2,8 +2,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
-import { TabsWrapper } from "@/components/tabs-wrapper"
-import { BackendTest } from "@/components/backend-test"
+import { MeetingHistory } from "@/components/meeting-history/meeting-history"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,18 +19,12 @@ export const metadata: Metadata = {
   description: "The AI notepad for people in back-to-back meetings",
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout() {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}>
-        <BackendTest />
-        <main className="h-full p-4">
-          <TabsWrapper />
-          {children}
+        <main className="h-full p-4 overflow-hidden">
+          <MeetingHistory />
         </main>
         <Toaster />
       </body>
