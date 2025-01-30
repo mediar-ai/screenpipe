@@ -1500,32 +1500,22 @@ impl DatabaseManager {
 
         // Get audio data with proper time windows for synchronization
         let audio_query = r#"
-        WITH frame_windows AS (
-            SELECT
-                f.timestamp as frame_time,
-                datetime(f.timestamp, '-0.5 seconds') as window_start,
-                datetime(f.timestamp, '+0.5 seconds') as window_end,
-                f.offset_index
-            FROM frames f
-            WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-            GROUP BY f.timestamp
-        )
         SELECT
             at.timestamp,
             at.transcription,
             at.device as audio_device,
             at.is_input_device,
             ac.file_path as audio_path,
-            fw.frame_time as nearest_frame_time,
-            fw.offset_index as frame_offset,
-            CAST((julianday(at.end_time) - julianday(at.start_time)) * 86400 as REAL) as duration_secs
+            at.start_time,
+            at.end_time,
+            CAST((julianday(datetime(at.timestamp, '+' || at.end_time || ' seconds')) -
+                  julianday(datetime(at.timestamp, '+' || at.start_time || ' seconds'))) * 86400
+                 as REAL) as duration_secs
         FROM audio_transcriptions at
         JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
-        JOIN frame_windows fw
-            ON at.timestamp BETWEEN fw.window_start AND fw.window_end
         WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
         ORDER BY at.timestamp DESC
-    "#;
+        "#;
 
         // Execute queries in parallel
         let (frame_rows, audio_rows) = tokio::try_join!(
@@ -1569,18 +1559,23 @@ impl DatabaseManager {
 
         // Process audio data with proper synchronization
         for row in audio_rows {
-            let frame_timestamp: DateTime<Utc> = row.get("nearest_frame_time");
-            let frame_offset: i64 = row.get("frame_offset");
-            let key = (frame_timestamp, frame_offset);
+            let timestamp: DateTime<Utc> = row.get("timestamp");
 
-            if let Some(frame_data) = frames_map.get_mut(&key) {
-                frame_data.audio_entries.push(AudioEntry {
-                    transcription: row.get("transcription"),
-                    device_name: row.get("audio_device"),
-                    is_input: row.get("is_input_device"),
-                    audio_file_path: row.get("audio_path"),
-                    duration_secs: row.get("duration_secs"),
-                });
+            // Find the closest frame
+            if let Some((&key, _)) = frames_map
+                .range(..=(timestamp, i64::MAX))
+                .next_back()
+                .or_else(|| frames_map.iter().next())
+            {
+                if let Some(frame_data) = frames_map.get_mut(&key) {
+                    frame_data.audio_entries.push(AudioEntry {
+                        transcription: row.get("transcription"),
+                        device_name: row.get("audio_device"),
+                        is_input: row.get("is_input_device"),
+                        audio_file_path: row.get("audio_path"),
+                        duration_secs: row.get("duration_secs"),
+                    });
+                }
             }
         }
 

@@ -208,6 +208,12 @@ export const TimelineSlider = ({
 									selectionRange &&
 									frameDate >= selectionRange.start &&
 									frameDate <= selectionRange.end;
+
+								const hasAudio = Boolean(frame.devices[0].audio.length);
+								if (hasAudio) {
+									console.log(frameIndex, hasAudio);
+								}
+
 								return (
 									<motion.div
 										key={frame.timestamp}
@@ -236,6 +242,9 @@ export const TimelineSlider = ({
 										}}
 										onMouseLeave={() => setHoveredTimestamp(null)}
 									>
+										{hasAudio && (
+											<div className="absolute -top-2 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full" />
+										)}
 										{hoveredTimestamp === frame.timestamp && (
 											<div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">
 												<p className="font-medium">
