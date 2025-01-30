@@ -95,7 +95,7 @@ export function TextEditor({ notes, setNotes, scrollRef, onScroll, isEditing = f
     <div 
       ref={scrollRef}
       onScroll={onScroll}
-      className="flex-1 overflow-y-auto p-3"
+      className="flex flex-col h-full"
     >
       <textarea
         value={notes.map(note => note.text.startsWith('- ') ? '• ' + note.text.slice(2) : note.text).join('\n')}
@@ -110,7 +110,7 @@ export function TextEditor({ notes, setNotes, scrollRef, onScroll, isEditing = f
           setNotes(newNotes)
         }}
         onKeyDown={handleKeyDown}
-        className="w-full h-full resize-none focus:outline-none bg-transparent"
+        className="flex-1 w-full p-3 resize-none focus:outline-none bg-transparent overflow-y-auto"
         placeholder="type your notes..."
         autoFocus={isEditing}
       />
