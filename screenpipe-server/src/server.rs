@@ -1940,7 +1940,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
     let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", post(api_list_monitors))
+        .route("/vision/list", get(api_list_monitors))
         .route(
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
