@@ -27,13 +27,12 @@ export const addComponentCommand = command({
         }
 
         // Before addig check a few things
-        const result = await preFlightAdd(opts.cwd)
+        const result = preFlightAdd(opts.cwd)
 
         // If the current directory is not a pipe, create one
         if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
           logger.warn('you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.')
           process.exit(1)
-          // await createPipe(options)
         }
 
         // Add components to the directory

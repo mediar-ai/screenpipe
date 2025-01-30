@@ -72167,7 +72167,7 @@ var registry_default = {
 
 // src/commands/components/commands/add/registry/api.ts
 var import_deepmerge = __toESM(require_cjs2(), 1);
-async function getRegistry() {
+function getRegistry() {
   try {
     const parsedRegistry = registrySchema.parse(registry_default);
     return parsedRegistry;
@@ -72177,13 +72177,13 @@ async function getRegistry() {
     handleError(error);
   }
 }
-async function resolveRegistryItems(names) {
+function resolveRegistryItems(names) {
   let registryDependencies = {};
-  const registry = await getRegistry();
+  const registry = getRegistry();
   if (!registry)
     return;
   for (const name of names) {
-    const itemRegistryDependencies = await resolveRegistryDependencies(name, registry);
+    const itemRegistryDependencies = resolveRegistryDependencies(name, registry);
     registryDependencies = {
       ...registryDependencies,
       ...itemRegistryDependencies
@@ -72191,57 +72191,48 @@ async function resolveRegistryItems(names) {
   }
   return registryDependencies;
 }
-async function resolveRegistryDependencies(name, registry) {
+function resolveRegistryDependencies(name, registry) {
   const components = {};
-  async function resolveDependencies(componentName) {
-    try {
-      if (registry[componentName]) {
-        components[componentName] = registry[componentName];
-      } else {
-        throw Error(componentName);
+  function resolveDependencies(componentName) {
+    if (registry[componentName]) {
+      components[componentName] = registry[componentName];
+    } else {
+      handleError(`Component ${componentName} not found.`);
+    }
+    if (registry[componentName].registryDependencies) {
+      for (const dependency of registry[componentName].registryDependencies) {
+        resolveDependencies(dependency);
       }
-      if (registry[componentName].registryDependencies) {
-        for (const dependency of registry[componentName].registryDependencies) {
-          await resolveDependencies(dependency);
-        }
-      }
-    } catch (error) {
-      console.error(`Component ${error.message} not found.`, error);
     }
   }
-  await resolveDependencies(name);
+  resolveDependencies(name);
   return components;
 }
-async function registryResolveItemsTree(names) {
-  try {
-    let relevantItemsRegistry = await resolveRegistryItems(names);
-    const payload = registrySchema.parse(relevantItemsRegistry);
-    if (!payload) {
-      return null;
-    }
-    const componentArray = Object.values(payload);
-    let docs = "";
-    componentArray.forEach((item) => {
-      if (item.docs) {
-        docs += `${item.docs}
-`;
-      }
-    });
-    return registryResolvedComponentsTreeSchema.parse({
-      dependencies: import_deepmerge.default.all(componentArray.map((item) => item.dependencies ?? [])),
-      devDependencies: import_deepmerge.default.all(componentArray.map((item) => item.devDependencies ?? [])),
-      files: componentArray.map((item) => {
-        return {
-          src: item.src,
-          target: item.target
-        };
-      }),
-      docs
-    });
-  } catch (error) {
-    handleError(error);
+function registryResolveItemsTree(names) {
+  let relevantItemsRegistry = resolveRegistryItems(names);
+  const payload = registrySchema.parse(relevantItemsRegistry);
+  if (!payload) {
     return null;
   }
+  const componentArray = Object.values(payload);
+  let docs = "";
+  componentArray.forEach((item) => {
+    if (item.docs) {
+      docs += `${item.docs}
+`;
+    }
+  });
+  return registryResolvedComponentsTreeSchema.parse({
+    dependencies: import_deepmerge.default.all(componentArray.map((item) => item.dependencies ?? [])),
+    devDependencies: import_deepmerge.default.all(componentArray.map((item) => item.devDependencies ?? [])),
+    files: componentArray.map((item) => {
+      return {
+        src: item.src,
+        target: item.target
+      };
+    }),
+    docs
+  });
 }
 
 // src/commands/components/commands/add/utils/prompt-for-component.ts
@@ -72283,7 +72274,7 @@ async function promptForRegistryComponents(all) {
 // src/commands/components/commands/add/preflights/preflight-add.ts
 import fs5 from "fs";
 import path4 from "path";
-async function preFlightAdd(cwd) {
+function preFlightAdd(cwd) {
   const errors12 = {};
   if (!fs5.existsSync(cwd) || !fs5.existsSync(path4.resolve(cwd, "package.json"))) {
     errors12[ERRORS.MISSING_DIR_OR_EMPTY_PIPE] = true;
@@ -78941,7 +78932,7 @@ async function addComponents(components, options) {
   const registrySpinner = spinner(`Checking registry.`, {
     silent: options.silent
   })?.start();
-  const tree = await registryResolveItemsTree(components);
+  const tree = registryResolveItemsTree(components);
   if (!tree) {
     registrySpinner?.fail();
     return handleError(new Error("Failed to fetch components from registry."));
@@ -78980,7 +78971,7 @@ var addComponentCommand = command({
       } else {
         components = [opts.components];
       }
-      const result = await preFlightAdd(opts.cwd);
+      const result = preFlightAdd(opts.cwd);
       if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
         logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
         process.exit(1);

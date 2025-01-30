@@ -1,9 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { z } from 'zod';
 import { ERRORS } from '../utils/handle-error';
 
-export async function preFlightAdd(cwd: string) {
+export function preFlightAdd(cwd: string) {
   const errors: Record<string, boolean> = {}
 
   // Ensure target directory exists.
