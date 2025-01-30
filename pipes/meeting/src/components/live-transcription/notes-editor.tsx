@@ -1,18 +1,19 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown, ArrowLeft, List, FileText } from 'lucide-react'
 import { useAutoScroll } from './hooks/use-auto-scroll'
 import { TextEditor } from './text-editor'
 import { Note } from './types'
+import { useMeetingContext } from './hooks/use-meeting-context'
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
+  onBack: () => void
 }
 
-export function NotesEditor({ onTimeClick }: Props) {
-  const [title, setTitle] = useState("")
-  const [notes, setNotes] = useState<Note[]>([])
+export function NotesEditor({ onTimeClick, onBack }: Props) {
+  const { title, setTitle, notes, setNotes } = useMeetingContext()
   const [currentMessage, setCurrentMessage] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
@@ -145,24 +146,33 @@ export function NotesEditor({ onTimeClick }: Props) {
         </div>
         <div className="flex">
           <button
+            onClick={onBack}
+            className="p-2 text-sm transition-colors rounded-none hover:bg-gray-50"
+            title="back to meetings"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <button
             onClick={() => setViewMode('timeline')}
-            className={`px-3 py-2 text-sm transition-colors rounded-none ${
+            className={`p-2 text-sm transition-colors rounded-none ${
               viewMode === 'timeline' 
-                ? 'bg-gray-200 font-medium' 
+                ? 'bg-gray-200' 
                 : 'hover:bg-gray-50'
             }`}
+            title="timeline view"
           >
-            list
+            <List className="h-4 w-4" />
           </button>
           <button
             onClick={() => setViewMode('text')}
-            className={`px-3 py-2 text-sm transition-colors rounded-none ${
+            className={`p-2 text-sm transition-colors rounded-none ${
               viewMode === 'text' 
-                ? 'bg-gray-200 font-medium' 
+                ? 'bg-gray-200' 
                 : 'hover:bg-gray-50'
             }`}
+            title="document view"
           >
-            doc
+            <FileText className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -277,8 +287,9 @@ export function NotesEditor({ onTimeClick }: Props) {
         <TextEditor 
           notes={sortedNotes}
           setNotes={(newNotes: Note[]) => setNotes(newNotes)}
-          scrollRef={undefined}
-          onScroll={undefined}
+          scrollRef={scrollRef}
+          onScroll={onScroll}
+          isEditing={true}
         />
       )}
 
