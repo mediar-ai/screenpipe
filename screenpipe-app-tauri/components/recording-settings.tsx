@@ -409,14 +409,6 @@ export function RecordingSettings() {
     handleSettingsChange({ ocrEngine: value });
   };
 
-  const handleMonitorChange = (currentValue: string) => {
-    const updatedMonitors = settings.monitorIds.includes(currentValue)
-      ? settings.monitorIds.filter((id) => id !== currentValue)
-      : [...settings.monitorIds, currentValue];
-
-    handleSettingsChange({ monitorIds: updatedMonitors });
-  };
-
   const handleLanguageChange = (currentValue: Language) => {
     const updatedLanguages = settings.languages.includes(currentValue)
       ? settings.languages.filter((id) => id !== currentValue)
@@ -803,66 +795,24 @@ export function RecordingSettings() {
                     <Monitor className="h-4 w-4" />
                     <span>monitors</span>
                   </Label>
-                  <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openMonitors}
-                        className="w-full justify-between"
-                      >
-                        {settings.monitorIds.length > 0
-                          ? `${settings.monitorIds.length} monitor(s) selected`
-                          : "select monitors"}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="search monitors..." />
-                        <CommandList>
-                          <CommandEmpty>no monitor found.</CommandEmpty>
-                          <CommandGroup>
-                            {availableMonitors.map((monitor) => (
-                              <CommandItem
-                                key={monitor.id}
-                                value={monitor.id}
-                                onSelect={() =>
-                                  handleMonitorChange(monitor.id.toString())
-                                }
-                              >
-                                <div className="flex items-center">
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      settings.monitorIds.includes(
-                                        monitor.id.toString()
-                                      )
-                                        ? "opacity-100"
-                                        : "opacity-0"
-                                    )}
-                                  />
-                                  {/* not selectable */}
-                                  <span
-                                    style={{
-                                      userSelect: "none",
-                                      WebkitUserSelect: "none",
-                                      MozUserSelect: "none",
-                                      msUserSelect: "none",
-                                    }}
-                                  >
-                                    {monitor.id}. {monitor.name}{" "}
-                                    {monitor.is_default ? "(default)" : ""} -{" "}
-                                    {monitor.width}x{monitor.height}
-                                  </span>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <MultiSelect
+                    options={
+                      availableMonitors.map((monitor) => ({
+                        value: monitor.id.toString(),
+                        label: `${monitor.id}. ${monitor.name} - ${monitor.width}x${monitor.height} ${monitor.is_default ? "(default)" : ""}`,
+                      }))
+                    }
+                    defaultValue={settings.monitorIds}
+                    onValueChange={(values) =>
+                      values.length === 0
+                        ? handleSettingsChange({ disableVision: true })
+                        : handleSettingsChange({ monitorIds: values })
+                    }
+                    placeholder="select monitors"
+                    variant="default"
+                    modalPopover={true}
+                    animation={2}
+                  />
                 </div>
 
                 <div className="flex flex-col space-y-2">
