@@ -836,6 +836,7 @@ async fn main() -> anyhow::Result<()> {
         "│ frame cache            │ {:<34} │",
         cli.enable_frame_cache
     );
+    println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
 
     const VALUE_WIDTH: usize = 34;
 
@@ -1127,6 +1128,8 @@ async fn main() -> anyhow::Result<()> {
         let mut shutdown_rx = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
+            // wait 10 seconds
+            tokio::time::sleep(Duration::from_secs(10)).await;
             // Start all available monitors immediately
             let initial_monitors: HashSet<u32> =
                 list_monitors().await.into_iter().map(|m| m.id()).collect();
