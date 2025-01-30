@@ -134,11 +134,12 @@ impl DatabaseManager {
         start_time: Option<f64>,
         end_time: Option<f64>,
     ) -> Result<i64, sqlx::Error> {
+        let text_length = transcription.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let id = sqlx::query(
-            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO audio_transcriptions (audio_chunk_id, transcription, offset_index, timestamp, transcription_engine, device, is_input_device, speaker_id, start_time, end_time, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )
         .bind(audio_chunk_id)
         .bind(transcription)
@@ -150,6 +151,7 @@ impl DatabaseManager {
         .bind(speaker_id)
         .bind(start_time)
         .bind(end_time)
+        .bind(text_length)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -165,13 +167,15 @@ impl DatabaseManager {
         audio_chunk_id: i64,
         transcription: &str,
     ) -> Result<i64, sqlx::Error> {
+        let text_length = transcription.len() as i64;
         let mut tx = self.pool.begin().await?;
 
         // Insert the full transcription
         let affected = sqlx::query(
-            "UPDATE audio_transcriptions SET transcription = ?1 WHERE audio_chunk_id = ?2",
+            "UPDATE audio_transcriptions SET transcription = ?1, text_length = ?2 WHERE audio_chunk_id = ?3",
         )
         .bind(transcription)
+        .bind(text_length)
         .bind(audio_chunk_id)
         .execute(&mut *tx)
         .await?
@@ -179,7 +183,6 @@ impl DatabaseManager {
 
         // Commit the transaction for the full transcription
         tx.commit().await?;
-
         Ok(affected as i64)
     }
 
@@ -419,6 +422,7 @@ impl DatabaseManager {
         ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
+        let text_length = text.len() as i64;
         let display_window_name = if window_name.chars().count() > 20 {
             format!("{}...", window_name.chars().take(20).collect::<String>())
         } else {
@@ -436,7 +440,7 @@ impl DatabaseManager {
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
@@ -444,6 +448,7 @@ impl DatabaseManager {
             .bind(format!("{:?}", *ocr_engine))
             .bind(window_name)
             .bind(focused)
+            .bind(text_length)
             .execute(&mut *tx)
             .await?;
 
@@ -753,17 +758,16 @@ impl DatabaseManager {
             LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
             LEFT JOIN tags ON vision_tags.tag_id = tags.id
             {}
-                AND ocr_text.text != 'No text found'
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
-                AND (?4 IS NULL OR LENGTH(ocr_text.text) >= ?4)
-                AND (?5 IS NULL OR LENGTH(ocr_text.text) <= ?5)
-                AND (?6 IS NULL OR ocr_text.app_name LIKE '%' || ?6 || '%' COLLATE NOCASE)
-                AND (?7 IS NULL OR ocr_text.window_name LIKE '%' || ?7 || '%' COLLATE NOCASE)
-                AND (?10 IS NULL OR frames.name LIKE '%' || ?10 || '%' COLLATE NOCASE)
+                AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
+                AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
+                AND (?6 IS NULL OR ocr_text.text_length >= ?6)
+                AND (?7 IS NULL OR ocr_text.text_length <= ?7)
+                AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
             GROUP BY ocr_text.frame_id
             ORDER BY frames.timestamp DESC
-            LIMIT ?8 OFFSET ?9
+            LIMIT ?9 OFFSET ?10
             "#,
             base_sql, where_clause
         );
@@ -772,14 +776,14 @@ impl DatabaseManager {
             .bind(query)
             .bind(start_time)
             .bind(end_time)
-            .bind(min_length.map(|l| l as i64))
-            .bind(max_length.map(|l| l as i64))
             .bind(app_name)
             .bind(window_name)
+            .bind(min_length.map(|l| l as i64))
+            .bind(max_length.map(|l| l as i64))
+            .bind(frame_name)
             .bind(limit)
             .bind(offset)
-            .bind(frame_name)
-            .fetch_all(&self.pool)
+            .fetch_all(&self.pool)            
             .await?;
 
         Ok(raw_results
@@ -857,8 +861,8 @@ impl DatabaseManager {
             {}
                 AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                AND (?4 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?4)
-                AND (?5 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?5)
+                AND (?4 IS NULL OR audio_transcriptions.text_length >= ?4)
+                AND (?5 IS NULL OR audio_transcriptions.text_length <= ?5)
                 AND (speakers.id IS NULL OR speakers.hallucination = 0)
                 AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
             GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
@@ -968,8 +972,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR frames.timestamp <= ?3)
                         AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
-                        AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
+                        AND (?6 IS NULL OR ocr_text.text_length >= ?6)
+                        AND (?7 IS NULL OR ocr_text.text_length <= ?7)
                         AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     if query.is_empty() {
@@ -984,13 +988,15 @@ impl DatabaseManager {
                     r#"
                     SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
                     FROM audio_transcriptions_fts
-                    JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id
+                    JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id          
                     WHERE {}
-                        AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
-                        AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                        AND (?6 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?6)
-                        AND (?7 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?7)
-                        AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
+                        AND (?2 IS NULL OR frames.timestamp >= ?2)
+                        AND (?3 IS NULL OR frames.timestamp <= ?3)
+                        AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
+                        AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
+                        AND (?6 IS NULL OR ocr_text.text_length >= ?6)
+                        AND (?7 IS NULL OR ocr_text.text_length <= ?7)
+                        AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     if query.is_empty() {
                         "1=1"
@@ -1010,8 +1016,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                         AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
-                        AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
+                        AND (?6 IS NULL OR ui_monitoring.text_length >= ?6)
+                        AND (?7 IS NULL OR ui_monitoring.text_length <= ?7)
                     "#,
                     if query.is_empty() {
                         "1=1"
@@ -1032,8 +1038,8 @@ impl DatabaseManager {
                             AND (?3 IS NULL OR frames.timestamp <= ?3)
                             AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                             AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR LENGTH(ocr_text.text) >= ?6)
-                            AND (?7 IS NULL OR LENGTH(ocr_text.text) <= ?7)
+                            AND (?6 IS NULL OR ocr_text.text_length >= ?6)
+                            AND (?7 IS NULL OR ocr_text.text_length <= ?7)
                             AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                             AND ocr_text.text != 'No text found'
 
@@ -1044,8 +1050,8 @@ impl DatabaseManager {
                         WHERE {}
                             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                            AND (?6 IS NULL OR LENGTH(audio_transcriptions.transcription) >= ?6)
-                            AND (?7 IS NULL OR LENGTH(audio_transcriptions.transcription) <= ?7)
+                            AND (?6 IS NULL OR audio_transcriptions.text_length >= ?6)
+                            AND (?7 IS NULL OR audio_transcriptions.text_length <= ?7)
                             AND audio_transcriptions.transcription != ''
                             AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
 
@@ -1058,8 +1064,8 @@ impl DatabaseManager {
                             AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                             AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                             AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR LENGTH(ui_monitoring.text_output) >= ?6)
-                            AND (?7 IS NULL OR LENGTH(ui_monitoring.text_output) <= ?7)
+                            AND (?6 IS NULL OR ui_monitoring.text_length >= ?6)
+                            AND (?7 IS NULL OR ui_monitoring.text_length <= ?7)
                             AND ui_monitoring.text_output != ''
                     )"#,
                     if query.is_empty() {
@@ -1513,7 +1519,7 @@ impl DatabaseManager {
                 AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                 AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
             ORDER BY ui_monitoring.timestamp DESC
-            LIMIT ?7 OFFSET ?8
+            LIMIT ?6 OFFSET ?7
             "#,
             base_sql, where_clause
         );
