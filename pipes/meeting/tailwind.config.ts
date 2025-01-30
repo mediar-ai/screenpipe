@@ -72,11 +72,50 @@ export default {
   				to: {
   					height: '0'
   				}
+  			},
+  			shimmer: {
+  				'0%, 100%': { 
+  					backgroundPosition: '200% 0',
+  					opacity: '0.9'
+  				},
+  				'50%': { 
+  					backgroundPosition: '-200% 0',
+  					opacity: '0.4'
+  				}
+  			},
+  			glow: {
+  				'0%': { 
+  					boxShadow: '0 0 0 rgba(0,0,0,0)',
+  					transform: 'scale(1)',
+  					opacity: '0.7'
+  				},
+  				'25%': {
+  					boxShadow: '0 0 30px rgba(0,0,0,0.3)',
+  					transform: 'scale(1.01)',
+  					opacity: '1'
+  				},
+  				'50%': { 
+  					boxShadow: '0 0 15px rgba(0,0,0,0.2)',
+  					transform: 'scale(0.99)',
+  					opacity: '0.8'
+  				},
+  				'75%': {
+  					boxShadow: '0 0 20px rgba(0,0,0,0.25)',
+  					transform: 'scale(1.005)',
+  					opacity: '0.9'
+  				},
+  				'100%': { 
+  					boxShadow: '0 0 0 rgba(0,0,0,0)',
+  					transform: 'scale(1)',
+  					opacity: '1'
+  				}
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'shimmer': 'shimmer 1.5s ease-in-out infinite',
+  			'glow': 'glow 0.7s ease-in-out'
   		}
   	}
   },
