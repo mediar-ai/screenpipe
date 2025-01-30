@@ -12,11 +12,11 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
+use dashmap::DashMap;
 use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use screenpipe_core::{AudioDevice, DeviceControl, DeviceType, Language};
-use std::collections::HashMap;
+use screenpipe_core::{AudioDevice, DeviceControl, Language};
 use std::{
     path::Path,
     sync::Arc,
@@ -155,7 +155,7 @@ pub async fn create_whisper_channel(
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
-    device_control_rx: tokio::sync::watch::Receiver<DeviceControl>,
+    devices: DashMap<String, DeviceControl>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -189,26 +189,18 @@ pub async fn create_whisper_channel(
     let embedding_manager = EmbeddingManager::new(usize::MAX);
 
     tokio::spawn(async move {
-        // HACK: mm ideally this should use device manager's state ...
-        let mut device_states: HashMap<String, bool> = HashMap::new();
-
         loop {
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
-                            // Get latest device state before processing
-                            if let Ok(_) = device_control_rx.has_changed() {
-                                let control = device_control_rx.borrow().clone();
-                                if let DeviceType::Audio(device) = control.device {
-                                    device_states.insert(device.to_string(), control.is_running);
-                                }
-                            }
-
                             // Check device state
-                            if !device_states.get(&audio.device.to_string()).copied().unwrap_or(false) {
-                                debug!("Skipping audio processing for stopped device: {}", audio.device);
-                                continue;
+                            if let Some(device) = devices.get(&audio.device.to_string()) {
+                                if !device.is_running {
+                                    debug!("Skipping audio processing for stopped device: {}", audio.device);
+                                    debug!("Device states: {:?}", devices);
+                                    continue;
+                                }
                             }
 
                             debug!("Received input from input_receiver");

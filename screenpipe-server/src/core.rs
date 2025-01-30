@@ -6,10 +6,8 @@ use dashmap::DashMap;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
 use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
-use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioInput,
-    AudioTranscriptionEngine, TranscriptionResult,
+    record_and_transcribe, AudioInput, AudioTranscriptionEngine, TranscriptionResult,
 };
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
@@ -17,7 +15,6 @@ use screenpipe_core::{AudioDevice, DeviceControl, DeviceType, Language};
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -27,7 +24,7 @@ use tokio::task::JoinHandle;
 #[derive(Clone)]
 pub struct DeviceManager {
     sender: tokio::sync::watch::Sender<DeviceControl>,
-    devices: DashMap<String, DeviceControl>,
+    pub devices: DashMap<String, DeviceControl>,
 }
 
 impl DeviceManager {
@@ -85,6 +82,8 @@ pub struct AudioConfig {
     pub deepgram_api_key: Option<String>,
     pub realtime_enabled: bool,
     pub realtime_devices: Vec<Arc<AudioDevice>>,
+    pub whisper_sender: crossbeam::channel::Sender<AudioInput>,
+    pub whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
 }
 
 #[derive(Clone)]
@@ -135,7 +134,6 @@ pub async fn start_continuous_recording(
     let ocr_engine_clone = vision.ocr_engine.clone();
     let device_control_receiver_vision = device_control_receiver.clone();
     let device_control_receiver_audio = device_control_receiver.clone();
-    let device_control_receiver_whisper = device_control_receiver.clone();
 
     let video_task = if !vision.disabled {
         vision_handle.spawn(async move {
@@ -162,30 +160,8 @@ pub async fn start_continuous_recording(
         })
     };
 
-    let (whisper_sender, whisper_receiver) = if audio.disabled {
-        // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (
-            crossbeam::channel::Sender<AudioInput>,
-            crossbeam::channel::Receiver<AudioInput>,
-        ) = crossbeam::channel::bounded(100);
-        let (_, output_receiver): (
-            crossbeam::channel::Sender<TranscriptionResult>,
-            crossbeam::channel::Receiver<TranscriptionResult>,
-        ) = crossbeam::channel::bounded(100);
-        (input_sender, output_receiver)
-    } else {
-        create_whisper_channel(
-            audio.transcription_engine.clone(),
-            VadEngineEnum::from(audio.vad_engine),
-            audio.deepgram_api_key.clone(),
-            &PathBuf::from(recording_config.output_path.as_ref()),
-            VadSensitivity::from(audio.vad_sensitivity),
-            recording_config.languages.clone(),
-            device_control_receiver_whisper,
-        )
-        .await?
-    };
-    let whisper_sender_clone = whisper_sender.clone();
+    let whisper_sender_clone = audio.whisper_sender.clone();
+    let whisper_receiver_clone = audio.whisper_receiver.clone();
     let db_manager_audio = Arc::clone(&db);
 
     let audio_task = if !audio.disabled {
@@ -194,8 +170,8 @@ pub async fn start_continuous_recording(
                 device_control_receiver_audio,
                 db_manager_audio,
                 recording_config.audio_chunk_duration,
-                whisper_sender,
-                whisper_receiver,
+                whisper_sender_clone,
+                whisper_receiver_clone,
                 audio.transcription_engine,
                 audio.realtime_enabled,
                 audio.realtime_devices,
@@ -220,7 +196,7 @@ pub async fn start_continuous_recording(
     }
 
     // Shutdown the whisper channel
-    drop(whisper_sender_clone); // Close the sender channel
+    drop(audio.whisper_sender); // Close the sender channel
 
     // TODO: process any remaining audio chunks
     // TODO: wait a bit for whisper to finish processing
@@ -417,7 +393,7 @@ async fn record_video(
 }
 
 async fn record_audio(
-    mut device_receiver: tokio::sync::watch::Receiver<DeviceControl>,
+    device_receiver: tokio::sync::watch::Receiver<DeviceControl>,
     db: Arc<DatabaseManager>,
     chunk_duration: Duration,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
@@ -433,10 +409,11 @@ async fn record_audio(
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
     let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
+    let mut device_receiver_clone = device_receiver.clone();
     loop {
         tokio::select! {
-            Ok(_) = device_receiver.changed() => {
-                let control = device_receiver.borrow().clone();
+            Ok(_) = device_receiver_clone.changed() => {
+                let control = device_receiver_clone.borrow().clone();
                 match control.device {
                     DeviceType::Audio(audio_device) => {
                         let device_id = audio_device.to_string();
@@ -462,6 +439,8 @@ async fn record_audio(
                         let realtime_transcription_sender_clone =
                             realtime_transcription_sender_clone.clone();
                         let deepgram_api_key_clone = deepgram_api_key.clone();
+                        let device_receiver_clone = device_receiver.clone();
+                        let device_receiver_clone_clone = device_receiver_clone.clone();
                         let handle = tokio::spawn(async move {
                             let audio_device_clone = Arc::clone(&audio_device);
                             let deepgram_api_key = deepgram_api_key_clone.clone();
@@ -473,7 +452,21 @@ async fn record_audio(
                             let mut did_warn = false;
                             let is_running = Arc::new(AtomicBool::new(control.is_running));
 
+
                             while is_running.load(Ordering::Relaxed) {
+                                let is_running_clone = is_running.clone();
+                                let device_receiver_monitor = device_receiver_clone_clone.clone();
+
+                                // if device control change to false, set is_running to false
+                                tokio::spawn(async move {
+                                    loop {
+                                        if !device_receiver_monitor.borrow().is_running {
+                                            is_running_clone.clone().store(false, Ordering::Relaxed);
+                                        } // KINDa spaghetti code here - should be uniefied on the device manager thing / receive
+                                        // also UX real time device vs non real time device is weird
+                                        tokio::time::sleep(Duration::from_millis(100)).await;
+                                    }
+                                });
                                 let deepgram_api_key = deepgram_api_key.clone();
                                 let is_running_loop = Arc::clone(&is_running); // Create separate reference for the loop
                                 let audio_stream = match AudioStream::from_device(
@@ -546,7 +539,6 @@ async fn record_audio(
                                 join_all(recording_handles).await;
                             }
 
-                            info!("exiting audio capture thread for device: {}", &audio_device);
                         });
 
                         handles.insert(device_id, handle);
@@ -555,61 +547,62 @@ async fn record_audio(
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                // Handle cleanup of finished handles
-                handles.retain(|device_id, handle| {
-                    if handle.is_finished() {
-                        info!("handle for device {} has finished", device_id);
-                        false
-                    } else {
-                        true
+
+            }
+        }
+        // Handle cleanup of finished handles
+        handles.retain(|device_id, handle| {
+            if handle.is_finished() {
+                info!("handle for device {} has finished", device_id);
+                false
+            } else {
+                true
+            }
+        });
+
+        // Process transcription results
+        while let Ok(mut transcription) = whisper_receiver.try_recv() {
+            info!(
+                "device {} received transcription {:?}",
+                transcription.input.device, transcription.transcription
+            );
+
+            // Insert the new transcript after fetching
+            let mut current_transcript: Option<String> = transcription.transcription.clone();
+            let mut processed_previous: Option<String> = None;
+            if let Some((previous, current)) =
+                transcription.cleanup_overlap(previous_transcript.clone())
+            {
+                if !previous.is_empty() && !current.is_empty() {
+                    if previous != previous_transcript {
+                        processed_previous = Some(previous);
                     }
-                });
-
-                // Process transcription results
-                while let Ok(mut transcription) = whisper_receiver.try_recv() {
-                    info!(
-                        "device {} received transcription {:?}",
-                        transcription.input.device, transcription.transcription
-                    );
-
-                    // Insert the new transcript after fetching
-                    let mut current_transcript: Option<String> = transcription.transcription.clone();
-                    let mut processed_previous: Option<String> = None;
-                    if let Some((previous, current)) =
-                        transcription.cleanup_overlap(previous_transcript.clone())
+                    if current_transcript.is_some()
+                        && current != current_transcript.clone().unwrap_or_default()
                     {
-                        if !previous.is_empty() && !current.is_empty() {
-                            if previous != previous_transcript {
-                                processed_previous = Some(previous);
-                            }
-                            if current_transcript.is_some()
-                                && current != current_transcript.clone().unwrap_or_default()
-                            {
-                                current_transcript = Some(current);
-                            }
-                        }
-                    }
-
-                    transcription.transcription = current_transcript.clone();
-                    if current_transcript.is_some() {
-                        previous_transcript = current_transcript.unwrap();
-                    } else {
-                        continue;
-                    }
-                    // Process the audio result
-                    match process_audio_result(
-                        &db,
-                        transcription,
-                        audio_transcription_engine.clone(),
-                        processed_previous,
-                        previous_transcript_id,
-                    )
-                    .await
-                    {
-                        Err(e) => error!("error processing audio result: {}", e),
-                        Ok(id) => previous_transcript_id = id,
+                        current_transcript = Some(current);
                     }
                 }
+            }
+
+            transcription.transcription = current_transcript.clone();
+            if current_transcript.is_some() {
+                previous_transcript = current_transcript.unwrap();
+            } else {
+                continue;
+            }
+            // Process the audio result
+            match process_audio_result(
+                &db,
+                transcription,
+                audio_transcription_engine.clone(),
+                processed_previous,
+                previous_transcript_id,
+            )
+            .await
+            {
+                Err(e) => error!("error processing audio result: {}", e),
+                Ok(id) => previous_transcript_id = id,
             }
         }
     }

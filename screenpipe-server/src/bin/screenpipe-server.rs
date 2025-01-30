@@ -4,9 +4,12 @@ use colored::Colorize;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+    create_whisper_channel, default_input_device, default_output_device, list_audio_devices,
+    parse_audio_device, VadEngineEnum,
 };
+use screenpipe_audio::{AudioInput, TranscriptionResult};
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_core::AudioDevice;
 use screenpipe_core::DeviceControl;
@@ -551,6 +554,31 @@ async fn main() -> anyhow::Result<()> {
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
+
+    let (whisper_sender, whisper_receiver) = if cli.disable_audio {
+        // Create a dummy channel if no audio devices are available, e.g. audio disabled
+        let (input_sender, _): (
+            crossbeam::channel::Sender<AudioInput>,
+            crossbeam::channel::Receiver<AudioInput>,
+        ) = crossbeam::channel::bounded(100);
+        let (_, output_receiver): (
+            crossbeam::channel::Sender<TranscriptionResult>,
+            crossbeam::channel::Receiver<TranscriptionResult>,
+        ) = crossbeam::channel::bounded(100);
+        (input_sender, output_receiver)
+    } else {
+        create_whisper_channel(
+            Arc::new(cli.audio_transcription_engine.clone().into()),
+            VadEngineEnum::from(cli.vad_engine),
+            cli.deepgram_api_key.clone(),
+            &PathBuf::from(output_path_clone.as_ref()),
+            VadSensitivity::from(cli.vad_sensitivity.clone()),
+            languages.clone(),
+            device_manager.devices.clone(),
+        )
+        .await?
+    };
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -579,6 +607,8 @@ async fn main() -> anyhow::Result<()> {
                     deepgram_api_key: cli.deepgram_api_key.clone(),
                     realtime_enabled: cli.enable_realtime_audio_transcription,
                     realtime_devices: realtime_audio_devices.clone(),
+                    whisper_sender: whisper_sender.clone(),
+                    whisper_receiver: whisper_receiver.clone(),
                 };
 
                 let vision_config = VisionConfig {
