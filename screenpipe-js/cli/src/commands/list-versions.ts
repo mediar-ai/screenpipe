@@ -5,7 +5,7 @@ import { colors, symbols } from "../utils/colors";
 
 export const listVersionsCommand = command({
   name: "list-versions",
-  desc: "List all versions of a pipe",
+  desc: "list all versions of a pipe",
   options: {
     name: string().required().desc("name of the pipe"),
   },

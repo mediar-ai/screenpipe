@@ -13,9 +13,6 @@ use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::{error, info};
 
-#[cfg(target_os = "macos")]
-use std::process::Command;
-
 pub struct ResourceMonitor {
     start_time: Instant,
     resource_log_file: Option<String>, // analyse output here: https://colab.research.google.com/drive/1zELlGdzGdjChWKikSqZTHekm5XRxY-1r?usp=sharing
@@ -76,28 +73,14 @@ impl ResourceMonitor {
             let memory_usage_percent = (total_memory_gb / system_total_memory) * 100.0;
             let runtime = self.start_time.elapsed();
 
-            let log_message = if cfg!(target_os = "macos") {
-                if let Some(npu_usage) = self.get_npu_usage() {
-                    format!(
-                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: {:.0}%",
-                        runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu, npu_usage
-                    )
-                } else {
-                    format!(
-                        "Runtime: {}s, Total Memory: {:.0}% ({:.0} GB / {:.0} GB), Total CPU: {:.0}%, NPU: N/A",
-                        runtime.as_secs(), memory_usage_percent, total_memory_gb, system_total_memory, total_cpu
-                    )
-                }
-            } else {
-                format!(
-                    "Runtime: {}s, Total Memory: {:.0}% ({:.2} GB / {:.2} GB), Total CPU: {:.0}%",
-                    runtime.as_secs(),
-                    memory_usage_percent,
-                    total_memory_gb,
-                    system_total_memory,
-                    total_cpu
-                )
-            };
+            let log_message = format!(
+                "Runtime: {}s, Total Memory: {:.0}% ({:.2} GB / {:.2} GB), Total CPU: {:.0}%",
+                runtime.as_secs(),
+                memory_usage_percent,
+                total_memory_gb,
+                system_total_memory,
+                total_cpu
+            );
 
             info!("{}", log_message);
 
@@ -110,7 +93,6 @@ impl ResourceMonitor {
                     "system_total_memory_gb": system_total_memory,
                     "memory_usage_percent": memory_usage_percent,
                     "total_cpu_percent": total_cpu,
-                    "npu_usage_percent": self.get_npu_usage().unwrap_or(-1.0),
                 });
 
                 if let Ok(mut file) = OpenOptions::new().read(true).write(true).open(filename) {
@@ -156,36 +138,5 @@ impl ResourceMonitor {
                 }
             }
         });
-    }
-
-    #[cfg(target_os = "macos")]
-    fn get_npu_usage(&self) -> Option<f32> {
-        let output = Command::new("ioreg")
-            .args(["-r", "-c", "AppleARMIODevice", "-n", "ane0"])
-            .output()
-            .ok()?;
-
-        let output_str = String::from_utf8_lossy(&output.stdout);
-
-        // Parse the output to find the "ane_power" value
-        for line in output_str.lines() {
-            if line.contains("\"ane_power\"") {
-                if let Some(value) = line.split('=').nth(1) {
-                    if let Ok(power) = value.trim().parse::<f32>() {
-                        // Assuming max ANE power is 8.0W (adjust if needed)
-                        let max_ane_power = 8.0;
-                        let npu_usage_percent = (power / max_ane_power) * 100.0;
-                        return Some(npu_usage_percent);
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    fn get_npu_usage(&self) -> Option<f32> {
-        None
     }
 }
