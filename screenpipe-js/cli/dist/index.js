@@ -66239,6 +66239,9 @@ function number(name) {
 function boolean(name) {
   return typeof name === "string" ? new OptionBuilderBase().boolean(name) : new OptionBuilderBase().boolean();
 }
+function positional(displayName) {
+  return typeof displayName === "string" ? new OptionBuilderBase().positional(displayName) : new OptionBuilderBase().positional();
+}
 
 // src/commands/create.ts
 var import_fs_extra = __toESM(require_lib(), 1);
@@ -67401,7 +67404,7 @@ async function downloadAndExtractRepo(owner, repo, branch, subdir, destPath) {
 }
 var createCommand = command({
   name: "create",
-  desc: "create a new pipe template",
+  desc: "create a new pipe",
   handler: async () => {
     console.log(source_default.bold(`
 welcome to create-pipe! \uD83D\uDE80
@@ -67646,7 +67649,7 @@ function archiveStandardProject(archive, ig) {
 }
 var publishCommand = command({
   name: "publish",
-  desc: "Deploy new pipe (includes pricing for paid)",
+  desc: "publish or update a pipe to the store",
   options: {
     name: string().required().desc("name of the pipe"),
     verbose: boolean().desc("enable verbose logging").default(false)
@@ -67904,7 +67907,7 @@ ${symbols.error} Creating failed with unexpected error`));
 // src/commands/list-versions.ts
 var listVersionsCommand = command({
   name: "list-versions",
-  desc: "List all versions of a pipe",
+  desc: "list all versions of a pipe",
   options: {
     name: string().required().desc("name of the pipe")
   },
@@ -72131,6 +72134,34 @@ var registry_default = {
     registryDependencies: [
       "use-sql-autocomplete"
     ]
+  },
+  "use-search-history": {
+    name: "use-search-history",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/data-table/src/lib/hooks/use-search-history.tsx",
+    target: "./src/hooks/use-search-history.tsx",
+    dependencies: [
+      "localforage"
+    ],
+    registryDependencies: [],
+    devDependencies: []
+  },
+  "keyword-cloud": {
+    name: "keyword-cloud",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/pipe-simple-nextjs/components/keyword-cloud.tsx",
+    target: "./src/components/keyword-cloud.tsx",
+    dependencies: [],
+    registryDependencies: [],
+    devDependencies: []
+  },
+  "use-ai-provider": {
+    name: "use-ai-provider",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
+    target: "./src/hooks/use-ai-provider.tsx",
+    dependencies: [
+      "@screenpipe/browser"
+    ],
+    devDependencies: [],
+    registryDependencies: []
   }
 };
 
@@ -72230,7 +72261,7 @@ async function promptForRegistryComponents(all) {
     message: "Which components would you like to add?",
     hint: "Space to select. A to toggle all. Enter to submit.",
     instructions: false,
-    choices: Object.values(registryIndex).map((entry) => ({
+    choices: Object.values(registryIndex).filter((item) => item.internal !== true).map((entry) => ({
       title: entry.name,
       value: entry.name
     }))
@@ -78935,7 +78966,7 @@ var addComponentCommand = command({
   name: "add",
   desc: "add components and dependencies to your pipe",
   options: {
-    components: string().desc("name of the pipe"),
+    components: positional().desc("list of components by name"),
     path: string().desc("the path to add the component to."),
     silent: boolean().desc("mute output.").default(false),
     overwrite: boolean().desc("overwrite existing files.").default(false),
@@ -79047,9 +79078,9 @@ var registerComponentCommand = command({
         name: opts.name,
         src: opts.src,
         target: opts.target,
-        dependencies: deps.length ? deps : undefined,
-        devDependencies: devDeps.length ? devDeps : undefined,
-        registryDependencies: registryDeps.length ? registryDeps : undefined
+        dependencies: deps.filter((item) => item !== ""),
+        devDependencies: devDeps.filter((item) => item !== ""),
+        registryDependencies: registryDeps.filter((item) => item !== "")
       };
       const currentRegistry = await getRegistry();
       if (!currentRegistry) {
