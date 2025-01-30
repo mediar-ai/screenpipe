@@ -191,6 +191,7 @@ export default Sentry.withSentry(
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
 		tracesSampleRate: 0.1,
 		environment: env.NODE_ENV || 'development',
+		enabled: (env.NODE_ENV || 'development') === 'production',
 	}),
 	{
 		/**

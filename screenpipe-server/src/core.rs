@@ -462,6 +462,7 @@ async fn record_audio(
                                     loop {
                                         if !device_receiver_monitor.borrow().is_running {
                                             is_running_clone.clone().store(false, Ordering::Relaxed);
+                                            break;
                                         } // KINDa spaghetti code here - should be uniefied on the device manager thing / receive
                                         // also UX real time device vs non real time device is weird
                                         tokio::time::sleep(Duration::from_millis(100)).await;

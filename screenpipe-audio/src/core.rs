@@ -198,13 +198,6 @@ async fn run_record_and_transcribe(
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => {
                     collected_audio.extend(chunk);
-                    LAST_AUDIO_CAPTURE.store(
-                        std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs(),
-                        Ordering::Relaxed,
-                    );
                 }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
@@ -440,6 +433,13 @@ impl AudioStream {
                         move |data: &[f32], _: &_| {
                             let mono = audio_to_mono(data, channels);
                             let _ = tx.send(mono);
+                            LAST_AUDIO_CAPTURE.store(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                                Ordering::Relaxed,
+                            );
                         },
                         error_callback,
                         None,
@@ -451,6 +451,13 @@ impl AudioStream {
                         move |data: &[i16], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
+                            LAST_AUDIO_CAPTURE.store(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                                Ordering::Relaxed,
+                            );
                         },
                         error_callback,
                         None,
@@ -462,6 +469,13 @@ impl AudioStream {
                         move |data: &[i32], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
+                            LAST_AUDIO_CAPTURE.store(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                                Ordering::Relaxed,
+                            );
                         },
                         error_callback,
                         None,
@@ -473,6 +487,13 @@ impl AudioStream {
                         move |data: &[i8], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
+                            LAST_AUDIO_CAPTURE.store(
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs(),
+                                Ordering::Relaxed,
+                            );
                         },
                         error_callback,
                         None,
