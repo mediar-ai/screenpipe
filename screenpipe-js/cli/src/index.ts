@@ -4,16 +4,20 @@ import {
   loginCommand,
   logoutCommand,
   publishCommand,
-  createCommand,
+  registerCommand,
   listVersionsCommand,
+  createCommand,
+  componentsCommands
 } from "./commands";
 
 run(
   [
     loginCommand,
     logoutCommand,
-    publishCommand,
     createCommand,
+    componentsCommands,
+    registerCommand,
+    publishCommand,
     listVersionsCommand,
   ],
   {

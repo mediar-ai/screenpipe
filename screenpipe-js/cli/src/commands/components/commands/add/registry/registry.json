@@ -1,0 +1,77 @@
+{
+  "use-health": {
+    "name": "use-health",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-health-check.tsx",
+    "target": "./src/hooks/use-health.tsx",
+    "dependencies": [
+      "lodash"
+    ],
+    "devDependencies": [
+      "@types/lodash"
+    ]
+  },
+  "use-settings": {
+    "name": "use-settings",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-settings.tsx",
+    "target": "./src/hooks/use-settings.ts",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "route-settings"
+    ]
+  },
+  "route-settings": {
+    "name": "route-settings",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/app/api/settings/route.ts",
+    "target": "./src/app/api/settings/route.ts",
+    "dependencies": [
+      "@screenpipe/js"
+    ]
+  },
+  "use-sql-autocomplete": {
+    "name": "use-sql-autocomplete",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/hooks/use-sql-autocomplete.ts"
+  },
+  "sql-autocomplete-input": {
+    "name": "sql-autocomplete-input",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/components/sql-autocomplete-input.ts",
+    "dependencies": [
+      "cmdk",
+      "lucide-react"
+    ],
+    "registryDependencies": [
+      "use-sql-autocomplete"
+    ]
+  },
+  "use-search-history": {
+    "name": "use-search-history",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/data-table/src/lib/hooks/use-search-history.tsx",
+    "target": "./src/hooks/use-search-history.tsx",
+    "dependencies": [
+      "localforage"
+    ],
+    "registryDependencies": [],
+    "devDependencies": []
+  },
+  "keyword-cloud": {
+    "name": "keyword-cloud",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/pipe-simple-nextjs/components/keyword-cloud.tsx",
+    "target": "./src/components/keyword-cloud.tsx",
+    "dependencies": [],
+    "registryDependencies": [],
+    "devDependencies": []
+  },
+  "use-ai-provider": {
+    "name": "use-ai-provider",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
+    "target": "./src/hooks/use-ai-provider.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "devDependencies": [],
+    "registryDependencies": []
+  }
+}
