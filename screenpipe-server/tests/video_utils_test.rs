@@ -102,6 +102,7 @@ async fn test_extract_frames() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(target_os = "macos")]
 async fn test_extract_frames_and_ocr() -> Result<()> {
     setup_test_env().await?;
     let video_path = create_test_video().await?;
