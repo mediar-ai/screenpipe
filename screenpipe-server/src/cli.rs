@@ -291,7 +291,6 @@ impl Cli {
     pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
         let mut cmd = Self::command();
         generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
-         
         Ok(())
     }
 }
