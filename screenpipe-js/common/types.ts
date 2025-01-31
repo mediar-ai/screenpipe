@@ -274,5 +274,5 @@ export interface VisionStreamResponse {
 
 export interface EventStreamResponse {
   name: string;
-  data: VisionEvent | TranscriptionChunk;
+  data: VisionEvent | TranscriptionChunk | any;
 }
