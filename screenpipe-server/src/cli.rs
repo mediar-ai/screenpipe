@@ -1,7 +1,12 @@
 use std::path::PathBuf;
 
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
+use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
+use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
-use clap::{Parser, Subcommand};
+use anyhow::Result;
+
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_audio::{
     vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
@@ -147,12 +152,13 @@ pub struct Cli {
     #[arg(short = 'r', long)]
     pub realtime_audio_device: Vec<String>,
 
-    /// List available audio devices
+    /// List available audio devices (deprecated: use 'audio list' instead)
     #[arg(long)]
+    #[deprecated(since = "0.2.30", note = "please use 'audio list' instead")]
     pub list_audio_devices: bool,
 
     /// Data directory. Default to $HOME/.screenpipe
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
 
     /// Enable debug logging for screenpipe modules
@@ -190,8 +196,9 @@ pub struct Cli {
     )]
     pub ocr_engine: CliOcrEngine,
 
-    /// List available monitors, then you can use --monitor-id to select one (with the ID)
+    /// List available monitors (deprecated: use 'vision list' instead)
     #[arg(long)]
+    #[deprecated(since = "0.2.30", note = "please use 'vision list' instead")]
     pub list_monitors: bool,
 
     /// Monitor IDs to use, these will be used to select the monitors to record
@@ -284,6 +291,12 @@ impl Cli {
         }
         Ok(unique_langs.into_iter().collect())
     }
+
+    pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
+        let mut cmd = Self::command();
+        generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
+        Ok(())
+    }
 }
 
 #[derive(Subcommand)]
@@ -293,12 +306,22 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
+    /// Vision device management commands
+    Vision {
+        #[command(subcommand)]
+        subcommand: VisionCommand,
+    },
+    /// Audio device management commands
+    Audio {
+        #[command(subcommand)]
+        subcommand: AudioCommand,
+    },
     /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
     Add {
         /// Path to folder containing video files
         path: String,
         /// Data directory. Default to $HOME/.screenpipe
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         data_dir: Option<String>,
         /// Output format
         #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
@@ -310,7 +333,7 @@ pub enum Command {
         #[arg(short = 'o', long, value_enum)]
         ocr_engine: Option<CliOcrEngine>,
         /// Path to JSON file containing metadata overrides
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::FilePath)]
         metadata_override: Option<PathBuf>,
         /// Copy videos to screenpipe data directory
         #[arg(long, default_value_t = true)]
@@ -327,6 +350,12 @@ pub enum Command {
         /// Enable beta features
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
+    },
+     /// Generate shell completions
+     Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
     /// Run database migrations
     Migrate,
@@ -432,6 +461,26 @@ pub enum PipeCommand {
         /// Server port
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VisionCommand {
+    /// List available vision devices (monitors)
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AudioCommand {
+    /// List available audio devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
     },
 }
 

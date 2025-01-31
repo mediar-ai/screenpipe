@@ -6,7 +6,9 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use screenpipe_audio::{AudioDevice, DeviceType};
+    use screenpipe_core::AudioDevice;
+    use screenpipe_core::AudioDeviceType;
+    use screenpipe_server::core::DeviceManager;
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;
@@ -16,9 +18,7 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
-    use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
@@ -32,9 +32,7 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_tx: Arc::new(tokio::sync::broadcast::channel(1000).0),
-            devices_status: HashMap::new(),
+            device_manager: Arc::new(DeviceManager::default()),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -71,7 +69,7 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -85,7 +83,7 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -207,7 +205,7 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -220,7 +218,7 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -400,7 +398,7 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), DeviceType::Input),
+                &AudioDevice::new("test".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,

@@ -1,9 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use dashmap::DashMap;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
-    create_whisper_channel, default_input_device, record_and_transcribe, AudioDevice, AudioInput,
-    AudioStream, AudioTranscriptionEngine,
+    create_whisper_channel, default_input_device, record_and_transcribe, AudioInput, AudioStream,
+    AudioTranscriptionEngine,
 };
+use screenpipe_core::AudioDevice;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -18,14 +20,14 @@ async fn setup_test() -> (
     let audio_device = default_input_device().unwrap(); // TODO feed voice in automatically somehow
     let output_path = PathBuf::from("/tmp/test_audio.mp4");
     // let (whisper_sender, _) = mpsc::unbounded_channel();
-    let (whisper_sender, _, _) = create_whisper_channel(
+    let (whisper_sender, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
         screenpipe_audio::VadEngineEnum::Silero,
         None,
         &output_path,
         VadSensitivity::High,
         vec![],
-        None,
+        DashMap::new(),
     )
     .await
     .unwrap();

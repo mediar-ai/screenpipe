@@ -28,6 +28,13 @@ pub struct DeviceManager {
 }
 
 impl DeviceManager {
+    pub fn default() -> Self {
+        let (sender, _) = tokio::sync::watch::channel(DeviceControl::default());
+        Self {
+            sender,
+            devices: DashMap::new(),
+        }
+    }
     pub fn new() -> (Self, tokio::sync::watch::Receiver<DeviceControl>) {
         let (sender, receiver) = tokio::sync::watch::channel(DeviceControl::default());
         (
@@ -220,7 +227,6 @@ async fn record_vision(
     video_chunk_duration: Duration,
     use_pii_removal: bool,
 ) -> Result<()> {
-    info!("record_vision: Starting");
     let mut handles: HashMap<u32, JoinHandle<()>> = HashMap::new();
     let mut device_receiver_clone = device_receiver.clone();
 
@@ -325,7 +331,7 @@ async fn record_video(
     loop {
         tokio::select! {
             Ok(_) = device_receiver.changed() => {
-                info!("device_receiver changed in record_video");
+                debug!("device_receiver changed in record_video");
                 let control = device_receiver.borrow().clone();
                 if !control.is_running {
                     let _ = video_capture.shutdown().await;
