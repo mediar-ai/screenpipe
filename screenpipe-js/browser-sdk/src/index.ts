@@ -1,4 +1,5 @@
 import type {
+  EventStreamResponse,
   InputAction,
   InputControlResponse,
   NotificationOptions,
@@ -15,6 +16,19 @@ import {
   captureMainFeatureEvent,
   identifyUser,
 } from "../../common/analytics";
+
+// create a singleton websocketconnection to ws://localhost:3030/ws/events
+const ws = new WebSocket("ws://localhost:3030/ws/events");
+
+// create a generator function that yields events from the websocket
+async function* wsEvents(): AsyncGenerator<EventStreamResponse, void, unknown> {
+  while (true) {
+    const event: MessageEvent = await new Promise((resolve) => {
+      ws.onmessage = (ev) => resolve(ev);
+    });
+    yield JSON.parse(event.data);
+  }
+}
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -62,6 +76,7 @@ export interface BrowserPipe {
     name: string,
     properties?: Record<string, any>
   ) => Promise<void>;
+  streamEvents(): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -233,38 +248,29 @@ class BrowserPipeImpl implements BrowserPipe {
       });
 
       while (true) {
-        const chunk: TranscriptionChunk = await new Promise(
-          (resolve, reject) => {
-            eventSource.onmessage = (event) => {
-              if (event.data.trim() === "keep-alive-text") {
-                return;
-              }
-              resolve(JSON.parse(event.data));
-            };
-            eventSource.onerror = (error) => {
-              reject(error);
+        for await (const event of wsEvents()) {
+          if (event.name === "transcription") {
+            let chunk: TranscriptionChunk = event.data as TranscriptionChunk;
+            yield {
+              id: crypto.randomUUID(),
+              object: "text_completion_chunk",
+              created: Date.now(),
+              model: "screenpipe-realtime",
+              choices: [
+                {
+                  text: chunk.transcription,
+                  index: 0,
+                  finish_reason: chunk.is_final ? "stop" : null,
+                },
+              ],
+              metadata: {
+                timestamp: chunk.timestamp,
+                device: chunk.device,
+                isInput: chunk.is_input,
+              },
             };
           }
-        );
-
-        yield {
-          id: crypto.randomUUID(),
-          object: "text_completion_chunk",
-          created: Date.now(),
-          model: "screenpipe-realtime",
-          choices: [
-            {
-              text: chunk.transcription,
-              index: 0,
-              finish_reason: chunk.is_final ? "stop" : null,
-            },
-          ],
-          metadata: {
-            timestamp: chunk.timestamp,
-            device: chunk.device,
-            isInput: chunk.is_input,
-          },
-        };
+        }
       }
     } finally {
       await this.captureEvent("stream_ended", {
@@ -286,19 +292,15 @@ class BrowserPipeImpl implements BrowserPipe {
       });
 
       while (true) {
-        const event: VisionEvent = await new Promise((resolve, reject) => {
-          eventSource.onmessage = (event) => {
-            resolve(JSON.parse(event.data));
-          };
-          eventSource.onerror = (error) => {
-            reject(error);
-          };
-        });
-
-        yield {
-          type: "vision_stream",
-          data: event,
-        };
+        for await (const event of wsEvents()) {
+          if (event.name === "ocr_result" || event.name === "ui_frame") {
+            let data: VisionEvent = event.data as VisionEvent;
+            yield {
+              type: event.name,
+              data,
+            };
+          }
+        }
       }
     } finally {
       await this.captureEvent("stream_ended", {
@@ -324,6 +326,16 @@ class BrowserPipeImpl implements BrowserPipe {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
     return captureMainFeatureEvent(featureName, properties);
+  }
+
+  public async *streamEvents(): AsyncGenerator<
+    EventStreamResponse,
+    void,
+    unknown
+  > {
+    for await (const event of wsEvents()) {
+      yield event;
+    }
   }
 }
 
