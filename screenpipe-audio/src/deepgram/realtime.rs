@@ -18,6 +18,8 @@ use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 use tracing::error;
 
+use super::DEEPGRAM_WEBSOCKET_URL;
+
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
     realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
@@ -49,12 +51,13 @@ pub async fn start_deepgram_stream(
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let api_key = deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string());
+    let base_url = DEEPGRAM_WEBSOCKET_URL.to_string();
 
     if api_key.is_empty() {
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
-    let deepgram = deepgram::Deepgram::new(api_key)?;
+    let deepgram = deepgram::Deepgram::with_base_url_and_api_key(base_url.as_str(), api_key)?;
 
     let deepgram_transcription = deepgram.transcription();
 

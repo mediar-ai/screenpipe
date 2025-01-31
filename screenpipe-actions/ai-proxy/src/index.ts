@@ -1,9 +1,10 @@
-import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
 import { verifyToken } from '@clerk/backend';
 import { createProvider } from './providers';
 import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
+import { Deepgram, LiveClient } from '@deepgram/sdk';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
 class SubscriptionCache {
@@ -37,7 +38,6 @@ class SubscriptionCache {
 const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
-	console.log('validating user id has cloud sub', userId);
 	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
@@ -186,6 +186,76 @@ async function handleOptions(request: Request) {
 	});
 }
 
+async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
+	try {
+		// Generate a unique request ID
+		const requestId = crypto.randomUUID();
+
+		// Create WebSocket pair
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
+		server.accept();
+
+		let params = new URL(request.url).searchParams;
+		let sampleRate = params.get('sample_rate');
+
+		let url = new URL('wss://api.deepgram.com/v1/listen');
+		// for each key in params, set the url search param
+		for (let [key, value] of params.entries()) {
+			url.searchParams.set(key, value);
+		}
+
+		const deepgram = createClient(env.DEEPGRAM_API_KEY);
+		const deepgramSocket = deepgram.listen.live({}, url.toString());
+
+		deepgramSocket.on(LiveTranscriptionEvents.Open, (data) => {
+			server.send(
+				JSON.stringify({
+					type: 'message',
+					data: JSON.stringify(data),
+				})
+			);
+		});
+
+		// Simple passthrough: client -> Deepgram
+		server.addEventListener('message', (event) => {
+			if (deepgramSocket.getReadyState() === WebSocket.OPEN) {
+				deepgramSocket.send(event.data);
+			}
+		});
+
+		// Simple passthrough: Deepgram -> client
+		deepgramSocket.on(LiveTranscriptionEvents.Transcript, (data) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.send(JSON.stringify(data));
+			}
+		});
+
+		// Handle connection close
+		server.addEventListener('close', () => {
+			deepgramSocket.requestClose();
+		});
+
+		// Handle errors
+		deepgramSocket.on(LiveTranscriptionEvents.Error, (error) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.close(1011, 'Deepgram error: ' + error.message);
+			}
+		});
+
+		return new Response(null, {
+			status: 101,
+			webSocket: client,
+			headers: {
+				'dg-request-id': requestId,
+			},
+		});
+	} catch (error) {
+		console.error('WebSocket upgrade failed:', error);
+		return new Response('WebSocket upgrade failed', { status: 500 });
+	}
+}
+
 export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
@@ -256,7 +326,8 @@ export default Sentry.withSentry(
 				// Add auth check for protected routes
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
-					if (!authHeader?.startsWith('Bearer ')) {
+					console.log('authHeader', authHeader);
+					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
 						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
 							headers: {
@@ -272,16 +343,12 @@ export default Sentry.withSentry(
 					}
 
 					const token = authHeader.split(' ')[1];
-					console.log('validating token:', token.slice(0, 10) + '...');
 
-					// First try to validate as a user ID with subscription
 					let isValid = await validateSubscription(env, token);
-					console.log('subscription validation result:', isValid);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
-						console.log('clerk validation result:', isValid);
 					}
 
 					if (!isValid) {
@@ -300,6 +367,8 @@ export default Sentry.withSentry(
 						return response;
 					}
 				}
+
+				console.log('path', path);
 
 				if (path === '/test') {
 					const response = new Response('ai proxy is working!', {
@@ -413,6 +482,11 @@ export default Sentry.withSentry(
 						response.headers.append('Vary', 'Origin');
 						return response;
 					}
+				}
+
+				if (path === '/v1/listen' && request.headers.get('Upgrade') === 'websocket') {
+					console.log('websocket request');
+					return await handleWebSocketUpgrade(request, env);
 				}
 
 				const response = new Response('not found', {
