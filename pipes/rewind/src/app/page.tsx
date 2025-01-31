@@ -85,11 +85,9 @@ export default function Timeline() {
 		end: new Date(),
 	});
 
-	const { currentFrame, setCurrentFrame, imageFrame } = useCurrentFrame(
-		(index) => {
-			setCurrentIndex(index);
-		},
-	);
+	const { currentFrame, setCurrentFrame } = useCurrentFrame((index) => {
+		setCurrentIndex(index);
+	});
 
 	const { currentDate, setCurrentDate, fetchTimeRange, hasDateBeenFetched } =
 		useTimelineStore();
@@ -99,6 +97,34 @@ export default function Timeline() {
 			setCurrentFrame(frame);
 		});
 
+	const [isFrameCacheEnabled, setIsFrameCacheEnabled] = useState(false);
+
+	useEffect(() => {
+		const checkSettings = async () => {
+			try {
+				const response = await fetch("/api/settings");
+				const settings = await response.json();
+
+				setIsFrameCacheEnabled(settings.enableFrameCache);
+
+				// Only proceed with timeline initialization if frame cache is enabled
+				if (settings.enableFrameCache) {
+					const data = await getStartDate();
+					if (!("error" in data)) {
+						setStartAndEndDates((prev) => ({
+							...prev,
+							start: data,
+						}));
+					}
+				}
+			} catch (error) {
+				console.error("Failed to load settings:", error);
+			}
+		};
+
+		checkSettings();
+	}, []);
+
 	useEffect(() => {
 		setAiPanelPosition({
 			x: window.innerWidth - 400,
@@ -107,23 +133,8 @@ export default function Timeline() {
 	}, []);
 
 	useEffect(() => {
-		const getStartEndDates = async () => {
-			const data = await getStartDate();
+		if (!isFrameCacheEnabled) return;
 
-			if ("error" in data) {
-				return;
-			}
-
-			setStartAndEndDates((prev) => ({
-				...prev,
-				start: data,
-			}));
-		};
-
-		getStartEndDates();
-	}, []);
-
-	useEffect(() => {
 		const startTime = new Date(currentDate);
 		startTime.setHours(0, 0, 0, 0);
 
@@ -134,17 +145,11 @@ export default function Timeline() {
 			endTime.setHours(23, 59, 59, 999);
 		}
 		fetchTimeRange(startTime, endTime);
-	}, [currentDate]);
-
-	//useEffect(() => {
-	//	setCurrentFrame(null);
-	//	setCurrentIndex(0);
-	//}, [currentDate]);
+	}, [currentDate, isFrameCacheEnabled]);
 
 	useEffect(() => {
 		if (currentFrame) {
 			const frameDate = new Date(currentFrame.timestamp);
-			console.log(frameDate, currentDate);
 			if (!isSameDay(frameDate, currentDate)) {
 				setCurrentDate(frameDate);
 			}
@@ -180,7 +185,7 @@ export default function Timeline() {
 					const direction = Math.sign(e.deltaY);
 
 					// Change this if you want limit the index change
-					const limitIndexChange = Infinity;
+					const limitIndexChange = 15;
 
 					// Adjust index change based on scroll intensity
 					const indexChange =
@@ -210,29 +215,6 @@ export default function Timeline() {
 			),
 		[frames], // Only depend on frames length changes
 	);
-
-	//	const timePercentage = useMemo(() => {
-	//		if (!frames.length || currentIndex >= frames.length || !loadedTimeRange) {
-	//			return 0;
-	//		}
-	//
-	//		const currentFrame = frames[currentIndex];
-	//		if (!currentFrame?.timestamp) {
-	//			return 0;
-	//		}
-	//
-	//		const frameTime = new Date(currentFrame.timestamp);
-	//		const totalVisibleMilliseconds =
-	//			loadedTimeRange.end.getTime() - loadedTimeRange.start.getTime();
-	//		const currentMilliseconds =
-	//			frameTime.getTime() - loadedTimeRange.start.getTime();
-	//
-	//		const percentage = Math.min(
-	//			99.8,
-	//			(currentMilliseconds / totalVisibleMilliseconds) * 100,
-	//		);
-	//		return Boolean(percentage) ? percentage : 0;
-	//	}, [currentIndex, frames, loadedTimeRange]);
 
 	useEffect(() => {
 		const preventScroll = (e: WheelEvent) => {
@@ -351,223 +333,149 @@ export default function Timeline() {
 		requestAnimationFrame(animate);
 	};
 
-	//	const timeRange = useMemo(
-	//		() => getTimeArray(loadedTimeRange),
-	//		[loadedTimeRange],
-	//	);
+	useEffect(() => {
+		console.log(isLoading);
+	}, [isLoading]);
 
 	return (
 		<TimelineProvider>
-			<div
-				ref={containerRef}
-				className="inset-0 flex flex-col bg-background text-foreground relative"
-				style={{
-					height: "100vh",
-					overscrollBehavior: "none",
-					WebkitUserSelect: "none",
-					userSelect: "none",
-					MozUserSelect: "none",
-					msUserSelect: "none",
-				}}
-			>
-				<div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
-					<div className="flex items-center gap-4">
-						<TimelineControls
-							currentDate={currentDate}
-							startAndEndDates={startAndEndDates}
-							onDateChange={handleDateChange}
-							onJumpToday={handleJumpToday}
-							className="shadow-lg"
-						/>
-						{/* <TimelineSearch2
+			{!isFrameCacheEnabled ? (
+				<div className="flex items-center justify-center h-screen">
+					<div className="text-center space-y-4">
+						<h2 className="text-xl font-medium">Frame Cache Disabled</h2>
+						<p className="text-muted-foreground">
+							Please enable frame cache in settings to use the timeline feature.
+						</p>
+					</div>
+				</div>
+			) : (
+				<div
+					ref={containerRef}
+					className="inset-0 flex flex-col bg-background text-foreground relative"
+					style={{
+						height: "100vh",
+						overscrollBehavior: "none",
+						WebkitUserSelect: "none",
+						userSelect: "none",
+						MozUserSelect: "none",
+						msUserSelect: "none",
+					}}
+				>
+					<div className="absolute top-4 left-1/2 -translate-x-1/2 z-50">
+						<div className="flex items-center gap-4">
+							<TimelineControls
+								currentDate={currentDate}
+								startAndEndDates={startAndEndDates}
+								onDateChange={handleDateChange}
+								onJumpToday={handleJumpToday}
+								className="shadow-lg"
+							/>
+							{/* <TimelineSearch2
               frames={frames}
               onResultSelect={animateToIndex}
               onSearchResults={setSearchResults}
             /> */}
+						</div>
+					</div>
+
+					<div className="flex-1 relative min-h-0">
+						{isLoading && (
+							<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
+								<div className="bg-background/95 p-6 border rounded-xl shadow-lg text-center space-y-3 max-w-md mx-4">
+									<h3 className="font-medium">Loading Timeline</h3>
+									<p className="text-sm text-muted-foreground">
+										Fetching your recorded frames...
+									</p>
+									<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
+								</div>
+							</div>
+						)}
+
+						{!error && message && (
+							<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
+								<div className="bg-background/95 p-6 border rounded-xl shadow-lg text-center space-y-3 max-w-md mx-4">
+									<h3 className="font-medium">Processing</h3>
+									<p className="text-sm text-muted-foreground">{message}</p>
+									<Loader2 className="h-5 w-5 animate-spin mx-auto mt-2" />
+								</div>
+							</div>
+						)}
+
+						{error && (
+							<div className="absolute inset-0 flex items-center justify-center backdrop-blur-sm">
+								<div className="bg-destructive/5 p-6 border-destructive/20 border rounded-xl text-center space-y-4 max-w-md mx-4">
+									<div className="flex flex-col items-center gap-2">
+										<AlertCircle className="h-6 w-6 text-destructive" />
+										<h3 className="font-medium text-destructive">
+											Connection Error
+										</h3>
+									</div>
+									<p className="text-sm text-muted-foreground">
+										Unable to reach your screenpipe data. Please verify that the
+										screenpipe turned on.
+									</p>
+									<button
+										onClick={handleRefresh}
+										className="flex items-center gap-2 px-4 py-2 bg-background hover:bg-muted transition-colors rounded-lg border border-input mx-auto"
+									>
+										<RotateCcw className="h-4 w-4" />
+										<span>Reload Timeline</span>
+									</button>
+								</div>
+							</div>
+						)}
+						{currentFrame && (
+							<img
+								//src={`data:image/png;base64,${imageFrame}`}
+								src={`http://localhost:3030/frames/${currentFrame.devices[0].frame_id}`}
+								className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
+								alt="Current frame"
+							/>
+						)}
+						{currentFrame && (
+							<AudioTranscript
+								frames={frames}
+								currentIndex={currentIndex}
+								groupingWindowMs={30000} // 30 seconds window
+							/>
+						)}
+					</div>
+
+					<TimelineSlider
+						frames={frames}
+						currentIndex={currentIndex}
+						onFrameChange={(index) => {
+							setCurrentIndex(index);
+							if (frames[index]) {
+								setCurrentFrame(frames[index]);
+							}
+						}}
+						fetchNextDayData={fetchNextDayData}
+						currentDate={currentDate}
+						startAndEndDates={startAndEndDates}
+					/>
+
+					<AIPanel
+						position={aiPanelPosition}
+						onPositionChange={setAiPanelPosition}
+						onClose={() => {
+							setIsAiPanelExpanded(false);
+						}}
+						frames={frames}
+						agents={AGENTS}
+						isExpanded={isAiPanelExpanded}
+						onExpandedChange={setIsAiPanelExpanded}
+					/>
+
+					<div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+						<div className="flex flex-col items-center gap-1">
+							<span>▲</span>
+							<span>scroll</span>
+							<span>▼</span>
+						</div>
 					</div>
 				</div>
-
-				<div className="flex-1 relative min-h-0">
-					{isLoading && (
-						<div className="absolute inset-0 flex items-center justify-center">
-							<div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
-								<p>loading frames...</p>
-								<Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
-							</div>
-						</div>
-					)}
-					{message && (
-						<div className="absolute inset-0 flex items-center justify-center">
-							<div className="bg-background/90 p-5 border rounded-lg shadow-lg text-center">
-								<p>{message}</p>
-								<Loader2 className="h-4 w-4 animate-spin mx-auto mt-2" />
-							</div>
-						</div>
-					)}
-					{error && (
-						<div className="absolute inset-0 flex items-center justify-center">
-							<div className="bg-destructive/10 p-5 border-destructive/20 border rounded-lg text-destructive flex flex-col items-center">
-								<AlertCircle className="h-4 w-4 mb-2" />
-								<p className="mb-4">
-									i cannot reach your screenpipe data, did you enable the
-									timeline feature?
-								</p>
-								<button
-									onClick={handleRefresh}
-									className="flex items-center gap-2 px-4 py-2 bg-background text-foreground hover:bg-muted transition-colors rounded-md border border-input"
-								>
-									<RotateCcw className="h-4 w-4" />
-									reload
-								</button>
-							</div>
-						</div>
-					)}
-					{currentFrame && (
-						<img
-							src={`data:image/png;base64,${imageFrame}`}
-							className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
-							alt="Current frame"
-						/>
-					)}
-					{currentFrame && (
-						<AudioTranscript
-							frames={frames}
-							currentIndex={currentIndex}
-							groupingWindowMs={30000} // 30 seconds window
-						/>
-					)}
-				</div>
-
-				<TimelineSlider
-					frames={frames}
-					currentIndex={currentIndex}
-					onFrameChange={(index) => {
-						setCurrentIndex(index);
-						if (frames[index]) {
-							setCurrentFrame(frames[index]);
-						}
-					}}
-					fetchNextDayData={fetchNextDayData}
-					currentDate={currentDate}
-					startAndEndDates={startAndEndDates}
-				/>
-				{
-					//<div className="w-4/5 mx-auto my-8 relative select-none">
-					//	<div
-					//		className="h-[60px] bg-card border rounded-lg shadow-sm cursor-crosshair relative overflow-hidden"
-					//		style={{
-					//			width: "100%",
-					//			boxSizing: "border-box",
-					//		}}
-					//	>
-					//		{
-					//			//                     loadedTimeRange && (
-					//			//<TimelineSelection loadedTimeRange={loadedTimeRange} />
-					//			//   )
-					//			//<TimelineSlider frames={frames} />
-					//		}
-					//		<div
-					//			className="absolute top-0 h-full w-1 bg-foreground/50 shadow-sm opacity-80 z-10"
-					//			style={{ left: `${timePercentage}%`, zIndex: 100 }}
-					//		>
-					//			<div className="relative -top-6 right-3 z-50 text-[10px] text-muted-foreground whitespace-nowrap">
-					//				{currentIndex < frames.length &&
-					//					frames[currentIndex] &&
-					//					frames[currentIndex].timestamp &&
-					//					(() => {
-					//						try {
-					//							return new Date(
-					//								frames[currentIndex].timestamp,
-					//							).toLocaleTimeString(
-					//								"en-US", // explicitly specify locale
-					//								{
-					//									hour: "2-digit",
-					//									minute: "2-digit",
-					//									second: "2-digit",
-					//								},
-					//							);
-					//						} catch (e) {
-					//							console.error("failed to format timestamp:", e);
-					//							return frames[currentIndex].timestamp; // fallback to raw timestamp
-					//						}
-					//					})()}
-					//			</div>
-					//		</div>
-					//		{searchResults.map((frameIndex) => {
-					//			const percentage = (frameIndex / (frames.length - 1)) * 100;
-					//			return (
-					//				<div
-					//					key={frameIndex}
-					//					className="absolute top-0 h-full w-1.5 bg-blue-500/50 hover:bg-blue-500 cursor-pointer transition-colors"
-					//					style={{ left: `${percentage}%`, zIndex: 4 }}
-					//					onClick={() => {
-					//						animateToIndex(frameIndex);
-					//						setSearchResults([]); // Clear results after clicking
-					//					}}
-					//				>
-					//					<div className="absolute -top-6 -left-2 text-[10px] text-blue-500 whitespace-nowrap">
-					//						{new Date(frames[frameIndex].timestamp).toLocaleTimeString(
-					//							[],
-					//							{
-					//								hour: "2-digit",
-					//								minute: "2-digit",
-					//							},
-					//						)}
-					//					</div>
-					//				</div>
-					//			);
-					//		})}
-					//	</div>
-				}
-
-				<AIPanel
-					position={aiPanelPosition}
-					onPositionChange={setAiPanelPosition}
-					onClose={() => {
-						setIsAiPanelExpanded(false);
-					}}
-					frames={frames}
-					agents={AGENTS}
-					isExpanded={isAiPanelExpanded}
-					onExpandedChange={setIsAiPanelExpanded}
-				/>
-				{
-					//	{loadedTimeRange && frames.length > 0 && (
-					//		<TimelineIconsSection blocks={frames} timeRange={loadedTimeRange} />
-					//	)}
-					//
-					//	<div className="relative mt-1 px-2 text-[10px] text-muted-foreground select-none">
-					//		{timeRange.map((time, i) => {
-					//			const dateTime = new Date(time);
-					//			return (
-					//				<button
-					//					key={i}
-					//					className="absolute transform -translate-x-1/2 text-nowrap flex flex-col"
-					//					style={{
-					//						left: `${(i * 100) / (timeRange.length - 1)}%`,
-					//					}}
-					//					onClick={() => jumpToTime(new Date(time))}
-					//				>
-					//					{dateTime.toLocaleTimeString("en-US", {
-					//						hour: "numeric",
-					//						minute: "2-digit",
-					//						hour12: true,
-					//					})}
-					//				</button>
-					//			);
-					//		})}
-					//	</div>
-					//  </div>
-				}
-
-				<div className="fixed left-12 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-					<div className="flex flex-col items-center gap-1">
-						<span>▲</span>
-						<span>scroll</span>
-						<span>▼</span>
-					</div>
-				</div>
-			</div>
+			)}
 		</TimelineProvider>
 	);
 }

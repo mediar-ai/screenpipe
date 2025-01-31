@@ -1,13 +1,17 @@
 use axum::{
+    body::Body,
     extract::{
         ws::{Message, WebSocket},
         Json, Path, Query, State, WebSocketUpgrade,
     },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Response, Sse},
     routing::{get, post},
     serve, Router,
 };
+use tokio_util::io::ReaderStream;
+
+use tokio::fs::File;
 
 use futures::{
     future::{try_join, try_join_all},
@@ -21,7 +25,8 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
+        MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
@@ -1912,28 +1917,26 @@ pub async fn get_frame_data(
 ) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
     let start_time = Instant::now();
 
-    // Add timeout for the entire operation
     match timeout(Duration::from_secs(5), async {
         // Try to get frame from cache if enabled
         if let Some(cache) = &state.frame_image_cache {
             let cache_result = cache.try_lock();
             match cache_result {
                 Ok(mut cache) => {
-                    if let Some((frame_data, timestamp)) = cache.get(&frame_id) {
+                    if let Some((file_path, timestamp)) = cache.get(&frame_id) {
                         if timestamp.elapsed() < Duration::from_secs(300) {
                             debug!(
                                 "Cache hit for frame_id: {}. Retrieved in {:?}",
                                 frame_id,
                                 start_time.elapsed()
                             );
-                            return Ok((StatusCode::OK, JsonResponse(json!({"data": frame_data}))));
+                            return serve_file(file_path).await;
                         }
                         cache.pop(&frame_id);
                     }
                 }
                 Err(_) => {
                     debug!("Cache lock contention for frame_id: {}", frame_id);
-                    // Continue without cache if lock is held
                 }
             }
         }
@@ -1941,18 +1944,17 @@ pub async fn get_frame_data(
         // If not in cache or cache disabled, get from database
         match state.db.get_frame(frame_id).await {
             Ok(Some((file_path, offset_index))) => {
-                match extract_frame(&file_path, offset_index).await {
-                    Ok(frame_data) => {
+                match extract_frame_from_video(&file_path, offset_index).await {
+                    Ok(frame_path) => {
                         // Store in cache if enabled and we can get the lock
                         if let Some(cache) = &state.frame_image_cache {
                             if let Ok(mut cache) = cache.try_lock() {
-                                cache.put(frame_id, (frame_data.clone(), Instant::now()));
+                                cache.put(frame_id, (frame_path.clone(), Instant::now()));
                             }
                         }
 
                         debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
-
-                        Ok((StatusCode::OK, JsonResponse(json!({"data": frame_data}))))
+                        serve_file(&frame_path).await
                     }
                     Err(e) => {
                         error!("Failed to extract frame {}: {}", frame_id, e);
@@ -1996,6 +1998,32 @@ pub async fn get_frame_data(
                 })),
             ))
         }
+    }
+}
+
+async fn serve_file(path: &str) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match File::open(path).await {
+        Ok(file) => {
+            let stream = ReaderStream::new(file);
+            let body = Body::from_stream(stream);
+
+            let response = Response::builder()
+                .header("content-type", "image/jpeg")
+                .header("cache-control", "public, max-age=604800") // Cache for 7 days
+                .body(body)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to create response: {}", e)})),
+                    )
+                })?;
+
+            Ok(response)
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to open file: {}", e)})),
+        )),
     }
 }
 

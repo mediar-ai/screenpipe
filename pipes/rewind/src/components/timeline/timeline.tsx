@@ -2,6 +2,7 @@ import { StreamTimeSeriesResponse, TimeRange } from "@/app/page";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { isAfter, subDays } from "date-fns";
 import { motion, useScroll, useTransform } from "framer-motion";
+import { AudioLinesIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface TimelineSliderProps {
@@ -18,6 +19,7 @@ interface AppGroup {
 	appName: string;
 	frames: StreamTimeSeriesResponse[];
 	color: string;
+	iconSrc?: string;
 }
 
 export function stringToColor(str: string): string {
@@ -85,7 +87,6 @@ export const TimelineSlider = ({
 				color: stringToColor(currentApp),
 			});
 		}
-
 		return groups;
 	}, [frames]);
 
@@ -115,11 +116,13 @@ export const TimelineSlider = ({
 		const handleScroll = () => {
 			const { scrollLeft, scrollWidth, clientWidth } = container;
 
-			// Check if we're near the end (right side) of the scroll area
-			const isNearEnd = scrollLeft + clientWidth >= scrollWidth - clientWidth;
+			// Check if we're 20% away from the left end (considering RTL)
+			const threshold = scrollWidth * 0.2; // 20% of total scroll width
+			const isNearLeftEnd =
+				Math.abs(scrollLeft) + clientWidth >= scrollWidth - threshold;
 
 			const lastDate = subDays(currentDate, 1);
-			if (isNearEnd && isAfter(lastDate, startAndEndDates.start)) {
+			if (isNearLeftEnd && isAfter(lastDate, startAndEndDates.start)) {
 				console.log("fetching next day's data", currentDate);
 				fetchNextDayData(lastDate);
 			}
@@ -180,7 +183,7 @@ export const TimelineSlider = ({
 	};
 
 	return (
-		<div className="relative w-full">
+		<div className="relative w-full" dir="rtl">
 			<motion.div
 				className="absolute top-0 h-1 bg-blue-500/0"
 				style={{ width: lineWidth }}
@@ -188,18 +191,30 @@ export const TimelineSlider = ({
 			<div
 				ref={containerRef}
 				className="w-full overflow-x-auto scroll-smooth scrollbar-hide"
-				style={{ scrollBehavior: "auto" }}
+				style={{
+					scrollBehavior: "auto",
+				}}
 			>
 				<motion.div
-					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-40"
+					className="whitespace-nowrap flex flex-nowrap w-max justify-center px-[50vw] h-40 sticky right-0"
 					onMouseUp={handleDragEnd}
 					onMouseLeave={handleDragEnd}
 				>
 					{appGroups.map((group, groupIndex) => (
 						<div
 							key={`${group.appName}-${groupIndex}`}
-							className="flex flex-nowrap items-end h-full group pt-20"
+							className="flex flex-nowrap items-end h-full group pt-20 relative"
+							dir="rtl"
 						>
+							<div className="absolute top-0 left-1/2 w-5 h-5 rounded-full -translate-x-1/2 bg-background/50 backdrop-blur p-0.5">
+								<img
+									src={`http://localhost:11435/app-icon?name=${group.appName}`}
+									className="w-full h-full opacity-70"
+									alt={group.appName}
+									loading="lazy"
+									decoding="async"
+								/>
+							</div>
 							{group.frames.map((frame) => {
 								const frameIndex = frames.indexOf(frame);
 								const isSelected = selectedIndices.has(frameIndex);
@@ -210,9 +225,6 @@ export const TimelineSlider = ({
 									frameDate <= selectionRange.end;
 
 								const hasAudio = Boolean(frame.devices[0].audio.length);
-								if (hasAudio) {
-									console.log(frameIndex, hasAudio);
-								}
 
 								return (
 									<motion.div
@@ -233,6 +245,7 @@ export const TimelineSlider = ({
 												frameIndex === currentIndex || isSelected || isInRange
 													? 1
 													: 0.7,
+											direction: "ltr",
 										}}
 										whileHover={{ height: "100%", opacity: 1 }}
 										onMouseDown={() => handleDragStart(frameIndex)}
@@ -243,7 +256,9 @@ export const TimelineSlider = ({
 										onMouseLeave={() => setHoveredTimestamp(null)}
 									>
 										{hasAudio && (
-											<div className="absolute -top-2 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full" />
+											<div className="absolute -top-5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full ">
+												<AudioLinesIcon className="w-full h-full" />
+											</div>
 										)}
 										{hoveredTimestamp === frame.timestamp && (
 											<div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">

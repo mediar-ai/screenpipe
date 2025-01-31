@@ -1,12 +1,14 @@
 use crate::{get_store, icons::AppIcon};
+use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
+use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
 use futures::stream::Stream;
-use http::header::HeaderValue;
+use http::header::{HeaderValue, CONTENT_TYPE};
 use notify::RecursiveMode;
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -115,15 +117,16 @@ async fn settings_stream(
 }
 
 #[cfg(target_os = "windows")]
-async fn settings_stream(
-    State(_): State<ServerState>,
-) -> (StatusCode, String) {
-    (StatusCode::NOT_IMPLEMENTED, "SSE not supported on Windows".to_string())
+async fn settings_stream(State(_): State<ServerState>) -> (StatusCode, String) {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        "SSE not supported on Windows".to_string(),
+    )
 }
 
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
-    
+
     #[cfg(not(target_os = "windows"))]
     let settings_tx_clone = settings_tx.clone();
 
@@ -136,6 +139,22 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
             .local_data_dir()
             .unwrap()
             .join("store.bin");
+
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = store_path.parent() {
+            std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+                error!("Failed to create directory: {}", e);
+            });
+        }
+
+        // Initialize store file if it doesn't exist
+        if !store_path.exists() {
+            if let Ok(store) = get_store(&app_handle, None) {
+                store.save().unwrap_or_else(|e| {
+                    error!("Failed to create store file: {}", e);
+                });
+            }
+        }
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
             if let Ok(event) = res {
@@ -150,9 +169,14 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         })
         .unwrap();
 
-        watcher
-            .watch(&store_path, RecursiveMode::NonRecursive)
-            .unwrap();
+        // Only watch if the file exists
+        if store_path.exists() {
+            watcher
+                .watch(&store_path, RecursiveMode::NonRecursive)
+                .unwrap_or_else(|e| {
+                    error!("Failed to watch store file: {}", e);
+                });
+        }
     }
 
     let state = ServerState {
@@ -302,13 +326,23 @@ async fn handle_auth(
 async fn get_app_icon_handler(
     State(_): State<ServerState>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("received app icon request: {:?}", app_name);
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-            Ok(icon) => Ok(Json(icon)),
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                Ok((headers, Bytes::from(icon.data)))
+            }
+            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
@@ -327,6 +361,35 @@ async fn get_app_icon_handler(
         ))
     }
 }
+
+//async fn get_app_icon_handler(
+//    State(_): State<ServerState>,
+//    Query(app_name): Query<AppIconQuery>,
+//) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+//    info!("received app icon request: {:?}", app_name);
+//
+//    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+//    {
+//        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
+//            Ok(icon) => Ok(Json(icon)),
+//            Err(e) => {
+//                error!("failed to get app icon: {}", e);
+//                Err((
+//                    StatusCode::INTERNAL_SERVER_ERROR,
+//                    format!("failed to get app icon: {}", e),
+//                ))
+//            }
+//        }
+//    }
+//
+//    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+//    {
+//        Err((
+//            StatusCode::NOT_IMPLEMENTED,
+//            "app icon retrieval not supported on this platform".to_string(),
+//        ))
+//    }
+//}
 
 async fn set_window_size(
     State(state): State<ServerState>,
