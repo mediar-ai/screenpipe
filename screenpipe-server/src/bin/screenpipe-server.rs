@@ -346,7 +346,6 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
                 return Ok(());
             }
-
             Command::Doctor { output, fix } => {
                 handle_doctor_command(output, fix).await?;
                 return Ok(());
