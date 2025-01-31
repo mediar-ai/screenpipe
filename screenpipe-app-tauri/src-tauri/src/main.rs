@@ -22,6 +22,7 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
@@ -369,10 +370,12 @@ async fn list_pipes() -> anyhow::Result<Value> {
     Ok(response)
 }
 
+
 pub fn get_base_dir(
     app: &tauri::AppHandle,
     custom_path: Option<String>,
 ) -> anyhow::Result<PathBuf> {
+
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
@@ -684,6 +687,13 @@ async fn main() {
             get_env
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
