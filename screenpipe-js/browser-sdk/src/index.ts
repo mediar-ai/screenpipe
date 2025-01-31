@@ -17,14 +17,37 @@ import {
   identifyUser,
 } from "../../common/analytics";
 
-// create a singleton websocketconnection to ws://localhost:3030/ws/events
-const ws = new WebSocket("ws://localhost:3030/ws/events");
+const WS_URL = "ws://localhost:3030/ws/events";
 
-// create a generator function that yields events from the websocket
-async function* wsEvents(): AsyncGenerator<EventStreamResponse, void, unknown> {
+// At the top of the file, add WebSocket instances
+let wsWithImages: WebSocket | null = null;
+let wsWithoutImages: WebSocket | null = null;
+
+// Update the wsEvents generator to accept includeImages parameter and manage connections
+async function* wsEvents(
+  includeImages: boolean = false
+): AsyncGenerator<EventStreamResponse, void, unknown> {
+  // Reuse existing connection or create new one
+  let ws = includeImages ? wsWithImages : wsWithoutImages;
+
+  if (!ws || ws.readyState === WebSocket.CLOSED) {
+    ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
+    if (includeImages) {
+      wsWithImages = ws;
+    } else {
+      wsWithoutImages = ws;
+    }
+
+    // Wait for connection to establish
+    await new Promise((resolve, reject) => {
+      ws!.onopen = resolve;
+      ws!.onerror = reject;
+    });
+  }
+
   while (true) {
     const event: MessageEvent = await new Promise((resolve) => {
-      ws.onmessage = (ev) => resolve(ev);
+      ws!.onmessage = (ev: MessageEvent) => resolve(ev);
     });
     yield JSON.parse(event.data);
   }
@@ -238,10 +261,6 @@ class BrowserPipeImpl implements BrowserPipe {
     void,
     unknown
   > {
-    const eventSource = new EventSource(
-      "http://localhost:3030/sse/transcriptions"
-    );
-
     try {
       await this.captureEvent("stream_started", {
         feature: "transcription",
@@ -276,37 +295,30 @@ class BrowserPipeImpl implements BrowserPipe {
       await this.captureEvent("stream_ended", {
         feature: "transcription",
       });
-      eventSource.close();
     }
   }
 
   async *streamVision(
     includeImages: boolean = false
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
-    const eventSource = new EventSource(
-      `http://localhost:3030/sse/vision?images=${includeImages}`
-    );
     try {
       await this.captureEvent("stream_started", {
         feature: "vision",
       });
 
-      while (true) {
-        for await (const event of wsEvents()) {
-          if (event.name === "ocr_result" || event.name === "ui_frame") {
-            let data: VisionEvent = event.data as VisionEvent;
-            yield {
-              type: event.name,
-              data,
-            };
-          }
+      for await (const event of wsEvents(includeImages)) {
+        if (event.name === "ocr_result" || event.name === "ui_frame") {
+          let data: VisionEvent = event.data as VisionEvent;
+          yield {
+            type: event.name,
+            data,
+          };
         }
       }
     } finally {
       await this.captureEvent("stream_ended", {
         feature: "vision",
       });
-      eventSource.close();
     }
   }
 
@@ -328,12 +340,10 @@ class BrowserPipeImpl implements BrowserPipe {
     return captureMainFeatureEvent(featureName, properties);
   }
 
-  public async *streamEvents(): AsyncGenerator<
-    EventStreamResponse,
-    void,
-    unknown
-  > {
-    for await (const event of wsEvents()) {
+  public async *streamEvents(
+    includeImages: boolean = false
+  ): AsyncGenerator<EventStreamResponse, void, unknown> {
+    for await (const event of wsEvents(includeImages)) {
       yield event;
     }
   }
