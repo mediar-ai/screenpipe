@@ -98,7 +98,7 @@ screenpipe
 ## 创建插件
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev create
 ```
 
 screenpipe有一个名为"pipe"的插件系统，允许你在Rust代码的沙盒环境中运行代码，[了解更多](https://docs.screenpi.pe/docs/plugins)
