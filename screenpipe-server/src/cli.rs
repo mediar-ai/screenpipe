@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 
+use anyhow::Result;
+use clap::ValueEnum;
 use clap::{CommandFactory, Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
-use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
+use screenpipe_audio::{
+    vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
+};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
-use clap::ValueEnum;
-use anyhow::Result;
 
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_audio::{
@@ -351,8 +353,8 @@ pub enum Command {
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
     },
-     /// Generate shell completions
-     Completions {
+    /// Generate shell completions
+    Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
