@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { ProfileVisit, State, Message, ProfileStore, ProfileDetails, MessageStore } from './types';
-import { getActiveBrowser } from '../browser-setup';
+import { getActiveBrowser, setupBrowser } from '../browser-setup';
 import { ChromeSession } from '../chrome-session';
 
 const STORAGE_DIR = path.join(process.cwd(), 'lib', 'storage');
@@ -233,15 +233,15 @@ export async function updateMultipleProfileVisits(state: State, newVisits: Profi
 
 export interface Connection {
     profileUrl: string;
-    status: 'pending' | 'accepted' | 'declined' | 'email_required' | 'cooldown';
+    status: 'pending' | 'accepted' | 'declined' | 'email_required' | 'invalid';
     timestamp: string;
-    cooldownUntil?: string;
 }
 
 interface ConnectionsStore {
     nextHarvestTime?: string;
     connections: Record<string, Connection>;
     harvestingStatus: 'stopped' | 'running' | 'cooldown';
+    statusMessage?: string; 
     connectionsSent: number;
     lastRefreshDuration?: number;  // in milliseconds
     averageProfileCheckDuration?: number;  // in milliseconds
@@ -254,6 +254,10 @@ interface ConnectionsStore {
     };
     isWithdrawing: boolean;
     withdrawStatus?: WithdrawStatus;
+    heartbeat?: {
+        lastBeat: string;  // ISO timestamp
+        processId: string; // unique ID for each harvest run
+    }
 }
 
 interface WithdrawStatus {
@@ -351,9 +355,13 @@ export async function saveNextHarvestTime(timestamp: string) {
     }
 }
 
-export async function saveHarvestingState(status: 'stopped' | 'running' | 'cooldown') {
+export async function saveHarvestingState(
+  status: 'stopped' | 'running' | 'cooldown',
+  statusMessage?: string
+) {
     const connectionsStore = await loadConnections();
     connectionsStore.harvestingStatus = status;
+    connectionsStore.statusMessage = statusMessage; // Save the status message
     
     try {
         await fs.writeFile(
@@ -361,7 +369,7 @@ export async function saveHarvestingState(status: 'stopped' | 'running' | 'coold
             JSON.stringify(connectionsStore, null, 2)
         );
         await saveToChrome('linkedin_assistant_connections', connectionsStore);
-        console.log(`saved harvesting status to both locations: ${status}`);
+        console.log(`saved harvesting status to both locations: ${status} (${statusMessage || 'no message'})`);
     } catch (err) {
         console.error('error saving harvesting state:', err);
     }
@@ -426,29 +434,47 @@ export async function isStopRequested(): Promise<boolean> {
 } 
 
 export async function saveToChrome(key: string, data: unknown) {
-    const session = ChromeSession.getInstance();
-    const page = session.getActivePage();
-    if (!page) {
-        console.log('cannot save to chrome: no active page in session');
-        return;
-    }
-    
     try {
-        const currentUrl = await page.url();
-        // console.log('current page url:', currentUrl);
+        // First try to get existing browser
+        let pages;
+        const { browser } = getActiveBrowser();
+        if (!browser) {
+            console.log('no browser found, attempting to set up...');
+            const { browser: newBrowser } = await setupBrowser();
+            if (!newBrowser) {
+                console.log('cannot save to chrome: failed to set up browser');
+                return;
+            }
+            pages = await newBrowser.pages();
+        } else {
+            pages = await browser.pages();
+        }
+        // console.log('found pages:', pages.length);
         
-        // Only save if we're already on LinkedIn
-        if (!currentUrl.includes('linkedin.com')) {
-            console.log('skipping chrome storage: not on linkedin.com');
-            return;
+        // Find LinkedIn tab
+        let linkedInPage = null;
+        for (const page of pages) {
+            const url = await page.url();
+            // console.log('checking page url:', url);
+            if (url.includes('linkedin.com')) {
+                linkedInPage = page;
+                break;
+            }
         }
         
-        await page.evaluate((key: string, data: unknown) => {
+        if (!linkedInPage) {
+            console.log('cannot save to chrome: no linkedin page found');
+            return;
+        }
+
+        await linkedInPage.evaluate((key: string, data: unknown) => {
             localStorage.setItem(key, JSON.stringify(data));
-            console.log('saved to chrome storage:', key);
+            return true;
         }, key, data);
+        
+        // console.log('successfully saved to chrome storage:', key);
     } catch (err) {
-        console.log('failed to save to chrome storage:', err);
+        console.log('failed to save to chrome storage:', {error: err, key});
     }
 }
 
@@ -541,4 +567,79 @@ export async function loadCronLogs(): Promise<CronLog[]> {
   } catch {
     return [];
   }
+}
+
+export async function updateHeartbeat(processId: string) {
+  const store = await loadConnections();
+  store.heartbeat = {
+    lastBeat: new Date().toISOString(),
+    processId
+  };
+  console.log('updating heartbeat:', { 
+    processId, 
+    timestamp: store.heartbeat.lastBeat 
+  });
+  await fs.writeFile(
+    path.join(STORAGE_DIR, 'connections.json'),
+    JSON.stringify(store, null, 2)
+  );
+}
+
+export async function isHarvestingAlive(): Promise<boolean> {
+  const store = await loadConnections();
+  if (!store.heartbeat) {
+    // console.log('no heartbeat found');
+    return false;
+  }
+
+  const lastBeat = new Date(store.heartbeat.lastBeat);
+  const now = new Date();
+  
+  // If no heartbeat in last 30 seconds, consider process dead
+  const isAlive = now.getTime() - lastBeat.getTime() < 30_000;
+//   console.log('harvest heartbeat check:', { 
+//     lastBeat: store.heartbeat.lastBeat,
+//     processId: store.heartbeat.processId,
+//     isAlive,
+//     timeSinceLastBeat: `${Math.floor((now.getTime() - lastBeat.getTime()) / 1000)}s`
+//   });
+  
+  return isAlive;
+}
+
+export interface HarvestStatus {
+  connectionsSent: number;
+  weeklyLimitReached: boolean;
+  dailyLimitReached: boolean;
+  nextHarvestTime?: string;
+  stopped?: boolean;
+  harvestingStatus: 'stopped' | 'running' | 'cooldown';
+  statusMessage?: string; // Add this field
+}
+
+export async function getHarvestingStatus(): Promise<HarvestStatus> {
+  const store = await loadConnections();
+  const isAlive = await isHarvestingAlive();
+
+  if (store.harvestingStatus === 'running' && !isAlive) {
+    console.log('detected dead harvest process, resetting state');
+    await saveHarvestingState('stopped', 'harvest process died unexpectedly');
+    return {
+      harvestingStatus: 'stopped',
+      connectionsSent: store.connectionsSent || 0,
+      weeklyLimitReached: false,
+      dailyLimitReached: false,
+      nextHarvestTime: store.nextHarvestTime,
+      statusMessage: 'harvest process died unexpectedly'
+    };
+  }
+
+  return {
+    harvestingStatus: store.harvestingStatus,
+    connectionsSent: store.connectionsSent || 0,
+    weeklyLimitReached: false,
+    dailyLimitReached: false,
+    nextHarvestTime: store.nextHarvestTime,
+    statusMessage: store.statusMessage
+  };
 }

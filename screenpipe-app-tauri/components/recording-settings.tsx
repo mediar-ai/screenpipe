@@ -35,7 +35,6 @@ import {
   CommandGroup,
   CommandItem,
 } from "./ui/command";
-import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import {
   Settings,
   useSettings,
@@ -56,20 +55,18 @@ import { Input } from "./ui/input";
 import { Slider } from "./ui/slider";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
-import { trace } from "@opentelemetry/api";
-import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { Language } from "@/lib/language";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { ToastAction } from "@/components/ui/toast";
-import { useUser } from "@/lib/hooks/use-user";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Separator } from "./ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
-import { relaunch } from "@tauri-apps/plugin-process";
+import * as Sentry from "@sentry/react";
+import { defaultOptions } from "tauri-plugin-sentry-api";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -142,8 +139,7 @@ export function RecordingSettings() {
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const { user } = useUser();
-  const { credits } = user || {};
+  const { credits } = settings.user || {};
   // Add new state to track if settings have changed
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -206,10 +202,7 @@ export function RecordingSettings() {
       try {
         // Fetch monitors
         const monitorsResponse = await fetch(
-          "http://localhost:3030/vision/list",
-          {
-            method: "POST",
-          }
+          "http://localhost:3030/vision/list"
         );
         if (!monitorsResponse.ok) {
           throw new Error("Failed to fetch monitors");
@@ -299,8 +292,9 @@ export function RecordingSettings() {
           enabled: false,
         });
         // disable opentelemetry
-        trace.disable();
         posthog.opt_out_capturing();
+        // disable sentry
+        Sentry.close();
         console.log("telemetry disabled");
       } else {
         const isDebug = process.env.TAURI_ENV_DEBUG === "true";
@@ -309,10 +303,14 @@ export function RecordingSettings() {
           posthog.capture("telemetry", {
             enabled: true,
           });
-          initOpenTelemetry("82688", new Date().toISOString());
 
           // enable opentelemetry
           console.log("telemetry enabled");
+
+          // enable sentry
+          Sentry.init({
+            ...defaultOptions,
+          });
         }
       }
 
@@ -343,55 +341,9 @@ export function RecordingSettings() {
     }
   };
 
-  const handleAddIgnoredWindow = (value: string) => {
-    const lowerCaseValue = value.toLowerCase();
-    if (
-      value &&
-      !settings.ignoredWindows
-        .map((w) => w.toLowerCase())
-        .includes(lowerCaseValue)
-    ) {
-      handleSettingsChange({
-        ignoredWindows: [...settings.ignoredWindows, value],
-        includedWindows: settings.includedWindows.filter(
-          (w) => w.toLowerCase() !== lowerCaseValue
-        ),
-      });
-    }
-  };
-
-  const handleRemoveIgnoredWindow = (value: string) => {
-    handleSettingsChange({
-      ignoredWindows: settings.ignoredWindows.filter((w) => w !== value),
-    });
-  };
-
-  const handleAddIncludedWindow = (value: string) => {
-    const lowerCaseValue = value.toLowerCase();
-    if (
-      value &&
-      !settings.includedWindows
-        .map((w) => w.toLowerCase())
-        .includes(lowerCaseValue)
-    ) {
-      handleSettingsChange({
-        includedWindows: [...settings.includedWindows, value],
-        ignoredWindows: settings.ignoredWindows.filter(
-          (w) => w.toLowerCase() !== lowerCaseValue
-        ),
-      });
-    }
-  };
-
-  const handleRemoveIncludedWindow = (value: string) => {
-    handleSettingsChange({
-      includedWindows: settings.includedWindows.filter((w) => w !== value),
-    });
-  };
-
   const handleAudioTranscriptionModelChange = (value: string) => {
-    if (value === "screenpipe-cloud" && !credits?.amount) {
-      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
+    if (value === "screenpipe-cloud" && !settings.user?.cloud_subscribed) {
+      openUrl("https://buy.stripe.com/7sIdRzbym4RA98c7sX");
       return;
     }
 
@@ -406,14 +358,6 @@ export function RecordingSettings() {
 
   const handleOcrModelChange = (value: string) => {
     handleSettingsChange({ ocrEngine: value });
-  };
-
-  const handleMonitorChange = (currentValue: string) => {
-    const updatedMonitors = settings.monitorIds.includes(currentValue)
-      ? settings.monitorIds.filter((id) => id !== currentValue)
-      : [...settings.monitorIds, currentValue];
-
-    handleSettingsChange({ monitorIds: updatedMonitors });
   };
 
   const handleLanguageChange = (currentValue: Language) => {
@@ -793,6 +737,23 @@ export function RecordingSettings() {
 
           {!settings.disableVision && (
             <>
+              <div className="flex items-center justify-between mb-4">
+                <div className="space-y-1">
+                  <h4 className="font-medium">use all monitors</h4>
+                  <p className="text-sm text-muted-foreground">
+                    automatically detect and record all monitors, including
+                    newly connected ones
+                  </p>
+                </div>
+                <Switch
+                  id="useAllMonitors"
+                  checked={settings.useAllMonitors}
+                  onCheckedChange={(checked) =>
+                    handleSettingsChange({ useAllMonitors: checked })
+                  }
+                />
+              </div>
+
               <div className="flex flex-col space-y-6">
                 <div className="flex flex-col space-y-2">
                   <Label
@@ -802,66 +763,31 @@ export function RecordingSettings() {
                     <Monitor className="h-4 w-4" />
                     <span>monitors</span>
                   </Label>
-                  <Popover open={openMonitors} onOpenChange={setOpenMonitors}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openMonitors}
-                        className="w-full justify-between"
-                      >
-                        {settings.monitorIds.length > 0
-                          ? `${settings.monitorIds.length} monitor(s) selected`
-                          : "select monitors"}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0">
-                      <Command>
-                        <CommandInput placeholder="search monitors..." />
-                        <CommandList>
-                          <CommandEmpty>no monitor found.</CommandEmpty>
-                          <CommandGroup>
-                            {availableMonitors.map((monitor) => (
-                              <CommandItem
-                                key={monitor.id}
-                                value={monitor.id}
-                                onSelect={() =>
-                                  handleMonitorChange(monitor.id.toString())
-                                }
-                              >
-                                <div className="flex items-center">
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      settings.monitorIds.includes(
-                                        monitor.id.toString()
-                                      )
-                                        ? "opacity-100"
-                                        : "opacity-0"
-                                    )}
-                                  />
-                                  {/* not selectable */}
-                                  <span
-                                    style={{
-                                      userSelect: "none",
-                                      WebkitUserSelect: "none",
-                                      MozUserSelect: "none",
-                                      msUserSelect: "none",
-                                    }}
-                                  >
-                                    {monitor.id}. {monitor.name}{" "}
-                                    {monitor.is_default ? "(default)" : ""} -{" "}
-                                    {monitor.width}x{monitor.height}
-                                  </span>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <MultiSelect
+                    options={availableMonitors.map((monitor) => ({
+                      value: monitor.id.toString(),
+                      label: `${monitor.id}. ${monitor.name} - ${
+                        monitor.width
+                      }x${monitor.height} ${
+                        monitor.is_default ? "(default)" : ""
+                      }`,
+                    }))}
+                    defaultValue={settings.monitorIds}
+                    onValueChange={(values) =>
+                      values.length === 0
+                        ? handleSettingsChange({ disableVision: true })
+                        : handleSettingsChange({ monitorIds: values })
+                    }
+                    placeholder={
+                      settings.useAllMonitors
+                        ? "all monitors will be used"
+                        : "select monitors"
+                    }
+                    variant="default"
+                    modalPopover={true}
+                    animation={2}
+                    disabled={settings.useAllMonitors}
+                  />
                 </div>
 
                 <div className="flex flex-col space-y-2">
@@ -1092,9 +1018,9 @@ export function RecordingSettings() {
                           <span>screenpipe cloud</span>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">cloud</Badge>
-                            {!credits?.amount && (
+                            {!settings.user?.cloud_subscribed && (
                               <Badge variant="outline" className="text-xs">
-                                get credits
+                                get screenpipe cloud
                               </Badge>
                             )}
                           </div>
@@ -1132,9 +1058,9 @@ export function RecordingSettings() {
                         <span>screenpipe cloud</span>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary">cloud</Badge>
-                          {!credits?.amount && (
+                          {!settings.user?.cloud_subscribed && (
                             <Badge variant="outline" className="text-xs">
-                              get credits
+                              get screenpipe cloud
                             </Badge>
                           )}
                         </div>

@@ -2,8 +2,7 @@ use super::get_base_dir;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreBuilder;
-use tracing::{info};
-
+use tracing::info;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProfilesConfig {
@@ -59,8 +58,7 @@ pub fn get_store(
     };
 
     // Build and return the store wrapped in Arc
-    Ok(StoreBuilder::new(app, store_path)
+    StoreBuilder::new(app, store_path)
         .build()
-        .map_err(|e| anyhow::anyhow!(e))?)
+        .map_err(|e| anyhow::anyhow!(e))
 }
-

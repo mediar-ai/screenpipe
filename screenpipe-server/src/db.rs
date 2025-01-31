@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
@@ -80,9 +80,7 @@ impl DatabaseManager {
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
-        if let Err(e) = Self::run_migrations(&db_manager.pool).await {
-            return Err(e);
-        }
+        Self::run_migrations(&db_manager.pool).await?;
 
         Ok(db_manager)
     }
@@ -124,6 +122,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -147,7 +146,7 @@ impl DatabaseManager {
         .bind(Utc::now())
         .bind(transcription_engine)
         .bind(&device.name)
-        .bind(device.device_type == DeviceType::Input)
+        .bind(device.device_type == AudioDeviceType::Input)
         .bind(speaker_id)
         .bind(start_time)
         .bind(end_time)
@@ -343,6 +342,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_ocr_text(
         &self,
         frame_id: i64,
@@ -408,6 +408,7 @@ impl DatabaseManager {
         Err(sqlx::Error::PoolTimedOut)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_ocr_text_old(
         &self,
         frame_id: i64,
@@ -451,6 +452,7 @@ impl DatabaseManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search(
         &self,
         query: &str,
@@ -705,6 +707,7 @@ impl DatabaseManager {
         Ok(results)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn search_ocr(
         &self,
         query: &str,
@@ -800,6 +803,7 @@ impl DatabaseManager {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_audio(
         &self,
         query: &str,
@@ -898,9 +902,9 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 device_name: raw.device_name,
                 device_type: if raw.is_input_device {
-                    DeviceType::Input
+                    AudioDeviceType::Input
                 } else {
-                    DeviceType::Output
+                    AudioDeviceType::Output
                 },
                 speaker,
                 start_time: raw.start_time,
@@ -1586,6 +1590,7 @@ impl DatabaseManager {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_ui_monitoring(
         &self,
         query: &str,
@@ -2120,5 +2125,92 @@ impl DatabaseManager {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn repair_database(&self) -> Result<(), anyhow::Error> {
+        debug!("starting aggressive database repair process");
+
+        // Force close any pending transactions
+        let emergency_steps = [
+            "PRAGMA locking_mode = EXCLUSIVE;",
+            "ROLLBACK;",                    // Force rollback any stuck transactions
+            "PRAGMA busy_timeout = 60000;", // Increase timeout to 60s
+        ];
+
+        for step in emergency_steps {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("emergency step failed (continuing anyway): {}", e);
+            }
+        }
+
+        // Force checkpoint and cleanup WAL files
+        let wal_cleanup = [
+            "PRAGMA wal_checkpoint(TRUNCATE);",
+            "PRAGMA journal_mode = DELETE;", // Temporarily disable WAL
+            "PRAGMA journal_size_limit = 0;", // Clear journal
+        ];
+
+        for step in wal_cleanup {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("wal cleanup failed (continuing anyway): {}", e);
+            }
+        }
+
+        // Aggressive recovery steps
+        let recovery_steps = [
+            ("PRAGMA synchronous = OFF;", "disable synchronous"),
+            ("PRAGMA cache_size = -2000000;", "increase cache"), // 2GB cache
+            ("VACUUM;", "vacuum database"),
+            ("PRAGMA integrity_check;", "check integrity"),
+            ("PRAGMA foreign_key_check;", "check foreign keys"),
+            ("REINDEX;", "rebuild indexes"),
+            ("ANALYZE;", "update statistics"),
+            ("VACUUM;", "final vacuum"), // Second vacuum after reindex
+        ];
+
+        for (query, step) in recovery_steps {
+            debug!("running aggressive recovery step: {}", step);
+            match sqlx::query(query).execute(&self.pool).await {
+                Ok(_) => debug!("recovery step '{}' succeeded", step),
+                Err(e) => warn!("recovery step '{}' failed: {}", step, e),
+            }
+        }
+
+        // Restore safe settings
+        let restore_steps = [
+            "PRAGMA synchronous = NORMAL;",
+            "PRAGMA journal_mode = WAL;",
+            "PRAGMA wal_autocheckpoint = 1000;",
+            "PRAGMA cache_size = -2000;", // Back to 2MB cache
+            "PRAGMA locking_mode = NORMAL;",
+            "PRAGMA busy_timeout = 5000;", // Back to 5s timeout
+        ];
+
+        for step in restore_steps {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("restore step failed: {}", e);
+            }
+        }
+
+        // Final verification
+        match sqlx::query_scalar::<_, String>("PRAGMA quick_check;")
+            .fetch_one(&self.pool)
+            .await
+        {
+            Ok(result) if result == "ok" => {
+                debug!("database successfully repaired");
+                Ok(())
+            }
+            Ok(result) => {
+                let msg = format!("database still corrupted after repair: {}", result);
+                error!("{}", msg);
+                Err(anyhow::anyhow!(msg))
+            }
+            Err(e) => {
+                let msg = format!("database repair failed catastrophically: {}", e);
+                error!("{}", msg);
+                Err(anyhow::anyhow!(msg))
+            }
+        }
     }
 }

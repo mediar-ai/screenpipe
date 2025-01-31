@@ -18,8 +18,10 @@ use futures::{
     SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl};
 
 use crate::{
+    core::DeviceManager,
     db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
@@ -42,7 +44,6 @@ use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     convert::Infallible,
     net::SocketAddr,
     num::NonZeroUsize,
@@ -61,6 +62,11 @@ use tokio::{
     sync::{broadcast, mpsc, Mutex},
     time::timeout,
 };
+    sync::{atomic::Ordering, Arc},
+    time::Duration,
+};
+
+use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -76,9 +82,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    pub vision_control: Arc<AtomicBool>,
-    pub audio_devices_tx: Arc<broadcast::Sender<(AudioDevice, DeviceControl)>>,
-    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub device_manager: Arc<DeviceManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -209,7 +213,7 @@ pub struct AudioContent {
     pub offset_index: i64,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: DeviceType,
+    pub device_type: AudioDeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -664,6 +668,13 @@ struct DownloadPipeRequest {
 }
 
 #[derive(Deserialize)]
+struct DownloadPipePrivateRequest {
+    url: String,
+    pipe_name: String,
+    pipe_id: String,
+}
+
+#[derive(Deserialize)]
 struct RunPipeRequest {
     pipe_id: String,
 }
@@ -681,6 +692,35 @@ async fn download_pipe_handler(
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
     debug!("Downloading pipe: {}", payload.url);
     match state.pipe_manager.download_pipe(&payload.url).await {
+        Ok(pipe_dir) => Ok(JsonResponse(json!({
+            "data": {
+                "pipe_id": pipe_dir,
+                "message": "pipe downloaded successfully"
+            },
+            "success": true
+        }))),
+        Err(e) => {
+            error!("Failed to download pipe: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("failed to download pipe: {}", e),
+                    "success": false
+                })),
+            ))
+        }
+    }
+}
+
+async fn download_pipe_private_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
+) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
+    match state
+        .pipe_manager
+        .download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id)
+        .await
+    {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
             "data": {
                 "pipe_id": pipe_dir,
@@ -825,8 +865,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    vision_control: Arc<AtomicBool>,
-    audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+    device_manager: Arc<DeviceManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -842,8 +881,7 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        vision_control: Arc<AtomicBool>,
-        audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+        device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -856,8 +894,7 @@ impl Server {
         Server {
             db,
             addr,
-            vision_control,
-            audio_devices_tx,
+            device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -871,7 +908,6 @@ impl Server {
 
     pub async fn start<F>(
         self,
-        device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
         enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
@@ -880,9 +916,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            vision_control: self.vision_control,
-            audio_devices_tx: self.audio_devices_tx,
-            devices_status: device_status,
+            device_manager: self.device_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -1117,7 +1151,7 @@ async fn add_transcription_to_db(
 
     let device = AudioDevice {
         name: device_name.to_string(),
-        device_type: DeviceType::Input,
+        device_type: AudioDeviceType::Input,
     };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
@@ -1151,7 +1185,7 @@ pub(crate) async fn add_to_database(
                     let output_dir = state.screenpipe_dir.join("data");
                     let time = Utc::now();
                     let formatted_time = time.format("%Y-%m-%d_%H-%M-%S").to_string();
-                    let video_file_path = PathBuf::from(output_dir)
+                    let video_file_path = output_dir
                         .join(format!("{}_{}.mp4", device_name, formatted_time))
                         .to_str()
                         .expect("Failed to create valid path")
@@ -1658,7 +1692,7 @@ async fn sse_transcription_handler(
 pub struct AudioDeviceControlRequest {
     device_name: String,
     #[serde(default)]
-    device_type: Option<DeviceType>,
+    device_type: Option<AudioDeviceType>,
 }
 
 #[derive(Serialize)]
@@ -1674,7 +1708,7 @@ async fn start_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1699,11 +1733,12 @@ async fn start_audio_device(
     }
 
     let control = DeviceControl {
+        device: screenpipe_core::DeviceType::Audio(device.clone()),
         is_running: true,
         is_paused: false,
     };
 
-    let _ = state.audio_devices_tx.send((device.clone(), control));
+    let _ = state.device_manager.update_device(control).await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1717,7 +1752,7 @@ async fn stop_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1741,13 +1776,14 @@ async fn stop_audio_device(
         ));
     }
 
-    let _ = state.audio_devices_tx.send((
-        device.clone(),
-        DeviceControl {
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1854,6 +1890,90 @@ async fn semantic_search_handler(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct VisionDeviceControlRequest {
+    device_id: u32,
+}
+
+impl VisionDeviceControlRequest {
+    pub fn new(device_id: u32) -> Self {
+        Self { device_id }
+    }
+}
+
+#[derive(Serialize)]
+pub struct VisionDeviceControlResponse {
+    success: bool,
+    message: String,
+}
+
+async fn start_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("starting vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("starting vision device: {}", payload.device_id);
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: true,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("started vision device: {}", payload.device_id),
+    }))
+}
+
+async fn stop_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("stopping vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("stopping vision device: {}", payload.device_id);
+
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: false,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("stopped vision device: {}", payload.device_id),
+    }))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1867,7 +1987,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
     let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", post(api_list_monitors))
+        .route("/vision/list", get(api_list_monitors))
         .route(
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
@@ -1875,6 +1995,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
+        .route(
+            "/pipes/download-private",
+            post(download_pipe_private_handler),
+        )
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
@@ -1901,6 +2025,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/sse/vision", get(sse_vision_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
+        .route("/vision/start", post(start_vision_device))
+        .route("/vision/stop", post(stop_vision_device))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1931,6 +2057,43 @@ pub async fn get_frame_data(
                                 start_time.elapsed()
                             );
                             return serve_file(file_path).await;
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+
+    // Create a stream that will be used for both success and error cases
+    let stream = async_stream::stream! {
+        // Early validation of frame cache
+        let cache = match state.frame_cache.as_ref() {
+            Some(cache) => cache.clone(),
+            None => {
+                // error!("frame cache not initialized");
+                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
+                return;
+            }
+        };
+
+        // Calculate duration in minutes between start and end time
+        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
+
+        // Calculate center timestamp
+        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
+
+        // Use a cancellation token to handle client disconnection
+        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+
+        // Spawn frame extraction task using get_frames
+        tokio::spawn({
+            let frame_tx = frame_tx.clone();
+            async move {
+                tokio::select! {
+                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
+                        if let Err(e) = result {
+                            error!("frame extraction failed: {}", e);
+                            // Send error to client
+                            let _ = frame_tx.send(TimeSeriesFrame {
+                                timestamp: Utc::now(),
+                                frame_data: vec![],
+                                error: Some(format!("frame extraction failed: {}", e)),
+                            }).await;
                         }
                         cache.pop(&frame_id);
                     }

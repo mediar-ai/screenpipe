@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useUser } from "@/lib/hooks/use-user";
 import { toast } from "@/components/ui/use-toast";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import OnboardingNavigation from "./navigation";
@@ -22,7 +21,6 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
   handlePrevSlide,
   handleNextSlide,
 }) => {
-  const { user, loadUser } = useUser();
   const { settings, updateSettings } = useSettings();
 
   useEffect(() => {
@@ -68,7 +66,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
           <Coins className="w-4 h-4 text-muted-foreground" />
           <h4 className="text-sm font-medium">credits & usage</h4>
           <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-            {user?.credits?.amount || 0} available
+            {settings.user?.credits?.amount || 0} available
           </Badge>
         </div>
 
@@ -91,7 +89,6 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
               variant="secondary"
               size="sm"
               onClick={async () => {
-                await loadUser(settings.user?.token || "");
                 toast({ title: "key verified" });
                 handleNextSlide();
               }}

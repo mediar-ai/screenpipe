@@ -15,20 +15,16 @@ use xcap_macos::Monitor;
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum OcrEngine {
     Unstructured,
+    #[default]
     Tesseract,
     WindowsNative,
     AppleNative,
     Custom(CustomOcrConfig),
 }
 
-impl Default for OcrEngine {
-    fn default() -> Self {
-        OcrEngine::Tesseract
-    }
-}
 pub fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
     image.as_bytes().hash(&mut hasher);

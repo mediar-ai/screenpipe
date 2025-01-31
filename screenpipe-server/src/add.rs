@@ -29,6 +29,7 @@ use crate::{
     DatabaseManager,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_index_command(
     screenpipe_dir: PathBuf,
     path: String,
@@ -82,11 +83,8 @@ pub async fn handle_index_command(
     // Setup channel for OCR results
 
     // At the start of handle_index_command, if JSON output is selected, print the stream start
-    match output_format {
-        crate::cli::OutputFormat::Json => {
-            println!("{{\"version\":1,\"stream\":["); // Start of JSON stream
-        }
-        _ => {}
+    if output_format == crate::cli::OutputFormat::Json {
+        println!("{{\"version\":1,\"stream\":["); // Start of JSON stream
     }
 
     for video_path in video_files {
@@ -148,7 +146,7 @@ pub async fn handle_index_command(
         for (idx, frame) in frames.iter().enumerate() {
             // Compare with previous frame to skip similar ones
             let current_average = if let Some(prev) = &previous_image {
-                compare_with_previous_image(Some(prev), &frame, &mut None, idx as u64, &mut 0.0)
+                compare_with_previous_image(Some(prev), frame, &mut None, idx as u64, &mut 0.0)
                     .await?
             } else {
                 1.0
@@ -185,7 +183,7 @@ pub async fn handle_index_command(
             // Do OCR processing directly
             let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
                 #[cfg(target_os = "macos")]
-                OcrEngine::AppleNative => perform_ocr_apple(&frame, &[]),
+                OcrEngine::AppleNative => perform_ocr_apple(frame, &[]),
                 #[cfg(target_os = "windows")]
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
@@ -306,7 +304,7 @@ pub async fn handle_index_command(
 
 fn find_video_files(root: &str, pattern: Option<&str>) -> Result<Vec<PathBuf>> {
     let mut video_files = Vec::new();
-    let regex = pattern.map(|p| Regex::new(p)).transpose()?;
+    let regex = pattern.map(Regex::new).transpose()?;
 
     for entry in WalkDir::new(root)
         .follow_links(true)

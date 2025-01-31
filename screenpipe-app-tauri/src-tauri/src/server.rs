@@ -1,5 +1,6 @@
-use crate::{get_store, icons::AppIcon};
+use crate::{get_store, get_base_dir, icons::AppIcon};
 use axum::body::Bytes;
+use crate::{get_store, get_base_dir, icons::AppIcon};
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
 use axum::{
@@ -93,7 +94,6 @@ struct WindowSizePayload {
     height: f64,
 }
 
-#[cfg(not(target_os = "windows"))]
 async fn settings_stream(
     State(state): State<ServerState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
@@ -116,21 +116,17 @@ async fn settings_stream(
     )
 }
 
-#[cfg(target_os = "windows")]
-async fn settings_stream(State(_): State<ServerState>) -> (StatusCode, String) {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        "SSE not supported on Windows".to_string(),
-    )
-}
-
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
 
     #[cfg(not(target_os = "windows"))]
+pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
+    let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
-
     let app_handle_clone = app_handle.clone();
+    let base_dir =
+        get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+    let store_path = base_dir.join("store.bin");
 
     #[cfg(not(target_os = "windows"))]
     {
@@ -156,18 +152,18 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
             }
         }
 
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(event) = res {
-                if event.kind.is_modify() {
-                    if let Ok(store) = get_store(&app_handle_clone, None) {
-                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
-                            let _ = settings_tx_clone.send(settings);
-                        }
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() {
+                if let Ok(store) = get_store(&app_handle_clone, None) {
+                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                        let _ = settings_tx_clone.send(settings);
                     }
                 }
             }
-        })
-        .unwrap();
+        }
+    })
+    .unwrap();
 
         // Only watch if the file exists
         if store_path.exists() {
@@ -178,6 +174,9 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
                 });
         }
     }
+    watcher
+        .watch(&store_path, RecursiveMode::NonRecursive)
+        .unwrap();
 
     let state = ServerState {
         app_handle,
@@ -361,35 +360,6 @@ async fn get_app_icon_handler(
         ))
     }
 }
-
-//async fn get_app_icon_handler(
-//    State(_): State<ServerState>,
-//    Query(app_name): Query<AppIconQuery>,
-//) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
-//    info!("received app icon request: {:?}", app_name);
-//
-//    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-//    {
-//        match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-//            Ok(icon) => Ok(Json(icon)),
-//            Err(e) => {
-//                error!("failed to get app icon: {}", e);
-//                Err((
-//                    StatusCode::INTERNAL_SERVER_ERROR,
-//                    format!("failed to get app icon: {}", e),
-//                ))
-//            }
-//        }
-//    }
-//
-//    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-//    {
-//        Err((
-//            StatusCode::NOT_IMPLEMENTED,
-//            "app icon retrieval not supported on this platform".to_string(),
-//        ))
-//    }
-//}
 
 async fn set_window_size(
     State(state): State<ServerState>,
