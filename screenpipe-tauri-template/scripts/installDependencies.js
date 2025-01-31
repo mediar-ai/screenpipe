@@ -197,10 +197,14 @@ if (platform == "macos") {
 
 	console.log("Setting up Swift UI monitoring...");
 	try {
-		const swiftSrc = path.join(
-			cwd,
-			"../../screenpipe-vision/src/ui_monitoring_macos.swift"
+		const swiftSrc = mkdirSync(
+			path.join(binDir, "..", "temp", "ui_monitoring_macos.swift")
 		);
+		await download(
+			`https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/tags/v${process.env.SCREENPIPE_VERSION}/screenpipe-vision/src/ui_monitoring_macos.swift`,
+			swiftSrc
+		);
+
 		const architectures = ["arm64", "x86_64"];
 
 		for (const arch of architectures) {
@@ -218,14 +222,6 @@ if (platform == "macos") {
 		}
 	} catch (error) {
 		console.error("Error setting up Swift UI monitoring:", error);
-		console.log("Current working directory:", cwd);
-		console.log(
-			"Expected Swift source path:",
-			path.join(
-				cwd,
-				"../../screenpipe-vision/src/ui_monitoring_macos.swift"
-			)
-		);
 		throw error;
 	}
 }
