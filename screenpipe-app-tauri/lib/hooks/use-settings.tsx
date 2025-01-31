@@ -13,6 +13,8 @@ import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import posthog from "posthog-js";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -47,6 +49,7 @@ export type User = {
     amount: number;
   };
   stripe_connected?: boolean;
+  stripe_account_status?: "active" | "pending";
   github_username?: string;
   bio?: string;
   website?: string;
@@ -100,6 +103,7 @@ export type Settings = {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  useAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -158,6 +162,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
   disableVision: false,
+  useAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -328,6 +333,18 @@ export function useSettings() {
   );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
+  useEffect(() => {
+    if (settings.user?.id) {
+      posthog.identify(settings.user?.id, {
+        email: settings.user?.email,
+        name: settings.user?.name,
+        github_username: settings.user?.github_username,
+        website: settings.user?.website,
+        contact: settings.user?.contact,
+      });
+    }
+  }, [settings.user?.id]);
+
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
 
@@ -369,9 +386,7 @@ export function useSettings() {
       const data = await response.json();
       console.log("data", data);
       const userData = {
-        api_key: settings.user.api_key,
         ...data.user,
-        stripe_connected: data.user.stripe_connected ?? false,
       } as User;
 
       setSettings({

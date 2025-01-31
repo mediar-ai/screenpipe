@@ -1,7 +1,7 @@
 use crate::{
-    deepgram::CUSTOM_DEEPGRAM_API_TOKEN, realtime::RealtimeTranscriptionEvent, AudioStream,
+    deepgram::CUSTOM_DEEPGRAM_API_TOKEN, deepgram::DEEPGRAM_WEBSOCKET_URL,
+    realtime::RealtimeTranscriptionEvent, AudioStream,
 };
-use crate::{AudioDevice, DeviceType};
 use anyhow::Result;
 use bytes::BufMut;
 use bytes::Bytes;
@@ -11,6 +11,8 @@ use deepgram::common::options::Encoding;
 use deepgram::common::stream_response::StreamResponse;
 use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
+use screenpipe_core::AudioDevice;
+use screenpipe_core::AudioDeviceType;
 use screenpipe_core::Language;
 use screenpipe_events::send_event;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -50,7 +52,12 @@ pub async fn start_deepgram_stream(
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
-    let deepgram = deepgram::Deepgram::new(api_key)?;
+    let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
+        true => deepgram::Deepgram::new(api_key)?,
+        false => {
+            deepgram::Deepgram::with_base_url_and_api_key(DEEPGRAM_WEBSOCKET_URL.as_str(), api_key)?
+        }
+    };
 
     let deepgram_transcription = deepgram.transcription();
 
@@ -117,7 +124,7 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
     {
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
-        let is_input = device.device_type == DeviceType::Input;
+        let is_input = device.device_type == AudioDeviceType::Input;
 
         if !text.is_empty() {
             let _ = send_event(
