@@ -323,7 +323,7 @@ export default Sentry.withSentry(
 				const path = url.pathname;
 
 				// Add auth check for protected routes
-				if (path === '/test') {
+				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
 					console.log('authHeader', authHeader);
 					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
