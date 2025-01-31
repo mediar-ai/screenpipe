@@ -331,6 +331,16 @@ pub enum Command {
     },
     /// Run database migrations
     Migrate,
+    /// Run system diagnostics and health checks
+    Doctor {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        
+        /// Fix issues automatically when possible
+        #[arg(short, long, default_value_t = false)]
+        fix: bool,
+    },
 }
 
 

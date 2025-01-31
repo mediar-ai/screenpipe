@@ -408,6 +408,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
             );
+            c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev/v1/listen");
             // Add token if screenpipe-cloud is selected and user has a token
             if user.id.is_some() {
                 c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
@@ -440,6 +441,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             "DEEPGRAM_API_URL",
             "https://ai-proxy.i-f9f.workers.dev/v1/listen",
         );
+        c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev/v1/listen");
         // Add token if screenpipe-cloud is selected and user has a token
         if user.id.is_some() {
             c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());

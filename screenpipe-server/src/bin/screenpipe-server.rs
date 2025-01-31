@@ -189,6 +189,10 @@ async fn main() -> anyhow::Result<()> {
             output: OutputFormat::Text,
             ..
         }) => true,
+        Some(Command::Doctor {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -336,6 +340,10 @@ async fn main() -> anyhow::Result<()> {
                     use_embedding,
                 )
                 .await?;
+                return Ok(());
+            }
+            Command::Doctor { output, fix } => {
+                handle_doctor_command(output, fix).await?;
                 return Ok(());
             }
         }
@@ -1615,6 +1623,96 @@ async fn check_ffmpeg() -> anyhow::Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+async fn handle_doctor_command(output: OutputFormat, fix: bool) -> anyhow::Result<()> {
+    let mut checks = Vec::new();
+
+    // Check ffmpeg
+    let ffmpeg_status = match find_ffmpeg_path() {
+        Some(path) => ("ffmpeg", true, format!("found at {}", path.display())),
+        None => ("ffmpeg", false, "not found in PATH".to_string()),
+    };
+    checks.push(ffmpeg_status);
+
+    // Check data directory
+    let data_dir = get_base_dir(&None)?;
+    let data_dir_status = (
+        "data directory",
+        data_dir.exists(),
+        format!("{}", data_dir.display()),
+    );
+    checks.push(data_dir_status);
+
+    // Check database
+    let db_path = data_dir.join("db.sqlite");
+    let db_exists = db_path.exists();
+    let db_status = ("database", db_exists, format!("{}", db_path.display()));
+    checks.push(db_status);
+
+    // Check audio devices
+    let audio_devices = match list_audio_devices().await {
+        Ok(devices) => {
+            let count = devices.len();
+            (
+                "audio devices",
+                count > 0,
+                format!("{} devices found", count),
+            )
+        }
+        Err(e) => ("audio devices", false, format!("error: {}", e)),
+    };
+    checks.push(audio_devices);
+
+    // Check monitors
+    let monitors = list_monitors().await;
+    let monitor_status = (
+        "monitors",
+        !monitors.is_empty(),
+        format!("{} found", monitors.len()),
+    );
+    checks.push(monitor_status);
+
+    // Output results
+    match output {
+        OutputFormat::Json => {
+            let json = serde_json::json!({
+                "checks": checks.iter().map(|(name, status, msg)| {
+                    serde_json::json!({
+                        "name": name,
+                        "status": status,
+                        "message": msg,
+                    })
+                }).collect::<Vec<_>>(),
+                "healthy": checks.iter().all(|(_, status, _)| *status),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        OutputFormat::Text => {
+            println!("\n🔍 screenpipe system diagnostics\n");
+
+            for (name, status, msg) in &checks {
+                let symbol = if *status { "✅" } else { "❌" };
+                println!("{} {}: {}", symbol, name, msg);
+            }
+
+            if fix {
+                println!("\n🔧 attempting to fix issues...");
+                // Add auto-fix logic here if needed
+                let db = DatabaseManager::new(&db_path.to_string_lossy()).await?;
+                db.repair_database().await?;
+            }
+
+            let healthy = checks.iter().all(|(_, status, _)| *status);
+            println!(
+                "\n{} overall health: {}\n",
+                if healthy { "✅" } else { "❌" },
+                if healthy { "healthy" } else { "issues found" }
+            );
+        }
     }
 
     Ok(())
