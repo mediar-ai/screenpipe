@@ -99,7 +99,9 @@ export interface BrowserPipe {
     name: string,
     properties?: Record<string, any>
   ) => Promise<void>;
-  streamEvents(): AsyncGenerator<EventStreamResponse, void, unknown>;
+  streamEvents(
+    includeImages: boolean
+  ): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
 class BrowserPipeImpl implements BrowserPipe {
