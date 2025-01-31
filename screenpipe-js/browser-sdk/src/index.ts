@@ -47,7 +47,7 @@ async function* wsEvents(
 
   while (true) {
     const event: MessageEvent = await new Promise((resolve) => {
-      ws!.onmessage = (ev: MessageEvent) => resolve(ev);
+      ws!.addEventListener("message", (ev: MessageEvent) => resolve(ev));
     });
     yield JSON.parse(event.data);
   }
