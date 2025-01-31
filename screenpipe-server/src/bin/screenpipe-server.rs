@@ -351,7 +351,6 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             Command::Completions { .. } => todo!(),
-
         }
     }
 
