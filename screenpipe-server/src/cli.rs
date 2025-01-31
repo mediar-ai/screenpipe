@@ -1,8 +1,7 @@
 use std::path::PathBuf;
-use std::io::{self, IsTerminal};
 
-use clap::{Parser, Subcommand, CommandFactory};
-use clap_complete_command::Shell;
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
@@ -153,7 +152,7 @@ pub struct Cli {
     pub list_audio_devices: bool,
 
     /// Data directory. Default to $HOME/.screenpipe
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
 
     /// Enable debug logging for screenpipe modules
@@ -291,34 +290,8 @@ impl Cli {
 
     pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
         let mut cmd = Self::command();
-        
-        // Check for terminal output
-        if io::stdout().is_terminal() {
-            let shell_instructions = match shell {
-                Shell::Bash => 
-                    "For Bash:\n\
-                    1. Generate: `screenpipe completions bash >> ~/.bashrc`\n\
-                    2. Reload profile: `source ~/.bashrc`",
-                Shell::Zsh => 
-                    "For Zsh:\n\
-                    1. Generate: `screenpipe completions zsh >> ~/.zshrc`\n\
-                    2. Reload profile: `source ~/.zshrc`",
-                Shell::Fish => 
-                    "For Fish:\n\
-                    1. Generate: `screenpipe completions fish > ~/.config/fish/completions/screenpipe.fish`",
-                Shell::PowerShell => 
-                    "For PowerShell:\n\
-                    1. Generate: `screenpipe completions powershell >> $PROFILE`\n\
-                    2. Reload profile: `. $PROFILE`",
-                _ => anyhow::bail!("Unsupported shell type"),
-            };
-            
-            anyhow::bail!("Completions must be redirected to a file.\n{}", shell_instructions);
-        }
-        
-        // Generate completions
-        shell.generate(&mut cmd, &mut std::io::stdout());
-        
+        generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
+         
         Ok(())
     }
 }
@@ -335,7 +308,7 @@ pub enum Command {
         /// Path to folder containing video files
         path: String,
         /// Data directory. Default to $HOME/.screenpipe
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         data_dir: Option<String>,
         /// Output format
         #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
@@ -347,7 +320,7 @@ pub enum Command {
         #[arg(short = 'o', long, value_enum)]
         ocr_engine: Option<CliOcrEngine>,
         /// Path to JSON file containing metadata overrides
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::FilePath)]
         metadata_override: Option<PathBuf>,
         /// Copy videos to screenpipe data directory
         #[arg(long, default_value_t = true)]
@@ -365,8 +338,8 @@ pub enum Command {
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
     },
-    /// Generate shell completions
-    Completions {
+     /// Generate shell completions
+     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,

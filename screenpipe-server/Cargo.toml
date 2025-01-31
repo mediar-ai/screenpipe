@@ -70,7 +70,7 @@ sysinfo = "0.29.0"
 colored = "2.0"
 
 # Completions
-clap_complete_command = "0.6.1"
+clap_complete = "4.2"
 
 # Plugins
 tower = { version = "0.5", features = ["util"] }
