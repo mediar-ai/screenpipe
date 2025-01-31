@@ -803,24 +803,6 @@ async fn main() {
                         // Kill all pipes before quitting
                         let app_handle_clone = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Ok(response) = list_pipes().await {
-                                if let Some(pipes) = response["data"].as_array() {
-                                    for pipe in pipes {
-                                        if pipe["enabled"].as_bool().unwrap_or(false) {
-                                            if let Some(id) = pipe["id"].as_str() {
-                                                let _ = reqwest::Client::new()
-                                                    .post("http://localhost:3030/pipes/disable")
-                                                    .json(&serde_json::json!({
-                                                        "pipe_id": id
-                                                    }))
-                                                    .send()
-                                                    .await;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
                             if let Err(e) =
