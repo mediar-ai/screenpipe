@@ -182,7 +182,7 @@ export default function Timeline() {
 
 					// Calculate scroll intensity based on absolute delta
 					const scrollIntensity = Math.abs(e.deltaY);
-					const direction = Math.sign(e.deltaY);
+					const direction = -Math.sign(e.deltaY);
 
 					// Change this if you want limit the index change
 					const limitIndexChange = 15;
