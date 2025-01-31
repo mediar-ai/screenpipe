@@ -1,68 +1,10 @@
-// app/api/settings/route.ts
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import os from "os";
-// Force Node.js runtime
-export const runtime = "nodejs"; // Add this line
+
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const DEFAULT_INTERVAL_MINUTES = 5;
-
-function getAppDataDir(): string {
-  const homeDir = os.homedir();
-  return path.join(homeDir, ".screenpipe");
-}
-
-async function updateCronSchedule(intervalMinutes: number) {
-  try {
-    const screenpipeDir = process.env.SCREENPIPE_DIR || getAppDataDir();
-    const pipeConfigPath = path.join(
-      screenpipeDir,
-      "pipes",
-      "obsidian",
-      "pipe.json"
-    );
-
-    console.log(`updating cron schedule at: ${pipeConfigPath}`);
-
-    // Load or initialize both configs
-    let config: any = {};
-
-    try {
-      const content = await fs.readFile(pipeConfigPath, "utf8");
-      config = JSON.parse(content);
-    } catch (err) {
-      console.log(
-        `no existing config found, creating new one at ${pipeConfigPath}`
-      );
-      config = { crons: [] };
-    }
-
-    // Update cron config
-    config.crons = [
-      {
-        path: "/api/log",
-        schedule: `0 */${intervalMinutes} * * * *`,
-      },
-      {
-        path: "/api/intelligence",
-        schedule: "0 0 */1 * * *",
-      },
-    ];
-    config.enabled = config.enabled ?? true;
-    config.is_nextjs = config.is_nextjs ?? true;
-
-    await fs.writeFile(pipeConfigPath, JSON.stringify(config, null, 2));
-    console.log(
-      `updated cron schedule to run every ${intervalMinutes} minutes`
-    );
-  } catch (err) {
-    console.error("failed to update cron schedule:", err);
-    throw err;
-  }
-}
 
 export async function GET() {
   try {
@@ -72,12 +14,12 @@ export async function GET() {
     }
 
     // Load persisted settings if they exist
-    const screenpipeDir = process.env.SCREENPIPE_DIR || getAppDataDir();
+    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
     const settingsPath = path.join(
       screenpipeDir,
       "pipes",
       "obsidian",
-      "settings.json"
+      "pipe.json"
     );
 
     try {
@@ -86,13 +28,12 @@ export async function GET() {
 
       // Merge with current settings
       const rawSettings = await settingsManager.getAll();
-      console.log("rawSettings", rawSettings);
       return NextResponse.json({
         ...rawSettings,
         customSettings: {
           ...rawSettings.customSettings,
-          obsidian: {
-            ...(rawSettings.customSettings?.obsidian || {}),
+          ["obsidian"]: {
+            ...(rawSettings.customSettings?.["obsidian"] || {}),
             ...persistedSettings,
           },
         },
@@ -121,22 +62,11 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { key, value, isPartialUpdate, reset, namespace } = body;
 
-    // Handle obsidian namespace updates
-    if (namespace === "obsidian" && isPartialUpdate) {
-      // Use provided interval or default
-      const intervalMs = value.interval || DEFAULT_INTERVAL_MINUTES * 60000;
-      const intervalMinutes = Math.max(1, Math.floor(intervalMs / 60000));
-      await updateCronSchedule(intervalMinutes);
-      console.log(`setting interval to ${intervalMinutes} minutes`);
-    }
-
     if (reset) {
       if (namespace) {
         if (key) {
-          // Reset single key in namespace
           await settingsManager.setCustomSetting(namespace, key, undefined);
         } else {
-          // Reset entire namespace
           await settingsManager.updateNamespaceSettings(namespace, {});
         }
       } else {

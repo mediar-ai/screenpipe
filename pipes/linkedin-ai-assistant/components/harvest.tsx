@@ -92,6 +92,13 @@ function getStatusStyle(status: HarvestingStatus): string {
   }
 }
 
+// Add this helper function
+function formatDuration(milliseconds: number): string {
+  const minutes = Math.floor(milliseconds / 60000);
+  const seconds = Math.floor((milliseconds % 60000) / 1000);
+  return `${minutes}m ${seconds}s`;
+}
+
 export function HarvestClosestConnections() {
   const [harvestingStatus, setHarvestingStatus] = useState<HarvestingStatus>('stopped');
   const [status, setStatus] = useState<string | JSX.Element>("");
@@ -118,6 +125,10 @@ export function HarvestClosestConnections() {
     reason?: string;
   } | null>(null);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  // Add new state for cycle duration
+  const [cycleStartTime, setCycleStartTime] = useState<number | null>(null);
+  const [cycleDuration, setCycleDuration] = useState<string>('');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // Load initial state with status only
@@ -127,9 +138,17 @@ export function HarvestClosestConnections() {
         if (!res.ok) return;
         
         const data = await res.json();
-        console.log('initial state data:', data);
+        console.log('initial state loaded:', {
+          harvestingStatus: data.harvestingStatus,
+          nextHarvestTime: data.nextHarvestTime,
+          now: new Date().toISOString(),
+          timeUntil: data.nextHarvestTime ? 
+            Math.floor((new Date(data.nextHarvestTime).getTime() - Date.now()) / 1000 / 60) + 'm' 
+            : 'none'
+        });
         
         setHarvestingStatus(data.harvestingStatus || 'stopped');
+        setNextHarvestTime(data.nextHarvestTime);
         setConnectionsSent(data.connectionsSent || 0);
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
@@ -170,13 +189,66 @@ export function HarvestClosestConnections() {
     loadInitialState();
   }, []);
 
+  // Auto-restart effect
+  useEffect(() => {
+    console.log('auto-restart effect triggered:', {
+      harvestingStatus,
+      nextHarvestTime,
+      now: new Date().toISOString()
+    });
+
+    if (!nextHarvestTime) {
+      console.log('no next harvest time set');
+      return;
+    }
+    
+    if (harvestingStatus !== 'cooldown') {
+      console.log('status is not cooldown:', harvestingStatus);
+      return;
+    }
+
+    const timeUntilNextHarvest = new Date(nextHarvestTime).getTime() - Date.now();
+    console.log('time until next harvest:', {
+      nextHarvestTime,
+      timeUntilNextHarvest: Math.floor(timeUntilNextHarvest / 1000 / 60) + 'm',
+      status: harvestingStatus
+    });
+
+    if (timeUntilNextHarvest <= 0) {
+      console.log('harvest time already passed, starting now');
+      startHarvesting();
+      return;
+    }
+
+    console.log('scheduling ui auto-restart after cooldown');
+    const timer = setTimeout(() => {
+      console.log('cooldown finished, auto-restarting harvest from ui');
+      startHarvesting();
+    }, timeUntilNextHarvest);
+
+    return () => clearTimeout(timer);
+  }, [nextHarvestTime, harvestingStatus]);
+
   // Stats polling stats, load connections
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/harvest/stats");  // Changed from /api/harvest/stats
+        const res = await fetch("/api/harvest/stats");
         if (!res.ok) return;
         const data = await res.json();
+        
+        console.log('polling received data:', {
+          statusMessage: data.statusMessage,
+          harvestingStatus: data.harvestingStatus,
+          isAlive: data.isAlive
+        });
+        
+        // Check if process is alive via heartbeat
+        if (data.harvestingStatus === 'running' && !data.isAlive) {
+          console.log('detected dead harvest process');
+          setHarvestingStatus('stopped');
+          return;
+        }
         
         // Update both stats and status
         if (data.stats) {
@@ -187,6 +259,14 @@ export function HarvestClosestConnections() {
         }
         if (data.nextHarvestTime) {
           setNextHarvestTime(data.nextHarvestTime);
+        }
+        if (typeof data.connectionsSent === 'number') {
+          setConnectionsSent(data.connectionsSent);
+        }
+        // Add debug before setting status message
+        if (data.statusMessage) {
+          console.log('setting status message:', data.statusMessage);
+          setStatusMessage(data.statusMessage);
         }
       } catch (error) {
         console.error("failed to fetch status:", error);
@@ -226,11 +306,35 @@ export function HarvestClosestConnections() {
     }
   }, [stats.withdrawStatus?.isWithdrawing]);
 
+  // Add effect to track running time
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (harvestingStatus === 'running') {
+      if (!cycleStartTime) {
+        setCycleStartTime(Date.now());
+      }
+      
+      interval = setInterval(() => {
+        if (cycleStartTime) {
+          setCycleDuration(formatDuration(Date.now() - cycleStartTime));
+        }
+      }, 1000);
+    } else {
+      setCycleStartTime(null);
+      setCycleDuration('');
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [harvestingStatus, cycleStartTime]);
+
   // Simplify the updateConnectionsStatus function
   const updateConnectionsStatus = async () => {
     try {
       if (isWithdrawing) {
-        // Stop withdrawal process
+        setIsRefreshing(true); // Start spinner immediately
         const response = await fetch("/api/harvest/withdraw-connections", { 
           method: "POST"
         });
@@ -239,20 +343,22 @@ export function HarvestClosestConnections() {
         }
         console.log('withdrawal stopped successfully');
         setIsWithdrawing(false);
-        return;
-      }
-      
-      // Start withdrawal process
-      console.log('starting withdrawal process');
-      setIsWithdrawing(true);
-      const withdrawRes = await fetch("/api/harvest/withdraw-connections?start=true");
-      if (!withdrawRes.ok) {
-        console.error('failed to start withdrawal');
-        setIsWithdrawing(false);
+      } else {
+        // Start withdrawal process
+        console.log('starting withdrawal process');
+        setIsRefreshing(true); // Start spinner immediately
+        setIsWithdrawing(true);
+        const withdrawRes = await fetch("/api/harvest/withdraw-connections?start=true");
+        if (!withdrawRes.ok) {
+          console.error('failed to start withdrawal');
+          setIsWithdrawing(false);
+        }
       }
     } catch (error) {
       console.error("failed to update/withdraw connections:", error);
       setIsWithdrawing(false);
+    } finally {
+      setIsRefreshing(false); // Always stop spinner when done
     }
   };
 
@@ -272,7 +378,7 @@ export function HarvestClosestConnections() {
 
       if (response.ok) {
         setStatus(data.message?.toLowerCase() || 'unknown status');
-        setConnectionsSent(data.connectionsSent || 0);
+        setConnectionsSent(data.connectionsSent || 0); // Update from response
         setDailyLimitReached(data.dailyLimitReached || false);
         setWeeklyLimitReached(data.weeklyLimitReached || false);
         setHarvestingStatus(data.harvestingStatus);
@@ -376,11 +482,16 @@ export function HarvestClosestConnections() {
                       <span>weekly limit reached, next harvest at</span>
                       <span className="font-medium">{formatDateTime(nextHarvestTime)}</span>
                     </span>
-                  : harvestingStatus === 'running'
-                    ? connectionsSent > 0 
-                      ? `sent ${connectionsSent} connections` 
-                      : ''
-                    : status}
+                  : statusMessage
+                    ? <span className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-gray-500" />
+                        <span>{statusMessage.toLowerCase()}</span>
+                      </span>
+                    : harvestingStatus === 'running'
+                      ? connectionsSent > 0 
+                        ? `sent ${connectionsSent} connections in ${cycleDuration}` 
+                        : cycleDuration ? `running for ${cycleDuration}` : ''
+                      : ''}
           </span>
         )}
         {restrictionInfo?.isRestricted && restrictionInfo?.reason && (

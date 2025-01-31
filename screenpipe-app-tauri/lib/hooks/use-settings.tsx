@@ -12,6 +12,9 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import posthog from "posthog-js";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -41,10 +44,17 @@ export type User = {
   image?: string;
   token?: string;
   clerk_id?: string;
+  api_key?: string;
   credits?: {
     amount: number;
   };
   stripe_connected?: boolean;
+  stripe_account_status?: "active" | "pending";
+  github_username?: string;
+  bio?: string;
+  website?: string;
+  contact?: string;
+  cloud_subscribed?: boolean;
 };
 
 export type Settings = {
@@ -93,6 +103,7 @@ export type Settings = {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  useAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -151,6 +162,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
   disableVision: false,
+  useAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -321,6 +333,18 @@ export function useSettings() {
   );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
+  useEffect(() => {
+    if (settings.user?.id) {
+      posthog.identify(settings.user?.id, {
+        email: settings.user?.email,
+        name: settings.user?.name,
+        github_username: settings.user?.github_username,
+        website: settings.user?.website,
+        contact: settings.user?.contact,
+      });
+    }
+  }, [settings.user?.id]);
+
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
 
@@ -341,10 +365,43 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
+  const loadUser = async (token: string) => {
+    try {
+      const BASE_URL =
+        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+        "https://screenpi.pe";
+
+      const response = await fetch(`https://screenpi.pe/api/user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("failed to verify token");
+      }
+
+      const data = await response.json();
+      console.log("data", data);
+      const userData = {
+        ...data.user,
+      } as User;
+
+      setSettings({
+        user: userData,
+      });
+    } catch (err) {
+      console.error("failed to load user:", err);
+    }
+  };
+
   return {
     settings,
     updateSettings: setSettings,
     resetSettings,
+    loadUser,
     resetSetting,
     getDataDir,
   };

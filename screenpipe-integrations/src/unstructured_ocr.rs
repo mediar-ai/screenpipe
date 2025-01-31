@@ -55,7 +55,7 @@ pub async fn perform_ocr_cloud(
             TESSERACT_LANGUAGES
                 .iter()
                 .filter_map(|(key, val)| {
-                    if let Some(_) = languages.iter().find(|l| l == &val) {
+                    if languages.iter().any(|l| l == val) {
                         Some(key.to_string())
                     } else {
                         None
@@ -104,7 +104,7 @@ pub async fn perform_ocr_cloud(
     Ok((text, json_output, Some(overall_confidence)))
 }
 
-fn calculate_overall_confidence(parsed_response: &Vec<HashMap<String, serde_json::Value>>) -> f64 {
+fn calculate_overall_confidence(parsed_response: &[HashMap<String, serde_json::Value>]) -> f64 {
     let confidence_sum: f64 = parsed_response
         .iter()
         .filter_map(|item| item.get("confidence").and_then(|v| v.as_f64()))
@@ -152,11 +152,9 @@ pub async fn unstructured_chunking(text: &str) -> Result<Vec<String>> {
                 .essence_str()
                 .to_owned();
 
-            let part = Part::bytes(bytes)
+            Part::bytes(bytes)
                 .file_name(file_name)
-                .mime_str(&mime_type)?;
-
-            part
+                .mime_str(&mime_type)?
         })
         .text("chunking_strategy", "by_similarity")
         .text("similarity_threshold", "0.5")

@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-
 import { debounce } from "lodash";
-
 
 interface HealthCheckResponse {
   status: string;
@@ -48,7 +46,6 @@ export function useHealthCheck() {
   const healthRef = useRef(health);
 
   const fetchHealth = useCallback(async () => {
-
     try {
       setIsLoading(true);
       const response = await fetch("http://localhost:3030/health", {
@@ -73,31 +70,24 @@ export function useHealthCheck() {
 
       setIsServerDown(false);
     } catch (error) {
-      if (error instanceof Error) {
-        setIsServerDown(true);
-        return;
-      }
-
-      if (!isServerDown) {
-        setIsServerDown(true);
-        const errorHealth: HealthCheckResponse = {
-          last_frame_timestamp: null,
-          last_audio_timestamp: null,
-          last_ui_timestamp: null,
-          frame_status: "error",
-          audio_status: "error",
-          ui_status: "error",
-          status: "error",
-          status_code: 500,
-          message: "Failed to fetch health status. Server might be down.",
-        };
-        setHealth(errorHealth);
-        healthRef.current = errorHealth;
-      }
+      setIsServerDown(true);
+      const errorHealth: HealthCheckResponse = {
+        last_frame_timestamp: null,
+        last_audio_timestamp: null,
+        last_ui_timestamp: null,
+        frame_status: "error",
+        audio_status: "error",
+        ui_status: "error",
+        status: "error",
+        status_code: 500,
+        message: "Failed to fetch health status. Server might be down.",
+      };
+      setHealth(errorHealth);
+      healthRef.current = errorHealth;
     } finally {
       setIsLoading(false);
     }
-  }, [isServerDown, setIsLoading]);
+  }, []);
 
   const debouncedFetchHealth = useCallback(debounce(fetchHealth, 200), [
     fetchHealth,

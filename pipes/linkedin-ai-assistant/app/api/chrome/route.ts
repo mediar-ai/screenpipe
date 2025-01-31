@@ -4,13 +4,10 @@ import { promisify } from 'util';
 import { quitBrowser } from '@/lib/browser-setup';
 import os from 'os';
 import { ChromeSession } from '@/lib/chrome-session';
+import { RouteLogger } from '@/lib/route-logger';
 // import { pipe } from "@screenpipe/js";
 
-const logs: string[] = [];
-const addLog = (msg: string) => {
-  console.log(msg);
-  logs.push(`${new Date().toISOString()} - ${msg}`);
-};
+const logger = new RouteLogger('chrome-route');
 
 export const runtime = 'nodejs'; // specify node runtime
 
@@ -21,7 +18,7 @@ function getChromePath() {
   switch (os.platform()) {
     case "darwin": {
       const isArm = os.arch() === 'arm64';
-      addLog(`mac architecture: ${os.arch()}`);
+      logger.log(`mac architecture: ${os.arch()}`);
       return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
     }
     case "linux":
@@ -42,18 +39,18 @@ function getScreenDimensions(requestDims?: ScreenDimensions) {
     const defaultDims = { width: 2560, height: 1440 };
     
     if (requestDims) {
-        addLog(`using client screen dimensions: ${requestDims.width}x${requestDims.height}`);
+        logger.log(`using client screen dimensions: ${requestDims.width}x${requestDims.height}`);
         return requestDims;
     }
     
-    addLog(`no dimensions provided, using defaults: ${defaultDims.width}x${defaultDims.height}`);
+    logger.log(`no dimensions provided, using defaults: ${defaultDims.width}x${defaultDims.height}`);
     return defaultDims;
 }
 
 export async function POST(request: Request) {
   try {
-    addLog('chrome route: starting POST request');
-    
+    logger.log('starting POST request');
+
     // Get dimensions from request first
     const body = await request.json();
     const screenDims = getScreenDimensions(body.screenDims);
@@ -77,96 +74,120 @@ export async function POST(request: Request) {
       '--disable-site-isolation-trials',
     ].flat();
     // Log environment info
-    addLog(`environment: ${process.env.NODE_ENV}`);
-    addLog(`current platform: ${os.platform()}`);
-    addLog(`system architecture: ${os.arch()}`);
-    addLog(`cpu info: ${JSON.stringify(os.cpus()[0], null, 2)}`);
+    logger.log(`environment: ${process.env.NODE_ENV}`);
+    logger.log(`current platform: ${os.platform()}`);
+    logger.log(`system architecture: ${os.arch()}`);
+    logger.log(`cpu info: ${JSON.stringify(os.cpus()[0], null, 2)}`);
 
-    addLog("attempting to launch chrome");
-    addLog("killing existing chrome instances...");
-    await quitChrome();
-    await quitBrowser(logs);
-
-    const chromePath = getChromePath();
-    addLog(`using chrome path: ${chromePath}`);
-    addLog(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
-
-    addLog("spawning chrome with debugging port 9222...");
-    const isArmMac = os.platform() === 'darwin' && os.arch() === 'arm64';
-    const spawnCommand = isArmMac ? 'arch' : chromePath;
-    const spawnArgs = isArmMac ? [
-      '-arm64',
-      chromePath,
-      ...additionalFlags
-    ] : [
-      ...additionalFlags
-    ];
-
-    const chromeProcess = spawn(spawnCommand, spawnArgs, { 
-      detached: true, 
-      stdio: 'ignore' 
-    });
-
-    chromeProcess.unref();
-    addLog("chrome process spawned and detached");
-
-    addLog("waiting for chrome to initialize...");
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    let attempts = 0;
-    const maxAttempts = 5;
-    addLog(`attempting to connect to debug port (max ${maxAttempts} attempts)`);
-
-    while (attempts < maxAttempts) {
-      try {
-        addLog(`connection attempt ${attempts + 1}/${maxAttempts}`);
-        const response = await fetch('http://127.0.0.1:9222/json/version');
-        const data = await response.json();
-        
-        if (response.ok && data.webSocketDebuggerUrl) {
-          addLog('chrome debug port responding');
-          const wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
-          addLog(`websocket url: ${wsUrl}`);
-          ChromeSession.getInstance().setWsUrl(wsUrl);
-          
-          return NextResponse.json({ 
-            success: true,
-            wsUrl,
-            logs
-          });
-        }
-      } catch (err) {
-        addLog(`attempt ${attempts + 1} failed: ${err}`);
+    logger.log("checking for existing chrome instance...");
+    let wsUrl: string | null = null;
+    try {
+      const response = await fetch('http://127.0.0.1:9222/json/version');
+      if (response.ok) {
+        const data = await response.json() as { webSocketDebuggerUrl: string };
+        wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+        logger.log(`found existing chrome instance at ${wsUrl}`);
+      } else {
+        logger.log('no existing chrome instance found, launching a new one');
       }
-      attempts++;
-      addLog(`waiting 1s before retry ${attempts}/${maxAttempts}`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      logger.error(`error checking for existing chrome instance: ${error}`);
+      logger.log('launching a new chrome instance');
     }
-    
-    throw new Error('failed to connect to chrome debug port after all attempts');
+
+    if (!wsUrl) {
+      logger.log("attempting to launch chrome");
+      logger.log("killing existing chrome instances...");
+      await quitChrome(); // only kill if we are about to launch a new one
+      await quitBrowser(logger);
+
+      const chromePath = getChromePath();
+      logger.log(`using chrome path: ${chromePath}`);
+      logger.log(`checking if chrome exists: ${require('fs').existsSync(chromePath)}`);
+
+      logger.log("spawning chrome with debugging port 9222...");
+      const isArmMac = os.platform() === 'darwin' && os.arch() === 'arm64';
+      const spawnCommand = isArmMac ? 'arch' : chromePath;
+      const spawnArgs = isArmMac ? [
+        '-arm64',
+        chromePath,
+        ...additionalFlags
+      ] : [
+        ...additionalFlags
+      ];
+
+      const chromeProcess = spawn(spawnCommand, spawnArgs, {
+        detached: true,
+        stdio: 'ignore'
+      });
+
+      chromeProcess.unref();
+      logger.log("chrome process spawned and detached");
+
+      logger.log("waiting for chrome to initialize...");
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      let attempts = 0;
+      const maxAttempts = 5;
+      logger.log(`attempting to connect to debug port (max ${maxAttempts} attempts)`);
+
+      while (attempts < maxAttempts) {
+        try {
+          logger.log(`connection attempt ${attempts + 1}/${maxAttempts}`);
+          const response = await fetch('http://127.0.0.1:9222/json/version');
+          const data = await response.json();
+
+          if (response.ok && data.webSocketDebuggerUrl) {
+            logger.log('chrome debug port responding');
+            wsUrl = data.webSocketDebuggerUrl.replace('ws://localhost:', 'ws://127.0.0.1:');
+            logger.log(`websocket url: ${wsUrl}`);
+            if (wsUrl) {
+              ChromeSession.getInstance().setWsUrl(wsUrl);
+            }
+            break; // exit retry loop on success
+          }
+        } catch (err) {
+          logger.error(`attempt ${attempts + 1} failed: ${err}`);
+        }
+        attempts++;
+        logger.log(`waiting 1s before retry ${attempts}/${maxAttempts}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      if (!wsUrl) {
+        throw new Error('failed to connect to chrome debug port after all attempts');
+      }
+    }
+
+
+    return NextResponse.json({
+      success: true,
+      wsUrl,
+      logs: logger.getLogs()
+    });
   } catch (err) {
-    addLog(`chrome launch failed with error: ${err}`);
-    return NextResponse.json({ 
-      success: false, 
+    logger.error(`chrome launch failed with error: ${err}`);
+    return NextResponse.json({
+      success: false,
       error: String(err),
-      logs
+      logs: logger.getLogs()
     }, { status: 500 });
   }
 }
 
 export async function DELETE() {
   try {
-    addLog('chrome route: starting DELETE request');
+    logger.log('starting DELETE request');
     await quitChrome();
-    await quitBrowser(logs);
-    addLog('chrome processes terminated');
+    await quitBrowser(logger);
+    logger.log('chrome processes terminated');
     ChromeSession.getInstance().clear();
-    addLog('chrome session cleared');
-    return NextResponse.json({ success: true, logs });
+    logger.log('chrome session cleared');
+    return NextResponse.json({ success: true, logs: logger.getLogs() });
   } catch (error) {
-    addLog(`failed to kill chrome: ${error}`);
+    logger.error(`failed to kill chrome: ${error}`);
     return NextResponse.json(
-      { success: false, error: String(error), logs },
+      { success: false, error: String(error), logs: logger.getLogs() },
       { status: 500 }
     );
   }
@@ -174,18 +195,18 @@ export async function DELETE() {
 
 async function quitChrome() {
   const platform = os.platform();
-  console.log('quitting chrome on platform:', platform);
+  logger.log(`quitting chrome on platform: ${platform}`);
   const killCommand =
     platform === "win32"
       ? `taskkill /F /IM chrome.exe`
       : `pkill -f -- "Google Chrome"`;
 
   try {
-    console.log('executing kill command:', killCommand);
+    logger.log('executing kill command:', killCommand);
     await execPromise(killCommand);
-    console.log("chrome killed successfully");
+    logger.log("chrome killed successfully");
   } catch (error) {
-    console.log("no chrome process found to kill", error);
+    logger.log("no chrome process found to kill", error);
   }
 }
 
