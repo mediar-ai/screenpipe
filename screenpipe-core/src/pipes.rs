@@ -172,7 +172,7 @@ mod pipes {
                 // Fallback to random port if needed
                 let port =
                     assigned_port.unwrap_or_else(|| pick_unused_port().expect("No ports free"));
-                info!("using port {} for next.js pipe", port);
+                info!("[{}] using port {} for next.js pipe", pipe, port);
 
                 // Update pipe.json with the actual port being used
                 let mut updated_config = pipe_config.clone();
@@ -180,18 +180,25 @@ mod pipes {
                 let updated_pipe_json = serde_json::to_string_pretty(&updated_config)?;
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
-                debug!("updated pipe.json with port configuration");
+                info!(
+                    "[{}] updated pipe.json with port configuration: {}",
+                    pipe, updated_pipe_json
+                );
 
                 env_vars.push(("PORT".to_string(), port.to_string()));
 
                 // Handle cron jobs if they exist
                 if let Some(crons) = pipe_config.get("crons").and_then(Value::as_array) {
-                    debug!("found {} cron jobs in configuration", crons.len());
+                    info!(
+                        "[{}] found {} cron jobs in configuration",
+                        pipe,
+                        crons.len()
+                    );
                     let base_url = format!("http://localhost:{}", port);
-                    debug!("using base url: {} for cron jobs", base_url);
+                    debug!("[{}] using base url: {} for cron jobs", pipe, base_url);
 
                     let cron_secret = generate_cron_secret();
-                    debug!("generated cron secret for pipe: {}", pipe);
+                    debug!("[{}] generated cron secret: {}", pipe, cron_secret);
                     env_vars.push(("CRON_SECRET".to_string(), cron_secret.clone()));
 
                     let mut handles = Vec::new();
@@ -234,7 +241,7 @@ mod pipes {
                 }
 
                 // Install dependencies using bun
-                info!("installing dependencies for next.js pipe [{}]", pipe);
+                info!("[{}] installing dependencies for next.js pipe", pipe);
 
                 let install_output = Command::new(&bun_path)
                     .arg("install")
@@ -246,7 +253,7 @@ mod pipes {
 
                 if !install_output.status.success() {
                     let err_msg = String::from_utf8_lossy(&install_output.stderr);
-                    error!("failed to install dependencies: {}", err_msg);
+                    error!("[{}] failed to install dependencies: {}", pipe, err_msg);
                     let err = anyhow::anyhow!(
                         "failed to install dependencies for next.js pipe: {}",
                         err_msg
@@ -254,12 +261,15 @@ mod pipes {
                     sentry::capture_error(&err.source().unwrap());
                     anyhow::bail!(err);
                 }
-                debug!("successfully installed dependencies for next.js pipe");
+                info!(
+                    "[{}] successfully installed dependencies for next.js pipe",
+                    pipe
+                );
             } else {
                 let port = pick_unused_port().expect("No ports free");
-                debug!(
-                    "no pipe.json found, using random port {} for next.js pipe",
-                    port
+                info!(
+                    "[{}] no pipe.json found, using random port {} for next.js pipe",
+                    pipe, port
                 );
                 env_vars.push(("PORT".to_string(), port.to_string()));
             }
@@ -291,7 +301,7 @@ mod pipes {
             if build_success {
                 command.arg("start");
             } else {
-                info!("falling back to dev mode due to build failure");
+                info!("[{}] falling back to dev mode due to build failure", pipe);
                 command.arg("dev");
             }
 
@@ -305,7 +315,7 @@ mod pipes {
 
             let mut child = command.spawn()?;
 
-            debug!("streaming logs for next.js pipe");
+            debug!("[{}] streaming logs for next.js pipe", pipe);
             stream_logs(pipe, &mut child).await?;
 
             return Ok((child, PipeState::Port(port)));
@@ -313,7 +323,7 @@ mod pipes {
 
         // If it's not a Next.js project, run as regular pipe
         let main_module = find_pipe_file(&pipe_dir)?;
-        info!("executing pipe: {:?}", main_module);
+        info!("[{}] executing pipe: {:?}", pipe, main_module);
 
         env_vars.push((
             "PIPE_FILE".to_string(),
@@ -1065,7 +1075,7 @@ mod pipes {
                 }
             };
 
-            debug!(
+            info!(
                 "next cron execution for pipe {} at path {} in {} seconds",
                 pipe,
                 path,
@@ -1075,7 +1085,7 @@ mod pipes {
             // Wait for either the next execution time or shutdown signal
             tokio::select! {
                 _ = tokio::time::sleep(duration) => {
-                    debug!("executing cron job for pipe {} at path {}", pipe, path);
+                    info!("executing cron job for pipe {} at path {}", pipe, path);
                     match client
                         .get(format!("{}{}", base_url, path))
                         .headers(headers.clone())
@@ -1126,14 +1136,17 @@ mod pipes {
     }
 
     async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
-        info!("attempting to build next.js project in: {:?}", pipe_dir);
+        info!(
+            "checking if i need to build the next.js project in: {:?}",
+            pipe_dir
+        );
 
         // Check if build already exists and is valid
         let build_dir = pipe_dir.join(".next");
         if build_dir.exists() {
             let build_manifest = build_dir.join("build-manifest.json");
             if build_manifest.exists() {
-                debug!("found existing next.js build, skipping rebuild");
+                info!("found existing next.js build, skipping rebuild");
                 return Ok(true);
             }
             // Invalid/incomplete build directory - remove it
@@ -1168,7 +1181,11 @@ mod pipes {
         TcpListener::bind(("127.0.0.1", port)).is_ok()
     }
 
-    pub async fn download_pipe_private(pipe_name: &str, source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
+    pub async fn download_pipe_private(
+        pipe_name: &str,
+        source: &str,
+        screenpipe_dir: PathBuf,
+    ) -> anyhow::Result<PathBuf> {
         info!("processing private pipe from zip: {}", source);
 
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
@@ -1192,11 +1209,11 @@ mod pipes {
         debug!("unzipping file to temp directory");
         let temp_zip_path = temp_zip.clone();
         let temp_dir_path = temp_dir.clone();
-        
+
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let zip_file = std::fs::File::open(&temp_zip_path)?;
             let mut archive = zip::ZipArchive::new(zip_file)?;
-            
+
             for i in 0..archive.len() {
                 let mut file = archive.by_index(i)?;
                 let name = file.name().to_string();
@@ -1215,7 +1232,8 @@ mod pipes {
                 }
             }
             Ok(())
-        }).await??;
+        })
+        .await??;
 
         // Remove the temporary zip file
         tokio::fs::remove_file(&temp_zip).await?;

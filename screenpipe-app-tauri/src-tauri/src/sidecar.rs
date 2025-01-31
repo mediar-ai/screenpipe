@@ -255,6 +255,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let use_all_monitors = store
+        .get("useAllMonitors")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -376,6 +381,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-realtime-audio-transcription");
     }
 
+    if use_all_monitors {
+        args.push("--use-all-monitors");
+    }
+
     let disable_vision = store
         .get("disableVision")
         .and_then(|v| v.as_bool())
@@ -404,6 +413,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
                 c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
             }
         }
+
+        c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
         let c = c.args(&args);
 
@@ -434,6 +445,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
         }
     }
+
+    c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
     let c = c.args(&args);
 

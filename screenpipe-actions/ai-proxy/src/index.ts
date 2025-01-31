@@ -261,6 +261,7 @@ export default Sentry.withSentry(
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
 		tracesSampleRate: 0.1,
 		environment: env.NODE_ENV || 'development',
+		enabled: (env.NODE_ENV || 'development') === 'production',
 	}),
 	{
 		/**
@@ -342,18 +343,16 @@ export default Sentry.withSentry(
 					}
 
 					const token = authHeader.split(' ')[1];
-					console.log('token', token);
-					// First try to validate as a user ID with subscription
+
 					let isValid = await validateSubscription(env, token);
-					console.log('isValid', isValid);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
-						console.log('isValid2', isValid);
 					}
 
 					if (!isValid) {
+						console.log('all validation attempts failed');
 						const response = new Response(JSON.stringify({ error: 'invalid subscription' }), {
 							status: 401,
 							headers: {

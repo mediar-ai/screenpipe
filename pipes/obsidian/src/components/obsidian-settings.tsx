@@ -25,6 +25,7 @@ import path from "path";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { debounce } from "lodash";
+import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
 
 // This interface represents the shape of obsidian settings
 interface ObsidianSettings {
@@ -119,6 +120,7 @@ export function ObsidianSettings() {
           obsidian: obsidianSettings,
         },
       });
+      await updatePipeConfig(obsidianSettings.interval / 60000);
 
       loadingToast.update({
         id: loadingToast.id,
@@ -154,6 +156,7 @@ export function ObsidianSettings() {
           obsidian: obsidianSettings,
         },
       });
+      await updatePipeConfig(obsidianSettings.interval / 60000);
 
       // Then test log generation
       const res = await fetch("/api/log");
@@ -570,7 +573,9 @@ export function ObsidianSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="aiModel">ollama/local openai-compatible model</Label>
+              <Label htmlFor="aiModel">
+                ollama/local openai-compatible model
+              </Label>
               <OllamaModelsList
                 disabled={!pathValidation.isValid}
                 defaultValue={

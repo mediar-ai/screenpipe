@@ -29,7 +29,8 @@ use std::{
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
-use tokio::time::sleep;
+use tokio::sync::watch;
+use tracing::info;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
@@ -138,6 +139,7 @@ pub async fn continuous_capture(
     window_filters: Arc<WindowFilters>,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    mut shutdown_rx: watch::Receiver<bool>,
 ) {
     let mut frame_counter: u64 = 0;
     let mut previous_image: Option<DynamicImage> = None;
@@ -149,102 +151,119 @@ pub async fn continuous_capture(
         monitor_id
     );
 
+    let monitor = get_monitor_by_id(monitor_id).await.unwrap();
+
     loop {
-        let monitor = match get_monitor_by_id(monitor_id).await {
-            Some(m) => m,
-            None => {
-                sleep(Duration::from_secs(1)).await;
-                continue;
-            }
-        };
-        let capture_result =
-            match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
-                Ok((image, window_images, image_hash, _capture_duration)) => {
-                    debug!(
-                        "Captured screenshot on monitor {} with hash: {}",
-                        monitor_id, image_hash
-                    );
-                    Some((image, window_images, image_hash))
-                }
-                Err(e) => {
-                    error!("Failed to capture screenshot: {}", e);
-                    None
-                }
-            };
-
-        if let Some((image, window_images, image_hash)) = capture_result {
-            let current_average = match compare_with_previous_image(
-                previous_image.as_ref(),
-                &image,
-                &mut max_average,
-                frame_counter,
-                &mut max_avg_value,
-            )
-            .await
-            {
-                Ok(avg) => avg,
-                Err(e) => {
-                    error!("Error comparing images: {}", e);
-                    0.0
-                }
-            };
-
-            let current_average = if previous_image.is_none() {
-                1.0
-            } else {
-                current_average
-            };
-
-            if current_average < 0.006 {
-                debug!(
-                    "Skipping frame {} due to low average difference: {:.3}",
-                    frame_counter, current_average
-                );
-                frame_counter += 1;
-                tokio::time::sleep(interval).await;
-                continue;
-            }
-
-            if current_average > max_avg_value {
-                max_average = Some(MaxAverageFrame {
-                    image: image.clone(),
-                    window_images: window_images.clone(),
-                    image_hash,
-                    frame_number: frame_counter,
-                    timestamp: Instant::now(),
-                    result_tx: result_tx.clone(),
-                    average: current_average,
-                });
-                max_avg_value = current_average;
-            }
-
-            previous_image = Some(image);
-
-            if let Some(max_avg_frame) = max_average.take() {
-                let ocr_task_data = OcrTaskData {
-                    image: max_avg_frame.image,
-                    window_images: max_avg_frame.window_images,
-                    frame_number: max_avg_frame.frame_number,
-                    timestamp: max_avg_frame.timestamp,
-                    result_tx: max_avg_frame.result_tx,
-                };
-
-                if let Err(e) =
-                    process_ocr_task(ocr_task_data, &ocr_engine, languages.clone()).await
-                {
-                    error!("Error processing OCR task: {}", e);
-                }
-
-                frame_counter = 0;
-                max_avg_value = 0.0;
-            }
-        } else {
-            debug!("Skipping frame {} due to capture failure", frame_counter);
+        // Check shutdown signal
+        if *shutdown_rx.borrow() {
+            info!(
+                "continuous_capture: received shutdown signal for monitor {}",
+                monitor_id
+            );
+            break;
         }
 
-        frame_counter += 1;
-        tokio::time::sleep(interval).await;
+        // Use tokio::select! to handle both capture and shutdown
+        tokio::select! {
+            _ = shutdown_rx.changed() => {
+                if *shutdown_rx.borrow() {
+                    info!("continuous_capture: shutdown signal received for monitor {}", monitor_id);
+                    break;
+                }
+            }
+            _ = async {
+                let capture_result = match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
+                    Ok((image, window_images, image_hash, _capture_duration)) => {
+                        debug!(
+                            "captured screenshot on monitor {} with hash: {}",
+                            monitor.id(),
+                            image_hash
+                        );
+                        Some((image, window_images, image_hash))
+                    }
+                    Err(e) => {
+                        error!("Failed to capture screenshot: {}", e);
+                        None
+                    }
+                };
+
+                if let Some((image, window_images, image_hash)) = capture_result {
+                    let current_average = match compare_with_previous_image(
+                        previous_image.as_ref(),
+                        &image,
+                        &mut max_average,
+                        frame_counter,
+                        &mut max_avg_value,
+                    )
+                    .await
+                    {
+                        Ok(avg) => avg,
+                        Err(e) => {
+                            error!("Error comparing images: {}", e);
+                            0.0
+                        }
+                    };
+
+                    let current_average = if previous_image.is_none() {
+                        1.0
+                    } else {
+                        current_average
+                    };
+
+                    if current_average < 0.006 {
+                        debug!(
+                            "Skipping frame {} due to low average difference: {:.3}",
+                            frame_counter, current_average
+                        );
+                        frame_counter += 1;
+                        tokio::time::sleep(interval).await;
+                        return;
+                    }
+
+                    if current_average > max_avg_value {
+                        max_average = Some(MaxAverageFrame {
+                            image: image.clone(),
+                            window_images: window_images.clone(),
+                            image_hash,
+                            frame_number: frame_counter,
+                            timestamp: Instant::now(),
+                            result_tx: result_tx.clone(),
+                            average: current_average,
+                        });
+                        max_avg_value = current_average;
+                    }
+
+                    previous_image = Some(image);
+
+                    if let Some(max_avg_frame) = max_average.take() {
+                        let ocr_task_data = OcrTaskData {
+                            image: max_avg_frame.image,
+                            window_images: max_avg_frame.window_images,
+                            frame_number: max_avg_frame.frame_number,
+                            timestamp: max_avg_frame.timestamp,
+                            result_tx: max_avg_frame.result_tx,
+                        };
+
+                        if let Err(e) =
+                            process_ocr_task(ocr_task_data, &ocr_engine, languages.clone()).await
+                        {
+                            error!("Error processing OCR task: {}", e);
+                        }
+
+                        frame_counter = 0;
+                        max_avg_value = 0.0;
+                    }
+                } else {
+                    debug!("Skipping frame {} due to capture failure", frame_counter);
+                }
+
+                frame_counter += 1;
+                tokio::time::sleep(interval).await;
+            } => {}
+        }
     }
+
+    debug!("Continuous capture stopped for monitor {}", monitor_id);
 }
 
 pub struct MaxAverageFrame {

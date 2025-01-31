@@ -10,11 +10,6 @@
     "clean": "rm -rf out && cargo clean && rm -rf src-tauri/{screenpipe-*,tesseract-*,ffmpeg*,bun*,ollama*,ui_monitor*} node_modules"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.49.1",
-    "@opentelemetry/resources": "^1.26.0",
-    "@opentelemetry/sdk-trace-base": "^1.22.0",
-    "@opentelemetry/sdk-trace-web": "^1.22.0",
     "@patternfly/react-core": "^6.1.0",
     "@patternfly/react-log-viewer": "^6.1.0",
     "@radix-ui/react-accordion": "^1.2.0",
@@ -35,6 +30,7 @@
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.1.3",
+    "@sentry/react": "^8.52.0",
     "@supabase/supabase-js": "^2.47.3",
     "@tanstack/react-virtual": "^3.11.0",
     "@tauri-apps/api": "^2.1.1",

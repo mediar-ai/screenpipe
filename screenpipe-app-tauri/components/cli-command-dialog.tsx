@@ -29,7 +29,7 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     let args = [];
 
     if (settings.audioTranscriptionEngine !== "default") {
-      // TBD hard coded for now 
+      // TBD hard coded for now
       // if someone wants to use deepgram / screenpipe cloud in CLI mode they'll ask us
       args.push(`--audio-transcription-engine whisper-large-v3-turbo`);
     }
@@ -101,8 +101,7 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-realtime-audio-transcription");
     }
 
-    const envString = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
-    return `${envString}${cliPath} ${args.join(" ")}`;
+    return `${cliPath} ${args.join(" ")}`;
   };
 
   const handleCopyCliCommand = () => {

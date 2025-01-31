@@ -2,22 +2,21 @@ use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
+use crate::resample;
 pub use crate::segments::prepare_segments;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{process_with_whisper, WhisperModel},
-    AudioDevice, AudioTranscriptionEngine,
+    AudioTranscriptionEngine,
 };
-use crate::{resample, DeviceControl};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
 use dashmap::DashMap;
-use log::{debug, error, info};
+use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use screenpipe_core::Language;
-use std::sync::atomic::{AtomicBool, Ordering};
+use screenpipe_core::{AudioDevice, DeviceControl, Language};
 use std::{
     path::Path,
     sync::Arc,
@@ -156,11 +155,10 @@ pub async fn create_whisper_channel(
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
-    audio_devices_control: Option<Arc<DashMap<AudioDevice, DeviceControl>>>,
+    devices: DashMap<String, DeviceControl>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
-    Arc<AtomicBool>, // Shutdown flag
 )> {
     let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
     let (input_sender, input_receiver): (
@@ -177,8 +175,6 @@ pub async fn create_whisper_channel(
     };
     vad_engine.set_sensitivity(vad_sensitivity);
     let vad_engine = Arc::new(Mutex::new(vad_engine));
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.to_path_buf();
 
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
@@ -194,25 +190,17 @@ pub async fn create_whisper_channel(
 
     tokio::spawn(async move {
         loop {
-            if shutdown_flag_clone.load(Ordering::Relaxed) {
-                info!("Whisper channel shutting down");
-                break;
-            }
-            debug!("Waiting for input from input_receiver");
-
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
-                            // Check if device should be recording
-                            if let Some(control) = audio_devices_control.as_ref().unwrap().get(&audio.device) {
-                                if !control.is_running {
+                            // Check device state
+                            if let Some(device) = devices.get(&audio.device.to_string()) {
+                                if !device.is_running {
                                     debug!("Skipping audio processing for stopped device: {}", audio.device);
+                                    debug!("Device states: {:?}", devices);
                                     continue;
                                 }
-                            } else {
-                                debug!("Device not found in control list: {}", audio.device);
-                                continue;
                             }
 
                             debug!("Received input from input_receiver");
@@ -287,18 +275,15 @@ pub async fn create_whisper_channel(
                         },
                         Err(e) => {
                             error!("Error receiving input: {:?}", e);
-                            // Depending on the error type, you might want to break the loop or continue
-                            // For now, we'll continue to the next iteration
                             break;
                         }
                     }
                 },
             }
         }
-        // Cleanup code here (if needed)
     });
 
-    Ok((input_sender, output_receiver, shutdown_flag))
+    Ok((input_sender, output_receiver))
 }
 
 #[allow(clippy::too_many_arguments)]
