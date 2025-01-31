@@ -1,5 +1,5 @@
-use image::{DynamicImage, GenericImageView};
 use anyhow::Result;
+use image::{DynamicImage, GenericImageView};
 
 #[cfg(target_os = "windows")]
 pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String, Option<f64>)> {
@@ -29,8 +29,8 @@ pub async fn perform_ocr_windows(image: &DynamicImage) -> Result<(String, String
     writer.FlushAsync()?.get()?;
     stream.Seek(0)?;
 
-    let decoder = BitmapDecoder::CreateWithIdAsync(BitmapDecoder::PngDecoderId()?, &stream)?
-        .get()?;
+    let decoder =
+        BitmapDecoder::CreateWithIdAsync(BitmapDecoder::PngDecoderId()?, &stream)?.get()?;
 
     let bitmap = decoder.GetSoftwareBitmapAsync()?.get()?;
 

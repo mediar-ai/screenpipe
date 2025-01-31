@@ -1,12 +1,12 @@
-use std::path::Path;
 use anyhow::Result;
 use dirs::home_dir;
 use screenpipe_core::{download_pipe, run_pipe};
+use std::path::Path;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 // ollama run nemotron-mini:4b-instruct-q4_k_m
-// cargo run --package screenpipe-core --example simple-node-api-pipe --features metal --features pipes 
+// cargo run --package screenpipe-core --example simple-node-api-pipe --features metal --features pipes
 
 #[tokio::main]
 async fn main() -> Result<()> {

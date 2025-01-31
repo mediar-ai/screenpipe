@@ -2,7 +2,7 @@ mod call_ai;
 mod monitor_keystroke_commands;
 mod run;
 mod screenshot;
-pub mod type_and_animate; 
+pub mod type_and_animate;
 
 pub use call_ai::call_ai;
 pub use monitor_keystroke_commands::{run_keystroke_monitor, KeystrokeCommand};

@@ -31,7 +31,6 @@ pub mod pii_removal;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
-
 #[cfg(feature = "security")]
 pub use pii_removal::*;
 

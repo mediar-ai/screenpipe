@@ -11,7 +11,7 @@
 // fn is_valid_window(window: &Window) -> bool {
 //     let title = window.title().unwrap_or_default();
 //     let class = window.class().unwrap_or_default();
-//     
+//
 //     !title.is_empty() && !class.is_empty() && title != "Desktop" && class != "Desktop"
 // }
 

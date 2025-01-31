@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
 // use base64::{engine::general_purpose, Engine as _};
@@ -16,7 +16,7 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
         json!({
             "role": "user",
             "content": prompt
-        })
+        }),
     ];
 
     let mut body = json!({
@@ -30,7 +30,8 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
         body["response_format"] = json!({"type": "json_object"});
     }
 
-    let response: Value = client.post("https://ai-proxy.i-f9f.workers.dev/v1/chat/completions")
+    let response: Value = client
+        .post("https://ai-proxy.i-f9f.workers.dev/v1/chat/completions")
         .json(&body)
         .send()
         .await?
@@ -56,12 +57,13 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
         .to_string();
 
     if expect_json {
-        let json_value: Value = serde_json::from_str(&content)
-            .context("response content is not valid JSON")?;
-        
+        let json_value: Value =
+            serde_json::from_str(&content).context("response content is not valid JSON")?;
+
         if let Some(array) = json_value["response"].as_array() {
             // If "response" is an array, join its elements with newlines
-            Ok(array.iter()
+            Ok(array
+                .iter()
                 .filter_map(|v| v.as_str())
                 .collect::<Vec<_>>()
                 .join("\n"))
@@ -93,7 +95,7 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
 // pub async fn call_openai_with_screenshot(prompt: String, expect_json: bool, screenshot: DynamicImage) -> Result<String> {
 //     dotenv().ok(); // Load .env file
 //     let api_key = std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY not set");
-    
+
 //     let client = Client::new();
 
 //     // Convert image to base64
@@ -173,7 +175,7 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
 // pub async fn call_claude_with_screenshot(prompt: String, expect_json: bool, screenshot: DynamicImage) -> Result<String> {
 //     dotenv().ok(); // load .env file
 //     let api_key = std::env::var("ANTHROPIC_API_KEY").context("ANTHROPIC_API_KEY not set")?;
-    
+
 //     let client = Client::new();
 
 //     // Convert image to base64
@@ -250,7 +252,7 @@ pub async fn call_ai(prompt: String, context: String, expect_json: bool) -> Resu
 //         // Validate that the content is valid JSON
 //         serde_json::from_str::<Value>(content)
 //             .context("response content is not valid JSON")?;
-        
+
 //         // Return the full JSON string
 //         Ok(content.to_string())
 //     } else {
