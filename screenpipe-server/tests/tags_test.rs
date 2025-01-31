@@ -4,17 +4,16 @@ use axum::{
     Router,
 };
 use chrono::Utc;
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
-use std::sync::atomic::AtomicBool;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
 use tower::ServiceExt;
 
 use screenpipe_server::{
-    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
-    PaginatedResponse, PipeManager,
+    core::DeviceManager, create_router, video_cache::FrameCache, AppState, ContentItem,
+    DatabaseManager, PaginatedResponse, PipeManager,
 };
 
 // Add this function to initialize the logger
@@ -27,11 +26,9 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
 
     let app_state = Arc::new(AppState {
         db: db.clone(),
+        device_manager: Arc::new(DeviceManager::default()),
         vision_disabled: false,
         audio_disabled: false,
-        vision_control: Arc::new(AtomicBool::new(false)),
-        audio_devices_tx: Arc::new(tokio::sync::broadcast::channel(1000).0),
-        devices_status: HashMap::new(),
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
         pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -392,7 +389,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "Test audio transcription",
         0,
         "test_engine",
-        &AudioDevice::new("test".to_string(), DeviceType::Output),
+        &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
         None,
         None,
         None,

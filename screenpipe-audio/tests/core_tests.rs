@@ -2,6 +2,7 @@
 mod tests {
     use anyhow::anyhow;
     use chrono::Utc;
+    use dashmap::DashMap;
     use log::{debug, LevelFilter};
     use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
     use screenpipe_audio::pyannote::identify::EmbeddingManager;
@@ -209,14 +210,14 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
+        let (whisper_sender, whisper_receiver) = create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
             VadEngineEnum::WebRtc,
             None,
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
-            None,
+            DashMap::new(),
         )
         .await
         .unwrap();

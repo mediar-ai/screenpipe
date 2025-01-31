@@ -705,7 +705,7 @@ async fn main() -> anyhow::Result<()> {
     let device_manager_clone = device_manager.clone();
     tokio::spawn(async move {
         while let Ok(_) = device_manager_receiver_control_loop.changed().await {
-            info!("received device update");
+            debug!("received device update");
             let control = device_manager_receiver_control_loop.borrow().clone();
             if let Err(e) =
                 handle_device_update(&control.device, control.clone(), &device_manager_clone).await
@@ -722,7 +722,7 @@ async fn main() -> anyhow::Result<()> {
         control: DeviceControl,
         devices_control: &Arc<DeviceManager>,
     ) -> anyhow::Result<()> {
-        info!("received device update");
+        debug!("received device update");
 
         match device {
             DeviceType::Audio(device) => {
@@ -738,10 +738,6 @@ async fn main() -> anyhow::Result<()> {
                         // Update the device state using DeviceManager
                         devices_control.update_device(control.clone()).await?;
 
-                        info!(
-                            "audio device state changed: {} - running: {}",
-                            device.name, control.is_running
-                        );
                         Ok(())
                     }
                     Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
@@ -759,10 +755,6 @@ async fn main() -> anyhow::Result<()> {
                 // Update the device state using DeviceManager
                 devices_control.update_device(control.clone()).await?;
 
-                info!(
-                    "vision device state changed: {} - running: {}",
-                    monitor_id, control.is_running
-                );
                 Ok(())
             }
         }

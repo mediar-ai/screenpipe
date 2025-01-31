@@ -160,6 +160,7 @@ pub async fn continuous_capture(
                 "continuous_capture: received shutdown signal for monitor {}",
                 monitor_id
             );
+            drop(result_tx);
             break;
         }
 
@@ -168,6 +169,7 @@ pub async fn continuous_capture(
             _ = shutdown_rx.changed() => {
                 if *shutdown_rx.borrow() {
                     info!("continuous_capture: shutdown signal received for monitor {}", monitor_id);
+                    drop(result_tx);
                     break;
                 }
             }
@@ -200,6 +202,7 @@ pub async fn continuous_capture(
                         Ok(avg) => avg,
                         Err(e) => {
                             error!("Error comparing images: {}", e);
+                            previous_image = None;
                             0.0
                         }
                     };

@@ -102,6 +102,7 @@ async fn main() -> Result<()> {
             window_filters,
             vec![],
             false,
+            tokio::sync::watch::channel(false).1,
         )
         .await
     });
