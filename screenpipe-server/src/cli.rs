@@ -10,11 +10,7 @@ use screenpipe_audio::{
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 
 use screenpipe_audio::vad_engine::VadEngineEnum;
-use screenpipe_audio::{
-    vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine,
-};
 use screenpipe_core::Language;
-use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
