@@ -17,7 +17,10 @@ use screenpipe_core::DeviceType;
 use screenpipe_server::core::DeviceManager;
 use screenpipe_server::VisionDeviceControlRequest;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    cli::{
+        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
+        PipeCommand, VisionCommand,
+    },
     core::{AudioConfig, RealtimeConfig, RecordingConfig, VisionConfig},
     handle_index_command,
     pipe_manager::PipeInfo,
@@ -193,6 +196,24 @@ async fn main() -> anyhow::Result<()> {
             output: OutputFormat::Text,
             ..
         }) => true,
+        Some(Command::Vision { subcommand }) => {
+            matches!(
+                subcommand,
+                VisionCommand::List {
+                    output: OutputFormat::Text,
+                    ..
+                }
+            )
+        }
+        Some(Command::Audio { subcommand }) => {
+            matches!(
+                subcommand,
+                AudioCommand::List {
+                    output: OutputFormat::Text,
+                    ..
+                }
+            )
+        }
         _ => true,
     };
 
@@ -211,6 +232,70 @@ async fn main() -> anyhow::Result<()> {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
+            Command::Vision { subcommand } => match subcommand {
+                VisionCommand::List { output } => {
+                    let monitors = list_monitors().await;
+                    match output {
+                        OutputFormat::Json => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "data": monitors.iter().map(|m| {
+                                        json!({
+                                            "id": m.id(),
+                                            "name": m.name(),
+                                            "x": m.x(),
+                                            "y": m.y(),
+                                            "width": m.width(),
+                                            "height": m.height(),
+                                            "rotation": m.rotation(),
+                                            "scale_factor": m.scale_factor(),
+                                            "frequency": m.frequency(),
+                                            "is_primary": m.is_primary()
+                                        })
+                                    }).collect::<Vec<_>>(),
+                                    "success": true
+                                }))?
+                            );
+                        }
+                        OutputFormat::Text => {
+                            println!("available monitors:");
+                            for monitor in monitors.iter() {
+                                println!("  {}. {:?}", monitor.id(), monitor);
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
+            Command::Audio { subcommand } => match subcommand {
+                AudioCommand::List { output } => {
+                    let devices = list_audio_devices().await?;
+                    match output {
+                        OutputFormat::Json => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "data": devices.iter().map(|d| {
+                                        json!({
+                                            "name": d.name,
+                                            "device_type": d.device_type,
+                                        })
+                                    }).collect::<Vec<_>>(),
+                                    "success": true
+                                }))?
+                            );
+                        }
+                        OutputFormat::Text => {
+                            println!("available audio devices:");
+                            for device in devices.iter() {
+                                println!("  {:?}", device);
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
             #[allow(unused_variables)]
             Command::Setup { enable_beta } => {
                 #[cfg(feature = "beta")]
