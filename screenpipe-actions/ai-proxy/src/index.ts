@@ -3,7 +3,7 @@ import { verifyToken } from '@clerk/backend';
 import { createProvider } from './providers';
 import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
-import { Deepgram } from '@deepgram/sdk';
+import { Deepgram, LiveClient } from '@deepgram/sdk';
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
@@ -187,44 +187,73 @@ async function handleOptions(request: Request) {
 }
 
 async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
-	const webSocketPair = new WebSocketPair();
-	const [client, server] = Object.values(webSocketPair);
-	server.accept();
+	try {
+		// Generate a unique request ID
+		const requestId = crypto.randomUUID();
 
-	const requestId = crypto.randomUUID();
-	const deepgram = createClient(env.DEEPGRAM_API_KEY);
-	const live = deepgram.listen.live({
-		model: 'nova-2',
-		options: {
+		// Create WebSocket pair
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
+		server.accept();
+
+		let params = new URL(request.url).searchParams;
+		let sampleRate = params.get('sample_rate');
+
+		let url = new URL('wss://api.deepgram.com/v1/listen');
+		// for each key in params, set the url search param
+		for (let [key, value] of params.entries()) {
+			url.searchParams.set(key, value);
+		}
+
+		const deepgram = createClient(env.DEEPGRAM_API_KEY);
+		const deepgramSocket = deepgram.listen.live({}, url.toString());
+
+		deepgramSocket.on(LiveTranscriptionEvents.Open, (data) => {
+			server.send(
+				JSON.stringify({
+					type: 'message',
+					data: JSON.stringify(data),
+				})
+			);
+		});
+
+		// Simple passthrough: client -> Deepgram
+		server.addEventListener('message', (event) => {
+			if (deepgramSocket.getReadyState() === WebSocket.OPEN) {
+				deepgramSocket.send(event.data);
+			}
+		});
+
+		// Simple passthrough: Deepgram -> client
+		deepgramSocket.on(LiveTranscriptionEvents.Transcript, (data) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.send(JSON.stringify(data));
+			}
+		});
+
+		// Handle connection close
+		server.addEventListener('close', () => {
+			deepgramSocket.requestClose();
+		});
+
+		// Handle errors
+		deepgramSocket.on(LiveTranscriptionEvents.Error, (error) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.close(1011, 'Deepgram error: ' + error.message);
+			}
+		});
+
+		return new Response(null, {
+			status: 101,
+			webSocket: client,
 			headers: {
-				'X-Request-Id': requestId,
+				'dg-request-id': requestId,
 			},
-		},
-	});
-
-	server.addEventListener('message', (event) => {
-		if (live.getReadyState() === WebSocket.OPEN) {
-			live.send(event.data);
-		}
-	});
-
-	live.on(LiveTranscriptionEvents.Transcript, (data) => {
-		if (server.readyState === WebSocket.OPEN) {
-			server.send(JSON.stringify(data));
-		}
-	});
-
-	server.addEventListener('close', () => live.requestClose());
-
-	return new Response(null, {
-		status: 101,
-		webSocket: client,
-		headers: {
-			'Access-Control-Allow-Origin': '*',
-			'Access-Control-Allow-Headers': '*',
-			'X-Request-Id': requestId,
-		},
-	});
+		});
+	} catch (error) {
+		console.error('WebSocket upgrade failed:', error);
+		return new Response('WebSocket upgrade failed', { status: 500 });
+	}
 }
 
 export default Sentry.withSentry(
@@ -294,7 +323,7 @@ export default Sentry.withSentry(
 				const path = url.pathname;
 
 				// Add auth check for protected routes
-				if (path !== '/test') {
+				if (path === '/test') {
 					const authHeader = request.headers.get('Authorization');
 					console.log('authHeader', authHeader);
 					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
