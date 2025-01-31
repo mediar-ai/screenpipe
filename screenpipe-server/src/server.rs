@@ -37,8 +37,9 @@ use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices,
-    realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
+    realtime::RealtimeTranscriptionEvent,
 };
+
 use screenpipe_vision::OcrEngine;
 use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -62,11 +63,7 @@ use tokio::{
     sync::{broadcast, mpsc, Mutex},
     time::timeout,
 };
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
 
-use tokio::net::TcpListener;
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -2057,43 +2054,6 @@ pub async fn get_frame_data(
                                 start_time.elapsed()
                             );
                             return serve_file(file_path).await;
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-
-    // Create a stream that will be used for both success and error cases
-    let stream = async_stream::stream! {
-        // Early validation of frame cache
-        let cache = match state.frame_cache.as_ref() {
-            Some(cache) => cache.clone(),
-            None => {
-                // error!("frame cache not initialized");
-                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
-                return;
-            }
-        };
-
-        // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
-
-        // Calculate center timestamp
-        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
-
-        // Use a cancellation token to handle client disconnection
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-
-        // Spawn frame extraction task using get_frames
-        tokio::spawn({
-            let frame_tx = frame_tx.clone();
-            async move {
-                tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
-                        if let Err(e) = result {
-                            error!("frame extraction failed: {}", e);
-                            // Send error to client
-                            let _ = frame_tx.send(TimeSeriesFrame {
-                                timestamp: Utc::now(),
-                                frame_data: vec![],
-                                error: Some(format!("frame extraction failed: {}", e)),
-                            }).await;
                         }
                         cache.pop(&frame_id);
                     }

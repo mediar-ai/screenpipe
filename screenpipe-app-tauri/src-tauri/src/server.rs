@@ -1,6 +1,5 @@
-use crate::{get_store, get_base_dir, icons::AppIcon};
+use crate::{get_base_dir, get_store, icons::AppIcon};
 use axum::body::Bytes;
-use crate::{get_store, get_base_dir, icons::AppIcon};
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
 use axum::{
@@ -116,17 +115,11 @@ async fn settings_stream(
     )
 }
 
-pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
-    let (settings_tx, _) = broadcast::channel(100);
-
-    #[cfg(not(target_os = "windows"))]
+#[cfg(not(target_os = "windows"))]
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
     let app_handle_clone = app_handle.clone();
-    let base_dir =
-        get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
-    let store_path = base_dir.join("store.bin");
 
     #[cfg(not(target_os = "windows"))]
     {
@@ -152,18 +145,18 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
             }
         }
 
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(event) = res {
-            if event.kind.is_modify() {
-                if let Ok(store) = get_store(&app_handle_clone, None) {
-                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
-                        let _ = settings_tx_clone.send(settings);
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            if let Ok(event) = res {
+                if event.kind.is_modify() {
+                    if let Ok(store) = get_store(&app_handle_clone, None) {
+                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                            let _ = settings_tx_clone.send(settings);
+                        }
                     }
                 }
             }
-        }
-    })
-    .unwrap();
+        })
+        .unwrap();
 
         // Only watch if the file exists
         if store_path.exists() {
@@ -174,9 +167,6 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
                 });
         }
     }
-    watcher
-        .watch(&store_path, RecursiveMode::NonRecursive)
-        .unwrap();
 
     let state = ServerState {
         app_handle,
@@ -405,7 +395,6 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
 }
 
 /*
-
 
 curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \
