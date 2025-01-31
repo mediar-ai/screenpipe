@@ -18,6 +18,7 @@ use screenpipe_events::send_event;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
+use tokio::sync::oneshot;
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
@@ -52,6 +53,20 @@ pub async fn start_deepgram_stream(
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
+    // create shutdown rx from is_running
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+
+    tokio::spawn(async move {
+        loop {
+            let running = is_running.load(std::sync::atomic::Ordering::SeqCst);
+            if !running {
+                shutdown_tx.send(()).unwrap();
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
     let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
         true => deepgram::Deepgram::new(api_key)?,
         false => {
@@ -78,11 +93,10 @@ pub async fn start_deepgram_stream(
     let device_clone = device.clone();
 
     loop {
-        if !is_running.load(std::sync::atomic::Ordering::SeqCst) {
-            break;
-        }
-
         tokio::select! {
+            _ = &mut shutdown_rx => {
+                break;
+            }
             result = results.try_next() => {
                 if let Ok(Some(result)) = result {
                     handle_transcription(
