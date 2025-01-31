@@ -25,6 +25,7 @@ async fn benchmark_continuous_capture(duration_secs: u64) -> f64 {
             window_filters,
             vec![],
             false,
+            tokio::sync::watch::channel(false).1,
         )
         .await;
     });

@@ -52,7 +52,7 @@ mod tests {
         let port = pick_unused_port();
         assert!(port.is_some());
         let port = port.unwrap();
-        assert!(port >= 15000 && port < 65535);
+        assert!((15000..65535).contains(&port));
         assert!(is_port_available(port));
     }
 }

@@ -12,10 +12,7 @@ export default function Document() {
           property="og:description"
           content="open source desktop app that records your screen & mic 24/7, extracts text & speech, and connects to ai to make it context-aware"
         />
-        <meta
-          property="og:image"
-          content="https://screenpi.pe/og-image.png"
-        />
+        <meta property="og:image" content="https://screenpi.pe/og-image.png" />
         <meta property="og:url" content="https://screenpi.pe" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="theme-color" content="#000000" />
@@ -41,6 +38,10 @@ export default function Document() {
         />
       </Head>
       <body className="antialiased">
+        <img
+          referrerPolicy="no-referrer-when-downgrade"
+          src="https://static.scarf.sh/a.png?x-pxid=6124adb3-618c-466d-a12b-a046ba1443b9"
+        />
         <Main />
         <NextScript />
       </body>

@@ -6,8 +6,9 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use crossbeam::queue::SegQueue;
-    use screenpipe_audio::{AudioDevice, DeviceType};
+    use screenpipe_core::AudioDevice;
+    use screenpipe_core::AudioDeviceType;
+    use screenpipe_server::core::DeviceManager;
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;
@@ -17,9 +18,7 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
-    use std::collections::HashMap;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
@@ -33,9 +32,7 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_tx: Arc::new(tokio::sync::broadcast::channel(1000).0),
-            devices_status: HashMap::new(),
+            device_manager: Arc::new(DeviceManager::default()),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -72,7 +69,7 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -86,7 +83,7 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -177,30 +174,28 @@ mod tests {
             .unwrap();
         let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
         let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
-        let _ = db
-            .insert_ocr_text(
-                frame_id1,
-                "This is a test OCR text", // 21 chars
-                "",
-                "TestApp",
-                "TestWindow",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
-        let _ = db
-            .insert_ocr_text(
-                frame_id2,
-                "Another OCR text for testing that should be longer than thirty characters", // >30 chars
-                "",
-                "TestApp2",
-                "TestWindow2",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "This is a test OCR text", // 21 chars
+            "",
+            "TestApp",
+            "TestWindow",
+            Arc::new(OcrEngine::Tesseract),
+            false,
+        )
+        .await
+        .unwrap();
+        db.insert_ocr_text(
+            frame_id2,
+            "Another OCR text for testing that should be longer than thirty characters", // >30 chars
+            "",
+            "TestApp2",
+            "TestWindow2",
+            Arc::new(OcrEngine::Tesseract),
+            false,
+        )
+        .await
+        .unwrap();
 
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
         let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.wav").await.unwrap();
@@ -210,7 +205,7 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -223,7 +218,7 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -236,6 +231,7 @@ mod tests {
             .count_search_results(
                 "test*",
                 ContentType::All,
+                None,
                 None,
                 None,
                 None,
@@ -260,6 +256,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -270,6 +267,7 @@ mod tests {
             .count_search_results(
                 "audio",
                 ContentType::Audio,
+                None,
                 None,
                 None,
                 None,
@@ -294,6 +292,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -308,6 +307,7 @@ mod tests {
                 None,
                 None,
                 Some("TestWindow2"),
+                None,
                 None,
                 None,
                 None,
@@ -328,6 +328,7 @@ mod tests {
                 Some(30),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -344,6 +345,7 @@ mod tests {
                 None,
                 None,
                 Some(25),
+                None,
                 None,
             )
             .await
@@ -378,18 +380,17 @@ mod tests {
             .unwrap();
 
         // insert ocr and audio data
-        let _ = db
-            .insert_ocr_text(
-                frame_id1,
-                "old ocr text",
-                "",
-                "testapp",
-                "testwindow",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "old ocr text",
+            "",
+            "testapp",
+            "testwindow",
+            Arc::new(OcrEngine::Tesseract),
+            false,
+        )
+        .await
+        .unwrap();
 
         let audio_transcription_id1 = db
             .insert_audio_transcription(
@@ -397,7 +398,7 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), DeviceType::Input),
+                &AudioDevice::new("test".to_string(), AudioDeviceType::Input),
                 None,
                 None,
                 None,
@@ -425,6 +426,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -437,6 +439,7 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
                 None,
                 None,
                 None,
@@ -457,6 +460,7 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
                 None,
                 None,
                 None,
@@ -485,6 +489,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -507,6 +512,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -517,6 +523,7 @@ mod tests {
                 "audio",
                 ContentType::Audio,
                 Some(two_hours_ago - Duration::minutes(100)),
+                None,
                 None,
                 None,
                 None,
@@ -568,31 +575,29 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = db
-            .insert_ocr_text(
-                old_frame_id,
-                "old task: write documentation",
-                "",
-                "vscode",
-                "tasks.md",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            old_frame_id,
+            "old task: write documentation",
+            "",
+            "vscode",
+            "tasks.md",
+            Arc::new(OcrEngine::Tesseract),
+            false,
+        )
+        .await
+        .unwrap();
 
-        let _ = db
-            .insert_ocr_text(
-                recent_frame_id,
-                "current task: fix bug #123",
-                "",
-                "vscode",
-                "tasks.md",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            recent_frame_id,
+            "current task: fix bug #123",
+            "",
+            "vscode",
+            "tasks.md",
+            Arc::new(OcrEngine::Tesseract),
+            false,
+        )
+        .await
+        .unwrap();
 
         // Search with 30-second window
         let results = db
@@ -602,6 +607,7 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::seconds(30)),
+                None,
                 None,
                 None,
                 None,
@@ -630,6 +636,7 @@ mod tests {
                 0,
                 Some(old_timestamp - Duration::seconds(1)),
                 Some(old_timestamp + Duration::seconds(1)),
+                None,
                 None,
                 None,
                 None,
@@ -677,6 +684,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -692,6 +700,7 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
                 None,
                 None,
                 None,

@@ -55,20 +55,59 @@ export const PipeStore: React.FC = () => {
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
+  // Add debounced search tracking
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery) {
+        posthog.capture("search_pipes", {
+          query: searchQuery,
+          results_count: filteredPipes.length,
+        });
+      }
+    }, 1000); // Debounce for 1 second
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, filteredPipes.length]);
+
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
       const plugins = await pipeApi.listStorePlugins();
 
       // Create PipeWithStatus objects for store plugins
-      const storePluginsWithStatus = plugins.map((plugin) => ({
-        ...plugin,
-        is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
-        installed_config: installedPipes.find((p) => p.config?.id === plugin.id)
-          ?.config,
-        has_purchased: purchaseHistory.some((p) => p.plugin_id === plugin.id),
-        is_core_pipe: corePipes.includes(plugin.name),
-      }));
+      const storePluginsWithStatus = await Promise.all(
+        plugins.map(async (plugin) => {
+          const installedPipe = installedPipes.find(
+            (p) => p.config?.id === plugin.id
+          );
+          const currentVersion = installedPipe?.config?.version;
+
+          let has_update = false;
+          if (currentVersion) {
+            try {
+              const updateCheck = await pipeApi.checkUpdate(
+                plugin.id,
+                currentVersion
+              );
+              has_update = updateCheck.has_update;
+            } catch (error) {
+              console.error(`Failed to check updates for ${plugin.id}:`, error);
+            }
+          }
+
+          return {
+            ...plugin,
+            is_installed: !!installedPipe,
+            installed_config: installedPipe?.config,
+            has_purchased: purchaseHistory.some(
+              (p) => p.plugin_id === plugin.id
+            ),
+            is_core_pipe: corePipes.includes(plugin.name),
+            is_enabled: installedPipe?.config?.enabled ?? false,
+            has_update,
+          };
+        })
+      );
 
       const customPipes = installedPipes
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
@@ -91,6 +130,8 @@ export const PipeStore: React.FC = () => {
             installed_config: p.config,
             has_purchased: true,
             is_core_pipe: false,
+            is_enabled: p.config?.enabled || false,
+            source_code: p.config?.source || "",
           };
         });
 
@@ -109,7 +150,6 @@ export const PipeStore: React.FC = () => {
     if (!settings.user?.token) return;
     const pipeApi = await PipeApi.create(settings.user!.token!);
     const purchaseHistory = await pipeApi.getUserPurchaseHistory();
-    console.log("purchase history", purchaseHistory);
     setPurchaseHistory(purchaseHistory);
   };
 
@@ -232,8 +272,6 @@ export const PipeStore: React.FC = () => {
     onComplete?: () => void
   ) => {
     try {
-      console.log("user", settings.user);
-
       if (!checkLogin(settings.user)) return;
 
       // Keep the pipe in its current position by updating its status
@@ -423,12 +461,10 @@ export const PipeStore: React.FC = () => {
         throw new Error(data.error);
       }
 
-      console.log("data", data);
       toast({
         title: `pipe ${endpoint}d`,
       });
       const installedPipes = await fetchInstalledPipes();
-      console.log("installedPipes", installedPipes);
 
       const pp = installedPipes?.find((p) => p.config.id === pipe.id);
       const port = pp?.config.port;
@@ -729,8 +765,6 @@ export const PipeStore: React.FC = () => {
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
             fetchPurchaseHistory();
-
-            console.log("pipes", pipes);
           }
         }
       });
@@ -827,6 +861,7 @@ export const PipeStore: React.FC = () => {
                 onPurchase={handlePurchasePipe}
                 isLoadingPurchase={loadingPurchases.has(pipe.id)}
                 isLoadingInstall={loadingInstalls.has(pipe.id)}
+                onToggle={handleTogglePipe}
               />
             ))}
           </div>

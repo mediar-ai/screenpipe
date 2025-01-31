@@ -62,6 +62,8 @@ async function analyzeRelationships(
         "opportunities": ["schedule a call", "send a follow-up email"]
       }
     }
+
+    of course adapt the example response to the actual data you have, do not use John Doe in your example response, use the names and companies of the people you see in the logs.
     `;
 
   const provider = ollama(model);

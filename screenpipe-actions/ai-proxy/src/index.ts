@@ -1,8 +1,10 @@
-import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
 import { verifyToken } from '@clerk/backend';
-import { Anthropic } from '@anthropic-ai/sdk';
+import { createProvider } from './providers';
+import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
+import { Deepgram, LiveClient } from '@deepgram/sdk';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
 class SubscriptionCache {
@@ -36,45 +38,59 @@ class SubscriptionCache {
 const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
+	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
 	if (cached !== null) {
 		return cached;
 	}
 
-	try {
-		const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
-			method: 'POST',
-			headers: {
-				apikey: env.SUPABASE_ANON_KEY,
-				Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ user_id: userId }),
-		});
+	const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-		if (!response.ok) {
-			throw new Error(`Supabase error: ${response.status}`);
+	if (UUID_REGEX.test(userId)) {
+		try {
+			const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_active_cloud_subscription`, {
+				method: 'POST',
+				headers: {
+					apikey: env.SUPABASE_ANON_KEY,
+					Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ input_user_id: userId }),
+			});
+
+			if (!response.ok) {
+				console.error('Supabase error:', await response.text());
+				return false;
+			}
+			if (!response.ok) {
+				console.error('Supabase error:', await response.text());
+				return false;
+			}
+
+			const isValid: boolean = await response.json();
+			subscriptionCache.set(userId, isValid);
+			return isValid;
+		} catch (error) {
+			console.error('Error checking subscription:', error);
+			return false;
 		}
-
-		const isValid: boolean = await response.json();
-		subscriptionCache.set(userId, isValid);
-		return isValid;
-	} catch (error) {
-		console.error('Error checking subscription:', error);
-		return false;
 	}
+
+	// If not a UUID, return false to allow Clerk verification to proceed
+	return false;
 }
 
-async function verifyClerkToken(env: Env, token: string): Promise<string | null> {
+async function verifyClerkToken(env: Env, token: string): Promise<boolean> {
+	console.log('verifying clerk token', token);
 	try {
 		const payload = await verifyToken(token, {
 			secretKey: env.CLERK_SECRET_KEY,
 		});
-		return payload.sub || null;
+		return payload.sub !== null;
 	} catch (error) {
 		console.error('clerk verification failed:', error);
-		return null;
+		return false;
 	}
 }
 
@@ -123,11 +139,129 @@ export class RateLimiter {
 	}
 }
 
+async function handleChatCompletions(body: RequestBody, env: Env): Promise<Response> {
+	const provider = createProvider(body.model, env);
+
+	if (body.stream) {
+		const stream = await provider.createStreamingCompletion(body);
+		return new Response(stream, {
+			headers: {
+				'Content-Type': 'text/event-stream',
+				'Cache-Control': 'no-cache',
+				Connection: 'keep-alive',
+			},
+		});
+	}
+
+	return await provider.createCompletion(body);
+}
+
+async function handleOptions(request: Request) {
+	const corsHeaders = {
+		'Access-Control-Allow-Origin': '*',
+		'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+		'Access-Control-Allow-Headers': '*',
+		'Access-Control-Max-Age': '86400',
+	};
+
+	// Handle CORS preflight requests
+	if (
+		request.headers.get('Origin') !== null &&
+		request.headers.get('Access-Control-Request-Method') !== null &&
+		request.headers.get('Access-Control-Request-Headers') !== null
+	) {
+		return new Response(null, {
+			headers: {
+				...corsHeaders,
+				'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '*',
+			},
+		});
+	}
+
+	// Handle standard OPTIONS request
+	return new Response(null, {
+		headers: {
+			Allow: 'GET, HEAD, POST, OPTIONS',
+		},
+	});
+}
+
+async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
+	try {
+		// Generate a unique request ID
+		const requestId = crypto.randomUUID();
+
+		// Create WebSocket pair
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
+		server.accept();
+
+		let params = new URL(request.url).searchParams;
+		let sampleRate = params.get('sample_rate');
+
+		let url = new URL('wss://api.deepgram.com/v1/listen');
+		// for each key in params, set the url search param
+		for (let [key, value] of params.entries()) {
+			url.searchParams.set(key, value);
+		}
+
+		const deepgram = createClient(env.DEEPGRAM_API_KEY);
+		const deepgramSocket = deepgram.listen.live({}, url.toString());
+
+		deepgramSocket.on(LiveTranscriptionEvents.Open, (data) => {
+			server.send(
+				JSON.stringify({
+					type: 'message',
+					data: JSON.stringify(data),
+				})
+			);
+		});
+
+		// Simple passthrough: client -> Deepgram
+		server.addEventListener('message', (event) => {
+			if (deepgramSocket.getReadyState() === WebSocket.OPEN) {
+				deepgramSocket.send(event.data);
+			}
+		});
+
+		// Simple passthrough: Deepgram -> client
+		deepgramSocket.on(LiveTranscriptionEvents.Transcript, (data) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.send(JSON.stringify(data));
+			}
+		});
+
+		// Handle connection close
+		server.addEventListener('close', () => {
+			deepgramSocket.requestClose();
+		});
+
+		// Handle errors
+		deepgramSocket.on(LiveTranscriptionEvents.Error, (error) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.close(1011, 'Deepgram error: ' + error.message);
+			}
+		});
+
+		return new Response(null, {
+			status: 101,
+			webSocket: client,
+			headers: {
+				'dg-request-id': requestId,
+			},
+		});
+	} catch (error) {
+		console.error('WebSocket upgrade failed:', error);
+		return new Response('WebSocket upgrade failed', { status: 500 });
+	}
+}
+
 export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
 		tracesSampleRate: 0.1,
 		environment: env.NODE_ENV || 'development',
+		enabled: (env.NODE_ENV || 'development') === 'production',
 	}),
 	{
 		/**
@@ -150,22 +284,9 @@ export default Sentry.withSentry(
 				console.error('langfuse error:', error);
 			});
 
-			// CORS headers
-			const corsHeaders = {
-				'Access-Control-Allow-Origin': '*', // Or specify your app's origin
-				'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-				'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent',
-			};
-
-			// Handle CORS preflight requests
+			// Modify your fetch handler to use this for OPTIONS requests
 			if (request.method === 'OPTIONS') {
-				return new Response(null, {
-					headers: {
-						...corsHeaders,
-						// Add this line to handle preflight requests for all headers
-						'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || '',
-					},
-				});
+				return handleOptions(request);
 			}
 
 			const ip = request.headers.get('cf-connecting-ip') || 'unknown';
@@ -177,7 +298,7 @@ export default Sentry.withSentry(
 			const rateLimitData = (await rateLimitResponse.json()) as { allowed: boolean; remaining: number; reset_in: number };
 
 			if (!rateLimitData.allowed) {
-				return new Response(
+				const response = new Response(
 					JSON.stringify({
 						error: 'rate limit exceeded',
 						retry_after: 60, // seconds
@@ -185,12 +306,17 @@ export default Sentry.withSentry(
 					{
 						status: 429,
 						headers: {
-							...corsHeaders,
-							'Content-Type': 'application/json',
+							'Access-Control-Allow-Origin': '*',
+							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+							'Access-Control-Allow-Headers': '*',
+							'Access-Control-Allow-Credentials': 'true',
+							'Access-Control-Max-Age': '86400',
 							'Retry-After': '60',
 						},
 					}
 				);
+				response.headers.append('Vary', 'Origin');
+				return response;
 			}
 
 			try {
@@ -200,286 +326,103 @@ export default Sentry.withSentry(
 				// Add auth check for protected routes
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
-					if (!authHeader?.startsWith('Bearer ')) {
-						return new Response(JSON.stringify({ error: 'unauthorized' }), {
+					console.log('authHeader', authHeader);
+					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
+						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
-							headers: corsHeaders,
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Access-Control-Allow-Credentials': 'true',
+								'Access-Control-Max-Age': '86400',
+							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 
 					const token = authHeader.split(' ')[1];
-					// First try to validate as a user ID with subscription
+
 					let isValid = await validateSubscription(env, token);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
-						const clerkUserId = await verifyClerkToken(env, token);
-						if (clerkUserId) {
-							isValid = await validateSubscription(env, clerkUserId);
-						}
+						isValid = await verifyClerkToken(env, token);
 					}
 
 					if (!isValid) {
-						return new Response(JSON.stringify({ error: 'invalid subscription' }), {
+						console.log('all validation attempts failed');
+						const response = new Response(JSON.stringify({ error: 'invalid subscription' }), {
 							status: 401,
-							headers: corsHeaders,
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Access-Control-Allow-Credentials': 'true',
+								'Access-Control-Max-Age': '86400',
+							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 				}
 
+				console.log('path', path);
+
 				if (path === '/test') {
-					return new Response('ai proxy is working!', {
+					const response = new Response('ai proxy is working!', {
 						status: 200,
-						headers: corsHeaders,
+						headers: {
+							'Access-Control-Allow-Origin': '*',
+							'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+							'Access-Control-Allow-Headers': '*',
+							'Access-Control-Allow-Credentials': 'true',
+							'Access-Control-Max-Age': '86400',
+						},
 					});
+					response.headers.append('Vary', 'Origin');
+					return response;
 				}
 
 				if (path === '/v1/chat/completions' && request.method === 'POST') {
-					const body = (await request.json()) as {
-						model: string;
-						messages: any[];
-						stream: boolean;
-						response_format?: { type: string };
-						temperature?: number;
-					};
-					const isStreaming = body.stream === true;
-					const isAnthropicModel = body.model.toLowerCase().includes('claude');
-					const isGeminiModel = body.model.toLowerCase().includes('gemini');
+					const body = (await request.json()) as RequestBody;
 
 					const trace = langfuse.trace({
 						id: 'ai_call_' + Date.now(),
 						name: 'ai_call',
 						metadata: {
-							expectJson: body.response_format?.type === 'json_object',
-							streaming: isStreaming,
-							provider: isAnthropicModel ? 'anthropic' : isGeminiModel ? 'gemini' : 'openai',
+							model: body.model,
+							streaming: body.stream === true,
 						},
 					});
 
-					const generation = trace.generation({
-						name: 'completion',
-						model: body.model,
-						modelParameters: {
-							temperature: body.temperature,
-							streaming: isStreaming,
-						},
-						input: JSON.stringify(body.messages),
-					});
-
-					// Convert messages to Anthropic format if needed
-					const anthropicMessages = isAnthropicModel
-						? {
-								messages: body.messages.map((msg) => ({
-									role: msg.role === 'user' ? 'user' : 'assistant',
-									content: msg.content,
-								})),
-								model: body.model,
-								stream: isStreaming,
-								temperature: body.temperature,
-								max_tokens: 8192,
-						  }
-						: null;
-
-					if (isStreaming) {
-						const { readable, writable } = new TransformStream();
-						const writer = writable.getWriter();
-
-						ctx.waitUntil(
-							(async () => {
-								try {
-									if (isAnthropicModel) {
-										const anthropic = new Anthropic({
-											apiKey: env.ANTHROPIC_API_KEY,
-										});
-
-										try {
-											const stream = await anthropic.messages.create({
-												messages: body.messages.map((msg) => ({
-													role: msg.role === 'user' ? 'user' : 'assistant',
-													content: msg.content,
-												})),
-												model: body.model,
-												stream: true,
-												max_tokens: 4096,
-											});
-
-											for await (const chunk of stream) {
-												if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'text_delta') {
-													const openaiChunk = {
-														choices: [
-															{
-																delta: {
-																	content: chunk.delta.text,
-																},
-															},
-														],
-													};
-													await writer.write(new TextEncoder().encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
-												}
-											}
-
-											await writer.write(new TextEncoder().encode('data: [DONE]\n\n'));
-										} catch (error) {
-											console.error('Error in Anthropic stream:', error);
-											throw error;
-										}
-									} else if (isGeminiModel) {
-										const apiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-											method: 'POST',
-											headers: {
-												Authorization: `Bearer ${env.GEMINI_API_KEY}`,
-												'Content-Type': 'application/json',
-											},
-											body: JSON.stringify(body),
-										});
-
-										if (!apiResponse.ok) {
-											const errorData = await apiResponse.json();
-											throw new Error(`API error: ${JSON.stringify(errorData)}`);
-										}
-
-										const reader = apiResponse.body?.getReader();
-										if (!reader) {
-											throw new Error('Failed to get reader from API response');
-										}
-
-										while (true) {
-											const { done, value } = await reader.read();
-											if (done) break;
-											await writer.write(value);
-										}
-									} else {
-										// Original OpenAI format - keep the fetch call only for OpenAI
-										const apiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-											method: 'POST',
-											headers: {
-												Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-												'Content-Type': 'application/json',
-											},
-											body: JSON.stringify(body),
-										});
-
-										if (!apiResponse.ok) {
-											const errorData = await apiResponse.json();
-											throw new Error(`API error: ${JSON.stringify(errorData)}`);
-										}
-
-										const reader = apiResponse.body?.getReader();
-										if (!reader) {
-											throw new Error('Failed to get reader from API response');
-										}
-
-										while (true) {
-											const { done, value } = await reader.read();
-											if (done) break;
-											await writer.write(value);
-										}
-									}
-
-									generation.end({
-										completionStartTime: new Date(),
-										output: 'Streaming response completed',
-									});
-								} catch (error: any) {
-									console.error('Error in API stream:', error);
-									generation.end({
-										completionStartTime: new Date(),
-										output: error.message,
-									});
-									await writer.write(new TextEncoder().encode(`data: ${JSON.stringify({ error: error.message })}\n\n`));
-								} finally {
-									await writer.close();
-								}
-							})()
-						);
-
-						return new Response(readable, {
-							headers: {
-								...corsHeaders,
-								'Content-Type': 'text/event-stream',
-								'Cache-Control': 'no-cache',
-								Connection: 'keep-alive',
+					try {
+						const response = await handleChatCompletions(body, env);
+						trace.update({
+							metadata: {
+								completionStatus: 'success',
+								completionTime: new Date().toISOString(),
+								modelUsed: body.model,
+								isStreaming: body.stream === true,
 							},
+							output: response.statusText,
 						});
-					} else {
-						// Non-streaming response
-						try {
-							const apiResponse = await fetch(
-								isAnthropicModel
-									? 'https://api.anthropic.com/v1/messages'
-									: isGeminiModel
-									? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
-									: 'https://api.openai.com/v1/chat/completions',
-								{
-									method: 'POST',
-									headers: {
-										...(isAnthropicModel
-											? {
-													'x-api-key': env.ANTHROPIC_API_KEY,
-													'anthropic-version': '2023-06-01',
-											  }
-											: isGeminiModel
-											? {
-													Authorization: `Bearer ${env.GEMINI_API_KEY}`,
-											  }
-											: {
-													Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-											  }),
-										'Content-Type': 'application/json',
-									},
-									body: JSON.stringify(isAnthropicModel ? anthropicMessages : body),
-								}
-							);
-
-							if (!apiResponse.ok) {
-								const errorData = await apiResponse.json();
-								throw new Error(`API error: ${JSON.stringify(errorData)}`);
-							}
-
-							const data: any = await apiResponse.json();
-
-							// Handle both OpenAI-style and Anthropic-style responses
-							const content = isAnthropicModel
-								? // Anthropic format: either content array or direct message
-								  data.content?.[0]?.text || data.choices?.[0]?.message?.content || ''
-								: // OpenAI format
-								  data.choices?.[0]?.message?.content || '';
-
-							const normalizedResponse = {
-								choices: [
-									{
-										message: {
-											content: content,
-										},
-									},
-								],
-							};
-
-							generation.end({
-								completionStartTime: new Date(),
-								output: normalizedResponse.choices[0]?.message?.content || '',
-							});
-
-							return new Response(JSON.stringify(normalizedResponse), {
-								headers: {
-									...corsHeaders,
-									'Content-Type': 'application/json',
-								},
-							});
-						} catch (error: any) {
-							console.error('Error in API request:', error);
-							generation.end({
-								completionStartTime: new Date(),
-								output: error.message,
-							});
-							return new Response(JSON.stringify({ error: error.message }), {
-								status: 500,
-								headers: {
-									...corsHeaders,
-									'Content-Type': 'application/json',
-								},
-							});
-						}
+						response.headers.set('Access-Control-Allow-Origin', '*');
+						response.headers.set('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
+						response.headers.append('Vary', 'Origin');
+						return response;
+					} catch (error: any) {
+						trace.update({
+							metadata: {
+								completionStatus: 'error',
+								errorTime: new Date().toISOString(),
+								errorType: error.name,
+								errorMessage: error.message,
+							},
+							output: error.message,
+						});
+						throw error;
 					}
 				}
 
@@ -509,15 +452,19 @@ export default Sentry.withSentry(
 						}
 
 						const data = await deepgramResponse.json();
-						return new Response(JSON.stringify(data), {
+						const response = new Response(JSON.stringify(data), {
 							headers: {
-								...corsHeaders,
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
 								'Content-Type': 'application/json',
 							},
 						});
+						response.headers.append('Vary', 'Origin');
+						return response;
 					} catch (error: any) {
 						console.error('Error in Deepgram request:', error);
-						return new Response(
+						const response = new Response(
 							JSON.stringify({
 								error: error.message,
 								details: error.stack,
@@ -525,44 +472,53 @@ export default Sentry.withSentry(
 							{
 								status: 500,
 								headers: {
-									...corsHeaders,
+									'Access-Control-Allow-Origin': '*',
+									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+									'Access-Control-Allow-Headers': '*',
 									'Content-Type': 'application/json',
 								},
 							}
 						);
+						response.headers.append('Vary', 'Origin');
+						return response;
 					}
 				}
 
-				return new Response('not found', {
+				if (path === '/v1/listen' && request.headers.get('Upgrade') === 'websocket') {
+					console.log('websocket request');
+					return await handleWebSocketUpgrade(request, env);
+				}
+
+				const response = new Response('not found', {
 					status: 404,
-					headers: corsHeaders,
+					headers: {
+						'Access-Control-Allow-Origin': '*',
+						'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+						'Access-Control-Allow-Headers': '*',
+						'Access-Control-Max-Age': '86400',
+					},
 				});
+				response.headers.append('Vary', 'Origin');
+				return response;
 			} catch (error) {
 				console.error('error in fetch:', error);
-				return new Response('an error occurred', {
+				const response = new Response('an error occurred', {
 					status: 500,
-					headers: corsHeaders,
+					headers: {
+						'Access-Control-Allow-Origin': '*',
+						'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+						'Access-Control-Allow-Headers': '*',
+						'Access-Control-Max-Age': '86400',
+					},
 				});
+				response.headers.append('Vary', 'Origin');
+				return response;
 			} finally {
 				await langfuse.shutdownAsync();
 			}
 		},
 	} satisfies ExportedHandler<Env>
 );
-
-interface Env {
-	OPENAI_API_KEY: string;
-	LANGFUSE_PUBLIC_KEY: string;
-	LANGFUSE_SECRET_KEY: string;
-	ANTHROPIC_API_KEY: string;
-	DEEPGRAM_API_KEY: string;
-	RATE_LIMITER: DurableObjectNamespace;
-	GEMINI_API_KEY: string;
-	NODE_ENV?: string;
-	SUPABASE_URL: string;
-	SUPABASE_ANON_KEY: string;
-	CLERK_SECRET_KEY: string;
-}
 
 /*
 terminal 1

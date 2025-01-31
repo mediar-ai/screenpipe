@@ -1,3 +1,4 @@
+#![allow(clippy::all, dead_code, unused_variables, unused_mut)]
 #[cfg(feature = "llm")]
 mod llm_module {
 

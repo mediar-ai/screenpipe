@@ -8,6 +8,7 @@ export interface PipeStorePlugin {
   price: number | null;
   status: string | null;
   created_at: string | null;
+  source_code: string | null;
   developer_accounts: {
     developer_name: string;
   };
@@ -174,7 +175,7 @@ export class PipeApi {
       const data = (await response.json()) as PipeDownloadResponse;
       return data;
     } catch (error) {
-      console.error("error downloading pipe:", error);
+      console.warn("error downloading pipe:", error);
       throw error;
     }
   }

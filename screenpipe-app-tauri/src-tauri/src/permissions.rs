@@ -24,31 +24,27 @@ pub fn open_permission_settings(permission: OSPermission) {
         use std::process::Command;
 
         match permission {
-            OSPermission::ScreenRecording => {
-                Command::new("open")
-                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-                    .spawn()
-                    .expect("Failed to open Screen Recording settings");
-            }
-            OSPermission::Camera => {
-                Command::new("open")
-                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
-                    .spawn()
-                    .expect("Failed to open Camera settings");
-            }
-            OSPermission::Microphone => {
-                Command::new("open")
-                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-                    .spawn()
-                    .expect("Failed to open Microphone settings");
-            }
-            OSPermission::Accessibility => {
-                Command::new("open")
-                    .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-                    .spawn()
-                    .expect("Failed to open Accessibility settings");
-            }
-        }
+            OSPermission::ScreenRecording => Command::new("open")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+                )
+                .spawn()
+                .expect("Failed to open Screen Recording settings"),
+            OSPermission::Camera => Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
+                .spawn()
+                .expect("Failed to open Camera settings"),
+            OSPermission::Microphone => Command::new("open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+                .spawn()
+                .expect("Failed to open Microphone settings"),
+            OSPermission::Accessibility => Command::new("open")
+                .arg(
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+                )
+                .spawn()
+                .expect("Failed to open Accessibility settings"),
+        };
     }
 }
 
@@ -97,10 +93,7 @@ pub enum OSPermissionStatus {
 
 impl OSPermissionStatus {
     pub fn permitted(&self) -> bool {
-        match self {
-            Self::NotNeeded | Self::Granted => true,
-            _ => false,
-        }
+        matches!(self, Self::NotNeeded | Self::Granted)
     }
 }
 
