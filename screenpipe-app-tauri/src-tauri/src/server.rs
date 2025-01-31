@@ -115,58 +115,30 @@ async fn settings_stream(
     )
 }
 
-#[cfg(not(target_os = "windows"))]
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
     let app_handle_clone = app_handle.clone();
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let store_path = app_handle
-            .path()
-            .local_data_dir()
-            .unwrap()
-            .join("store.bin");
+    let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+    let store_path = base_dir.join("store.bin");
 
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = store_path.parent() {
-            std::fs::create_dir_all(parent).unwrap_or_else(|e| {
-                error!("Failed to create directory: {}", e);
-            });
-        }
-
-        // Initialize store file if it doesn't exist
-        if !store_path.exists() {
-            if let Ok(store) = get_store(&app_handle, None) {
-                store.save().unwrap_or_else(|e| {
-                    error!("Failed to create store file: {}", e);
-                });
-            }
-        }
-
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(event) = res {
-                if event.kind.is_modify() {
-                    if let Ok(store) = get_store(&app_handle_clone, None) {
-                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
-                            let _ = settings_tx_clone.send(settings);
-                        }
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() {
+                if let Ok(store) = get_store(&app_handle_clone, None) {
+                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                        let _ = settings_tx_clone.send(settings);
                     }
                 }
             }
-        })
-        .unwrap();
-
-        // Only watch if the file exists
-        if store_path.exists() {
-            watcher
-                .watch(&store_path, RecursiveMode::NonRecursive)
-                .unwrap_or_else(|e| {
-                    error!("Failed to watch store file: {}", e);
-                });
         }
-    }
+    })
+    .unwrap();
+
+    watcher
+        .watch(&store_path, RecursiveMode::NonRecursive)
+        .unwrap();
 
     let state = ServerState {
         app_handle,
