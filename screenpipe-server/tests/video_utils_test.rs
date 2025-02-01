@@ -105,6 +105,8 @@ async fn test_extract_frames() -> Result<()> {
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn test_extract_frames_and_ocr() -> Result<()> {
+    use std::sync::Arc;
+
     use screenpipe_vision::perform_ocr_apple;
     setup_test_env().await?;
     let video_path = create_test_video().await?;
@@ -133,7 +135,10 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
     };
 
     // perform ocr using apple native (macos only)
-    let (text, _, confidence) = perform_ocr_apple(&captured_window.image, &[Language::English]);
+    let (text, _, confidence) = perform_ocr_apple(
+        &captured_window.image,
+        Arc::new([Language::English].to_vec()),
+    );
 
     println!("ocr confidence: {}", confidence.unwrap_or(0.0));
     println!("extracted text: {}", text);

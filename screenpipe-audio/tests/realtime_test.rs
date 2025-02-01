@@ -35,7 +35,7 @@ async fn test_realtime_transcription() {
             Arc::new(device),
             sample_rate,
             is_running_clone,
-            vec![],
+            Arc::new([].to_vec()),
             Some(deepgram_api_key),
         )
         .await;

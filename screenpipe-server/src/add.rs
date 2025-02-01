@@ -183,12 +183,12 @@ pub async fn handle_index_command(
             // Do OCR processing directly
             let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
                 #[cfg(target_os = "macos")]
-                OcrEngine::AppleNative => perform_ocr_apple(frame, &[]),
+                OcrEngine::AppleNative => perform_ocr_apple(frame, Arc::new([].to_vec())),
                 #[cfg(target_os = "windows")]
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    return perform_ocr_tesseract(&frame, vec![]);
+                    return perform_ocr_tesseract(&frame, Arc::new([].to_vec()));
 
                     panic!("unsupported ocr engine");
                 }

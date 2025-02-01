@@ -13,7 +13,7 @@ use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::{AudioDevice, DeviceManager, DeviceType, Language};
 use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
-use screenpipe_vision::OcrEngine;
+use screenpipe_vision::{CaptureResult, OcrEngine};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,7 +29,7 @@ pub struct RecordingConfig {
     pub video_chunk_duration: Duration,
     pub use_pii_removal: bool,
     pub capture_unfocused_windows: bool,
-    pub languages: Vec<Language>,
+    pub languages: Arc<Vec<Language>>,
 }
 
 #[derive(Clone)]
@@ -49,8 +49,8 @@ pub struct AudioConfig {
 pub struct VisionConfig {
     pub disabled: bool,
     pub ocr_engine: Arc<OcrEngine>,
-    pub ignored_windows: Vec<String>,
-    pub include_windows: Vec<String>,
+    pub ignored_windows: Arc<Vec<String>>,
+    pub include_windows: Arc<Vec<String>>,
 }
 
 #[derive(Clone)]
@@ -61,10 +61,10 @@ pub struct VideoRecordingConfig {
     pub ocr_engine: Arc<OcrEngine>,
     pub monitor_id: u32,
     pub use_pii_removal: bool,
-    pub ignored_windows: Vec<String>,
-    pub include_windows: Vec<String>,
+    pub ignored_windows: Arc<Vec<String>>,
+    pub include_windows: Arc<Vec<String>>,
     pub video_chunk_duration: Duration,
-    pub languages: Vec<Language>,
+    pub languages: Arc<Vec<Language>>,
     pub capture_unfocused_windows: bool,
 }
 
@@ -165,10 +165,10 @@ async fn record_vision(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    languages: Vec<Language>,
+    languages: Arc<Vec<Language>>,
     capture_unfocused_windows: bool,
-    ignored_windows: Vec<String>,
-    include_windows: Vec<String>,
+    ignored_windows: Arc<Vec<String>>,
+    include_windows: Arc<Vec<String>>,
     video_chunk_duration: Duration,
     use_pii_removal: bool,
 ) -> Result<()> {
@@ -199,11 +199,11 @@ async fn record_vision(
                         let db_manager_video = Arc::clone(&db);
                         let output_path_video = Arc::clone(&output_path);
                         let ocr_engine = Arc::clone(&ocr_engine);
-                        let ignored_windows_video = ignored_windows.to_vec();
-                        let include_windows_video = include_windows.to_vec();
 
                         let languages = languages.clone();
                         let device_manager_vision_clone = device_manager.clone();
+                        let ignored_windows = ignored_windows.clone();
+                        let include_windows = include_windows.clone();
                         let handle = tokio::spawn(async move {
                             let config = VideoRecordingConfig {
                                 db: db_manager_video,
@@ -212,8 +212,8 @@ async fn record_vision(
                                 ocr_engine,
                                 monitor_id,
                                 use_pii_removal,
-                                ignored_windows: ignored_windows_video,
-                                include_windows: include_windows_video,
+                                ignored_windows,
+                                include_windows,
                                 video_chunk_duration,
                                 languages,
                                 capture_unfocused_windows,
@@ -306,65 +306,81 @@ async fn record_video(
                     _ => continue, // Ignore other devices or monitors
                 }
             }
-            _ = tokio::time::sleep(Duration::from_secs_f64(1.0 / config.fps)) => {
-                if let Some(frame) = video_capture.ocr_frame_queue.pop() {
-                    for window_result in &frame.window_ocr_results {
-                        match config.db.insert_frame(&device_name, None).await {
-                            Ok(frame_id) => {
-                                let text_json =
-                                    serde_json::to_string(&window_result.text_json).unwrap_or_default();
+            // we should process faster than the fps we use to do OCR 
+            _ = tokio::time::sleep(Duration::from_secs_f64(1.0 / (config.fps * 2.0))) => {
+                let frame = match video_capture.ocr_frame_queue.pop() {
+                    Some(f) => f,
+                    None => continue,
+                };
 
-                                            let text = if config.use_pii_removal {
-                                                &remove_pii(&window_result.text)
-                                            } else {
-                                                &window_result.text
-                                            };
-
-                                    let _ = send_event(
-                                        "ocr_result",
-                                        WindowOcr {
-                                            image: Some(frame.image.clone()),
-                                            text: text.clone(),
-                                            text_json: window_result.text_json.clone(),
-                                            app_name: window_result.app_name.clone(),
-                                            window_name: window_result.window_name.clone(),
-                                            focused: window_result.focused,
-                                            confidence: window_result.confidence,
-                                            timestamp: frame.timestamp,
-                                        },
-                                    );
-
-                                    if let Err(e) = config.db
-                                        .insert_ocr_text(
-                                            frame_id,
-                                            text,
-                                            &text_json,
-                                            &window_result.app_name,
-                                            &window_result.window_name,
-                                            Arc::clone(&config.ocr_engine),
-                                            window_result.focused, // Add this line
-                                        )
-                                        .await
-                                    {
-                                        error!(
-                                            "Failed to insert OCR text: {}, skipping window {} of frame {}",
-                                            e, window_result.window_name, frame_id
-                                        );
-                                        continue;
-                                    }
-                                }
-
-                                    Err(e) => {
-                                        warn!("Failed to insert frame: {}", e);
-                                        tokio::time::sleep(Duration::from_millis(100)).await;
-                                        continue;
-                            }
-                                    }
-                                    }
-                                }
-                            }
+                process_ocr_frame(
+                    frame,
+                    &config.db,
+                    &device_name,
+                    config.use_pii_removal,
+                    config.ocr_engine.clone(),
+                ).await;
+            }
         }
-        tokio::time::sleep(Duration::from_secs_f64(1.0 / config.fps)).await;
+    }
+}
+
+async fn process_ocr_frame(
+    frame: Arc<CaptureResult>,
+    db: &DatabaseManager,
+    device_name: &str,
+    use_pii_removal: bool,
+    ocr_engine: Arc<OcrEngine>,
+) {
+    for window_result in &frame.window_ocr_results {
+        let frame_id = match db.insert_frame(device_name, None).await {
+            Ok(id) => id,
+            Err(e) => {
+                warn!("Failed to insert frame: {}", e);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+        };
+
+        let text_json = serde_json::to_string(&window_result.text_json).unwrap_or_default();
+
+        let text = if use_pii_removal {
+            remove_pii(&window_result.text)
+        } else {
+            window_result.text.clone()
+        };
+
+        let _ = send_event(
+            "ocr_result",
+            WindowOcr {
+                image: Some(frame.image.clone()),
+                text: text.clone(),
+                text_json: window_result.text_json.clone(),
+                app_name: window_result.app_name.clone(),
+                window_name: window_result.window_name.clone(),
+                focused: window_result.focused,
+                confidence: window_result.confidence,
+                timestamp: frame.timestamp,
+            },
+        );
+
+        if let Err(e) = db
+            .insert_ocr_text(
+                frame_id,
+                &text,
+                &text_json,
+                &window_result.app_name,
+                &window_result.window_name,
+                ocr_engine.clone(),
+                window_result.focused,
+            )
+            .await
+        {
+            error!(
+                "Failed to insert OCR text: {}, skipping window {} of frame {}",
+                e, window_result.window_name, frame_id
+            );
+        }
     }
 }
 
@@ -377,7 +393,7 @@ async fn record_audio(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_audio_enabled: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
-    languages: Vec<Language>,
+    languages: Arc<Vec<Language>>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();

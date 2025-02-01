@@ -12,12 +12,13 @@ use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tokio::time::{timeout, Duration};
 
 pub async fn perform_ocr_cloud(
     image: &DynamicImage,
-    languages: Vec<Language>,
+    languages: Arc<Vec<Language>>,
 ) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,

@@ -39,15 +39,18 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
-        ignore_list: Vec<String>,
-        include_list: Vec<String>,
-        languages: Vec<Language>,
+        ignore_list: Arc<Vec<String>>,
+        include_list: Arc<Vec<String>>,
+        languages: Arc<Vec<Language>>,
         capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
-            warn!("[monitor_id: {}] Invalid FPS value: {}. Using default of 1.0", monitor_id, fps);
+            warn!(
+                "[monitor_id: {}] Invalid FPS value: {}. Using default of 1.0",
+                monitor_id, fps
+            );
             1.0
         };
         let interval = Duration::from_secs_f64(1.0 / fps);
@@ -66,8 +69,9 @@ impl VideoCapture {
         let shutdown_rx_capture = shutdown_rx.clone();
         let shutdown_rx_queue = shutdown_rx.clone();
         let shutdown_rx_video = shutdown_rx.clone();
-
+        let languages_clone = languages.clone();
         let result_sender_inner = result_sender.clone();
+
         let capture_handle = tokio::spawn(async move {
             let mut rx = shutdown_rx_capture;
             loop {
@@ -80,15 +84,16 @@ impl VideoCapture {
                 }
                 let result_sender = result_sender_inner.clone();
                 let window_filters_clone = Arc::clone(&window_filters_clone);
+                let languages_clone = languages_clone.clone();
 
                 tokio::select! {
                     _ = continuous_capture(
                         result_sender,
                         interval,
-                        (*ocr_engine).clone(),
+                        ocr_engine.clone(),
                         monitor_id,
                         window_filters_clone,
-                        languages.clone(),
+                        languages_clone.clone(),
                         capture_unfocused_windows,
                         rx.clone(),
                     ) => {
