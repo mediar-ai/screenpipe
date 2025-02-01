@@ -796,6 +796,7 @@ impl DatabaseManager {
                 app_name: raw.app_name,
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
+                monitor_device: raw.monitor_device,
                 tags: raw
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
@@ -2096,6 +2097,7 @@ impl DatabaseManager {
                 ocr_engine: raw.ocr_engine,
                 window_name: raw.window_name,
                 frame_name: raw.frame_name,
+                monitor_device: raw.monitor_device,
                 tags: raw
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
