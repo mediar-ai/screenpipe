@@ -1,33 +1,61 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Meeting } from "./types"
 import { useMeetings } from "./hooks/use-meetings"
 import { MeetingCard } from "./components/meeting-card"
 import { Button } from "@/components/ui/button"
 import { Loader2, PlusCircle, Settings as SettingsIcon } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { LiveTranscription } from "@/components/live-transcription/new-meeting-wrapper"
 import { useRouter } from "next/navigation"
 import { MeetingSettings } from "./components/meeting-settings"
 import { UpcomingMeetings } from "./components/mockup-upcoming-meetings"
 import { getLiveMeetingData, clearLiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
+import { useSettings } from "@/lib/hooks/use-settings"
 
 export function MeetingHistory() {
-  const { meetings, loading, error, updateMeetings } = useMeetings()
-  const { toast } = useToast()
-  const [showLiveTranscription, setShowLiveTranscription] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [windowHeight, setWindowHeight] = useState(0)
   const [hasLiveMeeting, setHasLiveMeeting] = useState(false)
+
+  const { meetings, loading, error, updateMeetings } = useMeetings()
+  const { settings } = useSettings()
   const router = useRouter()
 
-  const updateHeight = () => {
-    const vh = window.innerHeight
-    const headerOffset = 32 // 2rem for top padding
-    console.log('meeting list height:', vh, 'header offset:', headerOffset)
-    setWindowHeight(vh - headerOffset)
-  }
+  const handleResume = useCallback(async () => {
+    if (!hasLiveMeeting) return
+    
+    console.log('resume: attempting navigation to live meeting')
+    try {
+      await router.push('/meetings/live', { 
+        state: { from: 'meeting-history' } 
+      })
+      console.log('resume: navigation completed')
+    } catch (e) {
+      console.error('resume: navigation failed:', e)
+    }
+  }, [hasLiveMeeting, router])
+
+  const handleNewMeeting = useCallback(async () => {
+    if (hasLiveMeeting) {
+      console.log('existing meeting detected, prompting user')
+      const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
+      if (!confirmed) {
+        console.log('user chose to resume existing meeting')
+        await handleResume()
+        return
+      }
+      console.log('user chose to start new meeting, clearing existing data')
+      await clearLiveMeetingData()
+    }
+    console.log('starting new meeting')
+    try {
+      await router.push('/meetings/live')
+      console.log('navigation completed')
+    } catch (e) {
+      console.error('navigation failed:', e)
+    }
+  }, [hasLiveMeeting, router, handleResume])
 
   useEffect(() => {
     updateHeight()
@@ -49,6 +77,18 @@ export function MeetingHistory() {
     checkLiveMeeting()
   }, [])
 
+  useEffect(() => {
+    setMounted(true)
+    console.log('meeting-history mounted')
+  }, [])
+
+  const updateHeight = () => {
+    const vh = window.innerHeight
+    const headerOffset = 32
+    console.log('meeting list height:', vh, 'header offset:', headerOffset)
+    setWindowHeight(vh - headerOffset)
+  }
+
   const handleMeetingUpdate = (id: string, update: { aiName?: string; aiSummary?: string }) => {
     console.log('handling meeting update:', {
       meetingId: id,
@@ -62,32 +102,10 @@ export function MeetingHistory() {
     updateMeetings(updatedMeetings)
   }
 
-  const handleNewMeeting = async () => {
-    if (hasLiveMeeting) {
-      console.log('existing meeting detected, prompting user')
-      const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
-      if (!confirmed) {
-        console.log('user chose to resume existing meeting')
-        setShowLiveTranscription(true)
-        return
-      }
-      console.log('user chose to start new meeting, clearing existing data')
-      await clearLiveMeetingData()
-    }
-    console.log('starting new meeting')
-    setShowLiveTranscription(true)
-  }
-
+  if (!mounted) return null
+  
   if (showSettings) {
     return <MeetingSettings onBack={() => setShowSettings(false)} />
-  }
-
-  if (showLiveTranscription) {
-    console.log('showing live transcription view')
-    return <LiveTranscription onBack={() => {
-      console.log('returning from live transcription to meeting history')
-      setShowLiveTranscription(false)
-    }} />
   }
 
   if (loading) {
@@ -114,7 +132,7 @@ export function MeetingHistory() {
             <SettingsIcon className="h-4 w-4" />
           </Button>
           <Button
-            onClick={hasLiveMeeting ? () => setShowLiveTranscription(true) : handleNewMeeting}
+            onClick={handleResume}
             variant="default"
             size="sm"
           >
@@ -147,6 +165,7 @@ export function MeetingHistory() {
                     <MeetingCard
                       key={meeting.id}
                       meeting={meeting}
+                      settings={settings}
                       onUpdate={handleMeetingUpdate}
                     />
                   ))}
