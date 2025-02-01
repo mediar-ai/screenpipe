@@ -3,9 +3,10 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, Trash2 } from "lucide-react"
+import { ArrowLeft, Trash2, Eye, EyeOff } from "lucide-react"
 import { useEffect, useState } from 'react'
-import { getMeetings } from '../hooks/use-meeting-storage'
+import { getMeetings, getAllUpdates } from '../hooks/storage-meeting-data'
+import { getLiveMeetingData, liveStore } from '../../live-transcription/hooks/storage-for-live-meeting'
 
 interface MeetingSettingsProps {
   onBack: () => void
@@ -15,24 +16,61 @@ export function MeetingSettings({ onBack }: MeetingSettingsProps) {
   const [stats, setStats] = useState<{
     meetingsCount: number
     updatesCount: number
+    liveMeetingsCount: number
     meetingsSize: string
     updatesSize: string
+    liveMeetingsSize: string
     orphanedUpdates: string[]
+  }>()
+  const [showRawData, setShowRawData] = useState(false)
+  const [rawData, setRawData] = useState<{
+    meetings: any[]
+    updates: Record<string, any>
+    liveMeetings: Record<string, any>
   }>()
 
   useEffect(() => {
-    const loadStats = async () => {
-      const meetings = await getMeetings()
-      const stats = {
-        meetingsCount: meetings.length,
-        updatesCount: meetings.length,
-        meetingsSize: (new TextEncoder().encode(JSON.stringify(meetings)).length / 1024).toFixed(2) + 'kb',
-        updatesSize: '0.00kb',
-        orphanedUpdates: []
+    const loadData = async () => {
+      try {
+        const meetings = await getMeetings()
+        const updates = await getAllUpdates()
+        
+        // Get all live meetings
+        const liveKeys = await liveStore.keys()
+        const liveMeetings: Record<string, any> = {}
+        for (const key of liveKeys) {
+          liveMeetings[key] = await liveStore.getItem(key)
+        }
+
+        console.log('loaded storage data:', {
+          meetingsCount: meetings?.length || 0,
+          updatesCount: Object.keys(updates || {}).length,
+          liveMeetingsCount: Object.keys(liveMeetings).length
+        })
+
+        // Set stats with null checks
+        const stats = {
+          meetingsCount: meetings?.length || 0,
+          updatesCount: Object.keys(updates || {}).length,
+          liveMeetingsCount: Object.keys(liveMeetings).length,
+          meetingsSize: (new TextEncoder().encode(JSON.stringify(meetings || [])).length / 1024).toFixed(2) + 'kb',
+          updatesSize: (new TextEncoder().encode(JSON.stringify(updates || {})).length / 1024).toFixed(2) + 'kb',
+          liveMeetingsSize: (new TextEncoder().encode(JSON.stringify(liveMeetings)).length / 1024).toFixed(2) + 'kb',
+          orphanedUpdates: Object.keys(updates || {}).filter(id => !meetings?.some(m => m.id === id))
+        }
+        setStats(stats)
+
+        // Set raw data
+        setRawData({
+          meetings: meetings || [],
+          updates: updates || {},
+          liveMeetings
+        })
+      } catch (error) {
+        console.error('failed to load storage data:', error)
       }
-      setStats(stats)
     }
-    loadStats()
+    loadData()
   }, [])
 
   return (
@@ -61,15 +99,64 @@ export function MeetingSettings({ onBack }: MeetingSettingsProps) {
             <div>updates count</div>
             <div>{stats?.updatesCount || 0}</div>
             
+            <div>live meetings count</div>
+            <div>{stats?.liveMeetingsCount || 0}</div>
+            
             <div>meetings size</div>
             <div>{stats?.meetingsSize || '0kb'}</div>
             
             <div>updates size</div>
             <div>{stats?.updatesSize || '0kb'}</div>
+
+            <div>live meetings size</div>
+            <div>{stats?.liveMeetingsSize || '0kb'}</div>
             
             <div>orphaned updates</div>
             <div>{stats?.orphanedUpdates?.length || 0}</div>
           </div>
+        </div>
+
+        {/* Raw Data Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">raw storage data</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowRawData(!showRawData)}
+            >
+              {showRawData ? (
+                <><EyeOff className="h-4 w-4 mr-2" /> hide</>
+              ) : (
+                <><Eye className="h-4 w-4 mr-2" /> show</>
+              )}
+            </Button>
+          </div>
+
+          {showRawData && rawData && (
+            <div className="space-y-4">
+              <Card className="p-4">
+                <h3 className="text-sm font-medium mb-2">live meetings ({Object.keys(rawData.liveMeetings).length})</h3>
+                <pre className="text-xs overflow-auto max-h-40 bg-gray-50 p-2 rounded">
+                  {JSON.stringify(rawData.liveMeetings, null, 2)}
+                </pre>
+              </Card>
+
+              <Card className="p-4">
+                <h3 className="text-sm font-medium mb-2">stored meetings ({rawData.meetings.length})</h3>
+                <pre className="text-xs overflow-auto max-h-40 bg-gray-50 p-2 rounded">
+                  {JSON.stringify(rawData.meetings, null, 2)}
+                </pre>
+              </Card>
+
+              <Card className="p-4">
+                <h3 className="text-sm font-medium mb-2">updates ({Object.keys(rawData.updates).length})</h3>
+                <pre className="text-xs overflow-auto max-h-40 bg-gray-50 p-2 rounded">
+                  {JSON.stringify(rawData.updates, null, 2)}
+                </pre>
+              </Card>
+            </div>
+          )}
         </div>
 
         {/* ai prompts section */}

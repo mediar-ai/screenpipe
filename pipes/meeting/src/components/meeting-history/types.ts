@@ -27,6 +27,7 @@ export interface Speaker {
     meetingEnd: string;
     humanName: string | null;
     aiName: string | null;
+    agenda: string | null;
     aiSummary: string | null;
     participants: string | null;
     mergedWith?: number[];
@@ -34,6 +35,12 @@ export interface Speaker {
     deviceNames: Set<string>;
     segments: MeetingSegment[];
     notes: MeetingNote[];
+    participants_invited?: string[];
+    recurrence?: string;
+    guestCount?: number;
+    confirmedCount?: number;
+    organizer?: string;
+    aiPrep?: MeetingPrep;
   }
   
   export interface AudioContent {
@@ -64,8 +71,30 @@ export interface Speaker {
     id: string;  // Changed from number to string
     humanName?: string | null;
     aiName?: string | null;
+    agenda?: string | null;
     aiSummary?: string | null;
     participants?: string | null;
     mergedWith?: number[];
     notes?: MeetingNote[];
+  }
+
+  export interface PersonContext {
+    personality: string;
+    communicationStyle: string;
+    pastDecisions: string[];
+    strengths: string[];
+    challenges: string[];
+  }
+  
+  export interface MeetingPrep {
+    previousContext: {
+      lastInteraction: string;
+      personContext: Record<string, PersonContext>;
+      agreedNextSteps: string[];
+    };
+    suggestedPrep: {
+      reviewPoints: string[];
+      discussionTopics: string[];
+      meetingTips: string[];
+    };
   }

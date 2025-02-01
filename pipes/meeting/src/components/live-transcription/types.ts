@@ -4,6 +4,9 @@ export interface TranscriptionChunk {
   isInput: boolean
   device: string
   speaker?: number  // Add optional speaker field
+  id: number
+  deviceName?: string
+  deviceType?: string
 }
 
 export type ServiceStatus = 'available' | 'forbidden' | 'unavailable' | 'no_subscription'

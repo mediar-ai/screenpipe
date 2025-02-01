@@ -19,7 +19,6 @@ export function useRecentChunks() {
       
       if (!results) {
         console.log('no results returned from queryScreenpipe')
-        setChunks([])
         return
       }
 
@@ -40,7 +39,7 @@ export function useRecentChunks() {
         .reverse()
 
       console.log('processed chunks:', recentChunks)
-      setChunks(recentChunks)
+      setChunks(prevChunks => [...recentChunks, ...prevChunks])
     } catch (error) {
       console.error("failed to fetch recent chunks:", error)
     } finally {

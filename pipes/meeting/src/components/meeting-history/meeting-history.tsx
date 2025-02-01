@@ -7,9 +7,11 @@ import { MeetingCard } from "./components/meeting-card"
 import { Button } from "@/components/ui/button"
 import { Loader2, PlusCircle, Settings as SettingsIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { LiveTranscription } from "@/components/live-transcription/new-meeting"
+import { LiveTranscription } from "@/components/live-transcription/new-meeting-wrapper"
 import { useRouter } from "next/navigation"
 import { MeetingSettings } from "./components/meeting-settings"
+import { UpcomingMeetings } from "./components/mockup-upcoming-meetings"
+import { getLiveMeetingData, clearLiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 export function MeetingHistory() {
   const { meetings, loading, error, updateMeetings } = useMeetings()
@@ -17,6 +19,7 @@ export function MeetingHistory() {
   const [showLiveTranscription, setShowLiveTranscription] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [windowHeight, setWindowHeight] = useState(0)
+  const [hasLiveMeeting, setHasLiveMeeting] = useState(false)
   const router = useRouter()
 
   const updateHeight = () => {
@@ -32,13 +35,47 @@ export function MeetingHistory() {
     return () => window.removeEventListener('resize', updateHeight)
   }, [])
 
+  useEffect(() => {
+    const checkLiveMeeting = async () => {
+      const liveData = await getLiveMeetingData()
+      console.log('checking for live meeting:', {
+        exists: !!liveData,
+        title: liveData?.title,
+        notesCount: liveData?.notes?.length,
+        hasAnalysis: !!liveData?.analysis
+      })
+      setHasLiveMeeting(!!liveData)
+    }
+    checkLiveMeeting()
+  }, [])
+
   const handleMeetingUpdate = (id: string, update: { aiName?: string; aiSummary?: string }) => {
-    console.log('handling meeting update - id:', id, 'update:', update)
+    console.log('handling meeting update:', {
+      meetingId: id,
+      update,
+      currentMeetingsCount: meetings.length
+    })
     const updatedMeetings = meetings.map(meeting => {
       return meeting.id === id ? { ...meeting, ...update } : meeting
     })
-    console.log('updated meetings:', updatedMeetings)
+    console.log('updated meetings count:', updatedMeetings.length)
     updateMeetings(updatedMeetings)
+  }
+
+  const handleNewMeeting = async () => {
+    if (hasLiveMeeting) {
+      console.log('existing meeting detected, prompting user')
+      const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
+      if (!confirmed) {
+        console.log('user chose to resume existing meeting')
+        setShowLiveTranscription(true)
+        return
+      }
+      console.log('user chose to start new meeting, clearing existing data')
+      await clearLiveMeetingData()
+    }
+    console.log('starting new meeting')
+    setShowLiveTranscription(true)
   }
 
   if (showSettings) {
@@ -46,7 +83,11 @@ export function MeetingHistory() {
   }
 
   if (showLiveTranscription) {
-    return <LiveTranscription onBack={() => setShowLiveTranscription(false)} />
+    console.log('showing live transcription view')
+    return <LiveTranscription onBack={() => {
+      console.log('returning from live transcription to meeting history')
+      setShowLiveTranscription(false)
+    }} />
   }
 
   if (loading) {
@@ -59,9 +100,9 @@ export function MeetingHistory() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="h-4" /> {/* top spacing */}
+      <div className="h-4" />
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold">
+        <h2 className="text-base font-bold text-muted-foreground uppercase tracking-wider">
           meeting and conversation history
         </h2>
         <div className="flex gap-2">
@@ -73,12 +114,12 @@ export function MeetingHistory() {
             <SettingsIcon className="h-4 w-4" />
           </Button>
           <Button
-            onClick={() => setShowLiveTranscription(true)}
+            onClick={hasLiveMeeting ? () => setShowLiveTranscription(true) : handleNewMeeting}
             variant="default"
             size="sm"
           >
             <PlusCircle className="h-4 w-4 mr-2" />
-            new meeting
+            {hasLiveMeeting ? 'resume meeting' : 'new meeting'}
           </Button>
         </div>
       </div>
@@ -93,18 +134,25 @@ export function MeetingHistory() {
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(groupMeetingsByDate(meetings)).map(([date, dateMeetings]) => (
-              <div key={date}>
-                <h3 className="text-xl font-semibold mb-3">{date}</h3>
-                {dateMeetings.map((meeting) => (
-                  <MeetingCard
-                    key={meeting.id}
-                    meeting={meeting}
-                    onUpdate={handleMeetingUpdate}
-                  />
-                ))}
-              </div>
-            ))}
+            <div className="bg-accent/50 rounded-lg">
+              <h3 className="text-xl font-semibold mb-6 text-muted-foreground pl-4">upcoming</h3>
+              <UpcomingMeetings />
+            </div>
+            
+            <div>
+              {Object.entries(groupMeetingsByDate(meetings)).map(([date, dateMeetings]) => (
+                <div key={date}>
+                  <h3 className="text-xl font-semibold mb-3 text-muted-foreground">{date}</h3>
+                  {dateMeetings.map((meeting) => (
+                    <MeetingCard
+                      key={meeting.id}
+                      meeting={meeting}
+                      onUpdate={handleMeetingUpdate}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

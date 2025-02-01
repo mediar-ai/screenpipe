@@ -3,13 +3,15 @@ interface ChunkOverlayProps {
     speaker?: number
     displaySpeaker: string | number
     onSpeakerClick: () => void
+    onGenerateNote: () => void
 }
 
 export function ChunkOverlay({
     timestamp,
     speaker,
     displaySpeaker,
-    onSpeakerClick
+    onSpeakerClick,
+    onGenerateNote
 }: ChunkOverlayProps) {
     const formatSpeaker = (speaker: string | number) => {
         return typeof speaker === 'number' ? `speaker ${speaker}` : speaker
@@ -26,6 +28,15 @@ export function ChunkOverlay({
                     {formatSpeaker(displaySpeaker)}
                 </button>
             )}
+            <button
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onGenerateNote()
+                }}
+                className="ml-1 px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 rounded-sm transition-colors pointer-events-auto"
+            >
+                generate note
+            </button>
         </div>
     )
 } 

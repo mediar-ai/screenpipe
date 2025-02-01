@@ -1,14 +1,16 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Meeting } from "../types"
 import { Button } from "@/components/ui/button"
-import { Wand2, FileText } from "lucide-react"
+import { Wand2, FileText, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import { generateMeetingName } from "../use-meeting-ai"
 import { useSettings } from "@/lib/hooks/use-settings"
-import { updateMeeting } from "../hooks/use-meeting-storage"
+import { updateMeeting } from "../hooks/storage-meeting-data"
 import { useToast } from "@/hooks/use-toast"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { generateMeetingSummary } from "../use-meeting-summary"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { MeetingPrepDetails } from "./meeting-prep-card"
 
 interface MeetingCardProps {
   meeting: Meeting
@@ -136,53 +138,86 @@ export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
             <h3 className="text-base font-bold">
               {(meeting.humanName || meeting.aiName || "untitled meeting").replace(/^"|"$/g, '')}
             </h3>
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
-              {formatTime(meeting.meetingStart)} • {formatDuration(meeting.meetingStart, meeting.meetingEnd)}
-              <div 
-                className="h-3 w-2 bg-muted-foreground/20 origin-left transition-transform duration-500"
-                style={{ transform: `scaleX(${0.5 + Math.min(durationMinutes / 60, 1) * 5.0})` }}
-              />
-            </div>
-            <div className="flex items-center -gap-1">
-              <HoverCard openDelay={0} closeDelay={0}>
-                <HoverCardTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2"
-                    onClick={handleGenerateName}
-                    disabled={isGenerating}
-                  >
-                    <Wand2 className={`h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
-                  </Button>
-                </HoverCardTrigger>
-                <HoverCardContent className="w-auto p-2">
-                  <span className="text-sm text-muted-foreground">
-                    re-generate an ai name for this meeting
-                  </span>
-                </HoverCardContent>
-              </HoverCard>
-              <HoverCard openDelay={0} closeDelay={0}>
-                <HoverCardTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2"
-                    onClick={handleGenerateSummary}
-                    disabled={isGeneratingSummary}
-                  >
-                    <FileText className={`h-4 w-4 ${isGeneratingSummary ? "animate-spin" : ""}`} />
-                  </Button>
-                </HoverCardTrigger>
-                <HoverCardContent className="w-auto p-2">
-                  <span className="text-sm text-muted-foreground">
-                    generate an ai summary for this meeting
-                  </span>
-                </HoverCardContent>
-              </HoverCard>
+            <div className="text-sm text-muted-foreground flex items-center justify-between">
+              <div className="flex items-center">
+                {formatTime(meeting.meetingStart)} • {formatDuration(meeting.meetingStart, meeting.meetingEnd)}
+                <div 
+                  className="h-3 w-2 bg-muted-foreground/20 origin-left transition-transform duration-500 ml-2"
+                  style={{ transform: `scaleX(${0.5 + Math.min(durationMinutes / 60, 1) * 5.0})` }}
+                />
+              </div>
+              <div className="flex">
+                <HoverCard openDelay={0} closeDelay={0}>
+                  <HoverCardTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1"
+                      onClick={handleGenerateName}
+                      disabled={isGenerating}
+                    >
+                      <Wand2 className={`h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+                    </Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-auto p-2">
+                    <span className="text-sm text-muted-foreground">
+                      re-generate an ai name for this meeting
+                    </span>
+                  </HoverCardContent>
+                </HoverCard>
+                <HoverCard openDelay={0} closeDelay={0}>
+                  <HoverCardTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1"
+                      onClick={handleGenerateSummary}
+                      disabled={isGeneratingSummary}
+                    >
+                      <FileText className={`h-4 w-4 ${isGeneratingSummary ? "animate-spin" : ""}`} />
+                    </Button>
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-auto p-2">
+                    <span className="text-sm text-muted-foreground">
+                      generate an ai summary for this meeting
+                    </span>
+                  </HoverCardContent>
+                </HoverCard>
+                {meeting.aiPrep && (
+                  <HoverCard openDelay={0} closeDelay={0}>
+                    <HoverCardTrigger asChild>
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1 flex items-center gap-1 text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300"
+                          >
+                            <span className="text-xs">ai prep</span>
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="absolute left-0 right-0 mt-2 z-20 bg-white dark:bg-gray-950 border rounded-md p-4 shadow-lg">
+                          <MeetingPrepDetails aiPrep={meeting.aiPrep} />
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-auto p-2">
+                      <span className="text-sm text-muted-foreground">
+                        view ai-generated meeting preparation insights
+                      </span>
+                    </HoverCardContent>
+                  </HoverCard>
+                )}
+              </div>
             </div>
           </div>
           <div className="flex-1">
+            {meeting.agenda && (
+              <div className="text-sm text-muted-foreground mb-2">
+                {meeting.agenda}
+              </div>
+            )}
             {meeting.aiSummary && (
               <div className="text-sm text-muted-foreground">
                 {meeting.aiSummary}

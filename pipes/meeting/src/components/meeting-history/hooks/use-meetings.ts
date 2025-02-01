@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Meeting, AudioTranscription } from "../types"
 import { keysToCamelCase } from "@/lib/utils"
-import { getMeetings, setMeetings, cleanupOldMeetings } from "./use-meeting-storage"
+import { getMeetings, setMeetings, cleanupOldMeetings } from "./storage-meeting-data"
 import { v4 as uuidv4 } from "uuid"
 
 export function useMeetings() {
