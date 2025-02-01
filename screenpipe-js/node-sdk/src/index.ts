@@ -13,17 +13,11 @@ import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
 import { EventSource } from "eventsource";
-import {
-  captureEvent,
-  captureMainFeatureEvent,
-  identifyUser,
-} from "../../common/analytics";
+import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 
 class NodePipe {
   private analyticsInitialized = false;
   private analyticsEnabled = true;
-  private userId?: string;
-  private userProperties?: Record<string, any>;
 
   public input = {
     type: (text: string) =>
@@ -223,12 +217,11 @@ class NodePipe {
   }
 
   private async initAnalyticsIfNeeded() {
-    if (this.analyticsInitialized || !this.userId) return;
+    if (this.analyticsInitialized) return;
 
     const settings = await this.settings.getAll();
     this.analyticsEnabled = settings.analyticsEnabled;
     if (settings.analyticsEnabled) {
-      await identifyUser(this.userId, this.userProperties);
       this.analyticsInitialized = true;
     }
   }
@@ -239,7 +232,12 @@ class NodePipe {
   ) {
     if (!this.analyticsEnabled) return;
     await this.initAnalyticsIfNeeded();
-    return captureEvent(eventName, properties);
+    const settings = await this.settings.getAll();
+    return captureEvent(eventName, {
+      distinct_id: settings.user.id,
+      email: settings.user.email,
+      ...properties,
+    });
   }
 
   public async captureMainFeatureEvent(

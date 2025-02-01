@@ -10,11 +10,7 @@ import type {
   VisionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
-import {
-  captureEvent,
-  captureMainFeatureEvent,
-  identifyUser,
-} from "../../common/analytics";
+import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -65,11 +61,10 @@ export interface BrowserPipe {
 }
 
 class BrowserPipeImpl implements BrowserPipe {
-  private userProperties?: Record<string, any>;
-
   private async initAnalyticsIfNeeded(): Promise<{
     analyticsEnabled: boolean;
     userId?: string;
+    email?: string;
   }> {
     try {
       // Connect to settings SSE stream
@@ -81,6 +76,7 @@ class BrowserPipeImpl implements BrowserPipe {
       const settings = await new Promise<{
         analyticsEnabled: boolean;
         userId?: string;
+        email?: string;
       }>((resolve, reject) => {
         const timeout = setTimeout(() => {
           settingsStream.close();
@@ -98,7 +94,10 @@ class BrowserPipeImpl implements BrowserPipe {
           const userId =
             settingsArray.find(([key]) => key === "user.clerk_id")?.[1] ??
             undefined;
-          resolve({ analyticsEnabled, userId });
+          const userEmail =
+            settingsArray.find(([key]) => key === "user.email")?.[1] ??
+            undefined;
+          resolve({ analyticsEnabled, userId, email: userEmail });
         };
 
         settingsStream.onerror = (error) => {
@@ -108,12 +107,10 @@ class BrowserPipeImpl implements BrowserPipe {
         };
       });
 
-      if (settings.analyticsEnabled && settings.userId) {
-        await identifyUser(settings.userId, this.userProperties);
-      }
       return {
         analyticsEnabled: settings.analyticsEnabled,
         userId: settings.userId,
+        email: settings.email,
       };
     } catch (error) {
       console.error(
@@ -130,7 +127,7 @@ class BrowserPipeImpl implements BrowserPipe {
   async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {
-    await this.initAnalyticsIfNeeded();
+    const { userId, email } = await this.initAnalyticsIfNeeded();
     const notificationApiUrl = "http://localhost:11435";
     try {
       await fetch(`${notificationApiUrl}/notify`, {
@@ -138,12 +135,18 @@ class BrowserPipeImpl implements BrowserPipe {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
-      await this.captureEvent("notification_sent", { success: true });
+      await this.captureEvent("notification_sent", {
+        distinct_id: userId,
+        email: email,
+        success: true,
+      });
       return true;
     } catch (error) {
       await this.captureEvent("error_occurred", {
         feature: "notification",
         error: "send_failed",
+        distinct_id: userId,
+        email: email,
       });
       return false;
     }
@@ -153,7 +156,7 @@ class BrowserPipeImpl implements BrowserPipe {
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {
     console.log("queryScreenpipe:", params);
-    await this.initAnalyticsIfNeeded();
+    const { userId, email } = await this.initAnalyticsIfNeeded();
     const queryParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== "") {
@@ -190,14 +193,18 @@ class BrowserPipeImpl implements BrowserPipe {
       }
       const data = await response.json();
       await captureEvent("search_performed", {
+        distinct_id: userId,
         content_type: params.contentType,
         result_count: data.pagination.total,
+        email: email,
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       await captureEvent("error_occurred", {
         feature: "search",
         error: "query_failed",
+        distinct_id: userId,
+        email: email,
       });
       console.error("error querying screenpipe:", error);
       return null;
@@ -226,10 +233,13 @@ class BrowserPipeImpl implements BrowserPipe {
     const eventSource = new EventSource(
       "http://localhost:3030/sse/transcriptions"
     );
+    const { userId, email } = await this.initAnalyticsIfNeeded();
 
     try {
       await this.captureEvent("stream_started", {
         feature: "transcription",
+        distinct_id: userId,
+        email: email,
       });
 
       while (true) {
@@ -269,6 +279,8 @@ class BrowserPipeImpl implements BrowserPipe {
     } finally {
       await this.captureEvent("stream_ended", {
         feature: "transcription",
+        distinct_id: userId,
+        email: email,
       });
       eventSource.close();
     }
@@ -280,9 +292,12 @@ class BrowserPipeImpl implements BrowserPipe {
     const eventSource = new EventSource(
       `http://localhost:3030/sse/vision?images=${includeImages}`
     );
+    const { userId, email } = await this.initAnalyticsIfNeeded();
     try {
       await this.captureEvent("stream_started", {
         feature: "vision",
+        distinct_id: userId,
+        email: email,
       });
 
       while (true) {
@@ -303,6 +318,8 @@ class BrowserPipeImpl implements BrowserPipe {
     } finally {
       await this.captureEvent("stream_ended", {
         feature: "vision",
+        distinct_id: userId,
+        email: email,
       });
       eventSource.close();
     }

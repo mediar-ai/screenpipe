@@ -1,5 +1,6 @@
 use screenpipe_audio::deepgram::start_deepgram_stream;
-use screenpipe_audio::{pcm_decode, AudioDevice, DeviceType};
+use screenpipe_audio::pcm_decode;
+use screenpipe_core::{AudioDevice, AudioDeviceType};
 use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
@@ -16,7 +17,7 @@ async fn test_realtime_transcription() {
     let (samples, sample_rate) = pcm_decode("test_data/accuracy1.wav").unwrap();
 
     let (stream_tx, stream_rx) = broadcast::channel(sample_rate as usize * 3);
-    let device = AudioDevice::new("test".to_string(), DeviceType::Output);
+    let device = AudioDevice::new("test".to_string(), AudioDeviceType::Output);
     let is_running = Arc::new(AtomicBool::new(true));
 
     let deepgram_api_key = std::env::var("CUSTOM_DEEPGRAM_API_KEY").unwrap();

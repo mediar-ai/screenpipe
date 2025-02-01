@@ -9,13 +9,14 @@
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241011.0",
+    "@cloudflare/workers-types": "^4.20250124.3",
     "@types/node": "^22.7.5",
     "typescript": "^5.5.2",
     "wrangler": "^3.60.3"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.33.1",
+    "@deepgram/sdk": "^3.9.0",
     "@clerk/backend": "^1.23.8",
     "@google/generative-ai": "^0.21.0",
     "@sentry/cloudflare": "^8.51.0",
