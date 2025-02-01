@@ -1,10 +1,10 @@
 import { OpenAI } from "openai"
-import { Settings } from "@/lib/hooks/use-settings"
-import { TranscriptionChunk, Note } from "../types"
+import type { Settings } from "@screenpipe/browser"
+import { TranscriptionChunk, Note, Speaker } from "../../meeting-history/types"
 
 interface NoteContext {
     note: Note
-    chunk: TranscriptionChunk
+    context: string  // Combined text with timestamps and speakers
     title?: string
 }
 
@@ -31,7 +31,7 @@ export async function improveNote(
     try {
         console.log("improving note with full context:", {
             note: context.note,
-            chunk: context.chunk,
+            context: context.context,
             title: context.title,
             settings: {
                 provider: settings.aiProviderType,
@@ -41,7 +41,7 @@ export async function improveNote(
 
         console.log("improving note:", {
             note_text: context.note.text,
-            chunk_text: context.chunk.text,
+            context: context.context,
             title: context.title
         })
 
@@ -50,7 +50,7 @@ export async function improveNote(
                 role: "system" as const,
                 content: `you are me, improving my meeting notes.
                          return a single, concise sentence in lowercase.
-                         use the transcription chunk for accuracy.
+                         use the transcription context for accuracy.
                          focus on the key point or action item.
                          preserve any markdown formatting.
                          be brief and direct.`
@@ -62,7 +62,7 @@ export async function improveNote(
                 meeting title: ${context.title || 'unknown'}
 
                 transcription context:
-                [${context.chunk.speaker ?? 'unknown'}]: ${context.chunk.text}
+                ${context.context}
 
                 note to improve:
                 ${context.note.text}`
