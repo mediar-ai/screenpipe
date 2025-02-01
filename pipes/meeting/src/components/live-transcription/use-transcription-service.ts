@@ -8,47 +8,65 @@ export function useTranscriptionService() {
   const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
   const { serviceStatus, checkService, getStatusMessage } = useServiceStatus()
   const { startTranscription } = useTranscriptionStream(serviceStatus, setChunks)
-  const isInitialMount = useRef(true)
+  const initRef = useRef(false)
+  const checkingRef = useRef(false)
 
+  // Load stored chunks once
   useEffect(() => {
     const loadStoredChunks = async () => {
+      if (initRef.current) return
+      initRef.current = true
+      
       const storedData = await getLiveMeetingData()
       if (storedData?.chunks) {
-        console.log('loading stored chunks:', storedData.chunks.length)
+        console.log('transcription-service: loading stored chunks:', storedData.chunks.length)
         setChunks(storedData.chunks)
       }
     }
     loadStoredChunks()
   }, [setChunks])
 
-  // Effect to handle service status changes and start transcription
+  // Handle service health checks
   useEffect(() => {
-    const initTranscription = async () => {
-      if (isInitialMount.current) {
-        isInitialMount.current = false
-        console.log('initial transcription service mount')
-      }
-
-      if (serviceStatus === 'available') {
-        console.log('service available, starting transcription')
+    console.log('transcription-service: setting up health checks')
+    let isActive = true
+    
+    const runHealthCheck = async () => {
+      if (checkingRef.current || !isActive) return
+      checkingRef.current = true
+      
+      try {
+        console.log('transcription-service: running health check')
         await checkService(startTranscription)
+      } catch (e) {
+        console.error('transcription-service: health check failed:', e)
+      } finally {
+        checkingRef.current = false
       }
     }
 
-    initTranscription()
-  }, [serviceStatus, checkService, startTranscription])
+    // Initial check
+    runHealthCheck()
 
-  const checkServiceAndStart = async () => {
-    console.log('manually checking service and starting transcription')
-    await checkService(startTranscription)
-  }
+    // Set up interval for subsequent checks if not available
+    const interval = setInterval(() => {
+      if (serviceStatus !== 'available') {
+        runHealthCheck()
+      }
+    }, 5000)
+
+    return () => {
+      console.log('transcription-service: cleaning up health checks')
+      isActive = false
+      clearInterval(interval)
+    }
+  }, [checkService, startTranscription, serviceStatus])
 
   return {
     chunks,
     serviceStatus,
     isLoadingRecent: isLoading,
     fetchRecentChunks,
-    checkService: checkServiceAndStart,
     getStatusMessage
   }
 } 
