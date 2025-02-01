@@ -47,7 +47,7 @@ impl VideoCapture {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
-            warn!("Invalid FPS value: {}. Using default of 1.0", fps);
+            warn!("[monitor_id: {}] Invalid FPS value: {}. Using default of 1.0", monitor_id, fps);
             1.0
         };
         let interval = Duration::from_secs_f64(1.0 / fps);
@@ -72,7 +72,10 @@ impl VideoCapture {
             let mut rx = shutdown_rx_capture;
             loop {
                 if *rx.borrow() {
-                    info!("shutting down video capture thread");
+                    info!(
+                        "[monitor_id: {}] shutting down video capture thread",
+                        monitor_id
+                    );
                     break;
                 }
                 let result_sender = result_sender_inner.clone();
@@ -89,17 +92,20 @@ impl VideoCapture {
                         capture_unfocused_windows,
                         rx.clone(),
                     ) => {
-                        debug!("continuous capture completed, restarting");
+                        debug!("[monitor_id: {}] continuous capture completed, restarting", monitor_id);
                     }
                     _ = rx.changed() => {
                         if *rx.borrow() {
-                            info!("shutting down video capture thread");
+                            info!("[monitor_id: {}] shutting down video capture thread", monitor_id);
                             break;
                         }
                     }
                 }
             }
-            debug!("exiting capture handle loop, dropping sender");
+            debug!(
+                "[monitor_id: {}] exiting capture handle loop, dropping sender",
+                monitor_id
+            );
             drop(result_sender_inner);
         });
         handles.push(capture_handle);
@@ -108,11 +114,17 @@ impl VideoCapture {
             let rx = shutdown_rx_queue;
             while let Some(result) = result_receiver.recv().await {
                 if *rx.borrow() {
-                    info!("shutting down video queue thread");
+                    info!(
+                        "[monitor_id: {}] shutting down video queue thread",
+                        monitor_id
+                    );
                     break;
                 }
                 let frame_number = result.frame_number;
-                debug!("received frame {} for queueing", frame_number);
+                debug!(
+                    "[monitor_id: {}] received frame {} for queueing",
+                    monitor_id, frame_number
+                );
 
                 let result = Arc::new(result);
 
@@ -121,14 +133,17 @@ impl VideoCapture {
 
                 if !video_pushed || !ocr_pushed {
                     error!(
-                        "failed to push frame {} to one or more queues",
-                        frame_number
+                        "[monitor_id: {}] failed to push frame {} to one or more queues, queue lengths: {}, {}",
+                        monitor_id, frame_number,
+                        capture_video_frame_queue.len(),
+                        capture_ocr_frame_queue.len()
                     );
                     continue; // Skip to next iteration instead of crashing
                 }
 
                 debug!(
-                    "frame {} pushed to queues. Queue lengths: {}, {}",
+                    "[monitor_id: {}] frame {} pushed to queues. Queue lengths: {}, {}",
+                    monitor_id,
                     frame_number,
                     capture_video_frame_queue.len(),
                     capture_ocr_frame_queue.len()
@@ -344,7 +359,10 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
     frame
         .image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .expect("Failed to encode frame");
     buffer
 }
