@@ -3,6 +3,12 @@ import { pipe } from "@screenpipe/browser"
 import { useToast } from "@/hooks/use-toast"
 import { TranscriptionChunk, ServiceStatus } from '../types'
 
+declare global {
+  interface Window {
+    _eventSource?: EventSource;
+  }
+}
+
 export function useTranscriptionStream(
   serviceStatus: ServiceStatus,
   setChunks: (updater: (prev: TranscriptionChunk[]) => TranscriptionChunk[]) => void
@@ -18,8 +24,14 @@ export function useTranscriptionStream(
     
     try {
       console.log('starting transcription stream...');
+      if (window._eventSource) {
+        console.log('closing existing event source');
+        window._eventSource.close();
+      }
+      
       streamingRef.current = true;
       const eventSource = new EventSource('http://localhost:3030/sse/transcriptions');
+      window._eventSource = eventSource;
       
       eventSource.onopen = () => {
         console.log('sse connection opened');
