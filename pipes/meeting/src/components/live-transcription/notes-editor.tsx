@@ -11,14 +11,13 @@ import { useSettings } from '@/lib/hooks/use-settings'
 import { useToast } from '@/hooks/use-toast'
 import { generateMeetingNotes } from './hooks/ai-create-all-notes'
 import { improveNote } from './hooks/ai-create-note'
+import { useRouter } from "next/navigation"
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
-  onBack: () => void
-  onNewMeeting: () => void
 }
 
-export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
+export function NotesEditor({ onTimeClick }: Props) {
   const { 
     title, 
     setTitle,
@@ -41,6 +40,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const [isGeneratingNotes, setIsGeneratingNotes] = useState(false)
   const { settings } = useSettings()
   const { toast } = useToast()
+  const router = useRouter()
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
@@ -313,6 +313,21 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
     ))
   }
 
+  const handleBack = () => {
+    console.log("returning to meeting history from notes editor", {
+      hasNotes: notes.length > 0,
+      hasTitle: !!title,
+      hasAnalysis: !!analysis
+    })
+    router.push('/meetings')
+  }
+
+  const handleNewMeeting = async () => {
+    console.log('starting new meeting from notes editor')
+    await clearLiveMeetingData()
+    router.refresh() // Refresh the current route to clear state
+  }
+
   return (
     <div className="h-full flex flex-col bg-card relative">
       <div className="flex items-center justify-between">
@@ -343,21 +358,14 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
             <Sparkles className={`h-4 w-4 ${isGeneratingNotes ? "animate-spin" : ""}`} />
           </button>
           <button
-            onClick={() => {
-              console.log("returning to meeting history from notes editor", {
-                hasNotes: notes.length > 0,
-                hasTitle: !!title,
-                hasAnalysis: !!analysis
-              })
-              onBack()
-            }}
+            onClick={handleBack}
             className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
             title="back to meetings"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <button
-            onClick={() => onNewMeeting()}
+            onClick={handleNewMeeting}
             className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
             title="start new meeting"
           >
