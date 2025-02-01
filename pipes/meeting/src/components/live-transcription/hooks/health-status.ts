@@ -7,50 +7,76 @@ export function useServiceStatus() {
   const [isChecking, setIsChecking] = useState(false)
 
   const checkService = async (startTranscription: () => Promise<void>) => {
-    if (isChecking || serviceStatus === 'available') {
-      console.log('skipping service check - already checking or available')
+    if (isChecking) {
+      console.log('health-status: skipping check - already in progress')
       return
     }
 
     setIsChecking(true)
+    console.log('health-status: starting service check')
+    
+    let testSource: EventSource | null = null
+    
     try {
-      console.log('checking service availability, pipe exists:', !!pipe, 'streamTranscriptions exists:', !!pipe?.streamTranscriptions)
+      testSource = new EventSource('http://localhost:3030/sse/transcriptions')
       
-      if (!pipe?.streamTranscriptions) {
-        console.error('transcription service not available - pipe:', pipe)
-        setServiceStatus('unavailable')
-        return
-      }
+      const result = await Promise.race([
+        new Promise<void>((resolve, reject) => {
+          testSource!.onopen = () => {
+            console.log('health-status: test connection opened')
+          }
 
-      try {
-        console.log('attempting to get test transcription chunk')
-        const testChunk = await pipe.streamTranscriptions().next()
-        console.log('test transcription result:', testChunk, 'value:', testChunk.value)
-        
-        if ((testChunk.value as { error?: { message: string } })?.error?.message?.includes('invalid subscription')) {
-          console.error('invalid subscription detected')
-          setServiceStatus('no_subscription')
-        } else {
-          console.log('service available, starting transcription')
-          setServiceStatus('available')
-          startTranscription()
-        }
-      } catch (error) {
-        if (error instanceof Error && 
-            error.message.toLowerCase().includes('invalid subscription')) {
-          console.log('caught invalid subscription error')
-          setServiceStatus('no_subscription')
-        } else {
-          console.log('no error detected, starting transcription')
-          setServiceStatus('available')
-          startTranscription()
-        }
-      }
+          testSource!.onmessage = async (event) => {
+            console.log('health-status: received test message:', event.data)
+            
+            if (event.data === 'keep-alive-text') {
+              console.log('health-status: received keep-alive, service available')
+              setServiceStatus('available')
+              await startTranscription()
+              resolve()
+              return
+            }
+
+            try {
+              const chunk = JSON.parse(event.data)
+              console.log('health-status: parsed test chunk:', chunk)
+              
+              if (chunk.error?.includes('invalid subscription') || 
+                  chunk.choices?.[0]?.text?.includes('invalid subscription')) {
+                console.log('health-status: invalid subscription detected')
+                setServiceStatus('no_subscription')
+                reject(new Error('invalid subscription'))
+              } else {
+                console.log('health-status: service check successful')
+                setServiceStatus('available')
+                await startTranscription()
+                resolve()
+              }
+            } catch (e) {
+              console.error('health-status: failed to parse chunk:', e)
+              reject(e)
+            }
+          }
+
+          testSource!.onerror = (error) => {
+            console.error('health-status: test connection error:', error)
+            setServiceStatus('unavailable')
+            reject(new Error('health check failed'))
+          }
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('health check timeout')), 5000)
+        )
+      ])
+
+      return result
     } catch (error) {
-      console.error('service check failed:', error)
+      console.error('health-status: service check failed:', error)
       setServiceStatus('unavailable')
     } finally {
+      testSource?.close()
       setIsChecking(false)
+      console.log('health-status: check completed, status:', serviceStatus)
     }
   }
 
