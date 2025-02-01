@@ -1,5 +1,5 @@
 import { OpenAI } from "openai"
-import { Settings } from "@/lib/hooks/use-settings"
+import type { Settings } from "@screenpipe/browser"
 import { Meeting } from "../../meeting-history/types"
 
 export interface MeetingAnalysis {
@@ -146,13 +146,13 @@ export async function generateMeetingNotes(
         console.log("analyzing meeting:", {
             meeting_id: meeting.id,
             meeting_name: meeting.humanName || meeting.aiName,
-            chunks_count: meeting.chunks?.length || 0,
+            segments_count: meeting.segments?.length || 0,
             notes_count: meeting.notes?.length || 0
         })
 
         // combine transcript with existing notes for context
-        const transcript = (meeting.chunks || [])
-            .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
+        const transcript = (meeting.segments || [])
+            .map(s => `[${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
             .join("\n")
             
         const existingNotes = (meeting.notes || [])
