@@ -49,7 +49,7 @@ import ListItem from "@tiptap/extension-list-item";
 import TextStyle from "@tiptap/extension-text-style";
 import { EditorProvider } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { LiveTranscription } from "@/components/live-transcription/new-meeting-wrapper";
+import { LiveTranscription } from "@/app/meetings/live/page";
 
 function formatDate(date: string): string {
   const dateObj = new Date(date);
