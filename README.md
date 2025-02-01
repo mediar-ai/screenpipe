@@ -133,6 +133,11 @@ bun run build
 bunx @screenpipe/dev publish --name foo
 ```
 
+## community 
+
+- [Template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
+- [Template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
+
 ## star history
 
 ![Star History Nov 24 2024](https://github.com/user-attachments/assets/c7e4de14-0771-4bbb-9a4c-7f2102a1a6cd)
