@@ -12,7 +12,7 @@ import {
   PurchaseHistoryItem,
 } from "@/lib/api/store";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { BrokenPipe, InstalledPipe, PipeWithStatus } from "./pipe-store/types";
+import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
 import { AddPipeForm } from "./pipe-store/add-pipe-form";
@@ -24,20 +24,7 @@ import { LoginDialog, useLoginCheck } from "./login-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
-const corePipes: string[] = [
-  "auto-pay",
-  "linkedin-ai-assistant",
-  "memories",
-  "data-table",
-  "search",
-  "timeline",
-  "identify-speakers",
-  "obsidian",
-  "meeting",
-  "pipe-for-loom",
-  "pipe-simple-nextjs",
-  "reddit-auto-posts",
-];
+const corePipes: string[] = ["data-table", "search"];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
@@ -52,14 +39,35 @@ export const PipeStore: React.FC = () => {
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
   const { open: openStatusDialog } = useStatusDialog();
+  const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
+    new Set()
+  );
+  const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
+    new Set()
+  );
 
   const filteredPipes = pipes
     .filter(
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (!showInstalledOnly || pipe.is_installed)
+        (!showInstalledOnly || pipe.is_installed) &&
+        !pipe.is_installing
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+
+  // Add debounced search tracking
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery) {
+        posthog.capture("search_pipes", {
+          query: searchQuery,
+          results_count: filteredPipes.length,
+        });
+      }
+    }, 1000); // Debounce for 1 second
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, filteredPipes.length]);
 
   const fetchStorePlugins = async () => {
     try {
@@ -67,14 +75,39 @@ export const PipeStore: React.FC = () => {
       const plugins = await pipeApi.listStorePlugins();
 
       // Create PipeWithStatus objects for store plugins
-      const storePluginsWithStatus = plugins.map((plugin) => ({
-        ...plugin,
-        is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
-        installed_config: installedPipes.find((p) => p.config?.id === plugin.id)
-          ?.config,
-        has_purchased: purchaseHistory.some((p) => p.plugins.id === plugin.id),
-        is_core_pipe: corePipes.includes(plugin.name),
-      }));
+      const storePluginsWithStatus = await Promise.all(
+        plugins.map(async (plugin) => {
+          const installedPipe = installedPipes.find(
+            (p) => p.config?.id === plugin.id
+          );
+          const currentVersion = installedPipe?.config?.version;
+
+          let has_update = false;
+          if (currentVersion) {
+            try {
+              const updateCheck = await pipeApi.checkUpdate(
+                plugin.id,
+                currentVersion
+              );
+              has_update = updateCheck.has_update;
+            } catch (error) {
+              console.error(`Failed to check updates for ${plugin.id}:`, error);
+            }
+          }
+
+          return {
+            ...plugin,
+            is_installed: !!installedPipe,
+            installed_config: installedPipe?.config,
+            has_purchased: purchaseHistory.some(
+              (p) => p.plugin_id === plugin.id
+            ),
+            is_core_pipe: corePipes.includes(plugin.name),
+            is_enabled: installedPipe?.config?.enabled ?? false,
+            has_update,
+          };
+        })
+      );
 
       const customPipes = installedPipes
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
@@ -97,6 +130,8 @@ export const PipeStore: React.FC = () => {
             installed_config: p.config,
             has_purchased: true,
             is_core_pipe: false,
+            is_enabled: p.config?.enabled || false,
+            source_code: p.config?.source || "",
           };
         });
 
@@ -118,17 +153,6 @@ export const PipeStore: React.FC = () => {
     setPurchaseHistory(purchaseHistory);
   };
 
-  // TODO: replace with actual IDs once published on the new store
-  const installDefaultPipes = async () => {
-    const DEFAULT_PIPES = [
-      "memories",
-      "data-table",
-      "search",
-      "timeline",
-      "identify-speakers",
-    ];
-  };
-
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
     onComplete?: () => void
@@ -136,9 +160,24 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
+      setLoadingPurchases((prev) => new Set(prev).add(pipe.id));
+
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
-      openUrl(response.data.checkout_url);
+
+      if (response.data.used_credits) {
+        await handleInstallPipe(pipe);
+        toast({
+          title: "purchase & install successful",
+          description: "your pipe has been purchased and installed",
+        });
+      } else if (response.data.checkout_url) {
+        openUrl(response.data.checkout_url);
+        toast({
+          title: "redirecting to checkout",
+          description: "you'll be able to install the pipe after purchase",
+        });
+      }
       onComplete?.();
     } catch (error) {
       console.error("error purchasing pipe:", error);
@@ -146,6 +185,12 @@ export const PipeStore: React.FC = () => {
         title: "error purchasing pipe",
         description: "please try again or check the logs",
         variant: "destructive",
+      });
+    } finally {
+      setLoadingPurchases((prev) => {
+        const next = new Set(prev);
+        next.delete(pipe.id);
+        return next;
       });
     }
   };
@@ -229,6 +274,15 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
+      // Keep the pipe in its current position by updating its status
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
+          p.id === pipe.id ? { ...p, is_installing: true } : p
+        )
+      );
+
+      setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
+
       const t = toast({
         title: "downloading pipe",
         description: (
@@ -289,8 +343,24 @@ export const PipeStore: React.FC = () => {
         duration: 2000,
       });
 
+      // Update the pipe's status after successful installation
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
+          p.id === pipe.id
+            ? { ...p, is_installed: true, is_installing: false }
+            : p
+        )
+      );
+
       onComplete?.();
+      t.dismiss();
     } catch (error) {
+      // Reset the pipe's status on error
+      setPipes((prevPipes) =>
+        prevPipes.map((p) =>
+          p.id === pipe.id ? { ...p, is_installing: false } : p
+        )
+      );
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({
           title: "paid pipe",
@@ -303,6 +373,12 @@ export const PipeStore: React.FC = () => {
         title: "error installing pipe",
         description: (error as Error).message,
         variant: "destructive",
+      });
+    } finally {
+      setLoadingInstalls((prev) => {
+        const next = new Set(prev);
+        next.delete(pipe.id);
+        return next;
       });
     }
   };
@@ -381,7 +457,6 @@ export const PipeStore: React.FC = () => {
       });
 
       const data = await response.json();
-
       if (!data.success) {
         throw new Error(data.error);
       }
@@ -389,11 +464,17 @@ export const PipeStore: React.FC = () => {
       toast({
         title: `pipe ${endpoint}d`,
       });
+      const installedPipes = await fetchInstalledPipes();
+
+      const pp = installedPipes?.find((p) => p.config.id === pipe.id);
+      const port = pp?.config.port;
+
       setSelectedPipe((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           installed_config: {
+            port,
             ...prev.installed_config!,
             enabled: !pipe.installed_config?.enabled,
           },
@@ -402,7 +483,9 @@ export const PipeStore: React.FC = () => {
       onComplete();
     } catch (error) {
       console.error(
-        `Failed to ${pipe.installed_config?.enabled ? "disable" : "enable"} pipe:`,
+        `Failed to ${
+          pipe.installed_config?.enabled ? "disable" : "enable"
+        } pipe:`,
         error
       );
       toast({
@@ -663,11 +746,25 @@ export const PipeStore: React.FC = () => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
           if (url.includes("purchase-successful")) {
-            fetchPurchaseHistory();
+            const urlObj = new URL(url);
+            const pipeId = urlObj.searchParams.get("pipe_id");
+
+            if (!pipeId) {
+              toast({
+                title: "purchase successful",
+                description: "your purchase was successful",
+              });
+              return;
+            }
+
             toast({
               title: "purchase successful",
-              description: "your purchase has been successful",
+              description: "installing your new pipe...",
             });
+
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+
+            fetchPurchaseHistory();
           }
         }
       });
@@ -762,6 +859,9 @@ export const PipeStore: React.FC = () => {
                 onInstall={handleInstallPipe}
                 onClick={setSelectedPipe}
                 onPurchase={handlePurchasePipe}
+                isLoadingPurchase={loadingPurchases.has(pipe.id)}
+                isLoadingInstall={loadingInstalls.has(pipe.id)}
+                onToggle={handleTogglePipe}
               />
             ))}
           </div>

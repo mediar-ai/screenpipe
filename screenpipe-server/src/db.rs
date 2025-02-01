@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
 use log::{debug, error, warn};
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
@@ -80,9 +80,7 @@ impl DatabaseManager {
         let db_manager = DatabaseManager { pool };
 
         // Run migrations after establishing the connection
-        if let Err(e) = Self::run_migrations(&db_manager.pool).await {
-            return Err(e);
-        }
+        Self::run_migrations(&db_manager.pool).await?;
 
         Ok(db_manager)
     }
@@ -124,6 +122,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_audio_transcription(
         &self,
         audio_chunk_id: i64,
@@ -147,7 +146,7 @@ impl DatabaseManager {
         .bind(Utc::now())
         .bind(transcription_engine)
         .bind(&device.name)
-        .bind(device.device_type == DeviceType::Input)
+        .bind(device.device_type == AudioDeviceType::Input)
         .bind(speaker_id)
         .bind(start_time)
         .bind(end_time)
@@ -343,6 +342,7 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_ocr_text(
         &self,
         frame_id: i64,
@@ -408,6 +408,7 @@ impl DatabaseManager {
         Err(sqlx::Error::PoolTimedOut)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn insert_ocr_text_old(
         &self,
         frame_id: i64,
@@ -451,6 +452,7 @@ impl DatabaseManager {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search(
         &self,
         query: &str,
@@ -705,6 +707,7 @@ impl DatabaseManager {
         Ok(results)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn search_ocr(
         &self,
         query: &str,
@@ -800,6 +803,7 @@ impl DatabaseManager {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_audio(
         &self,
         query: &str,
@@ -898,9 +902,9 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 device_name: raw.device_name,
                 device_type: if raw.is_input_device {
-                    DeviceType::Input
+                    AudioDeviceType::Input
                 } else {
-                    DeviceType::Output
+                    AudioDeviceType::Output
                 },
                 speaker,
                 start_time: raw.start_time,
@@ -1362,43 +1366,162 @@ impl DatabaseManager {
     // ! just merging
     // ! the offset is not quite right but we try to index around frames which is the central human experience and most important sense
     // ! there should be a way to properly sync audio and video indexes
+    //pub async fn find_video_chunks(
+    //    &self,
+    //    start: DateTime<Utc>,
+    //    end: DateTime<Utc>,
+    //) -> Result<TimeSeriesChunk, SqlxError> {
+    //    // First get all frames in time range with their OCR data
+    //    let frames_query = r#"
+    //        SELECT
+    //            f.id,
+    //            f.timestamp,
+    //            f.offset_index,
+    //            ot.text,
+    //            ot.app_name,
+    //            ot.window_name,
+    //            vc.device_name as screen_device,
+    //            vc.file_path as video_path
+    //        FROM frames f
+    //        JOIN video_chunks vc ON f.video_chunk_id = vc.id
+    //        LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+    //        WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+    //        ORDER BY f.timestamp DESC, f.offset_index DESC
+    //    "#;
+
+    //    // Then get audio data that overlaps with these frames
+    //    let audio_query = r#"
+    //        SELECT
+    //            at.timestamp,
+    //            at.transcription,
+    //            at.device as audio_device,
+    //            at.is_input_device,
+    //            ac.file_path as audio_path
+    //        FROM audio_transcriptions at
+    //        JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+    //        WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
+    //        ORDER BY at.timestamp DESC
+    //    "#;
+
+    //    // Execute both queries
+    //    let (frame_rows, audio_rows) = tokio::try_join!(
+    //        sqlx::query(frames_query)
+    //            .bind(start)
+    //            .bind(end)
+    //            .fetch_all(&self.pool),
+    //        sqlx::query(audio_query)
+    //            .bind(start)
+    //            .bind(end)
+    //            .fetch_all(&self.pool)
+    //    )?;
+
+    //    // Process into structured data
+    //    let mut frames_map: BTreeMap<(DateTime<Utc>, i64), FrameData> = BTreeMap::new();
+
+    //    // Process frame/OCR data
+    //    for row in frame_rows {
+    //        let timestamp: DateTime<Utc> = row.get("timestamp");
+    //        let offset_index: i64 = row.get("offset_index");
+    //        let key = (timestamp, offset_index);
+
+    //        let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
+    //            frame_id: row.get("id"),
+    //            timestamp,
+    //            offset_index,
+    //            ocr_entries: Vec::new(),
+    //            audio_entries: Vec::new(),
+    //        });
+
+    //        if let Ok(text) = row.try_get::<String, _>("text") {
+    //            frame_data.ocr_entries.push(OCREntry {
+    //                text,
+    //                app_name: row.get("app_name"),
+    //                window_name: row.get("window_name"),
+    //                device_name: row.get("screen_device"),
+    //                video_file_path: row.get("video_path"),
+    //            });
+    //        }
+    //    }
+
+    //    // Process audio data
+    //    for row in audio_rows {
+    //        let timestamp: DateTime<Utc> = row.get("timestamp");
+
+    //        // Find the closest frame
+    //        if let Some((&key, _)) = frames_map.range(..(timestamp, i64::MAX)).next_back() {
+    //            if let Some(frame_data) = frames_map.get_mut(&key) {
+    //                frame_data.audio_entries.push(AudioEntry {
+    //                    transcription: row.get("transcription"),
+    //                    device_name: row.get("audio_device"),
+    //                    is_input: row.get("is_input_device"),
+    //                    audio_file_path: row.get("audio_path"),
+    //                    // duration_secs: row.get("duration_secs"),
+    //                    duration_secs: 0.0, // TODO
+    //                });
+    //            }
+    //        }
+    //    }
+
+    //    Ok(TimeSeriesChunk {
+    //        frames: frames_map.into_values().rev().collect(),
+    //        start_time: start,
+    //        end_time: end,
+    //    })
+    //}
+
     pub async fn find_video_chunks(
         &self,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<TimeSeriesChunk, SqlxError> {
-        // First get all frames in time range with their OCR data
+        // Get frames with OCR data, grouped by minute to handle multiple monitors
         let frames_query = r#"
+        WITH MinuteGroups AS (
             SELECT
+                f.id,
                 f.timestamp,
                 f.offset_index,
                 ot.text,
                 ot.app_name,
                 ot.window_name,
                 vc.device_name as screen_device,
-                vc.file_path as video_path
+                vc.file_path as video_path,
+                strftime('%Y-%m-%d %H:%M', f.timestamp) as minute_group,
+                ROW_NUMBER() OVER (
+                    PARTITION BY strftime('%Y-%m-%d %H:%M', f.timestamp), ot.app_name, vc.device_name
+                    ORDER BY f.timestamp DESC
+                ) as rn
             FROM frames f
             JOIN video_chunks vc ON f.video_chunk_id = vc.id
             LEFT JOIN ocr_text ot ON f.id = ot.frame_id
             WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-            ORDER BY f.timestamp DESC, f.offset_index DESC
-        "#;
+        )
+        SELECT *
+        FROM MinuteGroups
+        WHERE rn = 1
+        ORDER BY timestamp DESC, offset_index DESC
+    "#;
 
-        // Then get audio data that overlaps with these frames
+        // Get audio data with proper time windows for synchronization
         let audio_query = r#"
-            SELECT
-                at.timestamp,
-                at.transcription,
-                at.device as audio_device,
-                at.is_input_device,
-                ac.file_path as audio_path
-            FROM audio_transcriptions at
-            JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
-            WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
-            ORDER BY at.timestamp DESC
+        SELECT
+            at.timestamp,
+            at.transcription,
+            at.device as audio_device,
+            at.is_input_device,
+            ac.file_path as audio_path,
+            at.start_time,
+            at.end_time,
+            CAST((julianday(datetime(at.timestamp, '+' || at.end_time || ' seconds')) -
+                  julianday(datetime(at.timestamp, '+' || at.start_time || ' seconds'))) * 86400
+                 as REAL) as duration_secs
+        FROM audio_transcriptions at
+        JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+        WHERE at.timestamp >= ?1 AND at.timestamp <= ?2
+        ORDER BY at.timestamp DESC
         "#;
 
-        // Execute both queries
+        // Execute queries in parallel
         let (frame_rows, audio_rows) = tokio::try_join!(
             sqlx::query(frames_query)
                 .bind(start)
@@ -1410,16 +1533,17 @@ impl DatabaseManager {
                 .fetch_all(&self.pool)
         )?;
 
-        // Process into structured data
+        // Process into structured data with device-aware grouping
         let mut frames_map: BTreeMap<(DateTime<Utc>, i64), FrameData> = BTreeMap::new();
 
-        // Process frame/OCR data
+        // Process frame/OCR data with device awareness
         for row in frame_rows {
             let timestamp: DateTime<Utc> = row.get("timestamp");
             let offset_index: i64 = row.get("offset_index");
             let key = (timestamp, offset_index);
 
             let frame_data = frames_map.entry(key).or_insert_with(|| FrameData {
+                frame_id: row.get("id"),
                 timestamp,
                 offset_index,
                 ocr_entries: Vec::new(),
@@ -1437,20 +1561,23 @@ impl DatabaseManager {
             }
         }
 
-        // Process audio data
+        // Process audio data with proper synchronization
         for row in audio_rows {
             let timestamp: DateTime<Utc> = row.get("timestamp");
 
             // Find the closest frame
-            if let Some((&key, _)) = frames_map.range(..(timestamp, i64::MAX)).next_back() {
+            if let Some((&key, _)) = frames_map
+                .range(..=(timestamp, i64::MAX))
+                .next_back()
+                .or_else(|| frames_map.iter().next())
+            {
                 if let Some(frame_data) = frames_map.get_mut(&key) {
                     frame_data.audio_entries.push(AudioEntry {
                         transcription: row.get("transcription"),
                         device_name: row.get("audio_device"),
                         is_input: row.get("is_input_device"),
                         audio_file_path: row.get("audio_path"),
-                        // duration_secs: row.get("duration_secs"),
-                        duration_secs: 0.0, // TODO
+                        duration_secs: row.get("duration_secs"),
                     });
                 }
             }
@@ -1463,6 +1590,7 @@ impl DatabaseManager {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn search_ui_monitoring(
         &self,
         query: &str,
@@ -1916,7 +2044,7 @@ impl DatabaseManager {
 
         let sql = r#"
             WITH embedding_matches AS (
-                SELECT 
+                SELECT
                     frame_id,
                     vec_distance_cosine(embedding, vec_f32(?1)) as similarity
                 FROM ocr_text_embeddings
@@ -1997,5 +2125,92 @@ impl DatabaseManager {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn repair_database(&self) -> Result<(), anyhow::Error> {
+        debug!("starting aggressive database repair process");
+
+        // Force close any pending transactions
+        let emergency_steps = [
+            "PRAGMA locking_mode = EXCLUSIVE;",
+            "ROLLBACK;",                    // Force rollback any stuck transactions
+            "PRAGMA busy_timeout = 60000;", // Increase timeout to 60s
+        ];
+
+        for step in emergency_steps {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("emergency step failed (continuing anyway): {}", e);
+            }
+        }
+
+        // Force checkpoint and cleanup WAL files
+        let wal_cleanup = [
+            "PRAGMA wal_checkpoint(TRUNCATE);",
+            "PRAGMA journal_mode = DELETE;", // Temporarily disable WAL
+            "PRAGMA journal_size_limit = 0;", // Clear journal
+        ];
+
+        for step in wal_cleanup {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("wal cleanup failed (continuing anyway): {}", e);
+            }
+        }
+
+        // Aggressive recovery steps
+        let recovery_steps = [
+            ("PRAGMA synchronous = OFF;", "disable synchronous"),
+            ("PRAGMA cache_size = -2000000;", "increase cache"), // 2GB cache
+            ("VACUUM;", "vacuum database"),
+            ("PRAGMA integrity_check;", "check integrity"),
+            ("PRAGMA foreign_key_check;", "check foreign keys"),
+            ("REINDEX;", "rebuild indexes"),
+            ("ANALYZE;", "update statistics"),
+            ("VACUUM;", "final vacuum"), // Second vacuum after reindex
+        ];
+
+        for (query, step) in recovery_steps {
+            debug!("running aggressive recovery step: {}", step);
+            match sqlx::query(query).execute(&self.pool).await {
+                Ok(_) => debug!("recovery step '{}' succeeded", step),
+                Err(e) => warn!("recovery step '{}' failed: {}", step, e),
+            }
+        }
+
+        // Restore safe settings
+        let restore_steps = [
+            "PRAGMA synchronous = NORMAL;",
+            "PRAGMA journal_mode = WAL;",
+            "PRAGMA wal_autocheckpoint = 1000;",
+            "PRAGMA cache_size = -2000;", // Back to 2MB cache
+            "PRAGMA locking_mode = NORMAL;",
+            "PRAGMA busy_timeout = 5000;", // Back to 5s timeout
+        ];
+
+        for step in restore_steps {
+            if let Err(e) = sqlx::query(step).execute(&self.pool).await {
+                warn!("restore step failed: {}", e);
+            }
+        }
+
+        // Final verification
+        match sqlx::query_scalar::<_, String>("PRAGMA quick_check;")
+            .fetch_one(&self.pool)
+            .await
+        {
+            Ok(result) if result == "ok" => {
+                debug!("database successfully repaired");
+                Ok(())
+            }
+            Ok(result) => {
+                let msg = format!("database still corrupted after repair: {}", result);
+                error!("{}", msg);
+                Err(anyhow::anyhow!(msg))
+            }
+            Err(e) => {
+                let msg = format!("database repair failed catastrophically: {}", e);
+                error!("{}", msg);
+                Err(anyhow::anyhow!(msg))
+            }
+        }
     }
 }

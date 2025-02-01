@@ -53,7 +53,7 @@ async fn test_extract_frames() -> Result<()> {
         println!("testing with write_to_disk = {}", write_to_disk);
 
         let output_path = if write_to_disk {
-            Some(PathBuf::from(home_dir().unwrap()).join("Downloads"))
+            Some(home_dir().unwrap().join("Downloads"))
         } else {
             None
         };
@@ -112,11 +112,8 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
     );
 
     // extract frames
-    let frames = extract_frames_from_video(
-        &video_path,
-        Some(PathBuf::from(home_dir().unwrap()).join("Downloads")),
-    )
-    .await?;
+    let frames =
+        extract_frames_from_video(&video_path, Some(home_dir().unwrap().join("Downloads"))).await?;
 
     // verify we got frames
     assert!(!frames.is_empty(), "should extract at least one frame");
@@ -133,7 +130,7 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
     };
 
     // perform ocr using apple native (macos only)
-    let (text, _, confidence) = perform_ocr_apple(&captured_window.image, &vec![Language::English]);
+    let (text, _, confidence) = perform_ocr_apple(&captured_window.image, &[Language::English]);
 
     println!("ocr confidence: {}", confidence.unwrap_or(0.0));
     println!("extracted text: {}", text);

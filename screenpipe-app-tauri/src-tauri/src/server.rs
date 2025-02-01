@@ -1,12 +1,14 @@
-use crate::{get_store, icons::AppIcon};
+use crate::{get_base_dir, get_store, icons::AppIcon};
+use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
+use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
 use futures::stream::Stream;
-use http::header::HeaderValue;
+use http::header::{HeaderValue, CONTENT_TYPE};
 use notify::RecursiveMode;
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -91,7 +93,6 @@ struct WindowSizePayload {
     height: f64,
 }
 
-#[cfg(not(target_os = "windows"))]
 async fn settings_stream(
     State(state): State<ServerState>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
@@ -114,46 +115,30 @@ async fn settings_stream(
     )
 }
 
-#[cfg(target_os = "windows")]
-async fn settings_stream(
-    State(_): State<ServerState>,
-) -> (StatusCode, String) {
-    (StatusCode::NOT_IMPLEMENTED, "SSE not supported on Windows".to_string())
-}
-
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
-    
-    #[cfg(not(target_os = "windows"))]
     let settings_tx_clone = settings_tx.clone();
-
     let app_handle_clone = app_handle.clone();
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let store_path = app_handle
-            .path()
-            .local_data_dir()
-            .unwrap()
-            .join("store.bin");
+    let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+    let store_path = base_dir.join("store.bin");
 
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(event) = res {
-                if event.kind.is_modify() {
-                    if let Ok(store) = get_store(&app_handle_clone, None) {
-                        if let Ok(settings) = serde_json::to_string(&store.entries()) {
-                            let _ = settings_tx_clone.send(settings);
-                        }
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() {
+                if let Ok(store) = get_store(&app_handle_clone, None) {
+                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                        let _ = settings_tx_clone.send(settings);
                     }
                 }
             }
-        })
-        .unwrap();
+        }
+    })
+    .unwrap();
 
-        watcher
-            .watch(&store_path, RecursiveMode::NonRecursive)
-            .unwrap();
-    }
+    watcher
+        .watch(&store_path, RecursiveMode::NonRecursive)
+        .unwrap();
 
     let state = ServerState {
         app_handle,
@@ -302,13 +287,23 @@ async fn handle_auth(
 async fn get_app_icon_handler(
     State(_): State<ServerState>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("received app icon request: {:?}", app_name);
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-            Ok(icon) => Ok(Json(icon)),
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                Ok((headers, Bytes::from(icon.data)))
+            }
+            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
@@ -372,7 +367,6 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
 }
 
 /*
-
 
 curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \

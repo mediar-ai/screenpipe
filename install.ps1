@@ -7,22 +7,22 @@ try {
     if (-not $latestRelease) {
         throw "no releases found"
     }
-    
+
     # Find the Windows asset
     $asset = $latestRelease.assets | Where-Object { $_.name -like "*-x86_64-pc-windows-msvc.zip" } | Select-Object -First 1
     if (-not $asset) {
         throw "no Windows release found in version $($latestRelease.tag_name)"
     }
-    
+
     $url = $asset.browser_download_url
-    
+
     $installDir = "$env:USERPROFILE\screenpipe"
     $tempZip = "$env:TEMP\screenpipe.zip"
 
     # Download and extract
     Write-Host "downloading latest version ($($latestRelease.tag_name)) from $url..."
     Invoke-WebRequest -Uri $url -OutFile $tempZip
-    
+
     # Create install directory if it doesn't exist
     if (!(Test-Path $installDir)) {
         New-Item -ItemType Directory -Path $installDir | Out-Null
@@ -51,12 +51,17 @@ try {
     Write-Host "installing bun..."
     powershell -c "irm bun.sh/install.ps1|iex"
 
+    # Install Visual Studio Redistributables to avoid any ort issues
+    Install-Module -Name VcRedist
+    Import-Module -Name VcRedist
+    Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path "$env:TEMP\VcRedist") -Silent
+
     Write-Host @"
 
 ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗██████╗ ██╗██████╗ ███████╗
 ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔══██╗██║██╔══██╗██╔════╝
-███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╔╝██║██████╔╝█████╗  
-╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔═══╝ ██║██╔═══╝ ██╔══╝  
+███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╔╝██║██████╔╝█████╗
+╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔═══╝ ██║██╔═══╝ ██╔══╝
 ███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║██║     ██║██║     ███████╗
 ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚═╝     ╚═╝╚═╝     ╚══════╝
 "@

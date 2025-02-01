@@ -46,22 +46,22 @@ The fastest way to create a new pipe is using our CLI:
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-    bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    npx @screenpipe/create-pipe@latest
+    npx @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    yarn @screenpipe/create-pipe
+    yarn @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    pnpx @screenpipe/create-pipe
+    pnpx @screenpipe/dev create
     ```
   </Tab>
 </Tabs>
@@ -78,29 +78,39 @@ for developers wanting to publish pipes to the store, we provide a dedicated CLI
 
 ![developer account](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/developer-account.png)
 
-```bash copy
-npm install -g @screenpipe/dev
-```
-
 prerequisite: connect your Stripe account in settings/account to obtain your developer API key.
 
 available commands:
 
 ```bash copy
 # authenticate with your API key
-screenpipe login --apiKey <your-key>
+bunx @screenpipe/dev login --apiKey <your-key>
 
 # create a new pipe
-screenpipe create --name my-pipe [--paid --price 9.99]
+bunx @screenpipe/dev register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
+# you'll receive payouts to your stripe account on a daily basis
+
+# add predefined components to your pipe
+bunx @screenpipe/dev components add
+# select components from the interactive menu:
+# - use-health: health monitoring hooks
+# - use-settings: settings management
+# - route-settings: settings page routing
+# - use-sql-autocomplete: SQL query assistance
+# - sql-autocomplete-input: SQL input component
+# - use-search-history: search history management
+# - use-ai-provider: AI integration hooks
 
 # publish your pipe to the store
-screenpipe publish --name my-pipe
+bunx @screenpipe/dev publish --name my-pipe
+# our team will review your pipe and publish it to the store
+# if approved, your pipe will be available in the store to everyone
 
 # list all versions of your pipe
-screenpipe list-versions --name my-pipe
+bunx @screenpipe/dev list-versions --name my-pipe
 
 # end current session
-screenpipe logout
+bunx @screenpipe/dev logout
 ```
 
 you can deploy your pipe to your screenpipe app through the UI or using `screenpipe install <path>` and `screenpipe enable <id/folder of your pipe>`.

@@ -1,0 +1,31 @@
+[package]
+name = "screenpipe-events"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = "1.0.95"
+futures = "0.3.31"
+lazy_static = { version = "1.4.0" }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.137"
+tokio.workspace = true
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+once_cell = { version = "1.18" }
+tracing.workspace = true
+parking_lot = "0.12.3"
+serial_test = "3.2.0"
+ctor = "0.2"
+chrono = "0.4.39"
+
+[dev-dependencies]
+serde = { version = "1.0", features = ["derive"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "events"
+harness = false

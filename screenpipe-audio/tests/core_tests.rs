@@ -13,8 +13,8 @@ mod tests {
         AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
-    use screenpipe_core::Language;
-    use std::path::PathBuf;
+    use screenpipe_core::{DeviceManager, Language};
+    use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -172,7 +172,7 @@ mod tests {
     }
 
     // Helper function to get audio duration (you'll need to implement this)
-    fn get_audio_duration(path: &PathBuf) -> Result<Duration, Box<dyn std::error::Error>> {
+    fn get_audio_duration(path: &Path) -> Result<Duration, Box<dyn std::error::Error>> {
         let output = Command::new("ffprobe")
             .args([
                 "-v",
@@ -209,14 +209,14 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
+        let (whisper_sender, whisper_receiver) = create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
             VadEngineEnum::WebRtc,
             None,
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
-            None,
+            Arc::new(DeviceManager::default()),
         )
         .await
         .unwrap();

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-import { invoke } from "@tauri-apps/api/core";
 import { debounce } from "lodash";
+import posthog from "posthog-js";
 
 interface HealthCheckResponse {
   status: string;
@@ -67,21 +67,23 @@ export function useHealthCheck() {
       });
 
       if (!response.ok) {
+        posthog.capture("health_check_http_error", {
+          status: response.status,
+          statusText: response.statusText,
+        });
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data: HealthCheckResponse = await response.json();
 
-      // if (data.status == "unhealthy") {
-      //   try {
-      //     await invoke("set_tray_unhealth_icon");
-      //   } catch (error) {
-      //     console.error("set unhealthy icon:", error);
-      //   }
-      // } else {
-      //   await invoke("set_tray_health_icon");
-      //   console.log("set healthy icon:");
-      // }
+      if (data.status === "unhealthy") {
+        posthog.capture("health_check_unhealthy", {
+          frame_status: data.frame_status,
+          audio_status: data.audio_status,
+          ui_status: data.ui_status,
+          message: data.message,
+        });
+      }
 
       if (isHealthChanged(healthRef.current, data)) {
         setHealth(data);
@@ -94,10 +96,11 @@ export function useHealthCheck() {
         return;
       }
 
-      // console.error("Health check error:", error);
       if (!isServerDown) {
+        posthog.capture("health_check_server_down", {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
         setIsServerDown(true);
-        // await invoke("set_tray_unhealth_icon");
         const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,

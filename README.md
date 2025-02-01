@@ -1,3 +1,4 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 <p align="center">
    <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | <a href="README-ja.md">日本語</a>
 </p>
@@ -96,13 +97,13 @@
 macos, linux:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+curl -fsSL get.screenpi.pe/cli | sh
 ```
 
 or on windows
 
 ```bash
-irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+iwr get.screenpi.pe/cli.ps1 | iex
 ```
 
 then
@@ -119,10 +120,23 @@ make sure to allow permissions on macos (screen, mic)
 ## create plugins
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev create
 ```
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
+
+you can then publish these to our store and make money:
+
+```bash
+bunx @screenpipe/dev register --name foo [--paid --price 50] # subscription
+bun run build
+bunx @screenpipe/dev publish --name foo
+```
+
+## community 
+
+- [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
+- [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
 
 ## star history
 

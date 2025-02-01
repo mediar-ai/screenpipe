@@ -287,7 +287,7 @@ mod llm_module {
                     completion_tokens: token_generated,
                     total_tokens: token_generated,
                     completion_tokens_details: serde_json::Value::Null,
-                    tokens_per_second: tokens_per_second,
+                    tokens_per_second,
                 },
             })
         }

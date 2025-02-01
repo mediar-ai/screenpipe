@@ -3,7 +3,6 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
-import { initOpenTelemetry } from "@/lib/opentelemetry";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
@@ -23,7 +22,6 @@ export const Providers = forwardRef<
         person_profiles: "identified_only",
         capture_pageview: false,
       });
-      initOpenTelemetry("82688", new Date().toISOString());
     }
   }, []);
 

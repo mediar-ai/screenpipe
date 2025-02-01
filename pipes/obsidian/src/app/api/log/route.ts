@@ -200,7 +200,7 @@ export async function GET() {
       startTime: oneHourAgo.toISOString(),
       endTime: now.toISOString(),
       limit: pageSize,
-      contentType: "ocr",
+      contentType: "all",
     });
 
     if (!screenData || screenData.data.length === 0) {

@@ -5,36 +5,35 @@ const POSTHOG_HOST = "https://eu.i.posthog.com";
 
 let initialized = false;
 
-function initPosthog() {
+function initPosthog(userId?: string, email?: string) {
   if (!initialized) {
-    posthog.init(POSTHOG_KEY, { api_host: POSTHOG_HOST });
+    posthog.init(POSTHOG_KEY, {
+      api_host: POSTHOG_HOST,
+      distinct_id: userId,
+      email: email,
+    });
+    posthog.identify(userId, { email: email });
     initialized = true;
   }
-}
-
-export async function identifyUser(
-  userId: string,
-  properties?: Record<string, any>
-): Promise<void> {
-  initPosthog();
-  posthog.identify(userId, properties);
 }
 
 export async function captureEvent(
   name: string,
   properties?: Record<string, any>
 ): Promise<void> {
-  initPosthog();
-  posthog.capture(name, properties);
+  initPosthog(properties?.distinct_id, properties?.email);
+  const { distinct_id, ...restProperties } = properties || {};
+  posthog.capture(name, restProperties);
 }
 
 export async function captureMainFeatureEvent(
   name: string,
   properties?: Record<string, any>
 ): Promise<void> {
-  initPosthog();
+  initPosthog(properties?.distinct_id, properties?.email);
+  const { distinct_id, ...restProperties } = properties || {};
   posthog.capture(name, {
     feature: "main",
-    ...properties,
+    ...restProperties,
   });
 }

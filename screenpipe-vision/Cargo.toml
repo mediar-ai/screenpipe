@@ -33,6 +33,7 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
+screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }

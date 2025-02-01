@@ -4,11 +4,12 @@ process.removeAllListeners("warning");
 
 import fs from "fs-extra";
 import path from "path";
-import { select, input } from "@inquirer/prompts";
+import { input } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
 import https from "https";
 import { Extract } from "unzip-stream";
+import { command } from "@drizzle-team/brocli";
 
 const PIPE_ADDITIONS = {
   dependencies: {
@@ -97,80 +98,80 @@ async function downloadAndExtractRepo(
   });
 }
 
-async function main() {
-  console.log(chalk.bold("\nwelcome to create-pipe! 🚀\n"));
-  console.log("let's create a new screenpipe pipe.\n");
-  console.log(
-    "pipes are plugins that interact with captured screen and audio data."
-  );
-  console.log("build powerful agents, monetize it, etc.\n");
-
-  // get project name
-  const pipeName = await input({
-    message: "what is your pipe name?",
-    default: "my-screenpipe",
-    validate: (input) => {
-      if (input.trim().length === 0) return "pipe name is required";
-      return true;
-    },
-  });
-
-  // get directory
-  const directory = await input({
-    message: "where would you like to create your pipe?",
-    default: pipeName,
-  });
-
-  const spinner = ora("creating your pipe...").start();
-
-  try {
-    // Download and extract the appropriate template
-    await downloadAndExtractRepo(
-      "mediar-ai",
-      "screenpipe",
-      "main",
-      "pipes/obsidian",
-      directory
-    );
-
-    // Update package.json with the pipe name
-    const pkgPath = path.join(process.cwd(), directory, "package.json");
-    const pkg = await fs.readJson(pkgPath);
-
-    pkg.name = pipeName;
-    pkg.dependencies = {
-      ...pkg.dependencies,
-      ...PIPE_ADDITIONS.dependencies,
-    };
-    pkg.devDependencies = {
-      ...pkg.devDependencies,
-      ...PIPE_ADDITIONS.devDependencies,
-    };
-
-    await fs.writeJson(pkgPath, pkg, { spaces: 2 });
-
-    spinner.succeed(chalk.green("pipe created successfully! 🎉"));
-
-    console.log("\nto get started:");
-    console.log(chalk.cyan(`cd ${directory}`));
+export const createCommand = command({
+  name: "create",
+  desc: "create a new pipe",
+  handler: async () => {
+    console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
+    console.log("let's create a new screenpipe pipe.\n");
     console.log(
-      chalk.cyan("bun install    # or use: npm install, pnpm install, yarn")
-    );
-    console.log(
-      chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev")
-    );
+      "pipes are plugins that interact with captured screen and audio data."
+    ); 
+    console.log("build powerful agents, monetize it, etc.\n");
 
-    console.log(
-      "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
-    );
-  } catch (error) {
-    spinner.fail("failed to create pipe");
-    console.error(error);
-    process.exit(1);
-  }
-}
+    // get project name
+    const pipeName = await input({
+      message: "what is your pipe name?",
+      default: "my-screenpipe",
+      validate: (input) => {
+        if (input.trim().length === 0) return "pipe name is required";
+        return true;
+      },
+    });
 
-main().catch((err) => {
-  console.error("unexpected error:", err);
-  process.exit(1);
+    // get directory
+    const directory = await input({
+      message: "where would you like to create your pipe?",
+      default: pipeName,
+    });
+
+    const spinner = ora("creating your pipe...").start();
+
+    try {
+      // Download and extract the appropriate template
+      await downloadAndExtractRepo(
+        "mediar-ai",
+        "screenpipe",
+        "main",
+        "pipes/obsidian",
+        directory
+      );
+
+      // Update package.json with the pipe name
+      const pkgPath = path.join(process.cwd(), directory, "package.json");
+      const pkg = await fs.readJson(pkgPath);
+
+      pkg.name = pipeName;
+      pkg.dependencies = {
+        ...pkg.dependencies,
+        ...PIPE_ADDITIONS.dependencies,
+      };
+      pkg.devDependencies = {
+        ...pkg.devDependencies,
+        ...PIPE_ADDITIONS.devDependencies,
+      };
+
+      await fs.writeJson(pkgPath, pkg, { spaces: 2 });
+
+      spinner.succeed(chalk.green("pipe created successfully! 🎉"));
+
+      console.log("\nto get started:");
+      console.log(chalk.cyan(`cd ${directory}`));
+      console.log(
+        chalk.cyan("bun install    # or use: npm install, pnpm install, yarn")
+      );
+      console.log(
+        chalk.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev")
+      );
+
+      console.log(
+        "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
+      );
+    } catch (error) {
+      spinner.fail("failed to create pipe");
+      console.error(error);
+      process.exit(1);
+    }
+  },
 });
+
