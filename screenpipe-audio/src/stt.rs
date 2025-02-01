@@ -12,11 +12,10 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
-use dashmap::DashMap;
 use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use screenpipe_core::{AudioDevice, DeviceControl, Language};
+use screenpipe_core::{AudioDevice, DeviceManager, Language};
 use std::{
     path::Path,
     sync::Arc,
@@ -155,7 +154,7 @@ pub async fn create_whisper_channel(
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
-    devices: DashMap<String, DeviceControl>,
+    device_manager: Arc<DeviceManager>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -195,10 +194,9 @@ pub async fn create_whisper_channel(
                     match input_result {
                         Ok(mut audio) => {
                             // Check device state
-                            if let Some(device) = devices.get(&audio.device.to_string()) {
+                            if let Some(device) = device_manager.get_active_devices().await.get(&audio.device.to_string()) {
                                 if !device.is_running {
                                     debug!("Skipping audio processing for stopped device: {}", audio.device);
-                                    debug!("Device states: {:?}", devices);
                                     continue;
                                 }
                             }

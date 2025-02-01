@@ -2,7 +2,6 @@
 mod tests {
     use anyhow::anyhow;
     use chrono::Utc;
-    use dashmap::DashMap;
     use log::{debug, LevelFilter};
     use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
     use screenpipe_audio::pyannote::identify::EmbeddingManager;
@@ -14,7 +13,7 @@ mod tests {
         AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
-    use screenpipe_core::Language;
+    use screenpipe_core::{DeviceManager, Language};
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::str::FromStr;
@@ -217,7 +216,7 @@ mod tests {
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
-            DashMap::new(),
+            Arc::new(DeviceManager::default()),
         )
         .await
         .unwrap();

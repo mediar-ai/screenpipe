@@ -67,6 +67,7 @@ impl VideoCapture {
         let shutdown_rx_queue = shutdown_rx.clone();
         let shutdown_rx_video = shutdown_rx.clone();
 
+        let result_sender_inner = result_sender.clone();
         let capture_handle = tokio::spawn(async move {
             let mut rx = shutdown_rx_capture;
             loop {
@@ -74,7 +75,7 @@ impl VideoCapture {
                     info!("shutting down video capture thread");
                     break;
                 }
-                let result_sender = result_sender.clone();
+                let result_sender = result_sender_inner.clone();
                 let window_filters_clone = Arc::clone(&window_filters_clone);
 
                 tokio::select! {
@@ -88,7 +89,6 @@ impl VideoCapture {
                         capture_unfocused_windows,
                         rx.clone(),
                     ) => {
-                        // If continuous_capture returns, we can continue the loop
                         debug!("continuous capture completed, restarting");
                     }
                     _ = rx.changed() => {
@@ -99,6 +99,8 @@ impl VideoCapture {
                     }
                 }
             }
+            debug!("exiting capture handle loop, dropping sender");
+            drop(result_sender_inner);
         });
         handles.push(capture_handle);
 
@@ -190,7 +192,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-f",
         "image2pipe",
         "-vcodec",
-        "png",
+        "mjpeg",
         "-r",
         &fps_str,
         "-i",
@@ -306,6 +308,7 @@ async fn save_frames_as_video_with_shutdown(
             &mut frame_count,
             frames_per_video,
             fps,
+            &shutdown_rx,
         )
         .await;
 
@@ -371,19 +374,23 @@ async fn process_frames(
     frame_count: &mut usize,
     frames_per_video: usize,
     fps: f64,
+    shutdown_rx: &watch::Receiver<bool>,
 ) {
     let write_timeout = Duration::from_secs_f64(1.0 / fps);
     while *frame_count < frames_per_video {
+        if *shutdown_rx.borrow() {
+            info!("process_frames: shutdown signal received, breaking out");
+            break;
+        }
         if let Some(frame) = frame_queue.pop() {
             let buffer = encode_frame(&frame);
             if let Some(stdin) = current_stdin.as_mut() {
                 if let Err(e) = write_frame_with_retry(stdin, &buffer).await {
-                    error!("Failed to write frame to ffmpeg after max retries: {}", e);
+                    error!("failed to write frame to ffmpeg after max retries: {}", e);
                     break;
                 }
                 *frame_count += 1;
-                debug!("Wrote frame {} to FFmpeg", frame_count);
-
+                debug!("wrote frame {} to ffmpeg", frame_count);
                 flush_ffmpeg_input(stdin, *frame_count, fps).await;
             }
         } else {

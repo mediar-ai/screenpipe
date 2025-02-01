@@ -89,7 +89,9 @@ export function AccountSection() {
 
   useEffect(() => {
     if (!settings.user?.email) {
-      posthog.capture("app_login");
+      posthog.capture("app_login", {
+        email: settings.user?.email,
+      });
     }
 
     const setupDeepLink = async () => {

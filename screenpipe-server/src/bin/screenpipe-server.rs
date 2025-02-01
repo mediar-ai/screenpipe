@@ -3,18 +3,18 @@ use clap::Parser;
 use colored::Colorize;
 use dirs::home_dir;
 use futures::pin_mut;
+use futures::StreamExt;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, default_input_device, default_output_device, list_audio_devices,
     parse_audio_device, VadEngineEnum,
 };
+
 use screenpipe_audio::{AudioInput, TranscriptionResult};
-use screenpipe_core::find_ffmpeg_path;
-use screenpipe_core::AudioDevice;
 use screenpipe_core::DeviceControl;
 use screenpipe_core::DeviceType;
-use screenpipe_server::core::DeviceManager;
+use screenpipe_core::{find_ffmpeg_path, DeviceManager};
 use screenpipe_server::VisionDeviceControlRequest;
 use screenpipe_server::{
     cli::{
@@ -47,16 +47,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-
-fn print_devices(devices: &[AudioDevice]) {
-    println!("available audio devices:");
-    for device in devices.iter() {
-        println!("  {}", device);
-    }
-
-    #[cfg(target_os = "macos")]
-    println!("on macos, it's not intuitive but output devices are your displays");
-}
 
 const DISPLAY: &str = r"
                                             _          
@@ -464,23 +454,10 @@ async fn main() -> anyhow::Result<()> {
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
-    if cli.list_audio_devices {
-        print_devices(&all_audio_devices);
-        return Ok(());
-    }
     let all_monitors = list_monitors().await;
-    if cli.list_monitors {
-        println!("available monitors:");
-        for monitor in all_monitors.iter() {
-            println!("  {}. {:?}", monitor.id(), monitor);
-        }
-        return Ok(());
-    }
 
     let mut audio_devices = Vec::new();
-    let (device_manager, device_manager_receiver) = DeviceManager::new();
-    let mut device_manager_receiver_control_loop = device_manager_receiver.clone();
-    let device_manager = Arc::new(device_manager);
+    let device_manager = Arc::new(DeviceManager::default());
     let mut realtime_audio_devices = Vec::new();
 
     // Add all available audio devices to the controls
@@ -505,8 +482,6 @@ async fn main() -> anyhow::Result<()> {
                 };
                 devices_status.insert(input_device, device_control);
             }
-            // audio output only on macos <15.0 atm ?
-            // see https://github.com/mediar-ai/screenpipe/pull/106
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
@@ -533,12 +508,17 @@ async fn main() -> anyhow::Result<()> {
         if audio_devices.is_empty() {
             eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
-            for device in &audio_devices {
+            for (index, device) in audio_devices.iter().enumerate() {
+                if cli.disable_audio {
+                    break;
+                }
                 let device_clone = device.deref().clone();
                 let sender_clone = device_manager.clone();
-                // send signal after everything started
+                // send signal after everything started, with staggered delays
                 tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    // Base delay of 15s + 5s for each device index
+                    let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
+                    tokio::time::sleep(delay).await;
                     info!(
                         "initializing audio device control for device: {}",
                         device_clone.name
@@ -561,8 +541,6 @@ async fn main() -> anyhow::Result<()> {
                 if let Ok(input_device) = default_input_device() {
                     realtime_audio_devices.push(Arc::new(input_device.clone()));
                 }
-                // audio output only on macos <15.0 atm ?
-                // see https://github.com/mediar-ai/screenpipe/pull/106
                 if let Ok(output_device) = default_output_device() {
                     realtime_audio_devices.push(Arc::new(output_device.clone()));
                 }
@@ -603,11 +581,16 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize vision devices control based on user selected monitors
     {
-        for monitor_id in monitor_ids.clone() {
+        for (index, monitor_id) in monitor_ids.clone().into_iter().enumerate() {
+            if cli.disable_vision {
+                break;
+            }
             let device_manager = device_manager.clone();
             // Send signal after everything started
             tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(15)).await;
+                // Base delay of 15s + 5s for each monitor index
+                let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
+                tokio::time::sleep(delay).await;
                 info!(
                     "initializing vision device control for monitor: {}",
                     monitor_id
@@ -659,6 +642,8 @@ async fn main() -> anyhow::Result<()> {
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
+    let dm_clone = device_manager.clone();
+    let device_manager_clone = device_manager.clone();
 
     let (whisper_sender, whisper_receiver) = if cli.disable_audio {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -679,7 +664,7 @@ async fn main() -> anyhow::Result<()> {
             &PathBuf::from(output_path_clone.as_ref()),
             VadSensitivity::from(cli.vad_sensitivity.clone()),
             languages.clone(),
-            device_manager.devices.clone(),
+            device_manager.clone(),
         )
         .await?
     };
@@ -736,7 +721,7 @@ async fn main() -> anyhow::Result<()> {
                     realtime_config,
                     &vision_handle,
                     &audio_handle,
-                    device_manager_receiver.clone(),
+                    device_manager.clone(),
                 );
 
                 let result = tokio::select! {
@@ -781,7 +766,7 @@ async fn main() -> anyhow::Result<()> {
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
-        device_manager.clone(),
+        dm_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -792,19 +777,31 @@ async fn main() -> anyhow::Result<()> {
         realtime_vision_sender_clone.clone(),
     );
 
-    let device_manager_clone = device_manager.clone();
     tokio::spawn(async move {
-        while let Ok(_) = device_manager_receiver_control_loop.changed().await {
-            debug!("received device update");
-            let control = device_manager_receiver_control_loop.borrow().clone();
-            if let Err(e) =
-                handle_device_update(&control.device, control.clone(), &device_manager_clone).await
+        // Watch for device changes using the new stream API
+        let mut device_changes = device_manager_clone.watch_devices().await;
+
+        while let Some(change) = device_changes.next().await {
+            // ignore if vision disabled and its a vision device
+            if cli.disable_vision && change.control.device.is_vision() {
+                continue;
+            }
+            if cli.disable_audio && change.control.device.is_audio() {
+                continue;
+            }
+            debug!("received device update: {:?}", change);
+            if let Err(e) = handle_device_update(
+                &change.control.device,
+                change.control.clone(),
+                &device_manager_clone,
+            )
+            .await
             {
                 error!("Device update failed: {}", e);
                 continue;
             }
         }
-        info!("audio device control task stopped");
+        info!("device control task stopped");
     });
 
     async fn handle_device_update(
@@ -819,32 +816,35 @@ async fn main() -> anyhow::Result<()> {
                 match list_audio_devices().await {
                     Ok(available_devices) => {
                         if !available_devices.contains(device) {
+                            warn!("attempted to control non-existent device: {}", device.name);
                             return Err(anyhow::anyhow!(
                                 "attempted to control non-existent device: {}",
                                 device.name
                             ));
                         }
 
-                        // Update the device state using DeviceManager
-                        devices_control.update_device(control.clone()).await?;
-
+                        // Update the device state using new DeviceManager API
+                        devices_control.update_device(control).await?;
                         Ok(())
                     }
-                    Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
+                    Err(e) => {
+                        warn!("failed to list audio devices: {}", e);
+                        Err(anyhow::anyhow!("failed to list audio devices: {}", e))
+                    }
                 }
             }
             DeviceType::Vision(monitor_id) => {
                 let monitors = list_monitors().await;
                 if !monitors.iter().any(|m| m.id() == *monitor_id) {
+                    warn!("attempted to control non-existent device: {}", monitor_id);
                     return Err(anyhow::anyhow!(
                         "attempted to control non-existent device: {}",
                         monitor_id
                     ));
                 }
 
-                // Update the device state using DeviceManager
-                devices_control.update_device(control.clone()).await?;
-
+                // Update the device state using new DeviceManager API
+                devices_control.update_device(control).await?;
                 Ok(())
             }
         }

@@ -102,7 +102,7 @@ export const createCommand = command({
   name: "create",
   desc: "create a new pipe",
   handler: async () => {
-    console.log(chalk.bold("\nwelcome to create-pipe! 🚀\n"));
+    console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
     console.log("let's create a new screenpipe pipe.\n");
     console.log(
       "pipes are plugins that interact with captured screen and audio data."

@@ -2,8 +2,8 @@ use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
-use dashmap::DashMap;
 use futures::future::join_all;
+use futures::StreamExt;
 use log::{debug, error, info, warn};
 use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
 use screenpipe_audio::{
@@ -11,7 +11,7 @@ use screenpipe_audio::{
 };
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
-use screenpipe_core::{AudioDevice, DeviceControl, DeviceType, Language};
+use screenpipe_core::{AudioDevice, DeviceManager, DeviceType, Language};
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
@@ -20,54 +20,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
-
-#[derive(Clone)]
-pub struct DeviceManager {
-    sender: tokio::sync::watch::Sender<DeviceControl>,
-    pub devices: DashMap<String, DeviceControl>,
-}
-
-impl DeviceManager {
-    pub fn default() -> Self {
-        let (sender, _) = tokio::sync::watch::channel(DeviceControl::default());
-        Self {
-            sender,
-            devices: DashMap::new(),
-        }
-    }
-    pub fn new() -> (Self, tokio::sync::watch::Receiver<DeviceControl>) {
-        let (sender, receiver) = tokio::sync::watch::channel(DeviceControl::default());
-        (
-            Self {
-                sender,
-                devices: DashMap::new(),
-            },
-            receiver,
-        )
-    }
-
-    pub async fn update_device(&self, control: DeviceControl) -> anyhow::Result<()> {
-        debug!("updating device: {:?}", control);
-        // check if there is an actual change, otherwise ignore
-        if let Some(device) = self.devices.get(&control.device.to_string()) {
-            if device.is_running == control.is_running {
-                return Ok(());
-            }
-        }
-
-        info!("updating device: {:?}", control);
-        self.sender.send(control.clone())?;
-        self.devices.insert(control.device.to_string(), control);
-        Ok(())
-    }
-
-    pub async fn get_device(&self, device_id: &str) -> anyhow::Result<DeviceControl> {
-        self.devices
-            .get(device_id)
-            .map(|r| r.value().clone())
-            .ok_or(anyhow::anyhow!("device not found: {}", device_id))
-    }
-}
 
 #[derive(Clone)]
 pub struct RecordingConfig {
@@ -131,7 +83,7 @@ pub async fn start_continuous_recording(
     realtime: RealtimeConfig,
     vision_handle: &Handle,
     audio_handle: &Handle,
-    device_control_receiver: tokio::sync::watch::Receiver<DeviceControl>,
+    device_manager: Arc<DeviceManager>,
 ) -> Result<()> {
     let recording_config = recording;
 
@@ -139,13 +91,13 @@ pub async fn start_continuous_recording(
     let languages_clone = recording_config.languages.clone();
     let db_clone = db.clone();
     let ocr_engine_clone = vision.ocr_engine.clone();
-    let device_control_receiver_vision = device_control_receiver.clone();
-    let device_control_receiver_audio = device_control_receiver.clone();
+    let device_manager_vision = device_manager.clone();
+    let device_manager_audio = device_manager.clone();
 
     let video_task = if !vision.disabled {
         vision_handle.spawn(async move {
             record_vision(
-                device_control_receiver_vision,
+                device_manager_vision,
                 ocr_engine_clone,
                 db_clone,
                 output_path_clone,
@@ -174,7 +126,7 @@ pub async fn start_continuous_recording(
     let audio_task = if !audio.disabled {
         audio_handle.spawn(async move {
             record_audio(
-                device_control_receiver_audio,
+                device_manager_audio,
                 db_manager_audio,
                 recording_config.audio_chunk_duration,
                 whisper_sender_clone,
@@ -214,7 +166,7 @@ pub async fn start_continuous_recording(
 }
 
 async fn record_vision(
-    device_receiver: tokio::sync::watch::Receiver<DeviceControl>,
+    device_manager: Arc<DeviceManager>,
     ocr_engine: Arc<OcrEngine>,
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
@@ -228,70 +180,86 @@ async fn record_vision(
     use_pii_removal: bool,
 ) -> Result<()> {
     let mut handles: HashMap<u32, JoinHandle<()>> = HashMap::new();
-    let mut device_receiver_clone = device_receiver.clone();
+    let mut device_states = device_manager.watch_devices().await;
 
-    while let Ok(_) = device_receiver_clone.changed().await {
-        let control = device_receiver_clone.borrow().clone();
-        let device_receiver_video = device_receiver_clone.clone();
-        match control.device {
-            DeviceType::Vision(monitor_id) => {
-                if !control.is_running {
-                    if let Some(handle) = handles.remove(&monitor_id) {
-                        handle.abort();
-                        info!("stopped thread for monitor {}", monitor_id);
+    loop {
+        tokio::select! {
+            Some(state_change) = device_states.next() => {
+                match DeviceType::from_str(&state_change.device) {
+                    Ok(DeviceType::Vision(monitor_id)) => {
+                        debug!("record_vision: vision state change: {:?}", state_change);
+                        if !state_change.control.is_running {
+                            if let Some(handle) = handles.remove(&monitor_id) {
+                                let _ = handle.await;
+                                info!("stopped thread for monitor {}", monitor_id);
+                            }
+                            continue;
+                        }
+
+
+                        if handles.contains_key(&monitor_id) {
+                            continue;
+                        }
+
+                        info!("starting vision capture thread for monitor: {}", monitor_id);
+
+                        let db_manager_video = Arc::clone(&db);
+                        let output_path_video = Arc::clone(&output_path);
+                        let ocr_engine = Arc::clone(&ocr_engine);
+                        let ignored_windows_video = ignored_windows.to_vec();
+                        let include_windows_video = include_windows.to_vec();
+                        let realtime_vision_sender_clone = realtime_vision_sender.clone();
+                        let languages = languages.clone();
+                        let device_manager_vision_clone = device_manager.clone();
+                        let handle = tokio::spawn(async move {
+                            let config = VideoRecordingConfig {
+                                db: db_manager_video,
+                                output_path: output_path_video,
+                                fps,
+                                ocr_engine,
+                                monitor_id,
+                                use_pii_removal,
+                                ignored_windows: ignored_windows_video,
+                                include_windows: include_windows_video,
+                                video_chunk_duration,
+                                languages,
+                                capture_unfocused_windows,
+                                realtime_vision_sender: realtime_vision_sender_clone,
+                            };
+
+                            if let Err(e) = record_video(device_manager_vision_clone, config).await {
+                                error!(
+                                    "Error in video recording thread for monitor {}: {}",
+                                    monitor_id, e
+                                );
+                            }
+                        });
+
+                        handles.insert(monitor_id, handle);
                     }
-                    continue;
+                    _ => continue, // Ignore non-vision devices
                 }
-
-                if handles.contains_key(&monitor_id) {
-                    continue;
-                }
-
-                let db_manager_video = Arc::clone(&db);
-                let output_path_video = Arc::clone(&output_path);
-                let ocr_engine = Arc::clone(&ocr_engine);
-                let ignored_windows_video = ignored_windows.to_vec();
-                let include_windows_video = include_windows.to_vec();
-                let realtime_vision_sender_clone = realtime_vision_sender.clone();
-                let languages = languages.clone();
-
-                let handle = tokio::spawn(async move {
-                    let config = VideoRecordingConfig {
-                        db: db_manager_video,
-                        output_path: output_path_video,
-                        fps,
-                        ocr_engine,
-                        monitor_id,
-                        use_pii_removal,
-                        ignored_windows: ignored_windows_video,
-                        include_windows: include_windows_video,
-                        video_chunk_duration,
-                        languages,
-                        capture_unfocused_windows,
-                        realtime_vision_sender: realtime_vision_sender_clone,
-                    };
-
-                    if let Err(e) = record_video(device_receiver_video, config).await {
-                        error!(
-                            "Error in video recording thread for monitor {}: {}",
-                            monitor_id, e
-                        );
-                    }
-                });
-
-                handles.insert(monitor_id, handle);
             }
-            DeviceType::Audio(_) => continue, // Ignore audio devices
+            _ = tokio::time::sleep(Duration::from_millis(100)) => {
+
+            }
         }
+
+        handles.retain(|monitor_id, handle| {
+            if handle.is_finished() {
+                info!("handle for monitor {} has finished", monitor_id);
+                false
+            } else {
+                true
+            }
+        });
     }
-    Ok(())
 }
 
 async fn record_video(
-    mut device_receiver: tokio::sync::watch::Receiver<DeviceControl>,
+    device_manager: Arc<DeviceManager>,
     config: VideoRecordingConfig,
 ) -> Result<()> {
-    info!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&config.db);
     let rt = Handle::current();
     let device_name = Arc::new(format!("monitor_{}", config.monitor_id));
@@ -328,14 +296,22 @@ async fn record_video(
         config.capture_unfocused_windows,
     );
 
+    let mut device_states = device_manager.watch_devices().await;
+
     loop {
         tokio::select! {
-            Ok(_) = device_receiver.changed() => {
-                debug!("device_receiver changed in record_video");
-                let control = device_receiver.borrow().clone();
-                if !control.is_running {
-                    let _ = video_capture.shutdown().await;
-                    return Ok(());
+            Some(state_change) = device_states.next() => {
+                match DeviceType::from_str(&state_change.device) {
+                    Ok(DeviceType::Vision(monitor_id)) if monitor_id == config.monitor_id => {
+                        debug!("record_video: vision state change: {:?}", state_change);
+                        if !state_change.control.is_running {
+                            info!("vision thread for monitor {} received stop signal", monitor_id);
+                            let _ = video_capture.shutdown().await;
+                            info!("vision thread for monitor {} shutdown complete", monitor_id);
+                            return Ok(());
+                        }
+                    }
+                    _ => continue, // Ignore other devices or monitors
                 }
             }
             _ = tokio::time::sleep(Duration::from_secs_f64(1.0 / config.fps)) => {
@@ -399,7 +375,7 @@ async fn record_video(
 }
 
 async fn record_audio(
-    device_receiver: tokio::sync::watch::Receiver<DeviceControl>,
+    device_manager: Arc<DeviceManager>,
     db: Arc<DatabaseManager>,
     chunk_duration: Duration,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
@@ -412,19 +388,19 @@ async fn record_audio(
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
+    let mut device_states = device_manager.watch_devices().await;
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
     let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
-    let mut device_receiver_clone = device_receiver.clone();
+
     loop {
         tokio::select! {
-            Ok(_) = device_receiver_clone.changed() => {
-                let control = device_receiver_clone.borrow().clone();
-                match control.device {
-                    DeviceType::Audio(audio_device) => {
+            Some(state_change) = device_states.next() => {
+                match DeviceType::from_str(&state_change.device) {
+                    Ok(DeviceType::Audio(audio_device)) => {
                         let device_id = audio_device.to_string();
 
-                        if !control.is_running {
+                        if !state_change.control.is_running {
                             if let Some(handle) = handles.remove(&device_id) {
                                 handle.abort();
                                 info!("stopped thread for device {}", &audio_device);
@@ -436,6 +412,8 @@ async fn record_audio(
                             continue;
                         }
 
+                        info!("starting audio capture thread for device: {}", &audio_device);
+
                         let whisper_sender_clone = whisper_sender.clone();
 
                         let audio_device = Arc::new(audio_device);
@@ -445,40 +423,41 @@ async fn record_audio(
                         let realtime_transcription_sender_clone =
                             realtime_transcription_sender_clone.clone();
                         let deepgram_api_key_clone = deepgram_api_key.clone();
-                        let device_receiver_clone = device_receiver.clone();
+                        let device_receiver_clone = device_manager.clone();
                         let device_receiver_clone_clone = device_receiver_clone.clone();
                         let handle = tokio::spawn(async move {
-                            let audio_device_clone = Arc::clone(&audio_device);
-                            let deepgram_api_key = deepgram_api_key_clone.clone();
                             info!(
                                 "starting audio capture thread for device: {}",
                                 &audio_device
                             );
 
                             let mut did_warn = false;
-                            let is_running = Arc::new(AtomicBool::new(control.is_running));
 
+                            let audio_device_clone = Arc::clone(&audio_device);
+                            let deepgram_api_key = deepgram_api_key_clone.clone();
+                            let is_running = Arc::new(AtomicBool::new(state_change.control.is_running));
 
                             while is_running.load(Ordering::Relaxed) {
                                 let is_running_clone = is_running.clone();
                                 let device_receiver_monitor = device_receiver_clone_clone.clone();
+                                let device_id = audio_device_clone.to_string();
 
-                                // if device control change to false, set is_running to false
+                                // Monitor device state changes
+                                let mut device_states = device_receiver_monitor.watch_devices().await;
                                 tokio::spawn(async move {
-                                    loop {
-                                        if !device_receiver_monitor.borrow().is_running {
-                                            is_running_clone.clone().store(false, Ordering::Relaxed);
+                                    while let Some(state_change) = device_states.next().await {
+                                        if state_change.device == device_id && !state_change.control.is_running {
+                                            is_running_clone.store(false, Ordering::Relaxed);
                                             break;
-                                        } // KINDa spaghetti code here - should be uniefied on the device manager thing / receive
-                                        // also UX real time device vs non real time device is weird
-                                        tokio::time::sleep(Duration::from_millis(100)).await;
+                                        }
                                     }
                                 });
+
                                 let deepgram_api_key = deepgram_api_key.clone();
-                                let is_running_loop = Arc::clone(&is_running); // Create separate reference for the loop
+                                let is_running_loop = Arc::clone(&is_running);
                                 let audio_stream = match AudioStream::from_device(
                                     audio_device_clone.clone(),
-                                    Arc::clone(&is_running_loop), // Clone from original Arc
+                                    Arc::clone(&is_running_loop),
                                 )
                                 .await
                                 {
@@ -545,12 +524,11 @@ async fn record_audio(
 
                                 join_all(recording_handles).await;
                             }
-
                         });
 
                         handles.insert(device_id, handle);
                     }
-                    DeviceType::Vision(_) => continue, // Ignore vision devices
+                    _ => continue,
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {

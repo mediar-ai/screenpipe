@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 use chrono::Utc;
-use screenpipe_core::{AudioDevice, AudioDeviceType};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceManager};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
 use std::path::PathBuf;
@@ -12,8 +12,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use screenpipe_server::{
-    core::DeviceManager, create_router, video_cache::FrameCache, AppState, ContentItem,
-    DatabaseManager, PaginatedResponse, PipeManager,
+    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
+    PaginatedResponse, PipeManager,
 };
 
 // Add this function to initialize the logger

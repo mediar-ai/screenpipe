@@ -2,7 +2,6 @@ import prompts from "prompts"
 import fs from "fs-extra"
 import { highlighter, logger } from "./logger";
 import path from 'path';
-// import { main } from '@screenpipe/create-pipe';
 
 export async function createPipe(
   cwd: string

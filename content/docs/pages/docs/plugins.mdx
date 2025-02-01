@@ -46,22 +46,22 @@ The fastest way to create a new pipe is using our CLI:
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-    bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    npx @screenpipe/create-pipe@latest
+    npx @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    yarn @screenpipe/create-pipe
+    yarn @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    pnpx @screenpipe/create-pipe
+    pnpx @screenpipe/dev create
     ```
   </Tab>
 </Tabs>
@@ -87,8 +87,19 @@ available commands:
 bunx @screenpipe/dev login --apiKey <your-key>
 
 # create a new pipe
-bunx @screenpipe/dev create --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
+bunx @screenpipe/dev register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
 # you'll receive payouts to your stripe account on a daily basis
+
+# add predefined components to your pipe
+bunx @screenpipe/dev components add
+# select components from the interactive menu:
+# - use-health: health monitoring hooks
+# - use-settings: settings management
+# - route-settings: settings page routing
+# - use-sql-autocomplete: SQL query assistance
+# - sql-autocomplete-input: SQL input component
+# - use-search-history: search history management
+# - use-ai-provider: AI integration hooks
 
 # publish your pipe to the store
 bunx @screenpipe/dev publish --name my-pipe
