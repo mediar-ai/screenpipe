@@ -97,7 +97,7 @@ impl EventManager {
     pub fn send<T: Serialize + 'static>(&self, event: impl Into<String>, data: T) -> Result<()> {
         let event_name = event.into();
         let value = serde_json::to_value(data)?;
-        tracing::debug!("Sending event {} with data {:?}", event_name, value);
+        tracing::debug!("sending event {} ", event_name);
         match self.sender.send(Event {
             name: event_name.clone(),
             data: value,

@@ -1,6 +1,5 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
@@ -193,7 +192,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-f",
         "image2pipe",
         "-vcodec",
-        "mjpeg",
+        "png", // consider using mjpeg and change to encode to jpeg below too
         "-r",
         &fps_str,
         "-i",
@@ -345,7 +344,7 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
     frame
         .image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+        .write_to(&mut std::io::Cursor::new(&mut buffer), image::ImageFormat::Png)
         .expect("Failed to encode frame");
     buffer
 }
