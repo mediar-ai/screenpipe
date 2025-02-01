@@ -3,7 +3,7 @@
 import { Loader2, ArrowDown, LayoutList, Layout } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useState, useMemo, useEffect, useRef } from "react"
-import { TranscriptionChunk, ServiceStatus } from "./types"
+import { TranscriptionChunk, ServiceStatus } from "../meeting-history/types"
 import { ChunkOverlay } from "./floating-container-buttons"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import { addVocabularyEntry } from './hooks/storage-vocabulary'
 import { generateMeetingNote } from './hooks/ai-create-note-based-on-chunk'
 import { improveTranscription } from './hooks/ai-improve-chunk-transcription'
 import { useMeetingContext } from './hooks/storage-for-live-meeting'
-import { Settings } from "@/lib/hooks/use-settings"
+import type { Settings } from "@screenpipe/browser"
 import { cn } from "@/lib/utils"
 import { 
     storeLiveChunks,
@@ -293,7 +293,7 @@ export function TranscriptionView({
         if (previousChunkIndex >= 0 && 
             previousChunkIndex > lastProcessedChunkRef.current && 
             !improvingChunks[previousChunkIndex] &&
-            settings.openAiKey) {
+            settings.openaiApiKey) {
             
             const improveChunk = async () => {
                 setImprovingChunks(prev => ({ ...prev, [previousChunkIndex]: true }))
@@ -312,7 +312,7 @@ export function TranscriptionView({
                         {
                             meetingTitle: title,
                             recentChunks: contextChunks,
-                            notes,
+                            notes: notes.map(note => note.text),
                         },
                         settings
                     )
@@ -366,12 +366,10 @@ export function TranscriptionView({
             console.log('generated note:', note)
             
             // Add the generated note to the meeting context
-            setNotes(prev => [...prev, {
+            setNotes([...notes, {
                 id: crypto.randomUUID(),
                 text: note,
-                timestamp: new Date(mergeChunks[index].timestamp),
-                isInput: false,
-                device: 'ai'
+                timestamp: new Date(mergeChunks[index].timestamp)
             }])
             
         } catch (error) {
