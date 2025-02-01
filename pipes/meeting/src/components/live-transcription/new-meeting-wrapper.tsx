@@ -1,94 +1,50 @@
 'use client'
 
 import { useEffect, useState } from "react"
-import { useTranscriptionService } from './use-transcription-service'
-import { useAutoScroll } from './hooks/auto-scroll'
-import { StatusAlerts } from './status-alerts'
-import { NotesEditor } from './notes-editor'
+import { useTranscriptionService } from '@/components/live-transcription/use-transcription-service'
+import { useAutoScroll } from '@/components/live-transcription/hooks/auto-scroll'
+import { StatusAlerts } from '@/components/live-transcription/status-alerts'
+import { NotesEditor } from '@/components/live-transcription/notes-editor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Split from 'react-split'
-import { TranscriptionView } from './transcription-view'
+import { TranscriptionView } from '@/components/live-transcription/transcription-view'
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { MeetingProvider } from './hooks/storage-for-live-meeting'
+import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
 
-interface LiveTranscriptionProps {
-    onBack: () => void;
+interface Props {
+  onBack: () => void
 }
 
-export function LiveTranscription({ onBack }: LiveTranscriptionProps) {
+export function LiveTranscription({ onBack }: Props) {
     const {
         chunks,
         serviceStatus,
         isLoadingRecent: isLoading,
-        checkService,
         getStatusMessage
     } = useTranscriptionService()
 
     const { scrollRef, onScroll, isScrolledToBottom } = useAutoScroll(chunks)
-
     const [windowHeight, setWindowHeight] = useState(0)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
     const [sizes, setSizes] = useState([50, 50])
-
     const router = useRouter()
-
     const { settings } = useSettings()
 
     const updateHeight = () => {
         const vh = window.innerHeight
-        const headerOffset = 32 // 2rem
+        const headerOffset = 32
         console.log('window height:', vh, 'header offset:', headerOffset)
         setWindowHeight(vh - headerOffset)
     }
 
-    useEffect(() => {
-        console.log('live transcription wrapper mounted')
-        const init = async () => {
-            await checkService()
-            if (serviceStatus !== 'available') {
-                console.log('initial service check failed, will retry')
-            }
-        }
-
-        init()
-        
-        // If service is not yet available, set an interval to re-check
-        let interval: NodeJS.Timeout | undefined
-        if (serviceStatus !== 'available') {
-            console.log('setting up service check interval')
-            interval = setInterval(async () => {
-                await checkService()
-                if (serviceStatus === 'available') {
-                    console.log('service became available, clearing interval')
-                    clearInterval(interval)
-                }
-            }, 5000)
-        }
-
-        return () => {
-            if (interval) {
-                console.log('cleaning up service check interval')
-                clearInterval(interval)
-            }
-            window.removeEventListener('resize', updateHeight)
-        }
-    }, [serviceStatus, checkService])
-
-    // Additional effect to ensure transcription stream is started whenever serviceStatus becomes available
-    useEffect(() => {
-        if (serviceStatus === 'available') {
-            console.log('live transcription wrapper detected service available, ensuring stream is active')
-            checkService()
-        }
-    }, [serviceStatus, checkService])
-
+    // Window resize handler
     useEffect(() => {
         updateHeight()
         window.addEventListener('resize', updateHeight)
         return () => window.removeEventListener('resize', updateHeight)
-    }, [])
+    }, []) // Empty deps array since updateHeight is stable
 
     const handleTimeClick = (timestamp: Date) => {
         console.log('clicking time:', timestamp)
@@ -116,53 +72,65 @@ export function LiveTranscription({ onBack }: LiveTranscriptionProps) {
         if (newSizes[1] < 25) setSizes([100, 0])
     }
 
+    const handleBack = () => {
+        console.log('navigating back to meeting history')
+        router.push('/meetings')
+    }
+
     return (
-        <MeetingProvider>
-            <div className="h-full flex flex-col">
-                <div
-                    className="w-full"
-                    style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
+        <div className="h-full flex flex-col">
+            <div
+                className="w-full"
+                style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
+            >
+                <Split
+                    className="flex gap-0 h-full [&_.gutter]:bg-gray-100 [&_.gutter]:bg-dotted [&_.gutter]:w-[3px] [&_.gutter]:mx-1 [&_.gutter]:cursor-col-resize"
+                    sizes={sizes}
+                    minSize={0}
+                    snapOffset={100}
+                    onDragEnd={onDragEnd}
+                    onDrag={onDrag}
                 >
-                    <Split
-                        className="flex gap-0 h-full [&_.gutter]:bg-gray-100 [&_.gutter]:bg-dotted [&_.gutter]:w-[3px] [&_.gutter]:mx-1 [&_.gutter]:cursor-col-resize"
-                        sizes={sizes}
-                        minSize={0}
-                        snapOffset={100}
-                        onDragEnd={onDragEnd}
-                        onDrag={onDrag}
-                    >
-                        {/* Transcription Panel */}
-                        <div className="flex flex-col relative">
-                            <StatusAlerts serviceStatus={serviceStatus} />
-                            <TranscriptionView
-                                chunks={chunks}
-                                settings={settings}
-                                isLoading={isLoading}
-                                isAutoScrollEnabled={isScrolledToBottom}
-                                serviceStatus={serviceStatus}
-                                getStatusMessage={getStatusMessage}
-                                scrollRef={scrollRef}
-                                onScroll={onScroll}
-                                isScrolledToBottom={isScrolledToBottom}
-                            />
-                        </div>
+                    {/* Transcription Panel */}
+                    <div className="flex flex-col relative">
+                        <StatusAlerts serviceStatus={serviceStatus} />
+                        <TranscriptionView
+                            chunks={chunks}
+                            settings={settings}
+                            isLoading={isLoading}
+                            isAutoScrollEnabled={isScrolledToBottom}
+                            serviceStatus={serviceStatus}
+                            getStatusMessage={getStatusMessage}
+                            scrollRef={scrollRef}
+                            onScroll={onScroll}
+                            isScrolledToBottom={isScrolledToBottom}
+                        />
+                    </div>
 
-                        {/* Notes Panel */}
-                        <div>
-                            <NotesEditor onTimeClick={handleTimeClick} onBack={onBack} />
-                        </div>
-                    </Split>
+                    {/* Notes Panel */}
+                    <div>
+                        <NotesEditor 
+                            onTimeClick={handleTimeClick} 
+                            onBack={handleBack}
+                            onNewMeeting={() => {
+                                clearLiveMeetingData()
+                                router.refresh()
+                            }}
+                        />
+                    </div>
+                </Split>
 
-                    <Dialog open={mergeModalOpen} onOpenChange={setMergeModalOpen}>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Merge Speakers</DialogTitle>
-                            </DialogHeader>
-                            {/* Dialog content */}
-                        </DialogContent>
-                    </Dialog>
-                </div>
+                <Dialog open={mergeModalOpen} onOpenChange={setMergeModalOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Merge Speakers</DialogTitle>
+                        </DialogHeader>
+                        {/* Dialog content */}
+                    </DialogContent>
+                </Dialog>
             </div>
-        </MeetingProvider>
+        </div>
     )
-} 
+}
+
+export default LiveTranscription 
