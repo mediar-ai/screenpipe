@@ -21,7 +21,6 @@ use image::ImageFormat::{self};
 use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
 
 use crate::{
-    core::DeviceManager,
     db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
@@ -49,10 +48,7 @@ use std::{
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
     time::{Duration, Instant},
 };
 
@@ -60,7 +56,7 @@ use lru::LruCache;
 
 use tokio::{
     net::TcpListener,
-    sync::{broadcast, mpsc, Mutex},
+    sync::{mpsc, Mutex},
     time::timeout,
 };
 
