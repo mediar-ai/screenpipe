@@ -1,11 +1,11 @@
-import { cyan, green, red, yellow } from "kleur/colors"
 import ora, { type Options } from "ora"
+import { colors } from "../../../../../utils/colors"
 
 export const highlighter = {
-  error: red,
-  warn: yellow,
-  info: cyan,
-  success: green,
+  error: colors.error,
+  warn: colors.warning,
+  info: colors.info,
+  success: colors.success,
 }
 
 export const logger = {
