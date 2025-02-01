@@ -12,6 +12,7 @@ import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
+import { clearLiveMeetingData } from './hooks/storage-for-live-meeting'
 
 interface Props {
   onBack: () => void
