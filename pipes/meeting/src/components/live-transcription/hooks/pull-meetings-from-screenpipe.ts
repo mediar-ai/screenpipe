@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { pipe } from "@screenpipe/browser"
-import { TranscriptionChunk } from '../types'
+import { TranscriptionChunk } from '../../meeting-history/types'
 
 export function useRecentChunks() {
   const [chunks, setChunks] = useState<TranscriptionChunk[]>([])
@@ -28,6 +28,7 @@ export function useRecentChunks() {
           const content = item.content
           console.log('processing chunk content:', content)
           return {
+            id: item.id || crypto.randomUUID(),
             timestamp: content.timestamp || new Date().toISOString(),
             text: content.transcription || '',
             isInput: content.deviceType?.toLowerCase() === 'input',
