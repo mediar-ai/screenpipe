@@ -52,9 +52,6 @@ tokio = { version = "1.36.0", features = ["full"] }
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
 
-# Uuid
-uuid = { version = "1.10.0", features = ["v4"] }
-
 # tracing
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
@@ -74,7 +71,6 @@ axum = "0.6.0" # or your current version
 
 
 dirs = "5.0.1"
-url = "2.4.0"
 tauri-plugin-deep-link = "2"
 
 once_cell = "1.20.0"
