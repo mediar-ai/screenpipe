@@ -13,6 +13,7 @@ edition = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
+screenpipe-events = { path = "../screenpipe-events" }
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
@@ -49,7 +50,7 @@ thiserror = "1"
 sentry = { workspace = true }
 
 # Server
-axum = { version = "0.7.5", features = ["ws"]}
+axum = { version = "0.7.5", features = ["ws"] }
 axum-macros = "0.5.0"
 async-stream = "0.3"
 tokio = { version = "1.15", features = ["full", "tracing"] }
@@ -128,6 +129,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
+tokio-tungstenite = "0.19.0"
 
 # Benches
 criterion = { workspace = true }

@@ -21,7 +21,6 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 use serde_json;
-use tracing::warn;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -32,6 +31,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::watch;
 use tracing::info;
+use tracing::warn;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
@@ -339,7 +339,7 @@ pub async fn process_ocr_task(
             window_count += 1;
         }
 
-        window_ocr_results.push(WindowOcrResult {
+        let ocr_result = WindowOcrResult {
             image: captured_window.image,
             window_name: captured_window.window_name,
             app_name: captured_window.app_name,
@@ -347,7 +347,9 @@ pub async fn process_ocr_task(
             text_json: parse_json_output(&window_json_output),
             focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
-        });
+        };
+
+        window_ocr_results.push(ocr_result);
     }
 
     let capture_result = CaptureResult {

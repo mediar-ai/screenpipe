@@ -1,11 +1,11 @@
 use axum::{
     body::Body,
     extract::{
-        ws::{Message, WebSocket},
-        Json, Path, Query, State, WebSocketUpgrade,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Json, Path, Query, State,
     },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Response, Sse},
+    response::{IntoResponse, Json as JsonResponse, Response},
     routing::{get, post},
     serve, Router,
 };
@@ -15,10 +15,11 @@ use tokio::fs::File;
 
 use futures::{
     future::{try_join, try_join_all},
-    SinkExt, Stream, StreamExt,
+    SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
 use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
+use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
     db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
@@ -34,17 +35,13 @@ use crate::{
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
-use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices,
-    realtime::RealtimeTranscriptionEvent,
-};
+use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
 
+use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
-use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    convert::Infallible,
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,
@@ -84,10 +81,6 @@ pub struct AppState {
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
     pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
-    pub realtime_transcription_enabled: bool,
-    pub realtime_transcription_sender:
-        Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
-    pub realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
 // Update the SearchQuery struct
@@ -863,9 +856,6 @@ pub struct Server {
     vision_disabled: bool,
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
-    realtime_transcription_enabled: bool,
-    realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
-    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
 impl Server {
@@ -879,9 +869,6 @@ impl Server {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
-        realtime_transcription_enabled: bool,
-        realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
-        realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
     ) -> Self {
         Server {
             db,
@@ -892,9 +879,6 @@ impl Server {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
-            realtime_transcription_enabled,
-            realtime_transcription_sender,
-            realtime_vision_sender,
         }
     }
 
@@ -931,9 +915,6 @@ impl Server {
             } else {
                 None
             },
-            realtime_transcription_enabled: self.realtime_transcription_enabled,
-            realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
-            realtime_vision_sender: self.realtime_vision_sender,
         });
 
         let app = create_router()
@@ -1648,38 +1629,6 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-
-async fn sse_transcription_handler(
-    State(state): State<Arc<AppState>>,
-) -> Result<
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    if !state.realtime_transcription_enabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            JsonResponse(json!({"error": "Real-time transcription is not enabled"})),
-        ));
-    }
-
-    // Get a new subscription - this won't affect the sender
-    let rx = state.realtime_transcription_sender.subscribe();
-
-    let stream = async_stream::stream! {
-        let mut rx = rx; // Create a new mutable reference to the receiver
-        while let Ok(event) = rx.recv().await {
-            yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
-        }
-        // Even if this stream ends, the sender remains active
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
-}
-
 #[derive(Deserialize)]
 pub struct AudioDeviceControlRequest {
     device_name: String,
@@ -1784,51 +1733,8 @@ async fn stop_audio_device(
 }
 
 #[derive(Deserialize)]
-struct VisionSSEQuery {
+struct EventsQuery {
     images: Option<bool>,
-}
-
-async fn sse_vision_handler(
-    Query(query): Query<VisionSSEQuery>,
-    State(state): State<Arc<AppState>>,
-) -> Result<
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    if state.vision_disabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            JsonResponse(json!({"error": "Vision streaming is disabled"})),
-        ));
-    }
-    // Get a new subscription - this won't affect the sender
-    let rx = state.realtime_vision_sender.subscribe();
-
-    let include_images = query.images.unwrap_or(false);
-
-    let stream = async_stream::stream! {
-        let mut rx = rx; // Create a new mutable reference to the receiver
-        while let Ok(event) = rx.recv().await {
-            match event {
-                RealtimeVisionEvent::Ocr(mut frame) => {
-                    if !include_images {
-                        frame.image = None; // Remove the image data if not enabled
-                    }
-                    yield Ok(Event::default().data(serde_json::to_string(&frame).unwrap_or_default()));
-                }
-                _ => {
-                    yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
-                }
-            }
-        }
-        // Even if this stream ends, the sender remains active
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1966,6 +1872,64 @@ async fn stop_vision_device(
     }))
 }
 
+// websocket events handler
+async fn ws_events_handler(ws: WebSocketUpgrade, query: Query<EventsQuery>) -> Response {
+    ws.on_upgrade(|socket| handle_socket(socket, query))
+}
+
+async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
+    let (mut sender, mut receiver) = socket.split();
+
+    let incoming = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(t) = msg {
+                if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
+                    let _ = send_event(&event.name, event.data);
+                }
+            }
+        }
+    });
+    // Handle the WebSocket connection here
+    // You can add your logic to handle messages, upgrades, etc.
+
+    let outgoing = tokio::spawn(async move {
+        let mut stream = subscribe_to_all_events();
+        loop {
+            tokio::select! {
+                event = stream.next() => {
+                    if let Some(mut event) = event {
+                        if !query.images.unwrap_or(false) && (event.name == "ocr_result" || event.name == "ui_frame") {
+                            if let Some(data) = event.data.as_object_mut() {
+                                data.remove("image");
+                            }
+                        }
+                        if let Err(e) = sender
+                            .send(Message::Text(
+                                serde_json::to_string(&event).unwrap_or_default(),
+                            ))
+                            .await
+                        {
+                            tracing::error!("Failed to send websocket message: {}", e);
+                            break;
+                        }
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    let _ = sender.send(Message::Ping(vec![])).await;
+                }
+            }
+        }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = incoming => {}
+        _ = outgoing => {}
+    }
+
+    debug!("WebSocket connection closed");
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -2011,10 +1975,9 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
-        .route("/sse/transcriptions", get(sse_transcription_handler))
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
-        .route("/sse/vision", get(sse_vision_handler))
+        .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
         .route("/vision/start", post(start_vision_device))

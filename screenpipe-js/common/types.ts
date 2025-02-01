@@ -271,3 +271,8 @@ export interface VisionStreamResponse {
   type: string;
   data: VisionEvent;
 }
+
+export interface EventStreamResponse {
+  name: string;
+  data: VisionEvent | TranscriptionChunk | any;
+}

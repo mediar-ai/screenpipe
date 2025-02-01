@@ -21,7 +21,7 @@ use screenpipe_server::{
         AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
         PipeCommand, VisionCommand,
     },
-    core::{AudioConfig, RealtimeConfig, RecordingConfig, VisionConfig},
+    core::{AudioConfig, RecordingConfig, VisionConfig},
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -217,7 +217,7 @@ async fn main() -> anyhow::Result<()> {
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
     if let Some(Command::Completions { shell }) = &cli.command {
-        cli.handle_completions(shell.clone())?;
+        cli.handle_completions(*shell)?;
         return Ok(());
     }
     if let Some(command) = cli.command {
@@ -637,11 +637,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
-    let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
-    let realtime_vision_sender_clone = realtime_vision_sender.clone();
     let dm_clone = device_manager.clone();
     let device_manager_clone = device_manager.clone();
 
@@ -673,10 +668,8 @@ async fn main() -> anyhow::Result<()> {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
 
                 // Create the configs
                 let recording_config = RecordingConfig {
@@ -708,17 +701,11 @@ async fn main() -> anyhow::Result<()> {
                     include_windows: cli.included_windows.clone(),
                 };
 
-                let realtime_config = RealtimeConfig {
-                    transcription_sender: Arc::new(realtime_transcription_sender_clone),
-                    vision_sender: realtime_vision_sender_clone,
-                };
-
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     recording_config,
                     audio_config,
                     vision_config,
-                    realtime_config,
                     &vision_handle,
                     &audio_handle,
                     device_manager.clone(),
@@ -762,7 +749,6 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -772,9 +758,6 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
-        cli.enable_realtime_audio_transcription,
-        realtime_transcription_sender_clone,
-        realtime_vision_sender_clone.clone(),
     );
 
     tokio::spawn(async move {
@@ -1193,7 +1176,7 @@ async fn main() -> anyhow::Result<()> {
 
             loop {
                 tokio::select! {
-                    result = run_ui(realtime_vision_sender_clone.clone()) => {
+                    result = run_ui() => {
                         match result {
                             Ok(_) => break,
                             Err(e) => {
