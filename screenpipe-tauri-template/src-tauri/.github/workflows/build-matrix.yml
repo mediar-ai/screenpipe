@@ -1,0 +1,17 @@
+name: Build matrix
+
+on:
+  push:
+      branches: [main, master]
+  pull_request:
+      branches: [main, master]
+  workflow_call:
+jobs:
+  build:
+      strategy:
+          matrix:
+              os: [ubuntu-latest, macos-latest, windows-latest]
+      uses: ./.github/workflows/build.yml
+      with:
+          os: ${{ matrix.os }}
+      secrets: inherit

@@ -1,0 +1,47 @@
+name: Build app
+
+on:
+  workflow_call:
+      inputs:
+        os:
+          required: true
+          type: string
+jobs:
+  install_dependencies:
+      runs-on: ${{ inputs.os }}
+      steps:
+          # Install system dependencies for Screenpipe and Tauri
+          - if: inputs.os == 'ubuntu-latest'
+          # Multiline doesn't seem to be working (even with \)
+            run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y update && sudo apt-get -y install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev g++ ffmpeg tesseract-ocr cmake pkg-config libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libavutil-dev libswscale-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev libasound2-dev libdbus-1-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libx11-dev libxi-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev clang llvm-dev llvm
+
+          # Install Rust (rustc, cargo, etc)
+          - uses: actions-rust-lang/setup-rust-toolchain@v1
+            with:
+                toolchain: stable
+  
+          # Checkout, install Bun, and install package.json dependencies
+          - uses: actions/checkout@v4
+          - uses: oven-sh/setup-bun@v2
+          - run: bun install --frozen-lockfile
+
+          # Build and upload Tauri app to the artifacts
+          - run: bun tauri build --verbose
+          - if: inputs.os == 'ubuntu-latest'
+            id: app-image
+            uses: actions/upload-artifact@v4
+            with:
+              name: ${{ inputs.os }}-app-image
+              path: ./src-tauri/target/release/bundle/appimage/*.AppImage
+          - if: inputs.os == 'macos-latest'
+            id: dmg
+            uses: actions/upload-artifact@v4
+            with:
+              name: ${{ inputs.os }}-dmg
+              path: ./src-tauri/target/release/bundle/dmg/*.dmg
+          - if: inputs.os == 'windows-latest'
+            id: exe
+            uses: actions/upload-artifact@v4
+            with:
+              name: ${{ inputs.os }}-exe
+              path: ./src-tauri/target/release/bundle/nsis/*.exe

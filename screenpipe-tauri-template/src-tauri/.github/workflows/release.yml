@@ -1,0 +1,24 @@
+name: Release app
+
+on: 
+  push:
+    tags:
+    - 'v*.*.*'
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-matrix.yml
+  release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      # Downloads all artifacts we've created by default
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./.github/artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ./.github/artifacts/**/*
