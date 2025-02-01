@@ -1,11 +1,13 @@
 use axum::{
     body::Body,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Json, Path, Query, State,
+    },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Response, Sse},
+    response::{IntoResponse, Json as JsonResponse, Response},
     routing::{get, post},
-    serve,
-    ws::{Message, WebSocket, WebSocketUpgrade},
-    Router,
+    serve, Router,
 };
 use tokio_util::io::ReaderStream;
 
@@ -13,7 +15,7 @@ use tokio::fs::File;
 
 use futures::{
     future::{try_join, try_join_all},
-    SinkExt, Stream, StreamExt,
+    SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
 use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
@@ -40,7 +42,6 @@ use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    convert::Infallible,
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,

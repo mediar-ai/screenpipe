@@ -42,6 +42,7 @@ mod tests {
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
             ui_monitoring_enabled: false,
+            frame_image_cache: None,
         });
 
         let router = create_router();

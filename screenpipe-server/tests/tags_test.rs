@@ -36,6 +36,7 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
         ui_monitoring_enabled: false,
+        frame_image_cache: None,
     });
 
     let app = create_router().with_state(app_state.clone());

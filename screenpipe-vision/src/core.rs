@@ -15,14 +15,12 @@ use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
-use screenpipe_events::send_event;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 use serde_json;
-use tracing::warn;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -33,6 +31,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::watch;
 use tracing::info;
+use tracing::warn;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;

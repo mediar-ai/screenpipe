@@ -201,7 +201,7 @@ async fn record_vision(
                         let ocr_engine = Arc::clone(&ocr_engine);
                         let ignored_windows_video = ignored_windows.to_vec();
                         let include_windows_video = include_windows.to_vec();
-                        let realtime_vision_sender_clone = realtime_vision_sender.clone();
+
                         let languages = languages.clone();
                         let device_manager_vision_clone = device_manager.clone();
                         let handle = tokio::spawn(async move {
@@ -217,7 +217,6 @@ async fn record_vision(
                                 video_chunk_duration,
                                 languages,
                                 capture_unfocused_windows,
-                                realtime_vision_sender: realtime_vision_sender_clone,
                             };
 
                             if let Err(e) = record_video(device_manager_vision_clone, config).await {
@@ -386,7 +385,6 @@ async fn record_audio(
     let mut previous_transcript = "".to_string();
     let mut previous_transcript_id: Option<i64> = None;
 
-    let mut device_receiver_clone = device_receiver.clone();
     loop {
         tokio::select! {
             Some(state_change) = device_states.next() => {
