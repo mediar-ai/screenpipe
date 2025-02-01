@@ -746,6 +746,7 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
+                video_chunks.device_name as monitor_device,
                 GROUP_CONCAT(tags.name, ',') as tags
             FROM {}
             JOIN frames ON ocr_text.frame_id = frames.id
