@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-
-import { debounce } from "lodash";
+import { useState, useEffect, useRef, useCallback } from "react";
 import posthog from "posthog-js";
 
 interface HealthCheckResponse {
@@ -44,37 +42,28 @@ interface HealthCheckHook {
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const healthRef = useRef(health);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const fetchHealth = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+    if (wsRef.current) {
+      wsRef.current.close();
     }
 
-    abortControllerRef.current = new AbortController();
+    const ws = new WebSocket("ws://127.0.0.1:9001");
+    wsRef.current = ws;
 
-    try {
-      setIsLoading(true);
-      const response = await fetch("http://localhost:3030/health", {
-        cache: "no-store",
-        signal: abortControllerRef.current.signal,
-        headers: {
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
-      });
+    ws.onopen = () => {
+      setIsLoading(false);
+    };
 
-      if (!response.ok) {
-        posthog.capture("health_check_http_error", {
-          status: response.status,
-          statusText: response.statusText,
-        });
-        throw new Error(`HTTP error! status: ${response.status}`);
+    ws.onmessage = (event) => {
+      const data: HealthCheckResponse = JSON.parse(event.data);
+      if (isHealthChanged(healthRef.current, data)) {
+        setHealth(data);
+        healthRef.current = data;
       }
-
-      const data: HealthCheckResponse = await response.json();
 
       if (data.status === "unhealthy") {
         posthog.capture("health_check_unhealthy", {
@@ -84,54 +73,37 @@ export function useHealthCheck() {
           message: data.message,
         });
       }
+    };
 
-      if (isHealthChanged(healthRef.current, data)) {
-        setHealth(data);
-        healthRef.current = data;
-      }
-
-      setIsServerDown(false);
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      if (!isServerDown) {
-        posthog.capture("health_check_server_down", {
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        setIsServerDown(true);
-        const errorHealth: HealthCheckResponse = {
-          last_frame_timestamp: null,
-          last_audio_timestamp: null,
-          last_ui_timestamp: null,
-          frame_status: "error",
-          audio_status: "error",
-          ui_status: "error",
-          status: "error",
-          status_code: 500,
-          message: "Failed to fetch health status. Server might be down.",
-        };
-        setHealth(errorHealth);
-        healthRef.current = errorHealth;
-      }
-    } finally {
+    ws.onerror = (event) => {
+      const error = event as ErrorEvent;
+      posthog.capture("health_check_error", {
+        error: error.message,
+      });
+      setIsServerDown(true);
       setIsLoading(false);
-    }
-  }, [isServerDown, setIsLoading]);
+    };
 
-  const debouncedFetchHealth = useCallback(debounce(fetchHealth, 1000), [
-    fetchHealth,
-  ]);
+    ws.onclose = () => {
+      setIsServerDown(true);
+    };
+  }, []);
+
+  const debouncedFetchHealth = useCallback(() => {
+    let timeoutId: NodeJS.Timeout;
+    return () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        fetchHealth();
+      }, 300);
+    };
+  }, [fetchHealth]);
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000);
-
     return () => {
-      clearInterval(interval);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
   }, [fetchHealth]);
@@ -141,6 +113,7 @@ export function useHealthCheck() {
     isServerDown,
     isLoading,
     fetchHealth,
-    debouncedFetchHealth,
+    debouncedFetchHealth: debouncedFetchHealth(),
   } as HealthCheckHook;
 }
+
