@@ -20,7 +20,7 @@ interface MeetingCardProps {
 export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
-  const { settings } = useSettings()
+  const [settings, setSettings] = useState<any>(null)
   const { toast } = useToast()
 
   const formatTime = (dateStr: string): string => {
@@ -50,6 +50,11 @@ export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
     
     setIsGenerating(true)
     try {
+      if (!settings) {
+        const { settings: newSettings } = useSettings()
+        setSettings(newSettings)
+      }
+      
       console.log("generating name for meeting:", meeting.id)
       const aiName = await generateMeetingName(meeting, settings)
       
@@ -82,6 +87,11 @@ export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
     
     setIsGeneratingSummary(true)
     try {
+      if (!settings) {
+        const { settings: newSettings } = useSettings()
+        setSettings(newSettings)
+      }
+      
       console.log("generating summary for meeting:", meeting.id)
       const aiSummary = await generateMeetingSummary(meeting, settings)
       
