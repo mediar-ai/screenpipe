@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppIcon {
-    pub base64: String,
+    pub data: Vec<u8>,
     pub path: Option<String>,
 }
 
@@ -11,7 +11,6 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
     use cocoa::base::{id, nil};
     use cocoa::foundation::{NSAutoreleasePool, NSData, NSString};
     use objc::{class, msg_send, sel, sel_impl};
@@ -48,16 +47,14 @@ pub async fn get_app_icon(
 
             let tiff_data: id = msg_send![icon, TIFFRepresentation];
             let image_rep: id = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff_data];
-            let png_data: id = msg_send![image_rep, representationUsingType:4 properties:nil];
+            let jpeg_data: id = msg_send![image_rep, representationUsingType:3 properties:nil]; // Type 3 is JPEG
 
-            let length = NSData::length(png_data);
-            let bytes = NSData::bytes(png_data);
-            let data = std::slice::from_raw_parts(bytes as *const u8, length as usize);
-
-            let base64 = STANDARD.encode(data);
+            let length = NSData::length(jpeg_data);
+            let bytes = NSData::bytes(jpeg_data);
+            let data = std::slice::from_raw_parts(bytes as *const u8, length as usize).to_vec();
 
             Ok(Some(AppIcon {
-                base64,
+                data,
                 path: Some(path),
             }))
         })();
@@ -85,7 +82,7 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use windows_icons::get_icon_base64_by_path;
+    use windows_icons::get_icon_image_by_path;
 
     async fn find_exe_path(app_name: &str) -> Option<String> {
         if let Some(path) = get_exe_by_reg_key(app_name) {
@@ -107,12 +104,12 @@ pub async fn get_app_icon(
             .ok_or_else(|| "app_path is None and could not find executable path".to_string())?,
     };
 
-    let base64 = get_icon_base64_by_path(&path)
+    let data = get_icon_image_by_path(&path)
         .await
         .map_err(|e| e.to_string())?;
 
     Ok(Some(AppIcon {
-        base64,
+        data,
         path: Some(path),
     }))
 }
@@ -310,7 +307,6 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
     use gtk::prelude::IconThemeExt;
     use std::fs;
 
@@ -331,11 +327,10 @@ pub async fn get_app_icon(
         None => find_icon_path(app_name).ok_or_else(|| "could not find icon path".to_string())?,
     };
 
-    let icon_data = fs::read(&path).map_err(|e| e.to_string())?;
-    let base64 = STANDARD.encode(&icon_data);
+    let data = fs::read(&path).map_err(|e| e.to_string())?;
 
     Ok(Some(AppIcon {
-        base64,
+        data,
         path: Some(path),
     }))
 }

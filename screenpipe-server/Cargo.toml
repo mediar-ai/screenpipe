@@ -49,7 +49,7 @@ thiserror = "1"
 sentry = { workspace = true }
 
 # Server
-axum = "0.7.5"
+axum = { version = "0.7.5", features = ["ws"]}
 axum-macros = "0.5.0"
 async-stream = "0.3"
 tokio = { version = "1.15", features = ["full", "tracing"] }
@@ -123,6 +123,8 @@ walkdir = "2.3.4"
 
 regex = "1.10.0"
 
+lru = "0.13.0"
+tokio-util = { version = "0.7", features = ["io"] }
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"

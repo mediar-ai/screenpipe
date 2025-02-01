@@ -52,12 +52,16 @@ pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String>
             &offset_str,
             "-i",
             file_path,
+            "-vf",
+            "scale=iw*0.75:ih*0.75", // Scale down to 75% of original size
             "-vframes",
             "1",
             "-f",
             "image2pipe",
-            "-vcodec",
-            "mjpeg",
+            "-c:v",
+            "mjpeg", // Use JPEG instead of PNG for smaller size
+            "-q:v",
+            "10", // Compression quality (2-31, lower is better quality)
             "-",
         ])
         .stdout(std::process::Stdio::piped())
@@ -506,4 +510,90 @@ impl VideoMetadataOverride {
             metadata.name = Some(name.clone());
         }
     }
+}
+
+pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
+    let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+
+    let offset_seconds = offset_index as f64 / 1000.0;
+    let offset_str = format!("{:.3}", offset_seconds);
+
+    // Create a temporary directory for frames if it doesn't exist
+    let frames_dir = PathBuf::from("/tmp/screenpipe_frames");
+    tokio::fs::create_dir_all(&frames_dir).await?;
+
+    // Generate unique filename for the frame
+    let frame_filename = format!("frame_{}_{}.jpg", offset_index, Uuid::new_v4());
+    let output_path = frames_dir.join(&frame_filename);
+
+    debug!(
+        "extracting frame from {} at offset {} to {}",
+        file_path,
+        offset_str,
+        output_path.display()
+    );
+
+    let mut command = Command::new(ffmpeg_path);
+    command
+        .args([
+            "-ss",
+            &offset_str,
+            "-i",
+            file_path,
+            "-vf",
+            "scale=iw*0.75:ih*0.75",
+            "-vframes",
+            "1",
+            "-c:v",
+            "mjpeg",
+            "-q:v",
+            "10",
+            output_path.to_str().unwrap(),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    debug!("ffmpeg command: {:?}", command);
+
+    let output = command.output().await?;
+
+    if !output.status.success() {
+        let error_message = String::from_utf8_lossy(&output.stderr);
+        info!("ffmpeg error: {}", error_message);
+        return Err(anyhow::anyhow!("ffmpeg process failed: {}", error_message));
+    }
+
+    if !output_path.exists() {
+        return Err(anyhow::anyhow!("failed to extract frame: file not created"));
+    }
+
+    // Schedule cleanup of old frames (files older than 1 hour)
+    tokio::spawn(async move {
+        if let Err(e) = cleanup_old_frames(&frames_dir).await {
+            error!("Failed to cleanup old frames: {}", e);
+        }
+    });
+
+    Ok(output_path.to_string_lossy().into_owned())
+}
+
+async fn cleanup_old_frames(frames_dir: &PathBuf) -> Result<()> {
+    use std::time::{Duration, SystemTime};
+
+    let one_hour_ago = SystemTime::now() - Duration::from_secs(3600);
+    let mut read_dir = tokio::fs::read_dir(frames_dir).await?;
+
+    while let Some(entry) = read_dir.next_entry().await? {
+        if let Ok(metadata) = entry.metadata().await {
+            if let Ok(modified) = metadata.modified() {
+                if modified < one_hour_ago {
+                    if let Err(e) = tokio::fs::remove_file(entry.path()).await {
+                        error!("Failed to remove old frame: {}", e);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }

@@ -1,35 +1,45 @@
 use axum::{
-    extract::{Json, Path, Query, State},
+    body::Body,
+    extract::{
+        ws::{Message, WebSocket},
+        Json, Path, Query, State, WebSocketUpgrade,
+    },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
+    response::{sse::Event, IntoResponse, Json as JsonResponse, Response, Sse},
     routing::{get, post},
     serve, Router,
 };
+use tokio_util::io::ReaderStream;
+
+use tokio::fs::File;
+
 use futures::{
     future::{try_join, try_join_all},
-    Stream,
+    SinkExt, Stream, StreamExt,
 };
 use image::ImageFormat::{self};
 use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
 
 use crate::{
-    db_types::{ContentType, SearchResult, Speaker, TagContentType},
+    core::DeviceManager,
+    db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
-    video_cache::{FrameCache, TimeSeriesFrame},
+    video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
+        MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
-use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices,
     realtime::RealtimeTranscriptionEvent,
 };
+
 use screenpipe_vision::OcrEngine;
 use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -37,12 +47,23 @@ use serde_json::{json, Value};
 use std::{
     convert::Infallible,
     net::SocketAddr,
+    num::NonZeroUsize,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
 };
 
-use tokio::net::TcpListener;
+use lru::LruCache;
+
+use tokio::{
+    net::TcpListener,
+    sync::{broadcast, mpsc, Mutex},
+    time::timeout,
+};
+
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -66,6 +87,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
+    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
     pub realtime_transcription_enabled: bool,
     pub realtime_transcription_sender:
         Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
@@ -906,6 +928,13 @@ impl Server {
             } else {
                 None
             },
+            frame_image_cache: if enable_frame_cache {
+                Some(Arc::new(Mutex::new(LruCache::new(
+                    NonZeroUsize::new(100).unwrap(),
+                ))))
+            } else {
+                None
+            },
             realtime_transcription_enabled: self.realtime_transcription_enabled,
             realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
             realtime_vision_sender: self.realtime_vision_sender,
@@ -1322,8 +1351,16 @@ struct InputControlResponse {
 
 #[derive(Deserialize, PartialEq)]
 enum Order {
+    #[serde(rename = "ascending")]
     Ascending,
+    #[serde(rename = "descending")]
     Descending,
+}
+
+impl Order {
+    fn default() -> Self {
+        Order::Descending
+    }
 }
 
 // Add this new struct
@@ -1331,9 +1368,9 @@ enum Order {
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    // #[serde(rename = "order")]
-    // #[serde(default = "descending")]
-    // order: Order,
+    #[serde(rename = "order")]
+    #[serde(default = "Order::default")]
+    order: Order,
 }
 
 #[derive(Debug, Serialize)]
@@ -1345,7 +1382,8 @@ pub struct StreamTimeSeriesResponse {
 #[derive(Debug, Serialize)]
 pub struct DeviceFrameResponse {
     pub device_id: String,
-    pub frame: String, // base64 encoded image
+    // pub frame: String, // base64 encoded image
+    pub frame_id: i64,
     pub metadata: DeviceMetadata,
     pub audio: Vec<AudioData>,
 }
@@ -1378,7 +1416,8 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                 .map(|device_frame| {
                     DeviceFrameResponse {
                         device_id: device_frame.device_id,
-                        frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        // frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        frame_id: device_frame.frame_id,
                         metadata: DeviceMetadata {
                             file_path: device_frame.metadata.file_path,
                             app_name: device_frame.metadata.app_name,
@@ -1981,6 +2020,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/audio/stop", post(stop_audio_device))
         .route("/sse/vision", get(sse_vision_handler))
         .route("/semantic-search", get(semantic_search_handler))
+        .route("/frames/:frame_id", get(get_frame_data))
         .route("/vision/start", post(start_vision_device))
         .route("/vision/stop", post(stop_vision_device))
         .layer(cors);
@@ -1993,90 +2033,306 @@ pub fn create_router() -> Router<Arc<AppState>> {
     router
 }
 
-// Add the new handler
-async fn stream_frames_handler(
-    Query(request): Query<StreamFramesRequest>,
+pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    info!(
-        "streaming frames from {} to {}",
-        request.start_time, request.end_time
-    );
+    Path(frame_id): Path<i64>,
+) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+    let start_time = Instant::now();
 
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-
-    // Create a stream that will be used for both success and error cases
-    let stream = async_stream::stream! {
-        // Early validation of frame cache
-        let cache = match state.frame_cache.as_ref() {
-            Some(cache) => cache.clone(),
-            None => {
-                // error!("frame cache not initialized");
-                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
-                return;
-            }
-        };
-
-        // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
-
-        // Calculate center timestamp
-        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
-
-        // Use a cancellation token to handle client disconnection
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-
-        // Spawn frame extraction task using get_frames
-        tokio::spawn({
-            let frame_tx = frame_tx.clone();
-            async move {
-                tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
-                        if let Err(e) = result {
-                            error!("frame extraction failed: {}", e);
-                            // Send error to client
-                            let _ = frame_tx.send(TimeSeriesFrame {
-                                timestamp: Utc::now(),
-                                frame_data: vec![],
-                                error: Some(format!("frame extraction failed: {}", e)),
-                            }).await;
+    match timeout(Duration::from_secs(5), async {
+        // Try to get frame from cache if enabled
+        if let Some(cache) = &state.frame_image_cache {
+            let cache_result = cache.try_lock();
+            match cache_result {
+                Ok(mut cache) => {
+                    if let Some((file_path, timestamp)) = cache.get(&frame_id) {
+                        if timestamp.elapsed() < Duration::from_secs(300) {
+                            debug!(
+                                "Cache hit for frame_id: {}. Retrieved in {:?}",
+                                frame_id,
+                                start_time.elapsed()
+                            );
+                            return serve_file(file_path).await;
                         }
-                    }
-                    _ = cancel_rx => {
-                        debug!("client disconnected, stopping frame stream");
+                        cache.pop(&frame_id);
                     }
                 }
-            }
-        });
-
-        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
-            let _ = tx.send(());  // Signal cancellation when stream is dropped
-        });
-
-        while let Some(timeseries_frame) = frame_rx.recv().await {
-            // Handle potential error in the frame
-            if let Some(error) = timeseries_frame.error {
-                yield Ok(Event::default().data(format!("{{\"error\": \"{}\"}}", error)));
-                break; // Stop streaming on error
-            }
-
-            // Convert frame to response and send
-            match serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
-                Ok(json) => yield Ok(Event::default().data(json)),
-                Err(e) => {
-                    error!("failed to serialize frame: {}", e);
-                    yield Ok(Event::default().data(format!("{{\"error\": \"failed to serialize frame: {}\"}}", e)));
-                    break;
+                Err(_) => {
+                    debug!("Cache lock contention for frame_id: {}", frame_id);
                 }
             }
         }
-    };
 
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    )
+        // If not in cache or cache disabled, get from database
+        match state.db.get_frame(frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_frame_from_video(&file_path, offset_index).await {
+                    Ok(frame_path) => {
+                        // Store in cache if enabled and we can get the lock
+                        if let Some(cache) = &state.frame_image_cache {
+                            if let Ok(mut cache) = cache.try_lock() {
+                                cache.put(frame_id, (frame_path.clone(), Instant::now()));
+                            }
+                        }
+
+                        debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
+                        serve_file(&frame_path).await
+                    }
+                    Err(e) => {
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("Failed to extract frame: {}", e),
+                                "frame_id": frame_id,
+                                "file_path": file_path
+                            })),
+                        ))
+                    }
+                }
+            }
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "Frame not found",
+                    "frame_id": frame_id
+                })),
+            )),
+            Err(e) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": frame_id
+                })),
+            )),
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            error!("Request timeout for frame_id: {}", frame_id);
+            Err((
+                StatusCode::REQUEST_TIMEOUT,
+                JsonResponse(json!({
+                    "error": "Request timed out",
+                    "frame_id": frame_id
+                })),
+            ))
+        }
+    }
+}
+
+async fn serve_file(path: &str) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match File::open(path).await {
+        Ok(file) => {
+            let stream = ReaderStream::new(file);
+            let body = Body::from_stream(stream);
+
+            let response = Response::builder()
+                .header("content-type", "image/jpeg")
+                .header("cache-control", "public, max-age=604800") // Cache for 7 days
+                .body(body)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to create response: {}", e)})),
+                    )
+                })?;
+
+            Ok(response)
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to open file: {}", e)})),
+        )),
+    }
+}
+
+// Add these new functions before stream_frames_handler
+async fn fetch_and_process_frames(
+    db: Arc<DatabaseManager>,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    frame_tx: mpsc::Sender<TimeSeriesFrame>,
+    is_descending: bool,
+) -> Result<(), anyhow::Error> {
+    let mut chunks = db.find_video_chunks(start_time, end_time).await?;
+
+    // Sort chunks based on order
+    if is_descending {
+        chunks
+            .frames
+            .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+    } else {
+        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+    }
+
+    for chunk in chunks.frames {
+        let frame = create_time_series_frame(chunk);
+        frame_tx.send(frame).await?;
+    }
+
+    Ok(())
+}
+
+fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
+    TimeSeriesFrame {
+        timestamp: chunk.timestamp,
+        frame_data: chunk
+            .ocr_entries
+            .into_iter()
+            .map(|device_data| DeviceFrame {
+                device_id: device_data.device_name,
+                frame_id: chunk.frame_id,
+                image_data: vec![], // Empty since we don't need image data
+                metadata: FrameMetadata {
+                    file_path: device_data.video_file_path,
+                    app_name: device_data.app_name,
+                    window_name: device_data.window_name,
+                    transcription: chunk
+                        .audio_entries
+                        .iter()
+                        .map(|a| a.transcription.clone())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    ocr_text: device_data.text,
+                },
+                audio_entries: chunk
+                    .audio_entries
+                    .iter()
+                    .map(|a| AudioEntry {
+                        transcription: a.transcription.clone(),
+                        device_name: a.device_name.clone(),
+                        is_input: a.is_input,
+                        audio_file_path: a.audio_file_path.clone(),
+                        duration_secs: a.duration_secs,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        error: None,
+    }
+}
+
+async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let db = state.db.clone();
+
+    // Create a buffer for batching frames
+    let mut frame_buffer = Vec::with_capacity(50);
+    let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
+
+    // Handle incoming messages for time range requests
+    let receive_handle = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(text) = msg {
+                match serde_json::from_str::<StreamFramesRequest>(&text) {
+                    Ok(request) => {
+                        debug!(
+                            "streaming frames from {} to {}",
+                            request.start_time, request.end_time
+                        );
+
+                        let frame_tx = frame_tx.clone();
+                        let db = db.clone();
+
+                        tokio::spawn(async move {
+                            if let Err(e) = fetch_and_process_frames(
+                                db,
+                                request.start_time,
+                                request.end_time,
+                                frame_tx,
+                                request.order == Order::Descending,
+                            )
+                            .await
+                            {
+                                error!("frame fetching failed: {}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("failed to parse stream request: {}", e);
+                    }
+                }
+            }
+        }
+    });
+
+    // Send frames to the client with batching
+    let send_handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // Check for new frames
+                frame = frame_rx.recv() => {
+                    match frame {
+                        Some(timeseries_frame) => {
+                            if let Some(error) = timeseries_frame.error {
+                                if let Err(e) = sender
+                                    .send(Message::Text(format!("{{\"error\": \"{}\"}}", error)))
+                                    .await
+                                {
+                                    error!("failed to send error message: {}", e);
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            // Add frame to buffer
+                            frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
+
+                            // If buffer is full, send immediately
+                            if frame_buffer.len() >= 50 {
+                                if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                                    error!("failed to send batch: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                // Timer for flushing partial batches
+                _ = buffer_timer.tick() => {
+                    if !frame_buffer.is_empty() {
+                        if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                            error!("failed to send batch: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wait for either handle to complete
+    tokio::select! {
+        _ = receive_handle => debug!("receive handle completed"),
+        _ = send_handle => debug!("send handle completed"),
+    }
+}
+
+// Helper function to send batched frames
+async fn send_batch(
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+    buffer: &mut Vec<StreamTimeSeriesResponse>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if buffer.is_empty() {
+        return Ok(());
+    }
+
+    // Serialize the batch
+    let json = serde_json::to_string(&buffer)?;
+    sender.send(Message::Text(json)).await?;
+    buffer.clear();
+    Ok(())
+}
+async fn stream_frames_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_stream_frames_socket(socket, state))
 }
 
 // Add this new handler function
@@ -2116,3 +2372,221 @@ struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
 }
+/*
+
+Curl commands for reference:
+# 1. Basic search query
+curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
+
+# 2. Search with content type filter (OCR)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
+
+# 3. Search with content type filter (Audio)
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
+
+# 4. Search with pagination
+curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
+
+# 6. Search with no query (should return all results)
+curl "http://localhost:3030/search?limit=5&offset=0"
+
+// list devices
+// # curl "http://localhost:3030/audio/list" | jq
+
+
+echo "Listing audio devices:"
+curl "http://localhost:3030/audio/list" | jq
+
+
+echo "Searching for content:"
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
+
+curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" | jq
+
+# last 5 w frames
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# 30 min to 25 min ago
+curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
+
+# Search for content from the last 30 minutes
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for content up to 1 hour ago
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for content between 2 hours ago and 1 hour ago
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for OCR content from yesterday
+curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search for audio content with a keyword from the beginning of the current month
+curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
+
+curl "http://localhost:3030/search?app_name=cursor"
+curl "http://localhost:3030/search?content_type=audio&min_length=20"
+
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq .
+
+
+curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+date -u -v-2H +%Y-%m-%dT%H:%M:%SZ
+2024-08-12T06:51:54Z
+date -u -v-1H +%Y-%m-%dT%H:%M:%SZ
+2024-08-12T07:52:17Z
+
+curl 'http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=2024-08-12T06:48:18Z&end_time=2024-08-12T07:48:34Z' | jq .
+
+
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T04:00:00Z&end_time=2024-08-12T05:00:00Z&content_type=all" | jq .
+
+curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T06:43:53Z&end_time=2024-08-12T08:43:53Z&content_type=all" | jq .
+
+curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z&content_type=all' | jq .
+
+
+
+
+
+
+
+
+
+
+
+# First, search for Rust-related content
+curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
+
+# Then, assuming you found a relevant item with id 123, tag it
+curl -X POST "http://localhost:3030/tags/vision/626" \
+     -H "Content-Type: application/json" \
+     -d '{"tags": ["debug"]}'
+
+
+
+
+# List all pipes
+curl "http://localhost:3030/pipes/list" | jq
+
+# Download a new pipe
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "./pipes/pipe-stream-ocr-text"}' | jq
+
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "./pipes/pipe-security-check"}' | jq
+
+
+curl -X POST "http://localhost:3030/pipes/download" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text"}' | jq
+
+
+# Get info for a specific pipe
+curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
+
+# Run a pipe
+curl -X POST "http://localhost:3030/pipes/enable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
+
+
+
+     curl -X POST "http://localhost:3030/pipes/enable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-security-check"}' | jq
+
+# Stop a pipe
+curl -X POST "http://localhost:3030/pipes/disable" \
+     -H "Content-Type: application/json" \
+     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
+
+# Update pipe configuration
+curl -X POST "http://localhost:3030/pipes/update" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "pipe_id": "pipe-stream-ocr-text",
+       "config": {
+         "key": "value",
+         "another_key": "another_value"
+       }
+     }' | jq
+
+
+
+
+
+# Basic search with min_length and max_length
+curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
+
+# Search for OCR content with length constraints
+curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
+
+# Search for audio content with length constraints
+curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
+
+# Search with time range and length constraints
+curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
+
+# Search with app_name and length constraints
+curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
+
+# Search with window_name and length constraints
+curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
+
+# Search for very short content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
+
+# Search for very long content
+curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
+
+
+curl "http://localhost:3030/search?limit=10&offset=0&min_length=500&content_type=audio" | jq
+
+
+# read random data and generate a clip using the merge endpoint
+
+
+# Perform the search and store the response
+
+# First, let's search for some recent video content
+SEARCH_RESPONSE1=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE2=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-40M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-35M +%Y-%m-%dT%H:%M:%SZ)")
+SEARCH_RESPONSE3=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-50M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-45M +%Y-%m-%dT%H:%M:%SZ)")
+
+# Extract the file paths from the search results without creating JSON arrays
+VIDEO_PATHS1=$(echo "$SEARCH_RESPONSE1" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS2=$(echo "$SEARCH_RESPONSE2" | jq -r '.data[].content.file_path' | sort -u)
+VIDEO_PATHS3=$(echo "$SEARCH_RESPONSE3" | jq -r '.data[].content.file_path' | sort -u)
+
+# Merge the video paths and create a single JSON array
+MERGED_VIDEO_PATHS=$(echo "$VIDEO_PATHS1"$'\n'"$VIDEO_PATHS2"$'\n'"$VIDEO_PATHS3" | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+# Create the JSON payload for merging videos
+MERGE_PAYLOAD=$(jq -n \
+  --argjson video_paths "$MERGED_VIDEO_PATHS" \
+  '{
+    video_paths: $video_paths
+  }')
+
+echo "Merge Payload: $MERGE_PAYLOAD"
+
+# Send the merge request and store the response
+MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
+  -H "Content-Type: application/json" \
+  -d "$MERGE_PAYLOAD")
+
+echo "Merge Response: $MERGE_RESPONSE"
+
+# Extract the merged video path from the response
+MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
+
+echo "Merged Video Path: $MERGED_VIDEO_PATH"
+
+*/
