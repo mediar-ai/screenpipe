@@ -1,11 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use dashmap::DashMap;
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, default_input_device, record_and_transcribe, AudioInput, AudioStream,
     AudioTranscriptionEngine,
 };
-use screenpipe_core::AudioDevice;
+use screenpipe_core::{AudioDevice, DeviceManager};
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -27,7 +26,7 @@ async fn setup_test() -> (
         &output_path,
         VadSensitivity::High,
         vec![],
-        DashMap::new(),
+        Arc::new(DeviceManager::default()),
     )
     .await
     .unwrap();
