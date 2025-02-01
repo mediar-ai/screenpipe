@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { pipe } from "@screenpipe/browser"
-import { ServiceStatus } from '../types'
+import { ServiceStatus } from '../../meeting-history/types'
 
 export function useServiceStatus() {
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>('unavailable')
