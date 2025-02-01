@@ -1,7 +1,7 @@
 import localforage from "localforage"
 
 // Define types
-interface VocabularyEntry {
+export interface VocabularyEntry {
     original: string
     corrected: string
     timestamp: number
