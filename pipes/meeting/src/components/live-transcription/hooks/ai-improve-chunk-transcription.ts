@@ -1,6 +1,6 @@
 import { OpenAI } from "openai"
-import { Settings } from "@/lib/hooks/use-settings"
-import { TranscriptionChunk } from "../types"
+import type { Settings } from "@screenpipe/browser"
+import { TranscriptionChunk } from "../../meeting-history/types"
 import { VocabularyEntry, getVocabularyEntries } from "./storage-vocabulary"
 import { Meeting } from "../../meeting-history/types"
 
@@ -123,7 +123,7 @@ export async function improveTranscriptionBatch(
             const context: TranscriptionContext = {
                 meetingTitle: meeting.humanName || meeting.aiName || undefined,
                 recentChunks: chunks.slice(Math.max(0, idx - 5), idx + 5),
-                notes: meeting.notes,
+                notes: meeting.notes?.map(note => note.text),
                 vocabulary
             }
 
