@@ -10,10 +10,9 @@ use futures::{
     Stream,
 };
 use image::ImageFormat::{self};
-use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
 
 use crate::{
-    core::DeviceManager,
     db_types::{ContentType, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
@@ -830,7 +829,6 @@ async fn get_pipe_info_handler(
 }
 
 async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
-    debug!("Listing pipes");
     let pipes = state.pipe_manager.list_pipes().await;
     JsonResponse(json!({
         "data": pipes,

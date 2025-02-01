@@ -74,7 +74,7 @@ clap_complete = "4.2"
 
 # Plugins
 tower = { version = "0.5", features = ["util"] }
-futures = "0.3.17"
+futures = { version = "0.3.31", features = ["std"] }
 
 # Directory management
 dirs = "5.0"

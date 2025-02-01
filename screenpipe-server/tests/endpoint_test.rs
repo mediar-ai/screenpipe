@@ -8,7 +8,7 @@ mod tests {
     use chrono::{Duration, Utc};
     use screenpipe_core::AudioDevice;
     use screenpipe_core::AudioDeviceType;
-    use screenpipe_server::core::DeviceManager;
+    use screenpipe_core::DeviceManager;
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;

@@ -57,7 +57,7 @@ pub async fn extract_frame(file_path: &str, offset_index: i64) -> Result<String>
             "-f",
             "image2pipe",
             "-vcodec",
-            "png",
+            "mjpeg",
             "-",
         ])
         .stdout(std::process::Stdio::piped())

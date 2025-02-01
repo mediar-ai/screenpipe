@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
-use dashmap::DashMap;
 use log::info;
 use screenpipe_audio::create_whisper_channel;
 use screenpipe_audio::default_input_device;
@@ -13,6 +12,7 @@ use screenpipe_audio::AudioStream;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
 use screenpipe_core::AudioDevice;
+use screenpipe_core::DeviceManager;
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -96,7 +96,7 @@ async fn main() -> Result<()> {
         &PathBuf::from("output.mp4"),
         VadSensitivity::Medium,
         languages,
-        DashMap::new(),
+        Arc::new(DeviceManager::default()),
     )
     .await?;
 

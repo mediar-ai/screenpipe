@@ -21,6 +21,7 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 use serde_json;
+use tracing::warn;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
@@ -239,6 +240,10 @@ pub async fn continuous_capture(
                     previous_image = Some(image);
 
                     if let Some(max_avg_frame) = max_average.take() {
+                        if max_avg_frame.result_tx.clone().is_closed() {
+                            warn!("result_tx is closed, skipping OCR task");
+                            return;
+                        }
                         let ocr_task_data = OcrTaskData {
                             image: max_avg_frame.image,
                             window_images: max_avg_frame.window_images,
