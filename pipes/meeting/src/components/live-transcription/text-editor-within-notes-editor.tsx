@@ -1,12 +1,11 @@
 'use client'
 
-import { Note } from './types'
-import { RefObject, UIEvent, useEffect, useState } from 'react'
+import { Note } from '../meeting-history/types'
+import { RefObject, UIEvent, useState } from 'react'
 import { MeetingAnalysis } from './hooks/ai-create-all-notes'
 import { ChunkOverlay } from './floating-container-buttons'
 import { useSettings } from "@/lib/hooks/use-settings"
 import { useMeetingContext } from './hooks/storage-for-live-meeting'
-import { improveNote } from "./hooks/ai-create-note"
 
 interface TextEditorProps {
   notes: Note[]
@@ -119,78 +118,6 @@ export function TextEditor({
         textarea.selectionStart = textarea.selectionEnd = selectionStart + insertion.length
       }, 0)
     }
-  }
-
-  const handleImprove = async (note: Note) => {
-    // Add debug logging for settings
-    console.log("improving note with settings:", {
-      aiProviderType: settings.aiProviderType,
-      hasToken: !!settings.user?.token,
-      hasOpenAIKey: !!settings.openaiApiKey,
-      aiUrl: settings.aiUrl
-    })
-    
-    // Get the last segment's timestamp - parse ISO string to Date
-    const lastSegmentTime = segments.length > 0 
-      ? new Date(segments[segments.length - 1].timestamp).getTime()
-      : 0
-
-    // If note is after the last segment, use all segments combined
-    if (note.timestamp.getTime() > lastSegmentTime) {
-      console.log("note is after last segment, using all segments")
-      const combinedText = segments
-        .map(s => `[${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
-        .join('\n')
-
-      const improved = await improveNote({
-        note,
-        chunk: {
-          text: combinedText,
-          speaker: 'combined',
-          timestamp: note.timestamp
-        },
-        title
-      }, settings)
-
-      const newNotes = notes.map(n => 
-        n.id === note.id ? { ...n, text: improved } : n
-      )
-      setNotes(newNotes)
-      return
-    }
-
-    // Original logic for notes during the meeting
-    const relevantSegment = segments
-      .filter(s => new Date(s.timestamp).getTime() <= note.timestamp.getTime())
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
-
-    if (!relevantSegment) {
-      console.log("no relevant segment found for note")
-      return
-    }
-
-    console.log("selected segment for improvement:", {
-      note_timestamp: note.timestamp,
-      segment_timestamp: new Date(relevantSegment.timestamp),
-      segment_text: relevantSegment.transcription,
-      segment_speaker: relevantSegment.speaker?.name
-    })
-
-    const improved = await improveNote({
-      note,
-      chunk: {
-        text: relevantSegment.transcription,
-        speaker: relevantSegment.speaker?.name,
-        timestamp: new Date(relevantSegment.timestamp)
-      },
-      title
-    }, settings)
-
-    // Update the note with improved content
-    const newNotes = notes.map(n => 
-      n.id === note.id ? { ...n, text: improved } : n
-    )
-    setNotes(newNotes)
   }
 
   const combinedText = notes
