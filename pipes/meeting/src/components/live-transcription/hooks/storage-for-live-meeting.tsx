@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { TranscriptionChunk, Note } from "../types"
-import { MeetingSegment } from "../../meeting-history/types"
+import { TranscriptionChunk, Note, MeetingSegment } from "../../meeting-history/types"
 import { MeetingAnalysis } from "./ai-create-all-notes"
 import localforage from "localforage"
 
@@ -35,6 +34,8 @@ interface MeetingContextType {
     analysis: MeetingAnalysis | null
     setAnalysis: (analysis: MeetingAnalysis | null) => Promise<void>
     isLoading: boolean
+    data: LiveMeetingData | null
+    updateStore: (newData: LiveMeetingData) => Promise<void>
 }
 
 const LIVE_MEETING_KEY = 'current-live-meeting'
@@ -95,12 +96,14 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     const setSegments = async (segments: MeetingSegment[]) => {
         if (!data) return
         console.log('setting segments:', segments.length)
-        const chunks = segments.map(seg => ({
-            id: crypto.randomUUID(),
+        const chunks = segments.map((seg, index) => ({
+            id: Date.now() + index,
             timestamp: seg.timestamp,
             text: seg.transcription,
             deviceName: seg.deviceName,
-            speaker: typeof seg.speaker.id === 'number' ? seg.speaker.id : parseInt(seg.speaker.id)
+            speaker: typeof seg.speaker.id === 'number' ? seg.speaker.id : parseInt(seg.speaker.id),
+            isInput: seg.deviceName?.toLowerCase().includes('input') || false,
+            device: seg.deviceName || 'unknown',
         }))
         await updateStore({ ...data, chunks })
     }
@@ -130,7 +133,9 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         setSegments,
         analysis: data?.analysis || null,
         setAnalysis,
-        isLoading
+        isLoading,
+        data,
+        updateStore
     }
 
     return (
