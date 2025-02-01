@@ -9,6 +9,9 @@ use axum::{
 };
 use futures::stream::Stream;
 use http::header::{HeaderValue, CONTENT_TYPE};
+use tokio_tungstenite::accept_async;
+use tokio_tungstenite::tungstenite::protocol::Message;
+use futures::{StreamExt, SinkExt};
 use notify::RecursiveMode;
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -366,6 +369,35 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
     tx
 }
 
+pub async fn start_websocket_server(
+    _app_handle: tauri::AppHandle,
+    tx: broadcast::Sender<crate::health::HealthCheckResponse>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "127.0.0.1:9001";
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    println!("websocket server listening on {}", addr);
+
+    while let Ok((stream, _)) = listener.accept().await {
+        let mut rx = tx.subscribe();
+        tokio::spawn(async move {
+            let ws_stream = accept_async(stream).await.expect("Error during WebSocket handshake");
+            let (mut write, _) = ws_stream.split();
+            loop {
+                match rx.recv().await {
+                    Ok(health) => {
+                        let message = serde_json::to_string(&health).unwrap();
+                        if write.send(Message::Text(message.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+    Ok(())
+}
+
 /*
 
 curl -X POST http://localhost:11435/notify \
@@ -383,5 +415,7 @@ curl -X POST http://localhost:11435/notify \
   curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \
   -d '{"title": "Malformed JSON", "body": "This JSON is malformed}'
+
+  wscat -c ws://127.0.0.1:9001
 
 */

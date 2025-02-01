@@ -1,16 +1,14 @@
 use anyhow::Result;
-use futures::{StreamExt, SinkExt};
 use serde::{Deserialize, Serialize};
 use tauri::{path::BaseDirectory, Manager};
 use tokio::time::{interval, Duration};
-use tokio_tungstenite::accept_async;
-use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio::sync::broadcast;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[allow(dead_code)]
 pub struct HealthCheckResponse {
     status: String,
+    status_code: u16,
     #[serde(rename = "last_frame_timestamp")]
     last_frame_timestamp: Option<String>,
     #[serde(rename = "last_audio_timestamp")]
@@ -84,6 +82,19 @@ pub async fn set_health_icon_in_tray(
                                 .and_then(|_| main_tray.set_icon_as_template(true));
                         }
                     }
+                    let error_health = HealthCheckResponse {
+                        status: "error".to_string(),
+                        last_frame_timestamp: None,
+                        last_audio_timestamp: None,
+                        last_ui_timestamp: None,
+                        frame_status: "error".to_string(),
+                        audio_status: "error".to_string(),
+                        ui_status: "error".to_string(),
+                        message: format!("health check failed: {}", e),
+                        status_code: 500,
+                        verbose_instructions: None,
+                    };
+                    let _ = tx.send(error_health);
                 }
             }
         }
@@ -105,39 +116,10 @@ pub async fn check_health(client: &reqwest::Client) -> Result<HealthCheckRespons
         anyhow::bail!("health check failed with status: {}", response.status());
     }
 
-    let health = response.json::<HealthCheckResponse>().await?;
-    println!("RESPONSE: {:#?}", health);
+    let status_code = response.status().as_u16();
+    let mut health = response.json::<HealthCheckResponse>().await?;
+    health.status_code = status_code;
+
     Ok(health)
 }
 
-// websocket should emit health change
-pub async fn start_websocket_server(
-    _app_handle: tauri::AppHandle,
-    // health_status: Arc<Mutex<Option<HealthCheckResponse>>>,
-    tx: broadcast::Sender<HealthCheckResponse>,
-) 
--> Result<()> {
-    let addr = "127.0.0.1:9001";
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    println!("websocket server listening on {}", addr);
-
-    while let Ok((stream, _)) = listener.accept().await {
-        let mut rx = tx.subscribe();
-        tokio::spawn(async move {
-            let ws_stream = accept_async(stream).await.expect("Error during WebSocket handshake");
-            let (mut write, _) = ws_stream.split();
-            loop {
-                match rx.recv().await {
-                    Ok(health) => {
-                        let message = serde_json::to_string(&health).unwrap();
-                        if write.send(Message::Text(message.into())).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-    }
-    Ok(())
-}

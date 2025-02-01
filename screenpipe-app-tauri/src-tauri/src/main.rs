@@ -1025,23 +1025,21 @@ async fn main() {
             app.manage(server_shutdown_tx);
 
             // Start health check service
-            // macos only
             let app_handle = app.handle().clone();
-            // let health_status = Arc::new(Mutex::new(None));
-            let (tx, _) = tokio::sync::broadcast::channel(16);
+            let (tx, _) = tokio::sync::broadcast::channel(4);
             tauri::async_runtime::spawn({
                 let app_handle = app.handle().clone();
                 let tx = tx.clone();
                 async move {
-                    if let Err(e) = crate::health::start_websocket_server(
+                    if let Err(e) = crate::server::start_websocket_server(
                         app_handle, 
-                        // health_status.clone(),
                         tx.clone()
                     ).await {
                         error!("Failed to start health check service: {}", e);
                     }
                 }
             });
+
             tauri::async_runtime::spawn({
                 let app_handle = app_handle.clone();
                 let tx = tx.clone();

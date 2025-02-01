@@ -268,6 +268,7 @@ fn default_limit() -> u32 {
 #[derive(Serialize, Deserialize)]
 pub struct HealthCheckResponse {
     pub status: String,
+    pub status_code: u16,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
     pub last_ui_timestamp: Option<DateTime<Utc>>,
@@ -611,7 +612,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+    let (overall_status, message, verbose_instructions, status_code) = if (frame_status == "ok"
         || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
@@ -620,6 +621,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "healthy",
             "all systems are functioning normally.".to_string(),
             None,
+            200,
         )
     } else {
         let mut unhealthy_systems = Vec::new();
@@ -637,12 +639,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try contacting us on discord".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string()),
+            500,
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
+        status_code,
         last_frame_timestamp: last_frame,
         last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
