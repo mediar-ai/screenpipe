@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { TranscriptionChunk } from '../types'
 
-export function useAutoScroll(chunks: TranscriptionChunk[]) {
+// Accept any array type since we only care about length changes
+export function useAutoScroll<T>(items: T[]) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const lastStateRef = useRef(true)
@@ -43,7 +43,7 @@ export function useAutoScroll(chunks: TranscriptionChunk[]) {
     if (shouldAutoScroll) {
       scrollToBottom()
     }
-  }, [chunks, shouldAutoScroll])
+  }, [items, shouldAutoScroll])
 
   return { scrollRef, onScroll, isScrolledToBottom: shouldAutoScroll }
 } 
