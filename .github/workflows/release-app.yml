@@ -340,15 +340,15 @@ jobs:
           # Download and install LLVM
           $installerUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe"
           $installerPath = Join-Path $env:TEMP "LLVM-10.0.0-win64.exe"
-          
+
           Write-Host "Downloading LLVM installer..."
           Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
-          
+
           Write-Host "Installing LLVM..."
           Start-Process -FilePath $installerPath -ArgumentList "/S","/D=$llvmPath" -Wait -NoNewWindow
-          
+
           Remove-Item $installerPath -Force
-          
+
           # Verify installation
           if (!(Test-Path "$llvmPath\bin\clang.exe")) {
             throw "LLVM installation failed - clang.exe not found"
@@ -430,28 +430,54 @@ jobs:
           # Create target directory
           $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
           New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
-          
+
           # Install and copy Intel OpenMP
           python -m pip install --upgrade pip
           $temp_dir = "temp_omp"
           New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
-          
+
           Write-Host "Installing Intel OpenMP..."
           python -m pip install intel-openmp --target $temp_dir
-          
+
           Write-Host "Copying DLL files..."
           Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
             Write-Host "Copying $_"
             Copy-Item $_.FullName -Destination $mkl_dir -Force
           }
-          
+
           # Verify DLLs were copied
           $dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
           Write-Host "Found $dll_count DLLs in target directory"
           if ($dll_count -eq 0) {
             throw "No DLLs found in target directory!"
           }
-          
+
+          Remove-Item -Path $temp_dir -Recurse -Force
+
+      - name: Copy library for vcredist
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          # Create target directory
+          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+
+          # Install and copy VcRedist
+          Install-Module -Name VcRedist
+          Import-Module -Name VcRedist
+          $temp_dir = "$env:TEMP\VcRedist"
+          Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path $temp_dir) -Silent
+
+          Write-Host "Copying DLL files..."
+          Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
+          Write-Host "Found $dll_count DLLs in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
+
           Remove-Item -Path $temp_dir -Recurse -Force
 
       - name: Build
@@ -512,14 +538,14 @@ jobs:
 
           # move to the directory we want to upload from
           cd screenpipe-app-tauri/src-tauri
-          
+
           # upload assets with retry logic
           $cliFullPath = Join-Path $cliDir "cn.exe"
           Write-Host "uploading assets from $(pwd) using $cliFullPath..."
-          
+
           $attempt = 1
           $success = $false
-          
+
           while (-not $success -and $attempt -le $env:MAX_RETRIES) {
             Write-Host "Attempt $attempt of $env:MAX_RETRIES"
             try {
@@ -539,7 +565,7 @@ jobs:
             }
             $attempt++
           }
-          
+
           if (-not $success) {
             Write-Host "Failed to upload after $env:MAX_RETRIES attempts"
             exit 1
@@ -725,6 +751,35 @@ jobs:
           mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
+      - name: Copy library for vcredist
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          # Create target directory
+          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+
+          # Install and copy VcRedist
+          Install-Module -Name VcRedist
+          Import-Module -Name VcRedist
+          $temp_dir = "$env:TEMP\VcRedist"
+          Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path $temp_dir) -Silent
+
+          Write-Host "Copying DLL files..."
+          Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+            Write-Host "Copying $_"
+            Copy-Item $_.FullName -Destination $vcredist_dir -Force
+          }
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
+          Write-Host "Found $dll_count DLLs in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
+
+          Remove-Item -Path $temp_dir -Recurse -Force
+
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
@@ -773,7 +828,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get version from Cargo.toml
         id: get_version
         run: |
