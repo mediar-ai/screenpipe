@@ -1,6 +1,6 @@
 import { AlertTriangle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ServiceStatus } from './types'
+import { ServiceStatus } from '../meeting-history/types'
 
 interface StatusAlertsProps {
   serviceStatus?: ServiceStatus;
