@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle } from 'lucide-react'
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
-import { Note } from './types'
-import { useMeetingContext, LiveMeetingData } from './hooks/storage-for-live-meeting'
+import { Note } from '../meeting-history/types'
+import { useMeetingContext, clearLiveMeetingData } from './hooks/storage-for-live-meeting'
 import { generateMeetingName } from '../meeting-history/use-meeting-ai'
 import { useSettings } from '@/lib/hooks/use-settings'
 import { useToast } from '@/hooks/use-toast'
@@ -15,9 +15,11 @@ import { useRouter } from "next/navigation"
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
+  onBack: () => void
+  onNewMeeting: () => void
 }
 
-export function NotesEditor({ onTimeClick }: Props) {
+export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const { 
     title, 
     setTitle,
@@ -57,11 +59,12 @@ export function NotesEditor({ onTimeClick }: Props) {
     function handleClickOutside(event: MouseEvent) {
       if (editingId && editRef.current && !editRef.current.contains(event.target as Node)) {
         // Save the current edit text before closing
-        setNotes(prev => prev.map(note => 
+        const updatedNotes = notes.map(note => 
           note.id === editingId 
             ? { ...note, text: editText.trim() }
             : note
-        ))
+        )
+        setNotes(updatedNotes)
         setEditingId(null)
       }
       if (editingTime && editTimeRef.current && !editTimeRef.current.contains(event.target as Node)) {
@@ -71,19 +74,18 @@ export function NotesEditor({ onTimeClick }: Props) {
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [editingId, editText, editingTime, editTimeText])
+  }, [editingId, editText, editingTime, editTimeText, notes])
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentMessage.trim()) return
 
-    setNotes(prev => [...prev, {
-      id: crypto.randomUUID(),
-      text: currentMessage.trim(),
-      timestamp: new Date(),
-      isInput: true,
-      device: 'user'
-    }])
+    const newNotes = [...notes, {
+        id: crypto.randomUUID(),
+        text: currentMessage.trim(),
+        timestamp: new Date()
+    }]
+    setNotes(newNotes)
     setCurrentMessage('')
   }
 
@@ -95,13 +97,9 @@ export function NotesEditor({ onTimeClick }: Props) {
 
   const updateNote = async () => {
     if (!editingId) return
-    const updatedNotes = notes.map(note => 
+    const updatedNotes: Note[] = notes.map(note => 
       note.id === editingId 
-        ? { 
-            ...note, 
-            text: editText.trim(),
-            editedAt: new Date()
-          }
+        ? { ...note, text: editText.trim() }
         : note
     )
     await setNotes(updatedNotes)
@@ -161,9 +159,7 @@ export function NotesEditor({ onTimeClick }: Props) {
           id: note.id,
           text: note.text,
           timestamp: note.timestamp.toISOString(),
-          editedAt: note.editedAt?.toISOString(),
-          isInput: note.isInput,
-          device: note.device
+          editedAt: note.editedAt?.toISOString()
         })),
         meetingStart: notes[0]?.timestamp.toISOString() || new Date().toISOString(),
         meetingEnd: notes[notes.length - 1]?.timestamp.toISOString() || new Date().toISOString(),
@@ -172,8 +168,8 @@ export function NotesEditor({ onTimeClick }: Props) {
         agenda: null,
         aiSummary: null,
         participants: null,
-        selectedDevices: new Set(),
-        deviceNames: new Set(),
+        selectedDevices: new Set<string>(),
+        deviceNames: new Set<string>(),
         segments
       }
       
@@ -213,9 +209,7 @@ export function NotesEditor({ onTimeClick }: Props) {
           id: note.id,
           text: note.text,
           timestamp: note.timestamp.toISOString(),
-          editedAt: note.editedAt?.toISOString(),
-          isInput: note.isInput,
-          device: note.device
+          editedAt: note.editedAt?.toISOString()
         })),
         meetingStart: notes[0]?.timestamp.toISOString() || new Date().toISOString(),
         meetingEnd: notes[notes.length - 1]?.timestamp.toISOString() || new Date().toISOString(),
@@ -224,8 +218,8 @@ export function NotesEditor({ onTimeClick }: Props) {
         agenda: null,
         aiSummary: null,
         participants: null,
-        selectedDevices: new Set(),
-        deviceNames: new Set(),
+        selectedDevices: new Set<string>(),
+        deviceNames: new Set<string>(),
         segments
       }
       
@@ -249,78 +243,66 @@ export function NotesEditor({ onTimeClick }: Props) {
   }
 
   const handleImprove = async (note: Note) => {
-    console.log("improving note with settings:", {
-      aiProviderType: settings.aiProviderType,
-      hasToken: !!settings.user?.token,
-      hasOpenAIKey: !!settings.openaiApiKey,
-      aiUrl: settings.aiUrl
+    console.log("improving note with context:", {
+        note,
+        segments_count: segments.length,
+        relevant_segments: segments
+            .filter(s => new Date(s.timestamp).getTime() <= note.timestamp.getTime())
     })
     
     const lastSegmentTime = segments.length > 0 
-      ? new Date(segments[segments.length - 1].timestamp).getTime()
-      : 0
+        ? new Date(segments[segments.length - 1].timestamp).getTime()
+        : 0
 
     if (note.timestamp.getTime() > lastSegmentTime) {
-      console.log("note is after last segment, using all segments")
-      const combinedText = segments
-        .map(s => `[${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
-        .join('\n')
+        console.log("note is after last segment, using all segments")
+        const context = segments
+            .map(s => `[${s.timestamp}] [${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
+            .join('\n')
 
-      const improved = await improveNote({
-        note,
-        chunk: {
-          text: combinedText,
-          speaker: 'combined',
-          timestamp: note.timestamp
-        },
-        title
-      }, settings)
+        const improved = await improveNote({
+            note,
+            context,
+            title
+        }, settings)
 
-      setNotes(prev => prev.map(n => 
-        n.id === note.id ? { ...n, text: improved } : n
-      ))
-      return
+        const updatedNotes: Note[] = notes.map(n => 
+            n.id === note.id ? { ...n, text: improved } : n
+        )
+        await setNotes(updatedNotes)
+        return
     }
 
     const relevantSegment = segments
-      .filter(s => new Date(s.timestamp).getTime() <= note.timestamp.getTime())
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+        .filter(s => new Date(s.timestamp).getTime() <= note.timestamp.getTime())
+        .pop()
 
     if (!relevantSegment) {
-      console.log("no relevant segment found for note")
-      return
+        console.log("no relevant segment found for note")
+        return
     }
 
     console.log("selected segment for improvement:", {
-      note_timestamp: note.timestamp,
-      segment_timestamp: new Date(relevantSegment.timestamp),
-      segment_text: relevantSegment.transcription,
-      segment_speaker: relevantSegment.speaker?.name
+        note_timestamp: note.timestamp,
+        segment_timestamp: relevantSegment.timestamp,
+        segment_text: relevantSegment.transcription,
+        segment_speaker: relevantSegment.speaker?.name
     })
+
+    const context = `[${relevantSegment.timestamp}] [${relevantSegment.speaker?.name ?? 'unknown'}]: ${relevantSegment.transcription}`
 
     const improved = await improveNote({
-      note,
-      chunk: {
-        text: relevantSegment.transcription,
-        speaker: relevantSegment.speaker?.name,
-        timestamp: new Date(relevantSegment.timestamp)
-      },
-      title
+        note,
+        context,
+        title
     }, settings)
 
-    setNotes(prev => prev.map(n => 
-      n.id === note.id ? { ...n, text: improved } : n
-    ))
+    const updatedNotes: Note[] = notes.map(n => 
+        n.id === note.id ? { ...n, text: improved } : n
+    )
+    await setNotes(updatedNotes)
   }
 
-  const handleBack = () => {
-    console.log("returning to meeting history from notes editor", {
-      hasNotes: notes.length > 0,
-      hasTitle: !!title,
-      hasAnalysis: !!analysis
-    })
-    router.push('/meetings')
-  }
 
   const handleNewMeeting = async () => {
     console.log('starting new meeting from notes editor')
@@ -358,14 +340,14 @@ export function NotesEditor({ onTimeClick }: Props) {
             <Sparkles className={`h-4 w-4 ${isGeneratingNotes ? "animate-spin" : ""}`} />
           </button>
           <button
-            onClick={handleBack}
+            onClick={onBack}
             className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
             title="back to meetings"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <button
-            onClick={handleNewMeeting}
+            onClick={onNewMeeting}
             className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
             title="start new meeting"
           >
@@ -520,10 +502,13 @@ export function NotesEditor({ onTimeClick }: Props) {
           scrollRef={scrollRef}
           onScroll={onScroll}
           isEditing={true}
-          analysis={{
-            ...analysis,
-            notes: analysis?.summary || []
-          }}
+          analysis={analysis?.summary ? {
+            summary: analysis.summary,
+            facts: [],
+            events: [],
+            flow: [],
+            decisions: []
+          } : null}
         />
       )}
 
