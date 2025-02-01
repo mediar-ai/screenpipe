@@ -1,7 +1,7 @@
 import { OpenAI } from "openai"
 import { Settings } from "@/lib/hooks/use-settings"
 import { TranscriptionChunk } from "../types"
-import { VocabularyEntry, getVocabularyEntries } from "./use-vocabulary-storage"
+import { VocabularyEntry, getVocabularyEntries } from "./storage-vocabulary"
 import { Meeting } from "../../meeting-history/types"
 
 interface TranscriptionContext {

@@ -4,15 +4,21 @@ import { Loader2, ArrowDown, LayoutList, Layout } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { TranscriptionChunk, ServiceStatus } from "./types"
-import { ChunkOverlay } from "./chunk-overlay"
+import { ChunkOverlay } from "./floating-container-buttons"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { DialogFooter } from "@/components/ui/dialog"
-import { addVocabularyEntry } from './hooks/use-vocabulary-storage'
-import { improveTranscription } from './hooks/use-transcription-ai'
-import { useMeetingContext } from './hooks/use-meeting-context'
+import { addVocabularyEntry } from './hooks/storage-vocabulary'
+import { generateMeetingNote } from './hooks/ai-create-note-based-on-chunk'
+import { improveTranscription } from './hooks/ai-improve-chunk-transcription'
+import { useMeetingContext } from './hooks/storage-for-live-meeting'
 import { Settings } from "@/lib/hooks/use-settings"
 import { cn } from "@/lib/utils"
+import { 
+    storeLiveChunks,
+    LiveMeetingData,
+} from './hooks/storage-for-live-meeting'
+import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 
 interface TranscriptionViewProps {
     chunks: TranscriptionChunk[]
@@ -37,7 +43,7 @@ export function TranscriptionView({
     isScrolledToBottom,
     settings
 }: TranscriptionViewProps) {
-    const { title, notes } = useMeetingContext()
+    const { title, notes, setSegments, setNotes, data, updateStore } = useMeetingContext()
     const [viewMode, setViewMode] = useState<'overlay' | 'sidebar' | 'timestamp'>('overlay')
     const [useOverlay, setUseOverlay] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
@@ -55,8 +61,57 @@ export function TranscriptionView({
     const [improvingChunks, setImprovingChunks] = useState<Record<number, boolean>>({})
     const [recentlyImproved, setRecentlyImproved] = useState<Record<number, boolean>>({})
     const lastProcessedChunkRef = useRef<number>(-1)
+    const [showLoadButton, setShowLoadButton] = useState(false)
+    const [loadingHistory, setLoadingHistory] = useState(false)
+    const { fetchRecentChunks } = useRecentChunks()
 
-    // moved from index.tsx
+    // Add logging for component mount/unmount
+    useEffect(() => {
+        console.log('transcription view mounted', {
+            chunksCount: chunks.length,
+            serviceStatus,
+            isLoading,
+            hasTitle: !!title,
+            hasNotes: notes.length > 0
+        })
+        return () => {
+            console.log('transcription view unmounting', {
+                chunksCount: chunks.length,
+                serviceStatus,
+                lastMessage: getStatusMessage()
+            })
+        }
+    }, [])
+
+    // Add logging for chunks updates
+    useEffect(() => {
+        console.log('chunks updated in transcription view', {
+            count: chunks.length,
+            lastChunk: chunks[chunks.length - 1]?.text,
+            serviceStatus,
+            isLoading
+        })
+    }, [chunks])
+
+    // Add logging for service status changes
+    useEffect(() => {
+        console.log('service status changed in transcription view:', {
+            status: serviceStatus,
+            message: getStatusMessage(),
+            isLoading
+        })
+    }, [serviceStatus])
+
+    // Helper functions
+    const getDisplaySpeaker = (speaker: number) => {
+        return speakerMappings[speaker] ?? speaker
+    }
+
+    const formatSpeaker = (speaker: string | number) => {
+        return typeof speaker === 'number' ? `speaker ${speaker}` : speaker
+    }
+
+    // Memoized values
     const uniqueSpeakers = useMemo(() => {
         const speakerFirstAppearance = new Map<string | number, Date>()
         chunks.forEach(chunk => {
@@ -79,28 +134,6 @@ export function TranscriptionView({
                 return timeB - timeA
             })
     }, [chunks, speakerMappings])
-
-    const getDisplaySpeaker = (speaker: number) => {
-        return speakerMappings[speaker] ?? speaker
-    }
-
-    const formatSpeaker = (speaker: string | number) => {
-        return typeof speaker === 'number' ? `speaker ${speaker}` : speaker
-    }
-
-    const mergeSpeakers = (newSpeaker: string | number) => {
-        if (!selectedSpeaker) return
-        console.log('merging speaker', selectedSpeaker, 'into', newSpeaker)
-        setSpeakerMappings(prev => ({
-            ...prev,
-            [selectedSpeaker]: newSpeaker,
-            ...(targetSpeaker ? { [targetSpeaker]: newSpeaker } : {})
-        }))
-        setMergeModalOpen(false)
-        setNameModalOpen(false)
-        setTargetSpeaker(null)
-        setCustomSpeaker('')
-    }
 
     const mergeChunks = useMemo(() => {
         const merged: typeof chunks = []
@@ -125,14 +158,87 @@ export function TranscriptionView({
         return merged
     }, [chunks, speakerMappings])
 
-    // Handler for text edits
-    const handleTextEdit = (index: number, newText: string) => {
-        console.log('text edited for chunk', index, ':', newText)
-        setEditedChunks(prev => ({
-            ...prev,
-            [index]: newText
-        }))
+    // Load initial state
+    useEffect(() => {
+        console.log('storing chunks in transcription view', {
+            count: chunks.length,
+            serviceStatus,
+            isLoading
+        })
+        storeLiveChunks(chunks)
+    }, [chunks])
+
+    const loadStoredData = async () => {
+        try {
+            setLoadingHistory(true)
+            await fetchRecentChunks()
+            
+            if (data) {
+                console.log('loaded stored meeting data:', data)
+                setEditedChunks(data.editedChunks)
+                setSpeakerMappings(data.speakerMappings)
+                lastProcessedChunkRef.current = data.lastProcessedIndex
+                setShowLoadButton(false)
+            }
+        } catch (error) {
+            console.error('failed to load history:', error)
+        } finally {
+            setLoadingHistory(false)
+        }
     }
+
+    // Store chunks when they update
+    useEffect(() => {
+        console.log('storing chunks in transcription view', {
+            count: chunks.length,
+            serviceStatus,
+            isLoading
+        })
+        storeLiveChunks(chunks)
+    }, [chunks])
+
+    // Move handleTextEdit inside the component
+    const handleTextEdit = async (index: number, newText: string) => {
+        console.log('text edited for chunk', index, ':', newText)
+        if (!data) return
+
+        const newEditedChunks = {
+            ...editedChunks,
+            [index]: newText
+        }
+        setEditedChunks(newEditedChunks)
+        await updateStore({ ...data, editedChunks: newEditedChunks })
+    }
+
+    const mergeSpeakers = async (newSpeaker: string | number) => {
+        if (!selectedSpeaker) return
+        if (!data) return
+
+        console.log('merging speaker', selectedSpeaker, 'into', newSpeaker)
+        const newMappings = {
+            ...speakerMappings,
+            [selectedSpeaker]: newSpeaker,
+            ...(targetSpeaker ? { [targetSpeaker]: newSpeaker } : {})
+        }
+        setSpeakerMappings(newMappings)
+        await updateStore({ ...data, speakerMappings: newMappings })
+        setMergeModalOpen(false)
+        setNameModalOpen(false)
+        setTargetSpeaker(null)
+        setCustomSpeaker('')
+    }
+
+    // Update last processed index
+    useEffect(() => {
+        if (lastProcessedChunkRef.current >= 0) {
+            if (data) {
+                updateStore({ 
+                    ...data, 
+                    lastProcessedIndex: lastProcessedChunkRef.current 
+                })
+            }
+        }
+    }, [lastProcessedChunkRef.current, data, updateStore])
 
     // Add selection handler
     const handleSelection = () => {
@@ -186,7 +292,8 @@ export function TranscriptionView({
         // Only process if we have a previous chunk and haven't processed it yet
         if (previousChunkIndex >= 0 && 
             previousChunkIndex > lastProcessedChunkRef.current && 
-            !improvingChunks[previousChunkIndex]) {
+            !improvingChunks[previousChunkIndex] &&
+            settings.openAiKey) {
             
             const improveChunk = async () => {
                 setImprovingChunks(prev => ({ ...prev, [previousChunkIndex]: true }))
@@ -212,8 +319,7 @@ export function TranscriptionView({
 
                     if (improved !== chunk.text) {
                         console.log('chunk improved:', improved)
-                        handleTextEdit(previousChunkIndex, improved)
-                        // Set recently improved flag and clear it after animation
+                        await handleTextEdit(previousChunkIndex, improved)
                         setRecentlyImproved(prev => ({ ...prev, [previousChunkIndex]: true }))
                         setTimeout(() => {
                             setRecentlyImproved(prev => ({ ...prev, [previousChunkIndex]: false }))
@@ -230,29 +336,75 @@ export function TranscriptionView({
 
             improveChunk()
         }
-    }, [mergeChunks, title, notes, settings])
+    }, [mergeChunks, title, notes, settings, data, updateStore])
+
+    // Update segments when mergeChunks changes
+    useEffect(() => {
+        console.log('updating segments in transcription view', {
+            mergedChunksCount: mergeChunks.length,
+            editedChunksCount: Object.keys(editedChunks).length,
+            speakerMappingsCount: Object.keys(speakerMappings).length
+        })
+        const segments = mergeChunks.map(chunk => ({
+            timestamp: chunk.timestamp,
+            transcription: editedChunks[chunk.id] ?? chunk.text,
+            deviceName: chunk.deviceName || '',
+            speaker: { id: chunk.speaker || 0, name: formatSpeaker(getDisplaySpeaker(chunk.speaker || 0)) }
+        }))
+        setSegments(segments)
+    }, [mergeChunks, editedChunks, speakerMappings])
+
+    const handleGenerateNote = async (index: number) => {
+        try {
+            console.log('generating note for chunk:', index)
+            const contextChunks = mergeChunks.slice(
+                Math.max(0, index - 4),
+                index + 1
+            )
+            
+            const note = await generateMeetingNote(contextChunks, settings)
+            console.log('generated note:', note)
+            
+            // Add the generated note to the meeting context
+            setNotes(prev => [...prev, {
+                id: crypto.randomUUID(),
+                text: note,
+                timestamp: new Date(mergeChunks[index].timestamp),
+                isInput: false,
+                device: 'ai'
+            }])
+            
+        } catch (error) {
+            console.error('failed to generate note:', error)
+        }
+    }
 
     return (
         <>
             <div className="relative h-full flex flex-col">
+                {showLoadButton && (
+                    <div className="absolute top-2 right-2 z-10">
+                        <button
+                            onClick={loadStoredData}
+                            className="px-3 py-1 bg-white text-black border border-black text-sm rounded-md hover:bg-gray-50 transition-colors flex items-center gap-2"
+                        >
+                            {loadingHistory ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                            load history
+                        </button>
+                    </div>
+                )}
                 <div
                     ref={scrollRef}
                     onScroll={onScroll}
                     onMouseUp={handleSelection}
                     className="flex-1 overflow-y-auto bg-card min-h-0"
                 >
-                    {mergeChunks.length === 0 ? (
+                    {mergeChunks.length === 0 && (
                         <div className="flex items-center justify-center h-full text-gray-500">
-                            {isLoading ? (
-                                <div className="flex flex-col items-center gap-2">
-                                    <Loader2 className="h-6 w-6 animate-spin" />
-                                    <p>loading transcriptions...</p>
-                                </div>
-                            ) : (
-                                <p>{getStatusMessage()}</p>
-                            )}
+                            <p>{getStatusMessage()}</p>
                         </div>
-                    ) : (
+                    )}
+                    {mergeChunks.length > 0 && (
                         <div className="space-y-2 relative p-4">
                             <button
                                 onClick={() => setViewMode(prev => {
@@ -260,7 +412,7 @@ export function TranscriptionView({
                                     if (prev === 'sidebar') return 'timestamp'
                                     return 'overlay'
                                 })}
-                                className="absolute top-2 right-2 p-2 hover:bg-gray-100 rounded-md transition-colors z-10"
+                                className="fixed top-2 left-2 p-2 hover:bg-gray-100 rounded-md transition-colors z-10 bg-background"
                                 title={`switch to ${viewMode === 'overlay' ? 'sidebar' : viewMode === 'sidebar' ? 'timestamp' : 'overlay'} view`}
                             >
                                 {viewMode === 'overlay' ? <LayoutList className="h-4 w-4" /> : viewMode === 'sidebar' ? <Layout className="h-4 w-4" /> : <Layout className="h-4 w-4" />}
@@ -279,6 +431,7 @@ export function TranscriptionView({
                                                         setMergeModalOpen(true)
                                                     }
                                                 }}
+                                                onGenerateNote={() => handleGenerateNote(i)}
                                             />
                                             <div className="relative">
                                                 <div

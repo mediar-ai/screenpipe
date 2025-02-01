@@ -1,19 +1,33 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowDown, ArrowLeft, List, FileText } from 'lucide-react'
-import { useAutoScroll } from './hooks/use-auto-scroll'
-import { TextEditor } from './text-editor'
+import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle } from 'lucide-react'
+import { useAutoScroll } from './hooks/auto-scroll'
+import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from './types'
-import { useMeetingContext } from './hooks/use-meeting-context'
+import { useMeetingContext, LiveMeetingData } from './hooks/storage-for-live-meeting'
+import { generateMeetingName } from '../meeting-history/use-meeting-ai'
+import { useSettings } from '@/lib/hooks/use-settings'
+import { useToast } from '@/hooks/use-toast'
+import { generateMeetingNotes } from './hooks/ai-create-all-notes'
+import { improveNote } from './hooks/ai-create-note'
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
   onBack: () => void
+  onNewMeeting: () => void
 }
 
-export function NotesEditor({ onTimeClick, onBack }: Props) {
-  const { title, setTitle, notes, setNotes } = useMeetingContext()
+export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
+  const { 
+    title, 
+    setTitle,
+    notes, 
+    setNotes,
+    segments,
+    analysis,
+    setAnalysis
+  } = useMeetingContext()
   const [currentMessage, setCurrentMessage] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
@@ -23,6 +37,10 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
   const [viewMode, setViewMode] = useState<'timeline' | 'text'>('text')
   const editRef = useRef<HTMLDivElement>(null)
   const editTimeRef = useRef<HTMLInputElement>(null)
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false)
+  const [isGeneratingNotes, setIsGeneratingNotes] = useState(false)
+  const { settings } = useSettings()
+  const { toast } = useToast()
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
@@ -75,9 +93,9 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
     setEditText(note.text)
   }
 
-  const updateNote = () => {
+  const updateNote = async () => {
     if (!editingId) return
-    setNotes(prev => prev.map(note => 
+    const updatedNotes = notes.map(note => 
       note.id === editingId 
         ? { 
             ...note, 
@@ -85,7 +103,8 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
             editedAt: new Date()
           }
         : note
-    ))
+    )
+    await setNotes(updatedNotes)
     setEditingId(null)
   }
 
@@ -102,7 +121,7 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
     setEditTimeText(time)
   }
 
-  const updateTime = (noteId: string) => {
+  const updateTime = async (noteId: string) => {
     try {
       const [hours, minutes, seconds] = editTimeText.split(':').map(Number)
       if (isNaN(hours) || isNaN(minutes) || isNaN(seconds) ||
@@ -110,17 +129,15 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
         throw new Error('invalid time')
       }
       
-      setNotes(prev => {
-        const updated = prev.map(note => {
-          if (note.id === noteId) {
-            const newTime = new Date(note.timestamp)
-            newTime.setHours(hours, minutes, seconds)
-            return { ...note, timestamp: newTime }
-          }
-          return note
-        })
-        return updated
+      const updatedNotes = notes.map(note => {
+        if (note.id === noteId) {
+          const newTime = new Date(note.timestamp)
+          newTime.setHours(hours, minutes, seconds)
+          return { ...note, timestamp: newTime }
+        }
+        return note
       })
+      await setNotes(updatedNotes)
       setEditingTime(null)
     } catch (e) {
       console.log('invalid time format')
@@ -132,10 +149,174 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
     }
   }
 
+  const handleGenerateTitle = async () => {
+    if (isGeneratingTitle) return
+    
+    setIsGeneratingTitle(true)
+    try {
+      console.log("generating title for meeting")
+      const meeting = {
+        id: crypto.randomUUID(),
+        notes: notes.map(note => ({
+          id: note.id,
+          text: note.text,
+          timestamp: note.timestamp.toISOString(),
+          editedAt: note.editedAt?.toISOString(),
+          isInput: note.isInput,
+          device: note.device
+        })),
+        meetingStart: notes[0]?.timestamp.toISOString() || new Date().toISOString(),
+        meetingEnd: notes[notes.length - 1]?.timestamp.toISOString() || new Date().toISOString(),
+        humanName: title,
+        aiName: null,
+        agenda: null,
+        aiSummary: null,
+        participants: null,
+        selectedDevices: new Set(),
+        deviceNames: new Set(),
+        segments
+      }
+      
+      const aiName = await generateMeetingName(meeting, settings)
+      await setTitle(aiName)
+      
+      toast({
+        title: "title generated",
+        description: "ai title has been generated",
+      })
+    } catch (error) {
+      console.error("failed to generate title:", error)
+      toast({
+        title: "generation failed",
+        description: "failed to generate ai title. please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingTitle(false)
+    }
+  }
+
+  const handleGenerateNotes = async () => {
+    if (isGeneratingNotes) return
+    
+    setIsGeneratingNotes(true)
+    try {
+      console.log("generating ai notes analysis for meeting", { 
+        notesCount: notes.length, 
+        segmentsCount: segments.length,
+        title,
+        hasAnalysis: !!analysis
+      })
+      const meeting = {
+        id: crypto.randomUUID(),
+        notes: notes.map(note => ({
+          id: note.id,
+          text: note.text,
+          timestamp: note.timestamp.toISOString(),
+          editedAt: note.editedAt?.toISOString(),
+          isInput: note.isInput,
+          device: note.device
+        })),
+        meetingStart: notes[0]?.timestamp.toISOString() || new Date().toISOString(),
+        meetingEnd: notes[notes.length - 1]?.timestamp.toISOString() || new Date().toISOString(),
+        humanName: title,
+        aiName: null,
+        agenda: null,
+        aiSummary: null,
+        participants: null,
+        selectedDevices: new Set(),
+        deviceNames: new Set(),
+        segments
+      }
+      
+      const newAnalysis = await generateMeetingNotes(meeting, settings)
+      await setAnalysis(newAnalysis)
+      
+      toast({
+        title: "notes generated",
+        description: "ai notes analysis completed",
+      })
+    } catch (error) {
+      console.error("failed to generate notes:", error)
+      toast({
+        title: "generation failed",
+        description: "failed to generate ai notes. please try again",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingNotes(false)
+    }
+  }
+
+  const handleImprove = async (note: Note) => {
+    console.log("improving note with settings:", {
+      aiProviderType: settings.aiProviderType,
+      hasToken: !!settings.user?.token,
+      hasOpenAIKey: !!settings.openaiApiKey,
+      aiUrl: settings.aiUrl
+    })
+    
+    const lastSegmentTime = segments.length > 0 
+      ? new Date(segments[segments.length - 1].timestamp).getTime()
+      : 0
+
+    if (note.timestamp.getTime() > lastSegmentTime) {
+      console.log("note is after last segment, using all segments")
+      const combinedText = segments
+        .map(s => `[${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
+        .join('\n')
+
+      const improved = await improveNote({
+        note,
+        chunk: {
+          text: combinedText,
+          speaker: 'combined',
+          timestamp: note.timestamp
+        },
+        title
+      }, settings)
+
+      setNotes(prev => prev.map(n => 
+        n.id === note.id ? { ...n, text: improved } : n
+      ))
+      return
+    }
+
+    const relevantSegment = segments
+      .filter(s => new Date(s.timestamp).getTime() <= note.timestamp.getTime())
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+
+    if (!relevantSegment) {
+      console.log("no relevant segment found for note")
+      return
+    }
+
+    console.log("selected segment for improvement:", {
+      note_timestamp: note.timestamp,
+      segment_timestamp: new Date(relevantSegment.timestamp),
+      segment_text: relevantSegment.transcription,
+      segment_speaker: relevantSegment.speaker?.name
+    })
+
+    const improved = await improveNote({
+      note,
+      chunk: {
+        text: relevantSegment.transcription,
+        speaker: relevantSegment.speaker?.name,
+        timestamp: new Date(relevantSegment.timestamp)
+      },
+      title
+    }, settings)
+
+    setNotes(prev => prev.map(n => 
+      n.id === note.id ? { ...n, text: improved } : n
+    ))
+  }
+
   return (
     <div className="h-full flex flex-col bg-card relative">
       <div className="flex items-center justify-between">
-        <div className="p-2 flex-1">
+        <div className="p-1 flex-1 flex items-center">
           <input
             type="text"
             value={title}
@@ -143,18 +324,48 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
             placeholder="meeting title"
             className="w-full text-2xl font-bold bg-transparent focus:outline-none"
           />
-        </div>
-        <div className="flex">
           <button
-            onClick={onBack}
-            className="p-2 text-sm transition-colors rounded-none hover:bg-gray-50"
+            onClick={handleGenerateTitle}
+            disabled={isGeneratingTitle}
+            className="p-0 hover:bg-gray-100 rounded transition-colors"
+            title="generate ai title"
+          >
+            <Wand2 className={`h-4 w-4 ${isGeneratingTitle ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+        <div className="flex -space-x-px">
+          <button
+            onClick={handleGenerateNotes}
+            disabled={isGeneratingNotes}
+            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
+            title="generate ai notes"
+          >
+            <Sparkles className={`h-4 w-4 ${isGeneratingNotes ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            onClick={() => {
+              console.log("returning to meeting history from notes editor", {
+                hasNotes: notes.length > 0,
+                hasTitle: !!title,
+                hasAnalysis: !!analysis
+              })
+              onBack()
+            }}
+            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
             title="back to meetings"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <button
+            onClick={() => onNewMeeting()}
+            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
+            title="start new meeting"
+          >
+            <PlusCircle className="h-4 w-4" />
+          </button>
+          <button
             onClick={() => setViewMode('timeline')}
-            className={`p-2 text-sm transition-colors rounded-none ${
+            className={`p-1 text-sm transition-colors rounded-none ${
               viewMode === 'timeline' 
                 ? 'bg-gray-200' 
                 : 'hover:bg-gray-50'
@@ -165,7 +376,7 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
           </button>
           <button
             onClick={() => setViewMode('text')}
-            className={`p-2 text-sm transition-colors rounded-none ${
+            className={`p-1 text-sm transition-colors rounded-none ${
               viewMode === 'text' 
                 ? 'bg-gray-200' 
                 : 'hover:bg-gray-50'
@@ -236,11 +447,22 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
                     </button>
                   )}
                 </div>
-                {note.editedAt && (
-                  <span className="text-gray-400 text-xs">
-                    edited {note.editedAt.toLocaleTimeString()}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {note.editedAt && (
+                    <span className="text-gray-400 text-xs">
+                      edited {note.editedAt.toLocaleTimeString()}
+                    </span>
+                  )}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      await handleImprove(note)
+                    }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-2 py-0.5"
+                  >
+                    improve
+                  </button>
+                </div>
               </div>
               {editingId === note.id ? (
                 <div 
@@ -290,6 +512,10 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
           scrollRef={scrollRef}
           onScroll={onScroll}
           isEditing={true}
+          analysis={{
+            ...analysis,
+            notes: analysis?.summary || []
+          }}
         />
       )}
 
@@ -315,6 +541,8 @@ export function NotesEditor({ onTimeClick, onBack }: Props) {
           />
         </form>
       )}
+
+
     </div>
   )
 } 

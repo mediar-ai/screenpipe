@@ -3,10 +3,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ServiceStatus } from './types'
 
 interface StatusAlertsProps {
-  serviceStatus: ServiceStatus
+  serviceStatus?: ServiceStatus;
+  minimal?: boolean;
 }
 
-export function StatusAlerts({ serviceStatus }: StatusAlertsProps) {
+export function StatusAlerts({ serviceStatus, minimal = false }: StatusAlertsProps) {
+  if (minimal) {
+    return (
+      <div className="fixed top-2 right-2 z-50">
+        {serviceStatus === 'available' ? (
+          <div className="w-2 h-2 rounded-full bg-green-500" />
+        ) : (
+          <div className="w-2 h-2 rounded-full bg-red-500" />
+        )}
+      </div>
+    )
+  }
+
   if (serviceStatus === 'no_subscription') {
     return (
       <Alert className="mb-4 border-red-500">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useTranscriptionService } from './use-transcription-service'
-import { useAutoScroll } from './hooks/use-auto-scroll'
+import { useAutoScroll } from './hooks/auto-scroll'
 import { StatusAlerts } from './status-alerts'
 import { NotesEditor } from './notes-editor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -10,7 +10,7 @@ import Split from 'react-split'
 import { TranscriptionView } from './transcription-view'
 import { ArrowLeft } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { MeetingProvider } from './hooks/use-meeting-context'
+import { MeetingProvider } from './hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
 
 interface LiveTranscriptionProps {
@@ -22,7 +22,6 @@ export function LiveTranscription({ onBack }: LiveTranscriptionProps) {
         chunks,
         serviceStatus,
         isLoadingRecent: isLoading,
-        fetchRecentChunks,
         checkService,
         getStatusMessage
     } = useTranscriptionService()
@@ -45,25 +44,45 @@ export function LiveTranscription({ onBack }: LiveTranscriptionProps) {
     }
 
     useEffect(() => {
+        console.log('live transcription wrapper mounted')
         const init = async () => {
-            await fetchRecentChunks()
-            checkService()
+            await checkService()
+            if (serviceStatus !== 'available') {
+                console.log('initial service check failed, will retry')
+            }
         }
 
         init()
         
-        // Only set interval if service is not available
+        // If service is not yet available, set an interval to re-check
         let interval: NodeJS.Timeout | undefined
         if (serviceStatus !== 'available') {
             console.log('setting up service check interval')
-            interval = setInterval(checkService, 5000)
+            interval = setInterval(async () => {
+                await checkService()
+                if (serviceStatus === 'available') {
+                    console.log('service became available, clearing interval')
+                    clearInterval(interval)
+                }
+            }, 5000)
         }
 
         return () => {
-            if (interval) clearInterval(interval)
+            if (interval) {
+                console.log('cleaning up service check interval')
+                clearInterval(interval)
+            }
             window.removeEventListener('resize', updateHeight)
         }
-    }, [serviceStatus])
+    }, [serviceStatus, checkService])
+
+    // Additional effect to ensure transcription stream is started whenever serviceStatus becomes available
+    useEffect(() => {
+        if (serviceStatus === 'available') {
+            console.log('live transcription wrapper detected service available, ensuring stream is active')
+            checkService()
+        }
+    }, [serviceStatus, checkService])
 
     useEffect(() => {
         updateHeight()
