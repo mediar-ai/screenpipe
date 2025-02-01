@@ -52,9 +52,9 @@ try {
     powershell -c "irm bun.sh/install.ps1|iex"
 
     # Install Visual Studio Redistributables to avoid any ort issues
-    Install-Module -Name VcRedist
-    Import-Module -Name VcRedist
-    Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path "$env:TEMP\VcRedist") -Silent
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
 
     Write-Host @"
 

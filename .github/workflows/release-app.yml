@@ -463,10 +463,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
           # Install and copy VcRedist
-          Install-Module -Name VcRedist
-          Import-Module -Name VcRedist
-          $temp_dir = "$env:TEMP\VcRedist"
-          Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path $temp_dir) -Silent
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
 
           Write-Host "Copying DLL files..."
           Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
@@ -477,8 +476,6 @@ jobs:
           if ($dll_count -eq 0) {
             throw "No DLLs found in target directory!"
           }
-
-          Remove-Item -Path $temp_dir -Recurse -Force
 
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
@@ -760,10 +757,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
           # Install and copy VcRedist
-          Install-Module -Name VcRedist
-          Import-Module -Name VcRedist
-          $temp_dir = "$env:TEMP\VcRedist"
-          Install-VcRedist -VcList (Get-VcList | Save-VcRedist -Path $temp_dir) -Silent
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
 
           Write-Host "Copying DLL files..."
           Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
@@ -777,8 +773,6 @@ jobs:
           if ($dll_count -eq 0) {
             throw "No DLLs found in target directory!"
           }
-
-          Remove-Item -Path $temp_dir -Recurse -Force
 
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
