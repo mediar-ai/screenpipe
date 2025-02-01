@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { pipe } from "@screenpipe/browser"
 import { useToast } from "@/hooks/use-toast"
-import { TranscriptionChunk, ServiceStatus } from '../types'
+import { TranscriptionChunk, ServiceStatus } from '../../meeting-history/types'
 
 declare global {
   interface Window {
@@ -63,6 +63,7 @@ export function useTranscriptionStream(
         } else {
           // New speaker or first chunk, create new entry
           currentChunk = {
+            id: Date.now(),
             timestamp: chunk.timestamp,
             text: chunk.transcription,
             isInput: chunk.is_input,
