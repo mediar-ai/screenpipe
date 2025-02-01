@@ -1,11 +1,5 @@
-"use client";
+import { redirect } from 'next/navigation'
 
-import { MeetingHistory } from "@/components/meeting-history/meeting-history";
-import { useState } from "react";
-
-export default function MeetingsPage() {
-  return (
-    <MeetingHistory
-    />
-  );
+export default function HomePage() {
+  redirect('/meetings')
 }
