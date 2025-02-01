@@ -1,6 +1,6 @@
 import { OpenAI } from "openai"
-import { Settings } from "@/lib/hooks/use-settings"
-import { TranscriptionChunk } from "../types"
+import type { Settings } from "@screenpipe/browser"
+import { TranscriptionChunk } from "../../meeting-history/types"
 
 export async function generateMeetingNote(
     chunks: TranscriptionChunk[],
