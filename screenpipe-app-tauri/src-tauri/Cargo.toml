@@ -48,6 +48,7 @@ log = "0.4.17"
 
 # Tokio
 tokio = { version = "1.36.0", features = ["full"] }
+tokio-tungstenite = "0.26.1"
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }

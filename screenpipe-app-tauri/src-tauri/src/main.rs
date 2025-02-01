@@ -68,7 +68,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;
 mod health;
-use health::start_health_check;
+use health::set_health_icon_in_tray;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -1027,9 +1027,28 @@ async fn main() {
             // Start health check service
             // macos only
             let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = start_health_check(app_handle).await {
-                    error!("Failed to start health check service: {}", e);
+            // let health_status = Arc::new(Mutex::new(None));
+            let (tx, _) = tokio::sync::broadcast::channel(16);
+            tauri::async_runtime::spawn({
+                let app_handle = app.handle().clone();
+                let tx = tx.clone();
+                async move {
+                    if let Err(e) = crate::health::start_websocket_server(
+                        app_handle, 
+                        // health_status.clone(),
+                        tx.clone()
+                    ).await {
+                        error!("Failed to start health check service: {}", e);
+                    }
+                }
+            });
+            tauri::async_runtime::spawn({
+                let app_handle = app_handle.clone();
+                let tx = tx.clone();
+                async move {
+                    if let Err(e) = set_health_icon_in_tray(app_handle, tx.clone()).await {
+                        error!("Failed to start health check service: {}", e);
+                    }
                 }
             });
 
