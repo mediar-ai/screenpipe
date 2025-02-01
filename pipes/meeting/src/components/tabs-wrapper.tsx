@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { LiveTranscription } from "@/components/live-transcription/new-meeting-wrapper"
+import { LiveTranscription } from "@/app/meetings/live/page"
 import { MeetingHistory } from "@/components/meeting-history/meeting-history"
 
 export function TabsWrapper() {
