@@ -3,6 +3,7 @@ import { MeetingCard } from "./meeting-card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ChevronDown } from "lucide-react"
 import { MeetingPrepDetails } from "./meeting-prep-card"
+import { useSettings } from "@/lib/hooks/use-settings"
 
 // Mock data for upcoming meetings
 const MOCK_UPCOMING_MEETINGS: Meeting[] = [
@@ -297,6 +298,8 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
 ] 
 
 export function UpcomingMeetings() {
+  const { settings } = useSettings()
+  
   const handleUpdate = (id: string, update: { aiName?: string; aiSummary?: string }) => {
     console.log("updating meeting:", id, update)
   }
@@ -337,7 +340,7 @@ export function UpcomingMeetings() {
                 `${getUpcomingTime(meeting.meetingStart)[0]} ${getUpcomingTime(meeting.meetingStart)[1]}`}
             </div>
           </div>
-          <MeetingCard meeting={meeting} onUpdate={handleUpdate} />
+          <MeetingCard meeting={meeting} onUpdate={handleUpdate} settings={settings} />
         </div>
       ))}
     </div>
