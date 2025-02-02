@@ -1,30 +1,26 @@
 import fs from "fs";
-import { boolean, command, number, string } from "@drizzle-team/brocli";
 import { Credentials } from "../utils/credentials";
 import { API_BASE_URL } from "../constants";
 import { colors, symbols } from "../utils/colors";
+import { Command } from "commander";
 
-export const registerCommand = command({
-  name: "register",
-  desc: "register a new pipe",
-  options: {
-    name: string().required().desc("name of the pipe"),
-    paid: boolean().desc("set this flag to create a paid pipe"),
-    price: number().desc("price in USD (required for paid pipes)"),
-    source: string().desc("source code URL (e.g. GitHub repository)"),
-  },
-  transform: (opts) => {
-    if (opts.paid && !opts.price) {
-      throw new Error(
-        "Price is required for paid pipes, i.e. --price <amount>"
-      );
+export const registerCommand = new Command()
+  .name('register')
+  .description('Register a new pipe')
+  .requiredOption('--name <name>', 'Name of the pipe')
+  .option('--paid', 'Set this flag to create a paid pipe')
+  .option('--price <price>', 'Price in USD (required for paid pipes)', parseFloat)
+  .option('--source <source>', 'Source code URL (e.g., GitHub repository)')
+  .action(async (opts) => {
+    if (opts.paid && opts.price == null) {
+      console.error('Error: Price is required for paid pipes, i.e., --price <amount>');
+      process.exit(1);
     }
-    if (opts.paid && opts.price && opts.price <= 0) {
-      throw new Error("Price must be positive for paid pipes");
+    if (opts.paid && opts.price <= 0) {
+      console.error('Error: Price must be positive for paid pipes');
+      process.exit(1);
     }
-    return opts;
-  },
-  handler: async (opts) => {
+  
     try {
       const apiKey = Credentials.getApiKey();
       if (!apiKey) {
@@ -129,5 +125,4 @@ export const registerCommand = command({
       }
       process.exit(1);
     }
-  },
-});
+  })
