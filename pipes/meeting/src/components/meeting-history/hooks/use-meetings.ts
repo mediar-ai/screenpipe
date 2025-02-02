@@ -100,60 +100,66 @@ export function useMeetings() {
       const storedMeetings = await getMeetings()
       console.log("loaded stored meetings:", storedMeetings.length)
 
-      // Find latest timestamp from stored meetings
-      const latestStoredTimestamp = storedMeetings.length > 0
-        ? storedMeetings[0].meetingEnd // meetings are sorted newest first
-        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() // fallback to 7 days if no stored meetings
-
-      console.log("fetching transcriptions after:", latestStoredTimestamp)
-      
-      const response = await fetch(
-        `http://localhost:3030/search?content_type=audio&start_time=${latestStoredTimestamp}&limit=1000`
-      )
-      if (!response.ok) {
-        throw new Error("failed to fetch meeting history")
-      }
-      
-      const result = await response.json()
-      const camelCaseResult = keysToCamelCase<{ data: AudioTranscription[] }>(result)
-      console.log("fetched new transcriptions:", camelCaseResult.data.length)
-      
-      const newMeetings = processMeetings(camelCaseResult.data)
-      console.log("processed new meetings:", newMeetings.length)
-
-      // Merge with stored meetings, preserving edited content
-      const mergedMeetings = [...newMeetings, ...storedMeetings]
-        .reduce((acc, meeting) => {
-          const existingIndex = acc.findIndex(m => m.id === meeting.id)
-          if (existingIndex === -1) {
-            acc.push(meeting)
-          } else {
-            // Preserve edited content from stored meeting
-            acc[existingIndex] = {
-              ...meeting,
-              humanName: acc[existingIndex].humanName,
-              aiName: acc[existingIndex].aiName,
-              aiSummary: acc[existingIndex].aiSummary,
-              participants: acc[existingIndex].participants
-            }
-          }
-          return acc
-        }, [] as Meeting[])
-
-      // Sort by start time (newest first)
-      mergedMeetings.sort((a, b) => 
-        new Date(b.meetingStart).getTime() - new Date(a.meetingStart).getTime()
-      )
-
+      // Try to fetch new data from screenpipe
       try {
-        await setMeetings(mergedMeetings)
-        setMeetingsState(mergedMeetings)
-      } catch (storageError) {
-        console.error("storage error, attempting cleanup:", storageError)
-        await cleanupOldMeetings()
-        // Retry storage with fewer meetings
-        await setMeetings(mergedMeetings.slice(-10))
-        setMeetingsState(mergedMeetings.slice(-10))
+        const latestStoredTimestamp = storedMeetings.length > 0
+          ? storedMeetings[0].meetingEnd
+          : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+        console.log("fetching transcriptions after:", latestStoredTimestamp)
+        
+        const response = await fetch(
+          `http://localhost:3030/search?content_type=audio&start_time=${latestStoredTimestamp}&limit=1000`,
+          { signal: AbortSignal.timeout(5000) } // 5s timeout
+        )
+        
+        if (!response.ok) {
+          throw new Error("failed to fetch meeting history")
+        }
+        
+        const result = await response.json()
+        const camelCaseResult = keysToCamelCase<{ data: AudioTranscription[] }>(result)
+        console.log("fetched new transcriptions:", camelCaseResult.data.length)
+        
+        const newMeetings = processMeetings(camelCaseResult.data)
+        console.log("processed new meetings:", newMeetings.length)
+
+        // Merge with stored meetings
+        const mergedMeetings = [...newMeetings, ...storedMeetings]
+          .reduce((acc, meeting) => {
+            const existingIndex = acc.findIndex(m => m.id === meeting.id)
+            if (existingIndex === -1) {
+              acc.push(meeting)
+            } else {
+              acc[existingIndex] = {
+                ...meeting,
+                humanName: acc[existingIndex].humanName,
+                aiName: acc[existingIndex].aiName,
+                aiSummary: acc[existingIndex].aiSummary,
+                participants: acc[existingIndex].participants
+              }
+            }
+            return acc
+          }, [] as Meeting[])
+
+        mergedMeetings.sort((a, b) => 
+          new Date(b.meetingStart).getTime() - new Date(a.meetingStart).getTime()
+        )
+
+        try {
+          await setMeetings(mergedMeetings)
+          setMeetingsState(mergedMeetings)
+        } catch (storageError) {
+          console.error("storage error, attempting cleanup:", storageError)
+          await cleanupOldMeetings()
+          await setMeetings(mergedMeetings.slice(-10))
+          setMeetingsState(mergedMeetings.slice(-10))
+        }
+
+      } catch (apiError) {
+        // If API is unavailable, just use stored meetings
+        console.log("screenpipe api unavailable, using stored meetings:", apiError)
+        setMeetingsState(storedMeetings)
       }
       
     } catch (err) {
