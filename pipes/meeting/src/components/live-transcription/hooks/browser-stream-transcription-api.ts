@@ -68,6 +68,7 @@ export function useBrowserTranscriptionStream(
           if (data.is_final && words.length > 0) {
             console.log('new browser transcription:', {
               text: data.channel.alternatives[0].transcript,
+              speaker: `speaker_${words[0].speaker || 0}`,
               words: words
             })
             
@@ -77,7 +78,7 @@ export function useBrowserTranscriptionStream(
               text: data.channel.alternatives[0].transcript,
               isInput: true,
               device: 'browser',
-              speaker: `speaker_${words[0].speaker || 0}` // Use first word's speaker ID
+              speaker: `speaker_${words[0].speaker || 0}`
             }
             
             setChunks(prev => [...prev, chunk])

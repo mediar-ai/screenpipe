@@ -39,7 +39,7 @@ export async function generateMeetingName(
     const transcriptSample = meeting.segments
       .map(
         (s) =>
-          `[${s.speaker.name}]: ${s.transcription}`
+          `[${s.speaker}]: ${s.transcription}`
       )
       .join("\n");
 

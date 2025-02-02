@@ -44,10 +44,10 @@ export function TranscriptionView({
     const [useOverlay, setUseOverlay] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
     const [nameModalOpen, setNameModalOpen] = useState(false)
-    const [selectedSpeaker, setSelectedSpeaker] = useState<number | null>(null)
-    const [targetSpeaker, setTargetSpeaker] = useState<number | null>(null)
+    const [selectedSpeaker, setSelectedSpeaker] = useState<string | null>(null)
+    const [targetSpeaker, setTargetSpeaker] = useState<string | null>(null)
     const [customSpeaker, setCustomSpeaker] = useState<string>('')
-    const [speakerMappings, setSpeakerMappings] = useState<Record<number, string | number>>({})
+    const [speakerMappings, setSpeakerMappings] = useState<Record<string, string>>({})
     const [editedChunks, setEditedChunks] = useState<Record<number, string>>({})
     const [selectedText, setSelectedText] = useState('')
     const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null)
@@ -87,17 +87,18 @@ export function TranscriptionView({
     }, [chunks])
 
     // Helper functions
-    const getDisplaySpeaker = (speaker: number) => {
+    const getDisplaySpeaker = (speaker: string) => {
         return speakerMappings[speaker] ?? speaker
     }
 
-    const formatSpeaker = (speaker: string | number) => {
-        return typeof speaker === 'number' ? `speaker ${speaker}` : speaker
+    const formatSpeaker = (speaker: string | undefined) => {
+        if (!speaker) return 'unknown'
+        return speaker.startsWith('speaker_') ? `speaker ${speaker.split('_')[1]}` : speaker
     }
 
     // Memoized values
     const uniqueSpeakers = useMemo(() => {
-        const speakerFirstAppearance = new Map<string | number, Date>()
+        const speakerFirstAppearance = new Map<string, Date>()
         chunks.forEach(chunk => {
             if (chunk.speaker !== undefined) {
                 const mappedSpeaker = speakerMappings[chunk.speaker] || chunk.speaker
@@ -111,7 +112,7 @@ export function TranscriptionView({
             const speaker = chunk.speaker
             return speaker !== undefined ? speakerMappings[speaker] || speaker : undefined
         })))
-            .filter((s): s is string | number => s !== undefined)
+            .filter((s): s is string => s !== undefined)
             .sort((a, b) => {
                 const timeA = speakerFirstAppearance.get(a)?.getTime() || 0
                 const timeB = speakerFirstAppearance.get(b)?.getTime() || 0
@@ -192,7 +193,7 @@ export function TranscriptionView({
         await updateStore({ ...data, editedChunks: newEditedChunks })
     }
 
-    const mergeSpeakers = async (newSpeaker: string | number) => {
+    const mergeSpeakers = async (newSpeaker: string) => {
         if (!selectedSpeaker) return
         if (!data) return
 
@@ -331,7 +332,7 @@ export function TranscriptionView({
             timestamp: chunk.timestamp,
             transcription: editedChunks[chunk.id] ?? chunk.text,
             deviceName: chunk.deviceName || '',
-            speaker: { id: chunk.speaker || 0, name: formatSpeaker(getDisplaySpeaker(chunk.speaker || 0)) }
+            speaker: chunk.speaker || 'speaker_0'
         }))
         setSegments(segments)
     }, [mergeChunks, editedChunks, speakerMappings])
@@ -404,9 +405,9 @@ export function TranscriptionView({
                                             <ChunkOverlay
                                                 timestamp={chunk.timestamp}
                                                 speaker={chunk.speaker}
-                                                displaySpeaker={chunk.speaker !== undefined ? getDisplaySpeaker(chunk.speaker) : 0}
+                                                displaySpeaker={chunk.speaker ? getDisplaySpeaker(chunk.speaker) : 'speaker_0'}
                                                 onSpeakerClick={() => {
-                                                    if (chunk.speaker !== undefined) {
+                                                    if (chunk.speaker) {
                                                         setSelectedSpeaker(chunk.speaker)
                                                         setMergeModalOpen(true)
                                                     }
@@ -547,7 +548,7 @@ export function TranscriptionView({
                                     <button
                                         key={speaker}
                                         onClick={() => {
-                                            setTargetSpeaker(speaker as number)
+                                            setTargetSpeaker(speaker as string)
                                             setNameModalOpen(true)
                                         }}
                                         className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors text-sm"

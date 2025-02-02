@@ -23,14 +23,12 @@ export function useMeetings() {
       const currentTime = new Date(trans.content.timestamp)
       const prevTime = index > 0 ? new Date(transcriptions[index - 1].content.timestamp) : null
 
-      // Get speaker name based on speaker info or device type
-      const speakerName = trans.content.speaker?.name && trans.content.speaker.name.length > 0
-        ? trans.content.speaker.name
-        : trans.content.deviceType?.toLowerCase() === "input"
+      // Get speaker name based on device type
+      const speakerName = trans.content.deviceType?.toLowerCase() === "input"
         ? "you"
         : trans.content.deviceType?.toLowerCase() === "output"
         ? "others"
-        : "unknown"
+        : trans.content.speaker || "unknown"
 
       if (!currentMeeting || (prevTime && currentTime.getTime() - prevTime.getTime() >= 5 * 60 * 1000)) {
         if (currentMeeting) {
@@ -52,7 +50,7 @@ export function useMeetings() {
             transcription: trans.content.transcription,
             deviceName: trans.content.deviceName,
             deviceType: trans.content.deviceType,
-            speaker: trans.content.speaker || { id: -1, name: speakerName }
+            speaker: trans.content.speaker || speakerName
           }],
           deviceNames: new Set([trans.content.deviceName]),
           notes: []
@@ -65,7 +63,7 @@ export function useMeetings() {
           transcription: trans.content.transcription,
           deviceName: trans.content.deviceName,
           deviceType: trans.content.deviceType,
-          speaker: trans.content.speaker || { id: -1, name: speakerName }
+          speaker: trans.content.speaker || speakerName
         })
         currentMeeting.deviceNames.add(trans.content.deviceName)
       }

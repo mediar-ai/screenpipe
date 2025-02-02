@@ -86,15 +86,13 @@ export function useTranscriptionStream(
         console.error("sse error:", error);
         eventSource.close();
         streamingRef.current = false;
-        if (serviceStatus === 'available') {
-          toast({
-            title: "transcription error",
-            description: "failed to stream audio. retrying...",
-            variant: "destructive"
-          });
-          console.log('scheduling retry...');
-          setTimeout(startTranscriptionScreenpipe, 1000);
-        }
+        toast({
+          title: "transcription error",
+          description: "failed to stream audio. retrying...",
+          variant: "destructive"
+        });
+        console.log('scheduling retry...');
+        setTimeout(startTranscriptionScreenpipe, 1000);
       }
     } catch (error) {
       console.error("failed to start transcription:", error);
