@@ -42,7 +42,7 @@ pub async fn poll_meetings_events() -> Result<()> {
         match name.as_str() {
             "ui_frame" => {
                 let ui_frame: UIFrame = serde_json::from_value(event).unwrap();
-                tracing::info!("ui_frame: {:?}", ui_frame.app);
+                tracing::debug!("ui_frame: {:?}", ui_frame.app);
 
                 let is_meeting_app = MEETING_APPS
                     .iter()
@@ -87,7 +87,7 @@ pub async fn poll_meetings_events() -> Result<()> {
             }
             "window_ocr" => {
                 let window_ocr: WindowOcr = serde_json::from_value(event).unwrap();
-                tracing::info!("window_ocr: {:?}", window_ocr.app_name);
+                tracing::debug!("window_ocr: {:?}", window_ocr.app_name);
 
                 // Method 1: Meeting App Detection
                 let is_meeting_app = MEETING_APPS
@@ -144,7 +144,7 @@ pub async fn poll_meetings_events() -> Result<()> {
 
             "realtime_transcription" => {
                 let transcript: RealtimeTranscriptionEvent = serde_json::from_value(event).unwrap();
-                tracing::info!("realtime_transcription: {:?}", transcript.transcription);
+                tracing::debug!("realtime_transcription: {:?}", transcript.transcription);
                 // Method 4: Multiple Speaker Detection
                 if transcript.is_final {
                     recent_speakers.insert(transcript.device.clone());
