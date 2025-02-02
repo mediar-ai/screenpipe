@@ -11,16 +11,17 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { generateMeetingSummary } from "../use-meeting-summary"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { MeetingPrepDetails } from "./meeting-prep-card"
+import { Settings } from "@screenpipe/browser"
 
 interface MeetingCardProps {
   meeting: Meeting
   onUpdate: (id: string, update: { aiName?: string; aiSummary?: string }) => void
+  settings: Settings
 }
 
-export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
+export function MeetingCard({ meeting, onUpdate, settings }: MeetingCardProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
-  const [settings, setSettings] = useState<any>(null)
   const { toast } = useToast()
 
   const formatTime = (dateStr: string): string => {
@@ -51,8 +52,7 @@ export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
     setIsGenerating(true)
     try {
       if (!settings) {
-        const { settings: newSettings } = useSettings()
-        setSettings(newSettings)
+        throw new Error("no settings found")
       }
       
       console.log("generating name for meeting:", meeting.id)
@@ -88,8 +88,7 @@ export function MeetingCard({ meeting, onUpdate }: MeetingCardProps) {
     setIsGeneratingSummary(true)
     try {
       if (!settings) {
-        const { settings: newSettings } = useSettings()
-        setSettings(newSettings)
+        throw new Error("no settings found")
       }
       
       console.log("generating summary for meeting:", meeting.id)
