@@ -129,13 +129,23 @@ export function MeetingHistory() {
           >
             <SettingsIcon className="h-4 w-4" />
           </Button>
+          {hasLiveMeeting && (
+            <Button
+              onClick={handleResume}
+              variant="outline"
+              size="sm"
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              resume meeting
+            </Button>
+          )}
           <Button
-            onClick={handleResume}
+            onClick={handleNewMeeting}
             variant="default"
             size="sm"
           >
             <PlusCircle className="h-4 w-4 mr-2" />
-            {hasLiveMeeting ? 'resume meeting' : 'new meeting'}
+            new meeting
           </Button>
         </div>
       </div>
