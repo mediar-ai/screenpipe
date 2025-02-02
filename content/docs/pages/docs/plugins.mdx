@@ -46,7 +46,7 @@ The fastest way to create a new pipe is using our CLI:
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-bunx @screenpipe/dev create
+bunx @screenpipe/dev@latest create
     ```
   </Tab>
   <Tab>
@@ -84,14 +84,14 @@ available commands:
 
 ```bash copy
 # authenticate with your API key
-bunx @screenpipe/dev login --apiKey <your-key>
+bunx @screenpipe/dev@latest login --apiKey <your-key>
 
 # create a new pipe
-bunx @screenpipe/dev register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
+bunx @screenpipe/dev@latest register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
 # you'll receive payouts to your stripe account on a daily basis
 
 # add predefined components to your pipe
-bunx @screenpipe/dev components add
+bunx @screenpipe/dev@latest components add
 # select components from the interactive menu:
 # - use-health: health monitoring hooks
 # - use-settings: settings management
@@ -102,15 +102,15 @@ bunx @screenpipe/dev components add
 # - use-ai-provider: AI integration hooks
 
 # publish your pipe to the store
-bunx @screenpipe/dev publish --name my-pipe
+bunx @screenpipe/dev@latest publish --name my-pipe
 # our team will review your pipe and publish it to the store
 # if approved, your pipe will be available in the store to everyone
 
 # list all versions of your pipe
-bunx @screenpipe/dev list-versions --name my-pipe
+bunx @screenpipe/dev@latest list-versions --name my-pipe
 
 # end current session
-bunx @screenpipe/dev logout
+bunx @screenpipe/dev@latest logout
 ```
 
 you can deploy your pipe to your screenpipe app through the UI or using `screenpipe pipe install <path>` and `screenpipe pipe enable <id/folder of your pipe>`.

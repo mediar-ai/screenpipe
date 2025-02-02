@@ -120,7 +120,7 @@ make sure to allow permissions on macos (screen, mic)
 ## create plugins
 
 ```bash
-bunx @screenpipe/dev create
+bunx @screenpipe/dev@latest create
 ```
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
@@ -128,9 +128,9 @@ screenpipe has a plugin system called "pipe" which lets you create desktop app i
 you can then publish these to our store and make money:
 
 ```bash
-bunx @screenpipe/dev register --name foo [--paid --price 50] # subscription
+bunx @screenpipe/dev@latest register --name foo [--paid --price 50] # subscription
 bun run build
-bunx @screenpipe/dev publish --name foo
+bunx @screenpipe/dev@latest publish --name foo
 ```
 
 ## community 
