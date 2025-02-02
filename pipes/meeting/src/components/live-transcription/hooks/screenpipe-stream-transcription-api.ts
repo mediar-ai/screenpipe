@@ -10,13 +10,21 @@ declare global {
 }
 
 export function useTranscriptionStream(
-  serviceStatus: ServiceStatus,
   setChunks: (updater: (prev: TranscriptionChunk[]) => TranscriptionChunk[]) => void
 ) {
   const streamingRef = useRef(false)
   const { toast } = useToast()
 
-  const startTranscription = useCallback(async () => {
+  const stopTranscriptionScreenpipe = useCallback(() => {
+    if (window._eventSource) {
+      console.log('stopping screenpipe transcription')
+      window._eventSource.close()
+      window._eventSource = undefined
+      streamingRef.current = false
+    }
+  }, [])
+
+  const startTranscriptionScreenpipe = useCallback(async () => {
     if (streamingRef.current) {
       console.log('transcription already streaming');
       return;
@@ -85,14 +93,18 @@ export function useTranscriptionStream(
             variant: "destructive"
           });
           console.log('scheduling retry...');
-          setTimeout(startTranscription, 1000);
+          setTimeout(startTranscriptionScreenpipe, 1000);
         }
       }
     } catch (error) {
       console.error("failed to start transcription:", error);
       streamingRef.current = false;
     }
-  }, [serviceStatus, toast, setChunks])
+  }, [toast, setChunks])
 
-  return { startTranscription, isStreaming: streamingRef.current }
+  return { 
+    startTranscriptionScreenpipe, 
+    stopTranscriptionScreenpipe, 
+    isStreaming: streamingRef.current 
+  }
 } 
