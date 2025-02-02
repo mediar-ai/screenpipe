@@ -1,15 +1,3 @@
-// import { run } from "@drizzle-team/brocli";
-// import {
-//   // loginCommand,
-//   // logoutCommand,
-//   // publishCommand,
-//   // registerCommand,
-//   // listVersionsCommand,
-//   // createCommand,
-//   // componentsCommands
-// } from "./commands";
-// import { addComponentCommand } from "./commands/components/commands/add/add";
-
 import { Command } from "commander";
 import { 
   loginCommand,
@@ -17,20 +5,9 @@ import {
   componentsCommands, 
   registerCommand,
   publishCommand,
-  listVersionsCommand
+  listVersionsCommand,
+  logoutCommand
 } from "./commands";
-
-// run(
-//   [
-//     // loginCommand,
-//     // logoutCommand,
-//     addComponentCommand
-//   ],
-//   {
-//     name: "screenpipe-dev",
-//     description: "screenpipe development CLI tool",
-//   }
-// );
 
 process.on("SIGINT", () => process.exit(0))
 process.on("SIGTERM", () => process.exit(0))
@@ -42,8 +19,9 @@ async function main() {
     .name('screenpipe-dev')
     .description('screenpipe development CLI tool')
     .version('0.0.1');
-    
+
   program.addCommand(loginCommand)
+  program.addCommand(logoutCommand)
   program.addCommand(createCommand)
   program.addCommand(componentsCommands)
   program.addCommand(registerCommand)
