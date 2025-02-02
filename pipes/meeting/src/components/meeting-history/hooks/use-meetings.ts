@@ -42,6 +42,7 @@ export function useMeetings() {
           meetingEnd: trans.content.timestamp,
           humanName: null,
           aiName: null,
+          agenda: null,
           aiSummary: null,
           participants: null,
           mergedWith: [],
