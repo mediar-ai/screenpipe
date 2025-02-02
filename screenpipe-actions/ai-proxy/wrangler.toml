@@ -5,6 +5,8 @@ compatibility_date = "2024-10-11"
 compatibility_flags = ["nodejs_compat"]
 upload_source_maps = true
 
+tail_consumers = [{service = "ai-proxy-tail"}]
+
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
 # Configuration: https://developers.cloudflare.com/workers/observability/logs/workers-logs/#enable-workers-logs

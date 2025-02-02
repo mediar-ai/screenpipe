@@ -1,4 +1,4 @@
-use crate::{get_base_dir, get_store, icons::AppIcon};
+use crate::{get_base_dir, get_store};
 use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;

@@ -1,12 +1,12 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -39,15 +39,18 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
-        ignore_list: Vec<String>,
-        include_list: Vec<String>,
-        languages: Vec<Language>,
+        ignore_list: Arc<Vec<String>>,
+        include_list: Arc<Vec<String>>,
+        languages: Arc<Vec<Language>>,
         capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
-            warn!("Invalid FPS value: {}. Using default of 1.0", fps);
+            warn!(
+                "[monitor_id: {}] Invalid FPS value: {}. Using default of 1.0",
+                monitor_id, fps
+            );
             1.0
         };
         let interval = Duration::from_secs_f64(1.0 / fps);
@@ -66,40 +69,48 @@ impl VideoCapture {
         let shutdown_rx_capture = shutdown_rx.clone();
         let shutdown_rx_queue = shutdown_rx.clone();
         let shutdown_rx_video = shutdown_rx.clone();
-
+        let languages_clone = languages.clone();
         let result_sender_inner = result_sender.clone();
+
         let capture_handle = tokio::spawn(async move {
             let mut rx = shutdown_rx_capture;
             loop {
                 if *rx.borrow() {
-                    info!("shutting down video capture thread");
+                    info!(
+                        "[monitor_id: {}] shutting down video capture thread",
+                        monitor_id
+                    );
                     break;
                 }
                 let result_sender = result_sender_inner.clone();
                 let window_filters_clone = Arc::clone(&window_filters_clone);
+                let languages_clone = languages_clone.clone();
 
                 tokio::select! {
                     _ = continuous_capture(
                         result_sender,
                         interval,
-                        (*ocr_engine).clone(),
+                        ocr_engine.clone(),
                         monitor_id,
                         window_filters_clone,
-                        languages.clone(),
+                        languages_clone.clone(),
                         capture_unfocused_windows,
                         rx.clone(),
                     ) => {
-                        debug!("continuous capture completed, restarting");
+                        debug!("[monitor_id: {}] continuous capture completed, restarting", monitor_id);
                     }
                     _ = rx.changed() => {
                         if *rx.borrow() {
-                            info!("shutting down video capture thread");
+                            info!("[monitor_id: {}] shutting down video capture thread", monitor_id);
                             break;
                         }
                     }
                 }
             }
-            debug!("exiting capture handle loop, dropping sender");
+            debug!(
+                "[monitor_id: {}] exiting capture handle loop, dropping sender",
+                monitor_id
+            );
             drop(result_sender_inner);
         });
         handles.push(capture_handle);
@@ -108,11 +119,17 @@ impl VideoCapture {
             let rx = shutdown_rx_queue;
             while let Some(result) = result_receiver.recv().await {
                 if *rx.borrow() {
-                    info!("shutting down video queue thread");
+                    info!(
+                        "[monitor_id: {}] shutting down video queue thread",
+                        monitor_id
+                    );
                     break;
                 }
                 let frame_number = result.frame_number;
-                debug!("received frame {} for queueing", frame_number);
+                debug!(
+                    "[monitor_id: {}] received frame {} for queueing",
+                    monitor_id, frame_number
+                );
 
                 let result = Arc::new(result);
 
@@ -121,14 +138,17 @@ impl VideoCapture {
 
                 if !video_pushed || !ocr_pushed {
                     error!(
-                        "failed to push frame {} to one or more queues",
-                        frame_number
+                        "[monitor_id: {}] failed to push frame {} to one or more queues, queue lengths: {}, {}",
+                        monitor_id, frame_number,
+                        capture_video_frame_queue.len(),
+                        capture_ocr_frame_queue.len()
                     );
                     continue; // Skip to next iteration instead of crashing
                 }
 
                 debug!(
-                    "frame {} pushed to queues. Queue lengths: {}, {}",
+                    "[monitor_id: {}] frame {} pushed to queues. Queue lengths: {}, {}",
+                    monitor_id,
                     frame_number,
                     capture_video_frame_queue.len(),
                     capture_ocr_frame_queue.len()
@@ -192,7 +212,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-f",
         "image2pipe",
         "-vcodec",
-        "mjpeg",
+        "png", // consider using mjpeg and change to encode to jpeg below too
         "-r",
         &fps_str,
         "-i",
@@ -344,7 +364,10 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
     frame
         .image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .expect("Failed to encode frame");
     buffer
 }
@@ -444,8 +467,9 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
     match child.wait_with_output().await {
         Ok(output) => {
             debug!("FFmpeg process exited with status: {}", output.status);
-            if !output.status.success() {
-                error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !output.status.success() && stderr != Cow::Borrowed("") {
+                error!("FFmpeg stderr: {}", stderr);
             }
         }
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),

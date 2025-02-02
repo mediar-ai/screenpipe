@@ -59686,7 +59686,7 @@ var createCommand = command({
   desc: "create a new pipe",
   handler: async () => {
     console.log(source_default.bold(`
-welcome to create-pipe! \uD83D\uDE80
+welcome to screenpipe! \uD83D\uDE80
 `));
     console.log(`let's create a new screenpipe pipe.
 `);
@@ -71263,7 +71263,7 @@ var addComponentCommand = command({
       }
       const result = await preFlightAdd(opts.cwd);
       if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-        logger.warn("you need to create a pipe first. run bunx @screenpipe/create-pipe@latest or visit https://docs.screenpi.pe/docs/plugins for more information.");
+        logger.warn("you need to create a pipe first. run bunx @screenpipe/dev create or visit https://docs.screenpi.pe/docs/plugins for more information.");
         process.exit(1);
       }
       await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });

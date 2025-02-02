@@ -208,11 +208,11 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
 		const deepgram = createClient(env.DEEPGRAM_API_KEY);
 		const deepgramSocket = deepgram.listen.live({}, url.toString());
 
-		deepgramSocket.on(LiveTranscriptionEvents.Open, (data) => {
+		deepgramSocket.on(LiveTranscriptionEvents.Open, () => {
 			server.send(
 				JSON.stringify({
-					type: 'message',
-					data: JSON.stringify(data),
+					type: 'connected',
+					message: 'WebSocket connection established',
 				})
 			);
 		});
@@ -322,6 +322,12 @@ export default Sentry.withSentry(
 			try {
 				const url = new URL(request.url);
 				const path = url.pathname;
+
+				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
+				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
+					console.log('websocket request to /v1/listen detected, bypassing auth');
+					return await handleWebSocketUpgrade(request, env);
+				}
 
 				// Add auth check for protected routes
 				if (path !== '/test') {
@@ -482,11 +488,6 @@ export default Sentry.withSentry(
 						response.headers.append('Vary', 'Origin');
 						return response;
 					}
-				}
-
-				if (path === '/v1/listen' && request.headers.get('Upgrade') === 'websocket') {
-					console.log('websocket request');
-					return await handleWebSocketUpgrade(request, env);
 				}
 
 				const response = new Response('not found', {

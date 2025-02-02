@@ -1,4 +1,5 @@
 import type {
+  EventStreamResponse,
   InputAction,
   InputControlResponse,
   NotificationOptions,
@@ -11,6 +12,42 @@ import type {
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+
+const WS_URL = "ws://localhost:3030/ws/events";
+
+// At the top of the file, add WebSocket instances
+let wsWithImages: WebSocket | null = null;
+let wsWithoutImages: WebSocket | null = null;
+
+// Update the wsEvents generator to accept includeImages parameter and manage connections
+async function* wsEvents(
+  includeImages: boolean = false
+): AsyncGenerator<EventStreamResponse, void, unknown> {
+  // Reuse existing connection or create new one
+  let ws = includeImages ? wsWithImages : wsWithoutImages;
+
+  if (!ws || ws.readyState === WebSocket.CLOSED) {
+    ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
+    if (includeImages) {
+      wsWithImages = ws;
+    } else {
+      wsWithoutImages = ws;
+    }
+
+    // Wait for connection to establish
+    await new Promise((resolve, reject) => {
+      ws!.onopen = resolve;
+      ws!.onerror = reject;
+    });
+  }
+
+  while (true) {
+    const event: MessageEvent = await new Promise((resolve) => {
+      ws!.addEventListener("message", (ev: MessageEvent) => resolve(ev));
+    });
+    yield JSON.parse(event.data);
+  }
+}
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -58,6 +95,9 @@ export interface BrowserPipe {
     name: string,
     properties?: Record<string, any>
   ) => Promise<void>;
+  streamEvents(
+    includeImages: boolean
+  ): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -230,10 +270,7 @@ class BrowserPipeImpl implements BrowserPipe {
     void,
     unknown
   > {
-    const eventSource = new EventSource(
-      "http://localhost:3030/sse/transcriptions"
-    );
-    const { userId, email } = await this.initAnalyticsIfNeeded();
+    const { userId, email } = await this.initAnalyticsIfNeeded();\
 
     try {
       await this.captureEvent("stream_started", {
@@ -243,38 +280,29 @@ class BrowserPipeImpl implements BrowserPipe {
       });
 
       while (true) {
-        const chunk: TranscriptionChunk = await new Promise(
-          (resolve, reject) => {
-            eventSource.onmessage = (event) => {
-              if (event.data.trim() === "keep-alive-text") {
-                return;
-              }
-              resolve(JSON.parse(event.data));
-            };
-            eventSource.onerror = (error) => {
-              reject(error);
+        for await (const event of wsEvents()) {
+          if (event.name === "transcription") {
+            let chunk: TranscriptionChunk = event.data as TranscriptionChunk;
+            yield {
+              id: crypto.randomUUID(),
+              object: "text_completion_chunk",
+              created: Date.now(),
+              model: "screenpipe-realtime",
+              choices: [
+                {
+                  text: chunk.transcription,
+                  index: 0,
+                  finish_reason: chunk.is_final ? "stop" : null,
+                },
+              ],
+              metadata: {
+                timestamp: chunk.timestamp,
+                device: chunk.device,
+                isInput: chunk.is_input,
+              },
             };
           }
-        );
-
-        yield {
-          id: crypto.randomUUID(),
-          object: "text_completion_chunk",
-          created: Date.now(),
-          model: "screenpipe-realtime",
-          choices: [
-            {
-              text: chunk.transcription,
-              index: 0,
-              finish_reason: chunk.is_final ? "stop" : null,
-            },
-          ],
-          metadata: {
-            timestamp: chunk.timestamp,
-            device: chunk.device,
-            isInput: chunk.is_input,
-          },
-        };
+        }
       }
     } finally {
       await this.captureEvent("stream_ended", {
@@ -282,17 +310,14 @@ class BrowserPipeImpl implements BrowserPipe {
         distinct_id: userId,
         email: email,
       });
-      eventSource.close();
     }
   }
 
   async *streamVision(
     includeImages: boolean = false
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
-    const eventSource = new EventSource(
-      `http://localhost:3030/sse/vision?images=${includeImages}`
-    );
     const { userId, email } = await this.initAnalyticsIfNeeded();
+
     try {
       await this.captureEvent("stream_started", {
         feature: "vision",
@@ -300,20 +325,14 @@ class BrowserPipeImpl implements BrowserPipe {
         email: email,
       });
 
-      while (true) {
-        const event: VisionEvent = await new Promise((resolve, reject) => {
-          eventSource.onmessage = (event) => {
-            resolve(JSON.parse(event.data));
+      for await (const event of wsEvents(includeImages)) {
+        if (event.name === "ocr_result" || event.name === "ui_frame") {
+          let data: VisionEvent = event.data as VisionEvent;
+          yield {
+            type: event.name,
+            data,
           };
-          eventSource.onerror = (error) => {
-            reject(error);
-          };
-        });
-
-        yield {
-          type: "vision_stream",
-          data: event,
-        };
+        }
       }
     } finally {
       await this.captureEvent("stream_ended", {
@@ -321,7 +340,6 @@ class BrowserPipeImpl implements BrowserPipe {
         distinct_id: userId,
         email: email,
       });
-      eventSource.close();
     }
   }
 
@@ -341,6 +359,14 @@ class BrowserPipeImpl implements BrowserPipe {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
     return captureMainFeatureEvent(featureName, properties);
+  }
+
+  public async *streamEvents(
+    includeImages: boolean = false
+  ): AsyncGenerator<EventStreamResponse, void, unknown> {
+    for await (const event of wsEvents(includeImages)) {
+      yield event;
+    }
   }
 }
 

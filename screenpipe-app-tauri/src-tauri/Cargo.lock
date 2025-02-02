@@ -2787,12 +2787,12 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.25.1"
+version = "0.25.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd54d660e773627692c524beaad361aca785a4f9f5730ce91f42aabe5bce3d11"
+checksum = "cd6f44aed642f18953a158afeb30206f4d50da59fbc66ecb53c66488de73563b"
 dependencies = [
  "bytemuck",
- "byteorder",
+ "byteorder-lite",
  "color_quant",
  "exr",
  "gif",
@@ -2810,9 +2810,9 @@ dependencies = [
 
 [[package]]
 name = "image-webp"
-version = "0.1.3"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f79afb8cbee2ef20f59ccd477a218c12a93943d075b492015ecb1bb81f8ee904"
+checksum = "b77d01e822461baa8409e156015a1d91735549f0f2c17691bd2d996bef238f7f"
 dependencies = [
  "byteorder-lite",
  "quick-error",
@@ -3329,6 +3329,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea1f30cedd69f0a2954655f7188c6a834246d2bcf1e315e2ac40c4b24dc9519"
 dependencies = [
  "cfg-if 1.0.0",
+ "rayon",
 ]
 
 [[package]]
@@ -4874,6 +4875,7 @@ dependencies = [
  "loop9",
  "quick-error",
  "rav1e",
+ "rayon",
  "rgb",
 ]
 
@@ -5057,9 +5059,6 @@ name = "rgb"
 version = "0.8.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57397d16646700483b67d2dd6511d79318f9d057fdbd21a4066aeac8b41d310a"
-dependencies = [
- "bytemuck",
-]
 
 [[package]]
 name = "ring"
@@ -5275,7 +5274,7 @@ dependencies = [
 
 [[package]]
 name = "screenpipe-app"
-version = "0.29.6"
+version = "0.30.3"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -5289,6 +5288,7 @@ dependencies = [
  "futures",
  "gtk",
  "http 0.2.12",
+ "image 0.25.5",
  "lazy_static",
  "libc",
  "log",
@@ -5326,8 +5326,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "url",
- "uuid",
  "windows-icons",
  "winreg 0.52.0",
 ]
@@ -6136,7 +6134,7 @@ dependencies = [
  "heck 0.5.0",
  "http 1.1.0",
  "http-range",
- "image 0.25.1",
+ "image 0.25.5",
  "jni",
  "libc",
  "log",
@@ -7744,7 +7742,7 @@ version = "0.1.1"
 source = "git+https://github.com/tribhuwan-kumar/windows-icons.git#f7db8e815b2d71c3b57bc6084b3451268be0d84a"
 dependencies = [
  "base64 0.22.1",
- "image 0.25.1",
+ "image 0.25.5",
  "regex",
  "tokio",
  "winapi",

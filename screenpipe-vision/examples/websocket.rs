@@ -92,15 +92,15 @@ async fn main() -> Result<()> {
             Duration::from_secs_f64(1.0 / cli.fps),
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
-                OcrEngine::AppleNative
+                Arc::new(OcrEngine::AppleNative)
             } else if cfg!(target_os = "windows") {
-                OcrEngine::WindowsNative
+                Arc::new(OcrEngine::WindowsNative)
             } else {
-                OcrEngine::Tesseract
+                Arc::new(OcrEngine::Tesseract)
             },
             id,
             window_filters,
-            vec![],
+            Arc::new([].to_vec()),
             false,
             tokio::sync::watch::channel(false).1,
         )
