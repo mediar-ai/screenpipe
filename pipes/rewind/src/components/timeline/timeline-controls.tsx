@@ -22,7 +22,7 @@ interface TimeRange {
 interface TimelineControlsProps {
 	startAndEndDates: TimeRange;
 	currentDate: Date;
-	onDateChange: (date: Date) => void;
+	onDateChange: (date: Date) => Promise<any>;
 	onJumpToday: () => void;
 	className?: string;
 }
@@ -34,19 +34,19 @@ export function TimelineControls({
 	onJumpToday,
 	className,
 }: TimelineControlsProps) {
-	const jumpDay = (days: number) => {
+	const jumpDay = async (days: number) => {
 		const today = new Date();
 
 		const newDate = endOfDay(new Date(currentDate));
 		newDate.setDate(newDate.getDate() + days);
 
 		// Prevent jumping to future dates
-		if (isAfter(newDate.getDate(), today.getDate())) {
-			onDateChange(today);
+		if (isAfter(startOfDay(newDate), startOfDay(today))) {
+			await onDateChange(today);
 			return;
 		}
 
-		onDateChange(newDate);
+		await onDateChange(newDate);
 	};
 
 	// Disable forward button if we're at today

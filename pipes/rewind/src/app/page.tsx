@@ -11,12 +11,13 @@ import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
 import { TimelineSearch } from "@/components/timeline/timeline-search";
 import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
-import { isAfter, isSameDay } from "date-fns";
+import { addDays, isAfter, isSameDay, subDays } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
 import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
 import { TimelineSlider } from "@/components/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
+import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -85,7 +86,6 @@ export default function Timeline() {
 		const getStartDateAndSet = async () => {
 			const data = await getStartDate();
 			if (!("error" in data)) {
-				console.log(data);
 				setStartAndEndDates((prev) => ({
 					...prev,
 					start: data,
@@ -248,8 +248,20 @@ export default function Timeline() {
 		}
 	};
 
-	const handleDateChange = (newDate: Date) => {
-		console.log(hasDateBeenFetched(newDate));
+	const handleDateChange = async (newDate: Date) => {
+		const checkFramesForDate = await hasFramesForDate(newDate);
+
+		if (!checkFramesForDate) {
+			let subDate;
+			if (isAfter(currentDate, newDate)) {
+				subDate = subDays(newDate, 1);
+			} else {
+				subDate = addDays(newDate, 1);
+			}
+
+			return await handleDateChange(subDate);
+		}
+
 		if (!hasDateBeenFetched(newDate)) {
 			setCurrentFrame(null);
 			const frameTimeStamp = new Date(newDate);
