@@ -21,9 +21,7 @@ interface Props {
 export function LiveTranscription({ onBack }: Props) {
     const {
         chunks,
-        serviceStatus,
         isLoadingRecent: isLoading,
-        getStatusMessage
     } = useTranscriptionService()
 
     const { scrollRef, onScroll, isScrolledToBottom } = useAutoScroll(chunks)
@@ -94,14 +92,11 @@ export function LiveTranscription({ onBack }: Props) {
                 >
                     {/* Transcription Panel */}
                     <div className="flex flex-col relative">
-                        <StatusAlerts serviceStatus={serviceStatus} />
                         <TranscriptionView
                             chunks={chunks}
                             settings={settings}
                             isLoading={isLoading}
                             isAutoScrollEnabled={isScrolledToBottom}
-                            serviceStatus={serviceStatus}
-                            getStatusMessage={getStatusMessage}
                             scrollRef={scrollRef}
                             onScroll={onScroll}
                             isScrolledToBottom={isScrolledToBottom}
