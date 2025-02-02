@@ -1,12 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { command, string, boolean } from "@drizzle-team/brocli";
 import { Credentials } from "../utils/credentials";
 import { API_BASE_URL } from "../constants";
 import archiver from "archiver";
 import crypto from "crypto";
 import ignore from "ignore";
 import { colors, symbols } from "../utils/colors";
+import { Command } from "commander";
 
 interface ProjectFiles {
   required: string[];
@@ -68,14 +68,12 @@ function archiveStandardProject(
   });
 }
 
-export const publishCommand = command({
-  name: "publish",
-  desc: "publish or update a pipe to the store",
-  options: {
-    name: string().required().desc("name of the pipe"),
-    verbose: boolean().desc("enable verbose logging").default(false),
-  },
-  handler: async (opts) => {
+export const publishCommand = new Command()
+  .name('publish')
+  .description('Publish or update a pipe to the store')
+  .requiredOption('--name <name>', 'Name of the pipe')
+  .option('--verbose', 'Enable verbose logging', false)
+  .action(async (opts) => {
     try {
       if (opts.verbose) {
         console.log(colors.dim(`${symbols.arrow} starting publish command...`));
@@ -352,5 +350,4 @@ export const publishCommand = command({
       }
       process.exit(1);
     }
-  },
-});
+  })

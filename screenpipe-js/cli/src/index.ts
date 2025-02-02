@@ -13,7 +13,8 @@
 import { Command } from "commander";
 import { 
   componentsCommands, 
-  createCommand 
+  createCommand, 
+  publishCommand
 } from "./commands";
 
 // run(
@@ -46,6 +47,7 @@ async function main() {
     
   program.addCommand(createCommand)
   program.addCommand(componentsCommands)
+  program.addCommand(publishCommand)
 
 
   program.parse()
