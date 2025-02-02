@@ -3,20 +3,36 @@ export interface Speaker {
     name: string;
   }
   
+  export interface Note {
+    id: string;
+    text: string;
+    timestamp: Date;
+    editedAt?: Date;
+  }
+  export interface TranscriptionChunk {
+    timestamp: string
+    text: string
+    isInput: boolean
+    device: string
+    speaker?: number  // Add optional speaker field
+    id: number
+    deviceName?: string
+    deviceType?: string
+  }
+  
+  export type ServiceStatus = 'available' | 'forbidden' | 'unavailable' | 'no_subscription'
   export interface MeetingNote {
     id: string;
     text: string;
     timestamp: string; // ISO string
     editedAt?: string; // ISO string
-    isInput: boolean;
-    device: string;
   }
   
   export interface MeetingSegment {
     timestamp: string;
     transcription: string;
     deviceName: string;
-    deviceType: string;
+    deviceType?: string;
     speaker: Speaker;
     editedText?: string; // For tracking edited transcriptions
   }
