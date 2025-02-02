@@ -557,7 +557,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let resource_monitor = ResourceMonitor::new();
+    let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
     resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
