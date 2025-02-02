@@ -2,6 +2,10 @@
   "name": "meeting",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/m13v/screen-pipe/tree/main/pipes/meeting.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build --no-lint",
