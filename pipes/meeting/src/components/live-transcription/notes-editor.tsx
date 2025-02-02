@@ -257,7 +257,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
     if (note.timestamp.getTime() > lastSegmentTime) {
         console.log("note is after last segment, using all segments")
         const context = segments
-            .map(s => `[${s.timestamp}] [${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
+            .map(s => `[${s.timestamp}] [${s.speaker ?? 'unknown'}]: ${s.transcription}`)
             .join('\n')
 
         const improved = await improveNote({
@@ -286,10 +286,10 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
         note_timestamp: note.timestamp,
         segment_timestamp: relevantSegment.timestamp,
         segment_text: relevantSegment.transcription,
-        segment_speaker: relevantSegment.speaker?.name
+        segment_speaker: relevantSegment.speaker
     })
 
-    const context = `[${relevantSegment.timestamp}] [${relevantSegment.speaker?.name ?? 'unknown'}]: ${relevantSegment.transcription}`
+    const context = `[${relevantSegment.timestamp}] [${relevantSegment.speaker ?? 'unknown'}]: ${relevantSegment.transcription}`
 
     const improved = await improveNote({
         note,

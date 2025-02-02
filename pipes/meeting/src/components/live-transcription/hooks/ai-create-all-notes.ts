@@ -152,7 +152,7 @@ export async function generateMeetingNotes(
 
         // combine transcript with existing notes for context
         const transcript = (meeting.segments || [])
-            .map(s => `[${s.speaker?.name ?? 'unknown'}]: ${s.transcription}`)
+            .map(s => `[${s.speaker ?? 'unknown'}]: ${s.transcription}`)
             .join("\n")
             
         const existingNotes = (meeting.notes || [])

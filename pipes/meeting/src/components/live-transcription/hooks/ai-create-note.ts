@@ -1,6 +1,6 @@
 import { OpenAI } from "openai"
 import type { Settings } from "@screenpipe/browser"
-import { TranscriptionChunk, Note, Speaker } from "../../meeting-history/types"
+import { TranscriptionChunk, Note } from "../../meeting-history/types"
 
 interface NoteContext {
     note: Note

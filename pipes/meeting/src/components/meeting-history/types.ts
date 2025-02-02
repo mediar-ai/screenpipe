@@ -1,9 +1,4 @@
-export interface Speaker {
-    id: number;
-    name: string;
-  }
-  
-  export interface Note {
+export interface Note {
     id: string;
     text: string;
     timestamp: Date;
@@ -14,7 +9,7 @@ export interface Speaker {
     text: string
     isInput: boolean
     device: string
-    speaker?: number  // Add optional speaker field
+    speaker?: string
     id: number
     deviceName?: string
     deviceType?: string
@@ -33,8 +28,8 @@ export interface Speaker {
     transcription: string;
     deviceName: string;
     deviceType?: string;
-    speaker: Speaker;
-    editedText?: string; // For tracking edited transcriptions
+    speaker: string;
+    editedText?: string;
   }
   
   export interface Meeting {
@@ -68,7 +63,7 @@ export interface Speaker {
     tags: string[];
     deviceName: string;
     deviceType: string;
-    speaker: Speaker;
+    speaker: string;
   }
   
   export interface AudioTranscription {

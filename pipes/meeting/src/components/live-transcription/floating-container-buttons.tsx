@@ -1,7 +1,7 @@
 interface ChunkOverlayProps {
     timestamp: string
-    speaker?: number
-    displaySpeaker: string | number
+    speaker?: string
+    displaySpeaker: string
     onSpeakerClick: () => void
     onGenerateNote: () => void
 }

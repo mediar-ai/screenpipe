@@ -24,7 +24,7 @@ export async function generateMeetingSummary(
     const transcriptContent = meeting.segments
       .map(
         (s) =>
-          `[${s.speaker.name}]: ${s.transcription}`
+          `[${s.speaker}]: ${s.transcription}`
       )
       .join("\n");
 

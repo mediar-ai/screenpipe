@@ -12,7 +12,7 @@ export const liveStore = localforage.createInstance({
 export interface LiveMeetingData {
     chunks: TranscriptionChunk[]
     editedChunks: Record<number, string>
-    speakerMappings: Record<number, string | number>
+    speakerMappings: Record<string, string>
     lastProcessedIndex: number
     startTime: string
     endTime?: string
@@ -101,7 +101,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             timestamp: seg.timestamp,
             text: seg.transcription,
             deviceName: seg.deviceName,
-            speaker: typeof seg.speaker.id === 'number' ? seg.speaker.id : parseInt(seg.speaker.id),
+            speaker: seg.speaker,
             isInput: seg.deviceName?.toLowerCase().includes('input') || false,
             device: seg.deviceName || 'unknown',
         }))
@@ -123,12 +123,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             timestamp: chunk.timestamp,
             transcription: data?.editedChunks[chunk.id] || chunk.text,
             deviceName: chunk.deviceName || '',
-            speaker: {
-                id: chunk.speaker || 0,
-                name: typeof data?.speakerMappings[chunk.speaker || 0] === 'string' 
-                    ? data?.speakerMappings[chunk.speaker || 0] as string 
-                    : `speaker ${chunk.speaker || 0}`
-            }
+            speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
         setSegments,
         analysis: data?.analysis || null,
