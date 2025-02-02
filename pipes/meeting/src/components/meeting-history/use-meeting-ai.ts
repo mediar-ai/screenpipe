@@ -1,6 +1,6 @@
 import { Meeting } from "./types";
 import { OpenAI } from "openai";
-import { Settings } from "@/lib/hooks/use-settings";
+import type { Settings } from "@screenpipe/browser"
 
 interface AiClientConfig {
   settings: Settings;
@@ -31,7 +31,7 @@ export async function generateMeetingName(
         segments_count: meeting.segments.length,
         notes_count: meeting.notes.length,
         total_transcript_length: meeting.segments.reduce((acc, s) => acc + s.transcription.length, 0),
-        total_notes_length: meeting.notes.reduce((acc, n) => acc + n.length, 0)
+        total_notes_length: meeting.notes.reduce((acc, n) => acc + n.text.length, 0)
       }
     );
 
