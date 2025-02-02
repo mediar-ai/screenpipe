@@ -1,10 +1,14 @@
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 import { useTranscriptionStream } from './hooks/screenpipe-stream-transcription-api'
+import { useDeepgramTranscription } from './hooks/deepgram-rtt'
+import { useAudioStream } from './hooks/chrome-audio-stream'
 import { useServiceStatus } from './hooks/health-status'
 import { useEffect, useRef } from 'react'
 import { getLiveMeetingData } from './hooks/storage-for-live-meeting'
 
-export function useTranscriptionService() {
+type TranscriptionMode = 'local' | 'remote'
+
+export function useTranscriptionService(mode: TranscriptionMode = 'remote') {
   const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
   const { serviceStatus, getStatusMessage } = useServiceStatus()
   // const { serviceStatus, checkService, getStatusMessage } = useServiceStatus()
@@ -12,7 +16,24 @@ export function useTranscriptionService() {
   const initRef = useRef(false)
   // const checkingRef = useRef(false)
 
-  // Load stored chunks and start transcription
+  // local transcription state
+  const { stream, startRecording, stopRecording } = useAudioStream()
+  const { transcript, error: transcriptError } = useDeepgramTranscription(stream)
+
+  // handle local transcription chunks
+  useEffect(() => {
+    if (mode === 'local' && transcript) {
+      const newChunk = {
+        id: Date.now().toString(),
+        text: transcript,
+        timestamp: new Date().toISOString(),
+        // add other required chunk fields
+      }
+      setChunks(prev => [...prev, newChunk])
+    }
+  }, [mode, transcript, setChunks])
+
+  // Load stored chunks and start appropriate transcription
   useEffect(() => {
     const init = async () => {
       if (initRef.current) return
@@ -24,55 +45,30 @@ export function useTranscriptionService() {
         setChunks(storedData.chunks)
       }
 
-      console.log('transcription-service: starting transcription')
-      await startTranscription()
+      if (mode === 'remote') {
+        console.log('transcription-service: starting remote transcription')
+        await startTranscription()
+      } else {
+        console.log('transcription-service: starting local transcription')
+        await startRecording()
+      }
     }
     init()
-  }, [setChunks, startTranscription])
 
-  // Health check effect commented out for now
-  /*
-  useEffect(() => {
-    console.log('transcription-service: setting up health checks')
-    let isActive = true
-    
-    const runHealthCheck = async () => {
-      if (checkingRef.current || !isActive) return
-      checkingRef.current = true
-      
-      try {
-        console.log('transcription-service: running health check')
-        await checkService(startTranscription)
-      } catch (e) {
-        console.error('transcription-service: health check failed:', e)
-      } finally {
-        checkingRef.current = false
-      }
-    }
-
-    // Initial check
-    runHealthCheck()
-
-    // Set up interval for subsequent checks if not available
-    const interval = setInterval(() => {
-      if (serviceStatus !== 'available') {
-        runHealthCheck()
-      }
-    }, 5000)
-
+    // cleanup
     return () => {
-      console.log('transcription-service: cleaning up health checks')
-      isActive = false
-      clearInterval(interval)
+      if (mode === 'local') {
+        stopRecording()
+      }
     }
-  }, [checkService, startTranscription, serviceStatus])
-  */
+  }, [mode, setChunks, startTranscription, startRecording, stopRecording])
 
   return {
     chunks,
-    serviceStatus,
+    serviceStatus: mode === 'remote' ? serviceStatus : 'available',
     isLoadingRecent: isLoading,
     fetchRecentChunks,
-    getStatusMessage
+    getStatusMessage,
+    transcriptError: mode === 'local' ? transcriptError : undefined
   }
 } 
