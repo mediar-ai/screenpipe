@@ -53,6 +53,7 @@ async function migrateMeetingData(meeting: any): Promise<Meeting> {
     meetingEnd: meeting.meetingEnd,
     humanName: meeting.name || meeting.humanName || null,
     aiName: meeting.aiName || null,
+    agenda: meeting.agenda || null,
     aiSummary: meeting.summary || meeting.aiSummary || null,
     participants: meeting.participants || null,
     mergedWith: meeting.mergedWith || [],
