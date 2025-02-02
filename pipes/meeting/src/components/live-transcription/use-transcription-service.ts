@@ -1,41 +1,21 @@
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 import { useTranscriptionStream } from './hooks/screenpipe-stream-transcription-api'
-import { useDeepgramTranscription } from './hooks/deepgram-rtt'
-import { useAudioStream } from './hooks/chrome-audio-stream'
-import { useServiceStatus } from './hooks/health-status'
+import { useBrowserTranscriptionStream } from './hooks/browser-stream-transcription-api'
 import { useEffect, useRef } from 'react'
 import { getLiveMeetingData } from './hooks/storage-for-live-meeting'
 
-type TranscriptionMode = 'local' | 'remote'
+type TranscriptionMode = 'browser' | 'screenpipe'
 
-export function useTranscriptionService(mode: TranscriptionMode = 'remote') {
+export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
   const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
-  const { serviceStatus, getStatusMessage } = useServiceStatus()
-  // const { serviceStatus, checkService, getStatusMessage } = useServiceStatus()
-  const { startTranscription } = useTranscriptionStream(serviceStatus, setChunks)
+  const { startTranscriptionScreenpipe, stopTranscriptionScreenpipe } = useTranscriptionStream(setChunks)
+  const { startTranscriptionBrowser, stopTranscriptionBrowser } = useBrowserTranscriptionStream(setChunks)
   const initRef = useRef(false)
-  // const checkingRef = useRef(false)
+  const modeRef = useRef<TranscriptionMode | null>(null)
 
-  // local transcription state
-  const { stream, startRecording, stopRecording } = useAudioStream()
-  const { transcript, error: transcriptError } = useDeepgramTranscription(stream)
-
-  // handle local transcription chunks
+  // Load stored chunks only once
   useEffect(() => {
-    if (mode === 'local' && transcript) {
-      const newChunk = {
-        id: Date.now().toString(),
-        text: transcript,
-        timestamp: new Date().toISOString(),
-        // add other required chunk fields
-      }
-      setChunks(prev => [...prev, newChunk])
-    }
-  }, [mode, transcript, setChunks])
-
-  // Load stored chunks and start appropriate transcription
-  useEffect(() => {
-    const init = async () => {
+    const loadStoredChunks = async () => {
       if (initRef.current) return
       initRef.current = true
       
@@ -44,31 +24,54 @@ export function useTranscriptionService(mode: TranscriptionMode = 'remote') {
         console.log('transcription-service: loading stored chunks:', storedData.chunks.length)
         setChunks(storedData.chunks)
       }
+    }
+    loadStoredChunks()
+  }, [setChunks])
 
-      if (mode === 'remote') {
-        console.log('transcription-service: starting remote transcription')
-        await startTranscription()
+  // Handle transcription mode initialization and changes
+  useEffect(() => {
+    // First mount or mode change
+    if (modeRef.current !== mode) {
+      console.log('transcription-service: mode', modeRef.current ? 'changed from ' + modeRef.current + ' to: ' + mode : 'initialized to: ' + mode)
+      
+      // Stop any existing transcription
+      if (modeRef.current) {
+        if (modeRef.current === 'browser') {
+          stopTranscriptionBrowser()
+        } else {
+          stopTranscriptionScreenpipe()
+        }
+      }
+      
+      // Update mode ref before starting new transcription
+      modeRef.current = mode
+      
+      // Start new transcription based on mode
+      if (mode === 'screenpipe') {
+        console.log('transcription-service: starting screenpipe transcription')
+        startTranscriptionScreenpipe()
       } else {
-        console.log('transcription-service: starting local transcription')
-        await startRecording()
+        console.log('transcription-service: starting browser transcription')
+        startTranscriptionBrowser()
       }
+    } else {
+      console.log('transcription-service: mode unchanged:', mode)
     }
-    init()
 
-    // cleanup
+    // Cleanup function
     return () => {
-      if (mode === 'local') {
-        stopRecording()
+      console.log('transcription-service: cleanup for mode:', modeRef.current)
+      if (modeRef.current === 'browser') {
+        stopTranscriptionBrowser()
+      } else if (modeRef.current === 'screenpipe') {
+        stopTranscriptionScreenpipe()
       }
     }
-  }, [mode, setChunks, startTranscription, startRecording, stopRecording])
+  }, [mode, startTranscriptionScreenpipe, stopTranscriptionScreenpipe, startTranscriptionBrowser, stopTranscriptionBrowser])
 
   return {
     chunks,
-    serviceStatus: mode === 'remote' ? serviceStatus : 'available',
     isLoadingRecent: isLoading,
-    fetchRecentChunks,
-    getStatusMessage,
-    transcriptError: mode === 'local' ? transcriptError : undefined
+    fetchRecentChunks
   }
 } 
