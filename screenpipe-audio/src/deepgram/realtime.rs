@@ -19,6 +19,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
+use tracing::info;
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
@@ -66,6 +67,11 @@ pub async fn start_deepgram_stream(
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });
+
+    info!(
+        "Starting deepgram stream with api key: {:?} and url: {:?}",
+        api_key, DEEPGRAM_WEBSOCKET_URL.as_str()
+    );
 
     let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
         true => deepgram::Deepgram::new(api_key)?,
