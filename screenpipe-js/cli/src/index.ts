@@ -11,7 +11,6 @@
 // import { addComponentCommand } from "./commands/components/commands/add/add";
 
 import { Command } from "commander";
-import { addComponentCommand } from "./commands/components/commands/add/add";
 import { componentsCommands } from "./commands";
 
 // run(

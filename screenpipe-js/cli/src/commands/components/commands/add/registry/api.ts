@@ -9,7 +9,7 @@ export function getRegistry() {
       const parsedRegistry = registrySchema.parse(registry)
       return parsedRegistry
     } catch (error) {
-      logger.error("\n")
+      logger.break()
       handleError(error)
     }
 }
@@ -45,6 +45,7 @@ function resolveRegistryDependencies(
       if (registry[componentName]) {
         components[componentName] = registry[componentName]
       } else {
+        logger.break()
         handleError(
           `Component ${componentName} not found.`,
         )

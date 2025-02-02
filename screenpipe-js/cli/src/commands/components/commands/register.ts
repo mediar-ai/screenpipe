@@ -29,16 +29,10 @@ async function writeJsonToFile(filePath: string, data: RegistrySchema) {
 export const registerComponentCommand = new Command()
   .name("register")
   .description("register a new component in screenpipe's component registry")
-  .option(
-    "-n, --name <name>",
-    "name of the component"
-  ).option(
-    "-s, --src",
-    "github url for the component"
-  ).option(
-    "-t, --target",
-    "path where file should be created"
-  ).action(async (opts) => {
+  .option("-n, --name <name>", "name of the component")
+  .option("-s, --src", "github url for the component")
+  .option("-t, --target", "path where file should be created")
+  .action(async (opts) => {
     try {
       if (!opts.name) {
         const { name } = await prompts({
@@ -108,7 +102,7 @@ export const registerComponentCommand = new Command()
         registryDependencies: (registryDeps as string[]).filter(item => item !== "")
       }
       
-      const currentRegistry = await getRegistry()
+      const currentRegistry = getRegistry()
       if (!currentRegistry) {
         logger.break()
         handleError('critical: build is missing registry file.')

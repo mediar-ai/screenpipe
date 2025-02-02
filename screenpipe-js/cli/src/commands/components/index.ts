@@ -1,4 +1,3 @@
-import { command } from "@drizzle-team/brocli";
 import { addComponentCommand } from "./commands/add/add";
 import { registerComponentCommand } from "./commands/register";
 import { Command } from "commander";
