@@ -12,10 +12,11 @@
 
 import { Command } from "commander";
 import { 
-  componentsCommands, 
+  loginCommand,
   createCommand, 
-  publishCommand,
+  componentsCommands, 
   registerCommand,
+  publishCommand,
   listVersionsCommand
 } from "./commands";
 
@@ -42,6 +43,7 @@ async function main() {
     .description('screenpipe development CLI tool')
     .version('0.0.1');
     
+  program.addCommand(loginCommand)
   program.addCommand(createCommand)
   program.addCommand(componentsCommands)
   program.addCommand(registerCommand)

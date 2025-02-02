@@ -1,14 +1,13 @@
-import { command, string } from "@drizzle-team/brocli";
 import { API_BASE_URL } from "../constants";
 import { Credentials } from "../utils/credentials";
 import { colors, symbols } from "../utils/colors";
+import { Command } from "commander";
 
-export const loginCommand = command({
-  name: "login",
-  options: {
-    apiKey: string().required().desc("API key to login with"),
-  },
-  handler: async (opts) => {
+export const loginCommand = new Command()
+  .name('login')
+  .description('Login with an API key')
+  .requiredOption('--apiKey <apiKey>', 'API key to login with')
+  .action(async (opts) => {
     try {
       console.log(colors.info(`\n${symbols.info} Validating API key...`));
 
@@ -78,5 +77,4 @@ export const loginCommand = command({
       }
       process.exit(1);
     }
-  }
-});
+  });
