@@ -150,10 +150,10 @@ export function MeetingHistory() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="bg-accent/50 rounded-lg">
+            {/* <div className="bg-accent/50 rounded-lg">
               <h3 className="text-xl font-semibold mb-6 text-muted-foreground pl-4">upcoming</h3>
               <UpcomingMeetings />
-            </div>
+            </div> */}
             
             <div>
               {Object.entries(groupMeetingsByDate(meetings)).map(([date, dateMeetings]) => (
