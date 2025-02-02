@@ -51,15 +51,15 @@ export function TimelineControls({
 
 	// Disable forward button if we're at today
 	const isAtToday = useMemo(
-		() => !isAfter(new Date().getDate(), currentDate.getDate()),
+		() => !isAfter(startOfDay(new Date()), startOfDay(currentDate)),
 		[currentDate],
 	);
 
 	const canGoBack = useMemo(
 		() =>
 			isAfter(
-				startAndEndDates.start.getDate(),
-				subDays(currentDate, 1).getDate(),
+				startOfDay(startAndEndDates.start),
+				startOfDay(subDays(currentDate, 1)),
 			),
 		[startAndEndDates.start, currentDate],
 	);
