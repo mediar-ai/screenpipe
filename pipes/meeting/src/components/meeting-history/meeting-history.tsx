@@ -27,9 +27,7 @@ export function MeetingHistory() {
     
     console.log('resume: attempting navigation to live meeting')
     try {
-      await router.push('/meetings/live', { 
-        state: { from: 'meeting-history' } 
-      })
+      await router.push('/meetings/live')
       console.log('resume: navigation completed')
     } catch (e) {
       console.error('resume: navigation failed:', e)
