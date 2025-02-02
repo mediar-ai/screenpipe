@@ -9,7 +9,7 @@ import chalk from "chalk";
 import ora from "ora";
 import https from "https";
 import { Extract } from "unzip-stream";
-import { command } from "@drizzle-team/brocli";
+import { Command } from "commander";
 
 const PIPE_ADDITIONS = {
   dependencies: {
@@ -98,10 +98,10 @@ async function downloadAndExtractRepo(
   });
 }
 
-export const createCommand = command({
-  name: "create",
-  desc: "create a new pipe",
-  handler: async () => {
+export const createCommand = new Command()
+  .name('create')
+  .description('create a new pipe')
+  .action(async () => {
     console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
     console.log("let's create a new screenpipe pipe.\n");
     console.log(
@@ -172,6 +172,5 @@ export const createCommand = command({
       console.error(error);
       process.exit(1);
     }
-  },
-});
+  })
 

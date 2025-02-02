@@ -1,4 +1,3 @@
-import { command, string } from "@drizzle-team/brocli";
 import { logger } from "./add/utils/logger";
 import { handleError } from "./add/utils/handle-error";
 import prompts from "prompts";

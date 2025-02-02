@@ -11,7 +11,10 @@
 // import { addComponentCommand } from "./commands/components/commands/add/add";
 
 import { Command } from "commander";
-import { componentsCommands } from "./commands";
+import { 
+  componentsCommands, 
+  createCommand 
+} from "./commands";
 
 // run(
 //   [
@@ -40,9 +43,10 @@ async function main() {
     .name('screenpipe-dev')
     .description('screenpipe development CLI tool')
     .version('0.0.1');
+    
+  program.addCommand(createCommand)
+  program.addCommand(componentsCommands)
 
-  program
-    .addCommand(componentsCommands)
 
   program.parse()
 }
