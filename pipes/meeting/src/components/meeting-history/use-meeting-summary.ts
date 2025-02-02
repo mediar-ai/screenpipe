@@ -1,5 +1,5 @@
 import { Meeting } from "./types";
-import { Settings } from "@/lib/hooks/use-settings";
+import type { Settings } from "@screenpipe/browser"
 import { createAiClient } from "./use-meeting-ai";
 
 export async function generateMeetingSummary(
@@ -16,7 +16,7 @@ export async function generateMeetingSummary(
         segments_count: meeting.segments.length,
         notes_count: meeting.notes.length,
         total_transcript_length: meeting.segments.reduce((acc, s) => acc + s.transcription.length, 0),
-        total_notes_length: meeting.notes.reduce((acc, n) => acc + n.length, 0)
+        total_notes_length: meeting.notes.reduce((acc, n) => acc + n.text.length, 0)
       }
     );
 
