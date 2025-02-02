@@ -77,8 +77,8 @@ pub async fn handle_index_command(
         }
     }
 
-    let mut total_frames = 0;
-    let mut total_text = 0;
+    let  mut total_frames = 0;
+    let  mut total_text = 0;
 
     // Setup channel for OCR results
 
@@ -188,8 +188,10 @@ pub async fn handle_index_command(
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    perform_ocr_tesseract(&frame, vec![]);
-
+                    {
+                        perform_ocr_tesseract(&frame, vec![]) // Ensure this returns the expected tuple
+                    }                    
+                    #[cfg(any(target_os = "macos", target_os = "windows"))]
                     panic!("unsupported ocr engine");
                 }
             };
