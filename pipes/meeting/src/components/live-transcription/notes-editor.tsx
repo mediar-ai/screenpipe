@@ -307,7 +307,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const handleNewMeeting = async () => {
     console.log('starting new meeting from notes editor')
     await clearLiveMeetingData()
-    router.refresh() // Refresh the current route to clear state
+    onNewMeeting()
   }
 
   return (
