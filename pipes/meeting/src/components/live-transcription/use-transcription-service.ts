@@ -1,19 +1,20 @@
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
-import { useTranscriptionStream } from './hooks/stream-transcription-api'
+import { useTranscriptionStream } from './hooks/screenpipe-stream-transcription-api'
 import { useServiceStatus } from './hooks/health-status'
 import { useEffect, useRef } from 'react'
 import { getLiveMeetingData } from './hooks/storage-for-live-meeting'
 
 export function useTranscriptionService() {
   const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
-  const { serviceStatus, checkService, getStatusMessage } = useServiceStatus()
+  const { serviceStatus, getStatusMessage } = useServiceStatus()
+  // const { serviceStatus, checkService, getStatusMessage } = useServiceStatus()
   const { startTranscription } = useTranscriptionStream(serviceStatus, setChunks)
   const initRef = useRef(false)
-  const checkingRef = useRef(false)
+  // const checkingRef = useRef(false)
 
-  // Load stored chunks once
+  // Load stored chunks and start transcription
   useEffect(() => {
-    const loadStoredChunks = async () => {
+    const init = async () => {
       if (initRef.current) return
       initRef.current = true
       
@@ -22,11 +23,15 @@ export function useTranscriptionService() {
         console.log('transcription-service: loading stored chunks:', storedData.chunks.length)
         setChunks(storedData.chunks)
       }
-    }
-    loadStoredChunks()
-  }, [setChunks])
 
-  // Handle service health checks
+      console.log('transcription-service: starting transcription')
+      await startTranscription()
+    }
+    init()
+  }, [setChunks, startTranscription])
+
+  // Health check effect commented out for now
+  /*
   useEffect(() => {
     console.log('transcription-service: setting up health checks')
     let isActive = true
@@ -61,6 +66,7 @@ export function useTranscriptionService() {
       clearInterval(interval)
     }
   }, [checkService, startTranscription, serviceStatus])
+  */
 
   return {
     chunks,
