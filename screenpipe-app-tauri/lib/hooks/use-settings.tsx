@@ -389,6 +389,13 @@ export function useSettings() {
         ...data.user,
       } as User;
 
+      // if user was not logged in, send posthog event app_login with email
+      if (!settings.user?.id) {
+        posthog.capture("app_login", {
+          email: userData.email,
+        });
+      }
+
       setSettings({
         user: userData,
       });
