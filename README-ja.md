@@ -109,7 +109,7 @@ macOSでは画面とマイクの許可を必ず設定してください
 ## プラグインの作成
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev create
 ```
 
 ScreenPipeには「パイプ」と呼ばれるプラグインシステムがあり、Rustコード内のサンドボックス環境でNext.jsデスクトップアプリを作成できます。[詳細はこちら](https://docs.screenpi.pe/docs/plugins)

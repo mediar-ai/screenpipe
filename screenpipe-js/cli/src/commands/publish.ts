@@ -259,7 +259,8 @@ export const publishCommand = command({
         });
 
         if (!uploadResponse.ok) {
-          throw new Error("Failed to upload file to storage");
+          const text = await uploadResponse.text();
+          throw new Error(`Failed to upload file to storage: ${text}`);
         }
 
         // Notify server that upload is complete
@@ -284,9 +285,8 @@ export const publishCommand = command({
         );
 
         if (!finalizeResponse.ok) {
-          throw new Error(
-            `Failed to finalize upload: ${await finalizeResponse.text()}`
-          );
+          const text = await finalizeResponse.text();
+          throw new Error(`Failed to finalize upload: ${text}`);
         }
 
         const data = await finalizeResponse.json();

@@ -45,10 +45,10 @@ async fn main() {
         continuous_capture(
             result_tx,
             Duration::from_secs_f32(1.0 / cli.fps),
-            OcrEngine::AppleNative,
+            Arc::new(OcrEngine::AppleNative),
             id,
             Arc::new(window_filters),
-            languages.clone(),
+            Arc::new(languages),
             false,
             shutdown_rx,
         )

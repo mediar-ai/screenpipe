@@ -1,12 +1,14 @@
-use crate::{get_store, get_base_dir, icons::AppIcon};
+use crate::{get_base_dir, get_store, icons::AppIcon};
+use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
+use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
 use futures::stream::Stream;
-use http::header::HeaderValue;
+use http::header::{HeaderValue, CONTENT_TYPE};
 use notify::RecursiveMode;
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -117,8 +119,8 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
     let app_handle_clone = app_handle.clone();
-    let base_dir =
-        get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+
+    let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
     let store_path = base_dir.join("store.bin");
 
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
@@ -285,13 +287,23 @@ async fn handle_auth(
 async fn get_app_icon_handler(
     State(_): State<ServerState>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("received app icon request: {:?}", app_name);
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-            Ok(icon) => Ok(Json(icon)),
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                Ok((headers, Bytes::from(icon.data)))
+            }
+            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
@@ -355,7 +367,6 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
 }
 
 /*
-
 
 curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \

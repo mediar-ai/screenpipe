@@ -31,6 +31,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::watch;
 use tracing::info;
+use tracing::warn;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
@@ -134,10 +135,10 @@ pub struct OcrTaskData {
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
     interval: Duration,
-    ocr_engine: OcrEngine,
+    ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     window_filters: Arc<WindowFilters>,
-    languages: Vec<Language>,
+    languages: Arc<Vec<Language>>,
     capture_unfocused_windows: bool,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
@@ -160,6 +161,7 @@ pub async fn continuous_capture(
                 "continuous_capture: received shutdown signal for monitor {}",
                 monitor_id
             );
+            drop(result_tx);
             break;
         }
 
@@ -168,10 +170,12 @@ pub async fn continuous_capture(
             _ = shutdown_rx.changed() => {
                 if *shutdown_rx.borrow() {
                     info!("continuous_capture: shutdown signal received for monitor {}", monitor_id);
+                    drop(result_tx);
                     break;
                 }
             }
             _ = async {
+                let languages_clone = languages.clone();
                 let capture_result = match capture_screenshot(&monitor, &window_filters, capture_unfocused_windows).await {
                     Ok((image, window_images, image_hash, _capture_duration)) => {
                         debug!(
@@ -200,6 +204,7 @@ pub async fn continuous_capture(
                         Ok(avg) => avg,
                         Err(e) => {
                             error!("Error comparing images: {}", e);
+                            previous_image = None;
                             0.0
                         }
                     };
@@ -236,16 +241,20 @@ pub async fn continuous_capture(
                     previous_image = Some(image);
 
                     if let Some(max_avg_frame) = max_average.take() {
+                        if max_avg_frame.result_tx.clone().is_closed() {
+                            warn!("result_tx is closed, skipping OCR task");
+                            return;
+                        }
                         let ocr_task_data = OcrTaskData {
-                            image: max_avg_frame.image,
-                            window_images: max_avg_frame.window_images,
+                            image: max_avg_frame.image.clone(),
+                            window_images: max_avg_frame.window_images.iter().cloned().collect(),
                             frame_number: max_avg_frame.frame_number,
                             timestamp: max_avg_frame.timestamp,
                             result_tx: max_avg_frame.result_tx,
                         };
 
                         if let Err(e) =
-                            process_ocr_task(ocr_task_data, &ocr_engine, languages.clone()).await
+                            process_ocr_task(ocr_task_data, ocr_engine.clone(), languages_clone).await
                         {
                             error!("Error processing OCR task: {}", e);
                         }
@@ -278,8 +287,8 @@ pub struct MaxAverageFrame {
 
 pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
-    ocr_engine: &OcrEngine,
-    languages: Vec<Language>,
+    ocr_engine: Arc<OcrEngine>,
+    languages: Arc<Vec<Language>>,
 ) -> Result<(), std::io::Error> {
     let OcrTaskData {
         image,
@@ -300,7 +309,7 @@ pub async fn process_ocr_task(
     let mut window_count = 0;
 
     for captured_window in window_images {
-        let (window_text, window_json_output, confidence) = match ocr_engine {
+        let (window_text, window_json_output, confidence) = match ocr_engine.as_ref() {
             OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
@@ -312,7 +321,7 @@ pub async fn process_ocr_task(
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
+            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, languages.clone()),
             OcrEngine::Custom(config) => {
                 perform_ocr_custom(&captured_window.image, languages.clone(), config)
                     .await
@@ -331,7 +340,7 @@ pub async fn process_ocr_task(
             window_count += 1;
         }
 
-        window_ocr_results.push(WindowOcrResult {
+        let ocr_result = WindowOcrResult {
             image: captured_window.image,
             window_name: captured_window.window_name,
             app_name: captured_window.app_name,
@@ -339,7 +348,9 @@ pub async fn process_ocr_task(
             text_json: parse_json_output(&window_json_output),
             focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
-        });
+        };
+
+        window_ocr_results.push(ocr_result);
     }
 
     let capture_result = CaptureResult {
