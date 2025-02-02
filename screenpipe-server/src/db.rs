@@ -762,8 +762,8 @@ impl DatabaseManager {
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
                 AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                 AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                AND (?6 IS NULL OR ocr_text.text_length >= ?6)
-                AND (?7 IS NULL OR ocr_text.text_length <= ?7)
+                AND (?6 IS NULL OR COALESCE(ocr_text.text_length,LENGTH(ocr_text.text)) >= ?6)
+                AND (?7 IS NULL OR COALESCE(ocr_text.text_length,LENGTH(ocr_text.text)) <= ?7)
                 AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
             GROUP BY ocr_text.frame_id
             ORDER BY frames.timestamp DESC
@@ -861,8 +861,8 @@ impl DatabaseManager {
             {}
                 AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                 AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                AND (?4 IS NULL OR audio_transcriptions.text_length >= ?4)
-                AND (?5 IS NULL OR audio_transcriptions.text_length <= ?5)
+                AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
+                AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
                 AND (speakers.id IS NULL OR speakers.hallucination = 0)
                 AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
             GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
@@ -972,8 +972,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR frames.timestamp <= ?3)
                         AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR ocr_text.text_length >= ?6)
-                        AND (?7 IS NULL OR ocr_text.text_length <= ?7)
+                        AND (?6 IS NULL OR COALESCE(ocr_text.text_length or LENGTH(ocr_text.text)) >= ?6)
+                        AND (?7 IS NULL OR COALESCE(ocr_text.text_length or LENGTH(ocr_text.text)) <= ?7)
                         AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     if query.is_empty() {
@@ -992,8 +992,8 @@ impl DatabaseManager {
                     WHERE {}
                         AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                         AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                        AND (?6 IS NULL OR audio_transcriptions.text_length >= ?6)
-                        AND (?7 IS NULL OR audio_transcriptions.text_length <= ?7)
+                        AND (?6 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?6)
+                        AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
                         AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
                     "#,
                     if query.is_empty() {
@@ -1014,8 +1014,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                         AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR ui_monitoring.text_length >= ?6)
-                        AND (?7 IS NULL OR ui_monitoring.text_length <= ?7)
+                        AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length or LENGTH(ui_monitoring.text_output)) >= ?6)
+                        AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length or LENGTH(ui_monitoring.text_output)) <= ?7)
                     "#,
                     if query.is_empty() {
                         "1=1"
