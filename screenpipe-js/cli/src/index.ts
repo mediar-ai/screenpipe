@@ -15,14 +15,14 @@ import {
   componentsCommands, 
   createCommand, 
   publishCommand,
-  registerCommand
+  registerCommand,
+  listVersionsCommand
 } from "./commands";
 
 // run(
 //   [
 //     // loginCommand,
 //     // logoutCommand,
-//     // listVersionsCommand,
 //     addComponentCommand
 //   ],
 //   {
@@ -46,6 +46,7 @@ async function main() {
   program.addCommand(componentsCommands)
   program.addCommand(registerCommand)
   program.addCommand(publishCommand)
+  program.addCommand(listVersionsCommand)
 
 
   program.parse()

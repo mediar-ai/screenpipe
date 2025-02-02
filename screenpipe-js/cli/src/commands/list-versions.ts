@@ -1,15 +1,13 @@
-import { command, string } from "@drizzle-team/brocli";
 import { API_BASE_URL } from "../constants";
 import { Credentials } from "../utils/credentials";
 import { colors, symbols } from "../utils/colors";
+import { Command } from "commander";
 
-export const listVersionsCommand = command({
-  name: "list-versions",
-  desc: "list all versions of a pipe",
-  options: {
-    name: string().required().desc("name of the pipe"),
-  },
-  handler: async (opts) => {
+export const listVersionsCommand = new Command()
+  .name('list-versions')
+  .description('List all versions of a pipe')
+  .requiredOption('--name <name>', 'Name of the pipe')
+  .action(async (opts) => {
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/plugins/list-versions`,
@@ -90,5 +88,4 @@ export const listVersionsCommand = command({
       }
       process.exit(1);
     }
-  },
-});
+  });
