@@ -23,8 +23,6 @@ import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 interface TranscriptionViewProps {
     chunks: TranscriptionChunk[]
     isLoading: boolean
-    serviceStatus: ServiceStatus
-    getStatusMessage: () => string
     scrollRef: React.RefObject<HTMLDivElement>
     onScroll: () => void
     isAutoScrollEnabled: boolean
@@ -35,8 +33,6 @@ interface TranscriptionViewProps {
 export function TranscriptionView({
     chunks,
     isLoading,
-    serviceStatus,
-    getStatusMessage,
     scrollRef,
     onScroll,
     isAutoScrollEnabled,
@@ -69,7 +65,6 @@ export function TranscriptionView({
     useEffect(() => {
         console.log('transcription view mounted', {
             chunksCount: chunks.length,
-            serviceStatus,
             isLoading,
             hasTitle: !!title,
             hasNotes: notes.length > 0
@@ -77,8 +72,7 @@ export function TranscriptionView({
         return () => {
             console.log('transcription view unmounting', {
                 chunksCount: chunks.length,
-                serviceStatus,
-                lastMessage: getStatusMessage()
+                isLoading
             })
         }
     }, [])
@@ -88,19 +82,9 @@ export function TranscriptionView({
         console.log('chunks updated in transcription view', {
             count: chunks.length,
             lastChunk: chunks[chunks.length - 1]?.text,
-            serviceStatus,
             isLoading
         })
     }, [chunks])
-
-    // Add logging for service status changes
-    useEffect(() => {
-        console.log('service status changed in transcription view:', {
-            status: serviceStatus,
-            message: getStatusMessage(),
-            isLoading
-        })
-    }, [serviceStatus])
 
     // Helper functions
     const getDisplaySpeaker = (speaker: number) => {
@@ -162,7 +146,6 @@ export function TranscriptionView({
     useEffect(() => {
         console.log('storing chunks in transcription view', {
             count: chunks.length,
-            serviceStatus,
             isLoading
         })
         storeLiveChunks(chunks)
@@ -191,7 +174,6 @@ export function TranscriptionView({
     useEffect(() => {
         console.log('storing chunks in transcription view', {
             count: chunks.length,
-            serviceStatus,
             isLoading
         })
         storeLiveChunks(chunks)
@@ -399,7 +381,7 @@ export function TranscriptionView({
                 >
                     {mergeChunks.length === 0 && (
                         <div className="flex items-center justify-center h-full text-gray-500">
-                            <p>{getStatusMessage()}</p>
+                            <p>waiting for transcription...</p>
                         </div>
                     )}
                     {mergeChunks.length > 0 && (
@@ -503,7 +485,7 @@ export function TranscriptionView({
                 </div>
             </div>
 
-            {!isAutoScrollEnabled && !isScrolledToBottom && serviceStatus === 'available' && (
+            {!isAutoScrollEnabled && !isScrolledToBottom && (
                 <button
                     onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })}
                     className="absolute bottom-4 right-4 p-2 bg-black text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors"
