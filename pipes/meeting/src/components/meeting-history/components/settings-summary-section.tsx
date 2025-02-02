@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Copy, FileText, PlusCircle } from "lucide-react"
@@ -22,9 +23,9 @@ export function SummarySection({
   return (
     <div className="relative">
       <h4 className="font-semibold mb-2">summary:</h4>
-      {meeting.summary && (
+      {meeting.aiSummary && (
         <Button
-          onClick={() => onCopy(meeting.summary || "")}
+          onClick={() => onCopy(meeting.aiSummary || "")}
           className="absolute top-0 right-0 p-1 h-6 w-6"
           variant="outline"
           size="icon"
@@ -32,9 +33,9 @@ export function SummarySection({
           <Copy className="h-4 w-4" />
         </Button>
       )}
-      {meeting.summary ? (
+      {meeting.aiSummary ? (
         <ReactMarkdown className="prose max-w-none">
-          {meeting.summary}
+          {meeting.aiSummary}
         </ReactMarkdown>
       ) : (
         <div className="flex items-center mt-2">
