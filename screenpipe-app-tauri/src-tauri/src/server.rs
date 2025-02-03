@@ -412,6 +412,6 @@ curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \
   -d '{"title": "Malformed JSON", "body": "This JSON is malformed}'
 
-  wscat -c ws://127.0.0.1:9001
+  wscat -c ws://127.0.0.1:11435/ws/health
 
 */
