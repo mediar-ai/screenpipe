@@ -425,21 +425,33 @@ async fn main() -> anyhow::Result<()> {
                 handle_doctor_command(output, fix).await?;
                 return Ok(());
             }
+            Command::AddToPath { yes } => {
+                if !yes {
+                    print!("add screenpipe to system PATH? [y/N] ");
+                    std::io::stdout().flush()?;
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        println!("operation cancelled");
+                        return Ok(());
+                    }
+                }
+
+                match ensure_screenpipe_in_path().await {
+                    Ok(_) => {
+                        println!("✓ screenpipe successfully added to PATH");
+                        println!("note: you may need to restart your terminal for changes to take effect");
+                    }
+                    Err(e) => {
+                        eprintln!("failed to add screenpipe to PATH: {}", e);
+                        return Err(e);
+                    }
+                }
+                return Ok(());
+            }
             Command::Completions { .. } => todo!(),
         }
     }
-
-    // Check if Screenpipe is present in PATH
-    // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
-    // match ensure_screenpipe_in_path().await {
-    //     Ok(_) => info!("screenpipe is available and properly set in the PATH"),
-    //     Err(e) => {
-    //         warn!("screenpipe PATH check failed: {}", e);
-    //         warn!("please ensure screenpipe is installed correctly and is in your PATH");
-    //         // do not crash
-    //     }
-    // }
-
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
@@ -1128,11 +1140,41 @@ async fn main() -> anyhow::Result<()> {
     if let Some(pid) = cli.auto_destruct_pid {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
+        let pipe_manager = pipe_manager.clone();
         tokio::spawn(async move {
             // sleep for 5 seconds
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
+
+                // Get list of enabled pipes
+                let pipes = pipe_manager.list_pipes().await;
+                let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
+
+                // Stop all enabled pipes in parallel
+                let stop_futures = enabled_pipes.iter().map(|pipe| {
+                    let pipe_manager = pipe_manager.clone();
+                    let pipe_id = pipe.id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = pipe_manager.stop_pipe(&pipe_id).await {
+                            error!("failed to stop pipe {}: {}", pipe_id, e);
+                        }
+                    })
+                });
+
+                // Wait for all pipes to stop with timeout
+                let timeout = tokio::time::sleep(Duration::from_secs(10));
+                tokio::pin!(timeout);
+
+                tokio::select! {
+                    _ = futures::future::join_all(stop_futures) => {
+                        info!("all pipes stopped successfully");
+                    }
+                    _ = &mut timeout => {
+                        warn!("timeout waiting for pipes to stop");
+                    }
+                }
+
                 let _ = shutdown_tx_clone.send(());
             }
         });
