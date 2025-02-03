@@ -270,15 +270,7 @@ class BrowserPipeImpl implements BrowserPipe {
     void,
     unknown
   > {
-    const { userId, email } = await this.initAnalyticsIfNeeded();\
-
     try {
-      await this.captureEvent("stream_started", {
-        feature: "transcription",
-        distinct_id: userId,
-        email: email,
-      });
-
       while (true) {
         for await (const event of wsEvents()) {
           if (event.name === "transcription") {
@@ -304,27 +296,15 @@ class BrowserPipeImpl implements BrowserPipe {
           }
         }
       }
-    } finally {
-      await this.captureEvent("stream_ended", {
-        feature: "transcription",
-        distinct_id: userId,
-        email: email,
-      });
+    } catch (error) {
+      console.error("error streaming transcriptions:", error);
     }
   }
 
   async *streamVision(
     includeImages: boolean = false
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
-    const { userId, email } = await this.initAnalyticsIfNeeded();
-
     try {
-      await this.captureEvent("stream_started", {
-        feature: "vision",
-        distinct_id: userId,
-        email: email,
-      });
-
       for await (const event of wsEvents(includeImages)) {
         if (event.name === "ocr_result" || event.name === "ui_frame") {
           let data: VisionEvent = event.data as VisionEvent;
@@ -334,12 +314,8 @@ class BrowserPipeImpl implements BrowserPipe {
           };
         }
       }
-    } finally {
-      await this.captureEvent("stream_ended", {
-        feature: "vision",
-        distinct_id: userId,
-        email: email,
-      });
+    } catch (error) {
+      console.error("error streaming vision:", error);
     }
   }
 

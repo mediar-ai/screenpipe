@@ -141,10 +141,6 @@ class NodePipe {
     const eventSource = new EventSource(`${apiUrl}/sse/transcriptions`);
 
     try {
-      await captureEvent("stream_started", {
-        feature: "transcription",
-      });
-
       while (true) {
         const chunk: TranscriptionChunk = await new Promise(
           (resolve, reject) => {
@@ -180,9 +176,6 @@ class NodePipe {
         };
       }
     } finally {
-      await captureEvent("stream_ended", {
-        feature: "transcription",
-      });
       eventSource.close();
     }
   }

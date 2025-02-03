@@ -41,6 +41,23 @@ interface HealthCheckHook {
   debouncedFetchHealth: () => Promise<void>;
 }
 
+const POSTHOG_RATE_LIMIT_HOURS = 1; // adjust this value as needed
+
+function shouldSendPosthogEvent(eventName: string): boolean {
+  const lastSentKey = `last_posthog_${eventName}`;
+  const lastSent = localStorage.getItem(lastSentKey);
+  const now = Date.now();
+
+  if (
+    !lastSent ||
+    now - parseInt(lastSent) > POSTHOG_RATE_LIMIT_HOURS * 60 * 60 * 1000
+  ) {
+    localStorage.setItem(lastSentKey, now.toString());
+    return true;
+  }
+  return false;
+}
+
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
@@ -67,16 +84,21 @@ export function useHealthCheck() {
       });
 
       if (!response.ok) {
-        posthog.capture("health_check_http_error", {
-          status: response.status,
-          statusText: response.statusText,
-        });
+        if (shouldSendPosthogEvent("health_check_http_error")) {
+          posthog.capture("health_check_http_error", {
+            status: response.status,
+            statusText: response.statusText,
+          });
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data: HealthCheckResponse = await response.json();
 
-      if (data.status === "unhealthy") {
+      if (
+        data.status === "unhealthy" &&
+        shouldSendPosthogEvent("health_check_unhealthy")
+      ) {
         posthog.capture("health_check_unhealthy", {
           frame_status: data.frame_status,
           audio_status: data.audio_status,
@@ -96,11 +118,13 @@ export function useHealthCheck() {
         return;
       }
 
-      if (!isServerDown) {
+      if (!isServerDown && shouldSendPosthogEvent("health_check_server_down")) {
         posthog.capture("health_check_server_down", {
           error: error instanceof Error ? error.message : "Unknown error",
         });
-        setIsServerDown(true);
+      }
+
+      if (!isServerDown) {
         const errorHealth: HealthCheckResponse = {
           last_frame_timestamp: null,
           last_audio_timestamp: null,

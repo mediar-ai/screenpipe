@@ -72,9 +72,7 @@ impl User {
                     .get("user.credits.created_at")
                     .and_then(|v| v.as_str().map(String::from)),
             }),
-            cloud_subscribed: store
-                .get("user.cloud_subscribed")
-                .and_then(|v| v.as_bool()),
+            cloud_subscribed: store.get("user.cloud_subscribed").and_then(|v| v.as_bool()),
         }
     }
 }
@@ -303,7 +301,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
     }
 
-    if deepgram_api_key != "default" {
+    if deepgram_api_key != "default" && deepgram_api_key != "" {
         args.push("--deepgram-api-key");
         let key = deepgram_api_key.as_str();
         args.push(key);
@@ -396,6 +394,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     // args.push("--debug");
 
+
     if cfg!(windows) {
         let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
@@ -403,7 +402,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
 
         // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-        if user.cloud_subscribed.is_some() {
+        if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
             c = c.env(
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
@@ -412,6 +411,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
             // Add token if screenpipe-cloud is selected and user has a token
             if user.id.is_some() {
                 c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+                args.push("--deepgram-api-key");
+                args.push(user.id.as_ref().unwrap());
             }
         }
 
@@ -436,7 +437,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-    if user.cloud_subscribed.is_some() {
+    if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
+        info!(
+            "Adding AI proxy env vars for deepgram: {:?}",
+            user.id.as_ref().unwrap()
+        );
         c = c.env(
             "DEEPGRAM_API_URL",
             "https://ai-proxy.i-f9f.workers.dev/v1/listen",
@@ -445,6 +450,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         // Add token if screenpipe-cloud is selected and user has a token
         if user.id.is_some() {
             c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+            args.push("--deepgram-api-key");
+            args.push(user.id.as_ref().unwrap());
         }
     }
 

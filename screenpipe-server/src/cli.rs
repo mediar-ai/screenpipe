@@ -367,6 +367,12 @@ pub enum Command {
         #[arg(short, long, default_value_t = false)]
         fix: bool,
     },
+    /// Add screenpipe to system PATH
+    AddToPath {
+        /// Skip confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand)]

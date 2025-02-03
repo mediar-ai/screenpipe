@@ -22,7 +22,6 @@ use tauri::{
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
-use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
@@ -358,24 +357,10 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-async fn list_pipes() -> anyhow::Result<Value> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("http://localhost:3030/pipes/list")
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
-
-    Ok(response)
-}
-
-
 pub fn get_base_dir(
     app: &tauri::AppHandle,
     custom_path: Option<String>,
 ) -> anyhow::Result<PathBuf> {
-
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);

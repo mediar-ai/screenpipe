@@ -3,7 +3,6 @@ import { ERRORS, handleError } from "./utils/handle-error";
 import { promptForRegistryComponents } from "./utils/prompt-for-component";
 import { preFlightAdd } from "./preflights/preflight-add";
 import { addComponents } from "./utils/add-components";
-import { Command } from "commander";
 
 export const addComponentCommand = new Command()
   .name("add")
