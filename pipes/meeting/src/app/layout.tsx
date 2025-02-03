@@ -2,6 +2,8 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
+import PostHogProvider from "@/components/providers/posthog-provider"
+import { Analytics } from "@vercel/analytics/react"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,10 +31,13 @@ export default function RootLayout({
         suppressHydrationWarning={true}
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}
       >
-        <main className="h-full p-4 overflow-hidden">
-          {children}
-        </main>
-        <Toaster />
+        <PostHogProvider>
+          <main className="h-full p-4 overflow-hidden">
+            {children}
+          </main>
+          <Toaster />
+          <Analytics mode={process.env.NODE_ENV === 'development' ? 'development' : 'production'} />
+        </PostHogProvider>
       </body>
     </html>
   )
