@@ -73,17 +73,5 @@
     ],
     "registryDependencies": [],
     "devDependencies": []
-  },
-  "test": {
-    "name": "test",
-    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
-    "target": "a",
-    "dependencies": [
-      "s"
-    ],
-    "devDependencies": [
-      "d"
-    ],
-    "registryDependencies": []
   }
 }
