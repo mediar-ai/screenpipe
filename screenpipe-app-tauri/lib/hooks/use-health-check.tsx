@@ -51,7 +51,7 @@ export function useHealthCheck() {
       wsRef.current.close();
     }
 
-    const ws = new WebSocket("ws://127.0.0.1:9001");
+    const ws = new WebSocket("ws://127.0.0.1:11435/ws/health");
     wsRef.current = ws;
 
     ws.onopen = () => {

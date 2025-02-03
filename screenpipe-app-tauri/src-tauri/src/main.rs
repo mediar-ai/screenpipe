@@ -1012,18 +1012,6 @@ async fn main() {
             // Start health check service
             let app_handle = app.handle().clone();
             let (tx, _) = tokio::sync::broadcast::channel(4);
-            tauri::async_runtime::spawn({
-                let app_handle = app.handle().clone();
-                let tx = tx.clone();
-                async move {
-                    if let Err(e) = crate::server::start_websocket_server(
-                        app_handle, 
-                        tx.clone()
-                    ).await {
-                        error!("Failed to start health check service: {}", e);
-                    }
-                }
-            });
 
             tauri::async_runtime::spawn({
                 let app_handle = app_handle.clone();

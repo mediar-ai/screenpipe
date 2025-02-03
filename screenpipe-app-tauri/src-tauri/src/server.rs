@@ -1,17 +1,16 @@
 use crate::{get_base_dir, get_store};
+use crate::health::HealthCheckResponse;
 use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
 use axum::{
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
 use futures::stream::Stream;
 use http::header::{HeaderValue, CONTENT_TYPE};
-use tokio_tungstenite::accept_async;
-use tokio_tungstenite::tungstenite::protocol::Message;
-use futures::{StreamExt, SinkExt};
 use notify::RecursiveMode;
 use notify::Watcher;
 use serde::{Deserialize, Serialize};
@@ -38,6 +37,7 @@ struct LogEntry {
 pub struct ServerState {
     app_handle: tauri::AppHandle,
     settings_tx: broadcast::Sender<String>,
+    health_tx: broadcast::Sender<HealthCheckResponse>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -118,8 +118,29 @@ async fn settings_stream(
     )
 }
 
+async fn handle_websocket(
+    ws: WebSocketUpgrade, 
+    State(state): State<ServerState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| websocket_handler(socket, state))
+}
+
+async fn websocket_handler(
+    mut socket: WebSocket,
+    state: ServerState,
+) {
+    let mut rx = state.health_tx.subscribe();
+    while let Ok(health) = rx.recv().await {
+        let message = serde_json::to_string(&health).unwrap();
+        if socket.send(Message::Text(message)).await.is_err() {
+            break;
+        }
+    }
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
     let (settings_tx, _) = broadcast::channel(100);
+    let (health_tx, _) = broadcast::channel(100);
     let settings_tx_clone = settings_tx.clone();
     let app_handle_clone = app_handle.clone();
 
@@ -144,8 +165,9 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .unwrap();
 
     let state = ServerState {
-        app_handle,
+        app_handle: app_handle.clone(),
         settings_tx,
+        health_tx: health_tx.clone(),
     };
 
     let cors = CorsLayer::new()
@@ -162,6 +184,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
         .route("/window-size", axum::routing::post(set_window_size))
         .route("/sse/settings", axum::routing::get(settings_stream))
+        .route("/ws/health", axum::routing::get(handle_websocket))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -173,6 +196,8 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("Server listening on {}", addr);
+
+    crate::health::set_health_icon_in_tray(app_handle, health_tx).await.unwrap();
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
@@ -367,35 +392,6 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
     });
 
     tx
-}
-
-pub async fn start_websocket_server(
-    _app_handle: tauri::AppHandle,
-    tx: broadcast::Sender<crate::health::HealthCheckResponse>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "127.0.0.1:9001";
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    println!("websocket server listening on {}", addr);
-
-    while let Ok((stream, _)) = listener.accept().await {
-        let mut rx = tx.subscribe();
-        tokio::spawn(async move {
-            let ws_stream = accept_async(stream).await.expect("Error during WebSocket handshake");
-            let (mut write, _) = ws_stream.split();
-            loop {
-                match rx.recv().await {
-                    Ok(health) => {
-                        let message = serde_json::to_string(&health).unwrap();
-                        if write.send(Message::Text(message.into())).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-    }
-    Ok(())
 }
 
 /*

@@ -48,7 +48,6 @@ log = "0.4.17"
 
 # Tokio
 tokio = { version = "1.36.0", features = ["full"] }
-tokio-tungstenite = "0.26.1"
 
 # HTTP client
 reqwest = { version = "0.12", features = ["json"] }
@@ -68,7 +67,7 @@ sysinfo = "=0.29.0"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
 
 # server
-axum = "0.6.0" # or your current version
+axum = { version = "0.6.0", features = ["ws"] }
 
 
 dirs = "5.0.1"
