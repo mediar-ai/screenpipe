@@ -4,6 +4,7 @@ import { highlighter, logger, spinner } from "../logger";
 import prompts from "prompts";
 import { existsSync } from "fs";
 import { fetchFileFromGitHubAPI } from "../download-file-from-github";
+import inquirer from 'inquirer';
 
 export async function updateFiles(
     componentLocations: {src: string, target: string}[],
@@ -41,14 +42,14 @@ export async function updateFiles(
         const existingFile = existsSync(location.target)
         if (existingFile && !options.overwrite) {
             filesCreatedSpinner.stop()
-            const { overwrite } = await prompts({
-              type: "confirm",
-              name: "overwrite",
-              message: `The file ${highlighter.info(
-                location.target
-              )} already exists. Would you like to overwrite?`,
-              initial: false,
-            })
+            const { overwrite } = await inquirer.prompt([
+              {
+                type: "confirm",
+                name: "overwrite",
+                message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
+                default: false,
+              },
+            ]);
       
             if (!overwrite) {
               filesSkipped.push(path.relative(options.cwd, location.target))

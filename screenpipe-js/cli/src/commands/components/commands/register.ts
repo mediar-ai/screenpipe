@@ -1,10 +1,10 @@
 import { logger } from "./add/utils/logger";
 import { handleError } from "./add/utils/handle-error";
-import prompts from "prompts";
 import { ComponentSchema, RegistrySchema } from "./add/registry/schema";
 import { getRegistry } from "./add/registry/api";
 import fs from 'fs-extra';
 import { Command } from "commander";
+import inquirer from "inquirer";
 
 async function writeJsonToFile(filePath: string, data: RegistrySchema) {
   try {
@@ -34,86 +34,94 @@ export const registerComponentCommand = new Command()
   .action(async (opts) => {
     try {
       if (!opts.name) {
-        const { name } = await prompts({
-          type: "text",
-          name: "name",
-          message: "what's your component's name?",
-          instructions: false,
-        })
-
-        opts.name = name
+        const { name } = await inquirer.prompt([
+          {
+            type: "input",
+            name: "name",
+            message: "what's your component's name?",
+          },
+        ]);
+        opts.name = name;
       }
 
       if (!opts.src) {
-        const { src } = await prompts({
-          type: "text",
-          name: "src",
-          message: "where should we download the component from?",
-          hint: "url with the following pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. see README for more info.",
-        })
-
-        opts.src = src
+        const { src } = await inquirer.prompt([
+          {
+            type: "input",
+            name: "src",
+            message: "where should we download the component from?",
+            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}",
+          },
+        ]);
+        opts.src = src;
       }
 
       if (!opts.target) {
-        const { target } = await prompts({
-          type: "text",
-          name: "target",
-          message: "where should the component be created?",
-        })
-
-        opts.target = target
+        const { target } = await inquirer.prompt([
+          {
+            type: "input",
+            name: "target",
+            message: "where should the component be created?",
+          },
+        ]);
+        opts.target = target;
       }
 
       if (!opts.name?.length || !opts.src?.length || !opts.target?.length) {
-        logger.break()
-        handleError('invalid component')
-        process.exit(1)
+        logger.break();
+        handleError("invalid component");
+        process.exit(1);
       }
 
-      const { deps } = await prompts({
-        type: "list",
-        name: "deps",
-        message: "type all of the component's runtime dependencies by name, separated by a comma",
-        separator: ',',
-      })
+      const { deps } = await inquirer.prompt([
+        {
+          type: "input",
+          name: "deps",
+          message: "type all of the component's runtime dependencies by name, separated by a comma",
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-      const { devDeps } = await prompts({
-        type: "list",
-        name: "devDeps",
-        message: "type all of the component's dev dependencies by name, separated by a comma",
-        separator: ',',
-      })
+      const { devDeps } = await inquirer.prompt([
+        {
+          type: "input",
+          name: "devDeps",
+          message: "type all of the component's dev dependencies by name, separated by a comma",
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-      const { registryDeps } = await prompts({
-        type: "list",
-        name: "registryDeps",
-        message: "type all of the component's registry dependencies by name, separated by a comma",
-        separator: ',',
-      })
+      const { registryDeps } = await inquirer.prompt([
+        {
+          type: "input",
+          name: "registryDeps",
+          message: "type all of the component's registry dependencies by name, separated by a comma",
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-      const componentObject:  ComponentSchema = {
-        name: opts.name as string,
-        src: opts.src as string,
-        target: opts.target as string,
-        dependencies: (deps as string[]).filter(item => item !== ""),
-        devDependencies: (devDeps as string[]).filter(item => item !== ""),
-        registryDependencies: (registryDeps as string[]).filter(item => item !== "")
-      }
-      
-      const currentRegistry = getRegistry()
+      const componentObject: ComponentSchema = {
+        name: opts.name,
+        src: opts.src,
+        target: opts.target,
+        dependencies: deps,
+        devDependencies: devDeps,
+        registryDependencies: registryDeps,
+      };
+
+      const currentRegistry = getRegistry();
       if (!currentRegistry) {
-        logger.break()
-        handleError('critical: build is missing registry file.')
-        process.exit(1)
+        logger.break();
+        handleError("critical: build is missing registry file.");
+        process.exit(1);
       }
 
-      currentRegistry[opts.name as string] = componentObject
+      currentRegistry[opts.name] = componentObject;
 
-      await writeJsonToFile('./src/commands/components/commands/add/registry/registry.json', currentRegistry)
-      logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.")
+      await writeJsonToFile("./src/commands/components/commands/add/registry/registry.json", currentRegistry);
+      logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.");
     } catch (error) {
-      logger.break()
-      handleError(error)
+      logger.break();
+      handleError(error);
     }
   })
