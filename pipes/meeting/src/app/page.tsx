@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation'
+import { MeetingHistory } from "@/components/meeting-history/meeting-history"
 
+// Instead of redirecting, show meetings directly at root
 export default function HomePage() {
-  redirect('/meetings')
+  return <MeetingHistory />
 }
