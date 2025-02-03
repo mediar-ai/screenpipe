@@ -431,14 +431,14 @@ async fn main() -> anyhow::Result<()> {
 
     // Check if Screenpipe is present in PATH
     // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
-    match ensure_screenpipe_in_path().await {
-        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
-        Err(e) => {
-            warn!("screenpipe PATH check failed: {}", e);
-            warn!("please ensure screenpipe is installed correctly and is in your PATH");
-            // do not crash
-        }
-    }
+    // match ensure_screenpipe_in_path().await {
+    //     Ok(_) => info!("screenpipe is available and properly set in the PATH"),
+    //     Err(e) => {
+    //         warn!("screenpipe PATH check failed: {}", e);
+    //         warn!("please ensure screenpipe is installed correctly and is in your PATH");
+    //         // do not crash
+    //     }
+    // }
 
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
