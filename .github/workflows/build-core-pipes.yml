@@ -3,7 +3,8 @@ name: build and release pipes
 on:
   push:
     paths:
-      - 'pipes/**'
+      - 'pipes/**' # or this workflow change
+      - 'build-core-pipes.yml'
     branches:
       - main
 
@@ -27,56 +28,24 @@ jobs:
       - name: get core pipes list
         id: core-pipes
         run: |
-          PIPES="memories data-table search timeline identify-speakers"
+          PIPES=$(ls -d pipes/* | grep -v "archive" | xargs -n 1 basename)
           echo "pipes=$PIPES" >> $GITHUB_OUTPUT
 
       - name: build pipes
         run: |
-          for pipe in ${{ steps.core-pipes.outputs.pipes }}; do
-            if [ -d "pipes/$pipe" ]; then
-              echo "building $pipe..."
-              cd pipes/$pipe
+          for pipe in pipes/*; do
+            if [ -d "$pipe" ]; then
+              echo "building $(basename $pipe)..."
+              cd "$pipe"
               
               bun install
               bun run build
               
-              # create zip only if build succeeded and dist exists
-              if [ -d "dist" ]; then
-                cd dist
-                zip -r ../../$pipe.zip .
-                cd ../..
-                echo "created zip for $pipe"
-                ls -la ../../$pipe.zip
-              else
-                echo "warning: no dist directory found for $pipe"
-              fi
-              
               cd ../../
-            else
-              echo "warning: pipe directory $pipe not found"
             fi
           done
           
           echo "listing all zip files:"
           ls -la *.zip || echo "no zip files found"
 
-      - name: generate release tag
-        id: tag
-        run: |
-          SHA=$(git rev-parse --short HEAD)
-          echo "tag=pipes-${SHA}" >> $GITHUB_OUTPUT
-
-      - name: create release
-        uses: softprops/action-gh-release@v1
-        permissions:
-          contents: write
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: pipes build ${{ steps.tag.outputs.tag }}
-          files: |
-            *.zip
-          draft: false
-          prerelease: false
-          fail_on_unmatched_files: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+   
