@@ -1,17 +1,17 @@
 {
-	"name": "screenpipe",
+	"name": "ai-proxy",
 	"private": true,
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"tauri": "tauri",
-		"dev": "tauri dev",
-		"build": "tauri build"
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"build": "tsc"
 	},
 	"devDependencies": {
-		"@tauri-apps/cli": "^2.0.0",
 		"@cloudflare/workers-types": "^4.20240208.0",
 		"hono": "^4.0.5",
-		"typescript": "^5.0.0"
+		"typescript": "^5.0.0",
+		"wrangler": "^3.0.0"
 	}
 }
