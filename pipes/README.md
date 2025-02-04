@@ -1,1 +1,1 @@
-check [docs](https://docs.screenpi.pe/docs/plugins)
+check [docs](https://docs.screenpi.pe/docs/plugins).
