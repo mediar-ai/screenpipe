@@ -28,7 +28,7 @@ jobs:
       - name: get core pipes list
         id: core-pipes
         run: |
-          PIPES=$(ls -d pipes/* | grep -v "archive" | xargs -n 1 basename)
+          PIPES=$(ls -d pipes/* | grep -v "archive" | xargs -n 1 basename | jq -R -s -c 'split("\n")[:-1]')
           echo "pipes=$PIPES" >> $GITHUB_OUTPUT
 
       - name: build pipes
