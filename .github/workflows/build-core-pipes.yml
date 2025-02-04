@@ -32,6 +32,7 @@ jobs:
           echo "pipes=$PIPES" >> $GITHUB_OUTPUT
 
       - name: build pipes
+        working-directory: pipes
         run: |
           for pipe in pipes/*; do
             if [ -d "$pipe" ]; then
@@ -41,7 +42,6 @@ jobs:
               bun install
               bun run build
               
-              cd ../../
             fi
           done
           
