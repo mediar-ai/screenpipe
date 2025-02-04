@@ -68,6 +68,34 @@ function archiveStandardProject(
   });
 }
 
+async function retryFetch(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+  baseDelay = 1000
+): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok) return response;
+
+      // If it's the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw new Error(
+          `Failed after ${maxRetries} attempts: ${await response.text()}`
+        );
+      }
+    } catch (error) {
+      if (attempt === maxRetries) throw error;
+    }
+
+    // Exponential backoff delay
+    const delay = baseDelay * Math.pow(2, attempt - 1);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  throw new Error("Retry failed"); // Fallback error
+}
+
 export const publishCommand = command({
   name: "publish",
   desc: "publish or update a pipe to the store",
@@ -250,7 +278,7 @@ export const publishCommand = command({
 
         // Upload directly to Supabase
         console.log(colors.dim(`${symbols.arrow} Uploading to storage...`));
-        const uploadResponse = await fetch(uploadUrl, {
+        const uploadResponse = await retryFetch(uploadUrl, {
           method: "PUT",
           headers: {
             "Content-Type": "application/zip",

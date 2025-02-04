@@ -3,7 +3,7 @@ import { verifyToken } from '@clerk/backend';
 import { createProvider } from './providers';
 import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
-import { Deepgram, LiveClient } from '@deepgram/sdk';
+import { Deepgram, DeepgramClient, LiveClient } from '@deepgram/sdk';
 import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
@@ -205,8 +205,26 @@ async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Respo
 			url.searchParams.set(key, value);
 		}
 
-		const deepgram = createClient(env.DEEPGRAM_API_KEY);
-		const deepgramSocket = deepgram.listen.live({}, url.toString());
+		let deepgram: DeepgramClient | null = null;
+		try {
+			deepgram = createClient(env.DEEPGRAM_API_KEY);
+		} catch (error: any) {
+			console.error('Error creating Deepgram client:', error);
+			return new Response(`Deepgram client creation failed: ${error.message}`, { status: 500 });
+		}
+
+		if (!deepgram) {
+			return new Response('Deepgram client creation failed', { status: 500 });
+		}
+
+		let deepgramSocket: LiveClient;
+
+		try {
+			deepgramSocket = deepgram.listen.live({}, url.toString());
+		} catch (error: any) {
+			console.error('Error creating Deepgram socket:', error);
+			return new Response(`Deepgram socket creation failed: ${error.message}`, { status: 500 });
+		}
 
 		deepgramSocket.on(LiveTranscriptionEvents.Open, () => {
 			server.send(

@@ -78,7 +78,7 @@ ort = "=2.0.0-rc.6"
 knf-rs = { git = "https://github.com/Neptune650/knf-rs.git", branch = "main" }
 ort-sys = "=2.0.0-rc.8"
 futures = "0.3.31"
-deepgram = "0.6.4"
+deepgram = { git = "https://github.com/EzraEllette/deepgram-rust-sdk.git" }
 bytes = { version = "1.9.0", features = ["serde"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

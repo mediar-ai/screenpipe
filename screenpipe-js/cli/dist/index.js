@@ -59926,6 +59926,24 @@ function archiveStandardProject(archive, ig) {
     mark: true
   });
 }
+async function retryFetch(url, options, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1;attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok)
+        return response;
+      if (attempt === maxRetries) {
+        throw new Error(`Failed after ${maxRetries} attempts: ${await response.text()}`);
+      }
+    } catch (error) {
+      if (attempt === maxRetries)
+        throw error;
+    }
+    const delay = baseDelay * Math.pow(2, attempt - 1);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  throw new Error("Retry failed");
+}
 var publishCommand = command({
   name: "publish",
   desc: "publish or update a pipe to the store",
@@ -60030,7 +60048,7 @@ ${symbols.info} Publishing ${colors8.highlight(packageJson.name)} v${packageJson
         }
         const { uploadUrl, path: path4 } = await urlResponse.json();
         console.log(colors8.dim(`${symbols.arrow} Uploading to storage...`));
-        const uploadResponse = await fetch(uploadUrl, {
+        const uploadResponse = await retryFetch(uploadUrl, {
           method: "PUT",
           headers: {
             "Content-Type": "application/zip"
@@ -71263,10 +71281,14 @@ var addComponentCommand = command({
       }
       const result = await preFlightAdd(opts.cwd);
       if (result?.errors[ERRORS.MISSING_DIR_OR_EMPTY_PIPE]) {
-        logger.warn("you need to create a pipe first. run bunx @screenpipe/dev create or visit https://docs.screenpi.pe/docs/plugins for more information.");
+        logger.warn("you need to create a pipe first. run bunx @screenpipe/dev@latest create or visit https://docs.screenpi.pe/docs/plugins for more information.");
         process.exit(1);
       }
-      await addComponents(components, { silent: opts.silent, cwd: opts.cwd, overwrite: opts.overwrite });
+      await addComponents(components, {
+        silent: opts.silent,
+        cwd: opts.cwd,
+        overwrite: opts.overwrite
+      });
     } catch (error) {
       logger.break();
       handleError(error);
