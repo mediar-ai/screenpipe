@@ -112,6 +112,17 @@ DEEPGRAM_WEBSOCKET_URL = "wss://api.deepgram.com/v1/listen"
 # binding = "MY_INDEX"
 # index_name = "my-index"
 
+[build]
+command = "bun run build"
+
 [[rules]]
-type = "WebSocket"
+type = "ESModule"
+globs = ["**/*.ts"]
+
+[[rules]]
+type = "Data"
 globs = ["api.deepgram.com"]
+fallthrough = true
+
+[rules.websocket]
+pattern = "api.deepgram.com"
