@@ -11,6 +11,7 @@ import https from "https";
 import { Extract } from "unzip-stream";
 import { Command } from "commander";
 import { logger } from "../../components/commands/add/utils/logger";
+import simpleGit from "simple-git";
 import { handleError } from "../../components/commands/add/utils/handle-error";
 
 const PIPE_ADDITIONS = {
@@ -22,82 +23,13 @@ const PIPE_ADDITIONS = {
   },
 };
 
-async function downloadAndExtractRepo(
-  owner: string,
-  repo: string,
-  branch: string,
-  subdir: string,
-  destPath: string
-): Promise<void> {
-  const url = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
-
-  // Create a temporary directory for extraction
+async function downloadAndExtractSubdir(subdir: string, destPath: string) {
   const tempDir = path.join(destPath, "_temp");
   await fs.ensureDir(tempDir);
-
-  return new Promise((resolve, reject) => {
-    const request = https
-      .get(url, (response) => {
-        if (response.statusCode === 302 || response.statusCode === 301) {
-          const redirectUrl = response.headers.location;
-          if (!redirectUrl) {
-            reject(new Error("Redirect location not found"));
-            return;
-          }
-
-          https
-            .get(redirectUrl, async (redirectResponse) => {
-              if (redirectResponse.statusCode !== 200) {
-                reject(
-                  new Error(
-                    `Failed to download: ${redirectResponse.statusCode}`
-                  )
-                );
-                return;
-              }
-
-              const extractStream = Extract({ path: tempDir });
-
-              extractStream.on("finish", async () => {
-                try {
-                  // Move files from the specific subdirectory to the final destination
-                  const sourcePath = path.join(
-                    tempDir,
-                    `screenpipe-${branch}`,
-                    subdir
-                  );
-                  await fs.copy(sourcePath, destPath);
-                  // Clean up temp directory
-                  await fs.remove(tempDir);
-                  console.log("extraction completed");
-                  resolve();
-                } catch (err) {
-                  reject(err);
-                }
-              });
-
-              extractStream.on("error", async (err) => {
-                await fs.remove(tempDir).catch(console.error);
-                reject(err);
-              });
-
-              redirectResponse.pipe(extractStream);
-            })
-            .on("error", async (err) => {
-              await fs.remove(tempDir).catch(console.error);
-              reject(err);
-            });
-        } else {
-          reject(new Error(`Failed to download: ${response.statusCode}`));
-        }
-      })
-      .on("error", async (err) => {
-        await fs.remove(tempDir).catch(console.error);
-        reject(err);
-      });
-
-    request.end();
-  });
+  await simpleGit().clone("https://github.com/mediar-ai/screenpipe", tempDir);
+  const sourcePath = path.join(tempDir, subdir);
+  await fs.copy(sourcePath, destPath);
+  await fs.remove(tempDir);
 }
 
 export const createPipeCommand = new Command()
@@ -111,7 +43,6 @@ export const createPipeCommand = new Command()
     ); 
     logger.log("build powerful agents, monetize it, etc.\n");
 
-    // get project name
     const pipeName = await input({
       message: "what is your pipe name?",
       default: "my-screenpipe",
@@ -121,7 +52,6 @@ export const createPipeCommand = new Command()
       },
     });
 
-    // get directory
     const directory = await input({
       message: "where would you like to create your pipe?",
       default: pipeName,
@@ -131,10 +61,7 @@ export const createPipeCommand = new Command()
 
     try {
       // Download and extract the appropriate template
-      await downloadAndExtractRepo(
-        "mediar-ai",
-        "screenpipe",
-        "main",
+      await downloadAndExtractSubdir(
         "pipes/obsidian",
         directory
       );
