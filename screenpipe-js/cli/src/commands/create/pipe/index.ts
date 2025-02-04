@@ -10,6 +10,8 @@ import ora from "ora";
 import https from "https";
 import { Extract } from "unzip-stream";
 import { Command } from "commander";
+import { logger } from "../../components/commands/add/utils/logger";
+import { handleError } from "../../components/commands/add/utils/handle-error";
 
 const PIPE_ADDITIONS = {
   dependencies: {
@@ -103,11 +105,11 @@ export const createPipeCommand = new Command()
   .description('create a new pipe')
   .action(async () => {
     console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
-    console.log("let's create a new screenpipe pipe.\n");
-    console.log(
+    logger.log("let's create a new screenpipe pipe.\n");
+    logger.log(
       "pipes are plugins that interact with captured screen and audio data."
     ); 
-    console.log("build powerful agents, monetize it, etc.\n");
+    logger.log("build powerful agents, monetize it, etc.\n");
 
     // get project name
     const pipeName = await input({
@@ -169,8 +171,7 @@ export const createPipeCommand = new Command()
       );
     } catch (error) {
       spinner.fail("failed to create pipe");
-      console.error(error);
-      process.exit(1);
+      handleError(error);
     }
   })
 
