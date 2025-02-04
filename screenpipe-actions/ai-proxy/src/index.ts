@@ -1,7 +1,5 @@
 import { Hono } from 'hono';
-import { WebSocketPair } from '@cloudflare/workers-types';
 import { Env } from './types';
-import { RateLimiter } from './rate-limiter';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -20,40 +18,38 @@ app.get('/api/v1/realtime-transcription', async (c) => {
 
 	server.addEventListener('message', async (event: MessageEvent) => {
 		try {
-			// Create new Deepgram WebSocket if not exists
 			if (!deepgramWs) {
-				deepgramWs = new WebSocket(c.env.DEEPGRAM_WEBSOCKET_URL);
+				const url = new URL(c.env.DEEPGRAM_WEBSOCKET_URL);
+				url.searchParams.append('encoding', 'linear16');
+				url.searchParams.append('sample_rate', '16000');
+
+				const protocols = [`Authorization: Token ${c.env.DEEPGRAM_API_KEY}`];
+				deepgramWs = new WebSocket(url.toString(), protocols);
 
 				deepgramWs.addEventListener('open', () => {
-					const options = {
-						language: 'en',
-						smart_format: true,
-						model: 'nova-2',
-						encoding: 'linear16',
-						channels: 1,
-						sample_rate: 16000,
-					};
-					deepgramWs?.send(JSON.stringify({ options }));
+					console.log('deepgram connection opened');
 				});
 
 				deepgramWs.addEventListener('message', (dgEvent: MessageEvent) => {
 					server.send(dgEvent.data);
 				});
 
-				deepgramWs.addEventListener('error', () => {
+				deepgramWs.addEventListener('error', (error) => {
+					console.error('deepgram error:', error);
 					server.send(JSON.stringify({ error: 'Deepgram connection error' }));
 				});
 
 				deepgramWs.addEventListener('close', () => {
+					console.log('deepgram connection closed');
 					deepgramWs = null;
 				});
 			}
 
-			// Forward audio data to Deepgram
 			if (deepgramWs?.readyState === WebSocket.OPEN) {
 				deepgramWs.send(event.data);
 			}
 		} catch (error) {
+			console.error('error:', error);
 			server.send(JSON.stringify({ error: 'Internal server error' }));
 		}
 	});
@@ -72,4 +68,3 @@ app.get('/api/v1/realtime-transcription', async (c) => {
 });
 
 export default app;
-export { RateLimiter };
