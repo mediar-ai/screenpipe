@@ -185,7 +185,7 @@ const AISection = () => {
           "gemini-1.5-pro",
         ];
       case "openai":
-        return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
+        return ["o3-mini", "gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
       default:
         return [];
     }
@@ -421,8 +421,8 @@ const AISection = () => {
                   <p>
                     maximum number of characters (think 4 characters per token)
                     to send to the ai model. <br />
-                    usually, openai models support up to 128k tokens, which is
-                    roughly 512k characters. <br />
+                    usually, openai models support up to 200k tokens, which is
+                    roughly 1m characters. <br />
                     we&apos;ll use this for UI purposes to show you how much you
                     can send.
                   </p>
@@ -433,9 +433,9 @@ const AISection = () => {
           <div className="flex-grow flex items-center">
             <Slider
               id="aiMaxContextChars"
-              min={1000}
-              max={512000}
-              step={1000}
+              min={10000}
+              max={1000000}
+              step={10000}
               value={[settings.aiMaxContextChars]}
               onValueChange={handleMaxContextCharsChange}
               className="flex-grow"

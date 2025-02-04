@@ -36,7 +36,7 @@ interface AppIcon {
 
 async function getAppIcon(
   appName: string,
-  appPath?: string
+  appPath?: string,
 ): Promise<AppIcon | null> {
   const params = new URLSearchParams({
     name: appName,
@@ -63,10 +63,16 @@ async function getAppIcon(
   }
 }
 
+interface TimeRange {
+  start: Date;
+  end: Date;
+}
 export function TimelineIconsSection({
   blocks,
+  timeRange,
 }: {
   blocks: StreamTimeSeriesResponse[];
+  timeRange: TimeRange;
 }) {
   const [iconCache, setIconCache] = useState<{ [key: string]: string }>({});
   const [selectedApp, setSelectedApp] = useState<ProcessedBlock | null>(null);
@@ -76,12 +82,12 @@ export function TimelineIconsSection({
   const { setSelectionRange } = useTimelineSelection();
 
   // Separate time range calculation
-  const timeRange = useMemo(() => {
-    if (blocks.length === 0) return null;
-    const startTime = new Date(blocks[blocks.length - 1].timestamp);
-    const endTime = new Date(blocks[0].timestamp);
-    return { start: startTime, end: endTime };
-  }, [blocks]);
+  //const timeRange = useMemo(() => {
+  //	if (blocks.length === 0) return null;
+  //	const startTime = new Date(blocks[blocks.length - 1].timestamp);
+  //	const endTime = new Date(blocks[0].timestamp);
+  //	return { start: startTime, end: endTime };
+  //}, [blocks]);
 
   // Process blocks without icon dependency
   const { processedBlocks, processedAudioGroups } = useMemo(() => {
@@ -101,8 +107,8 @@ export function TimelineIconsSection({
                 timeRange.start.getTime()) /
                 (timeRange.end.getTime() - timeRange.start.getTime())) *
               100,
-          }))
-        )
+          })),
+        ),
       )
       .filter((audio) => {
         const timestamp = audio.timestamp;
@@ -174,7 +180,8 @@ export function TimelineIconsSection({
         const blockStart = blockEntries[0].timestamp;
         const blockEnd = blockEntries[blockEntries.length - 1].timestamp;
         const blockMiddle = new Date(
-          blockStart.getTime() + (blockEnd.getTime() - blockStart.getTime()) / 2
+          blockStart.getTime() +
+            (blockEnd.getTime() - blockStart.getTime()) / 2,
         );
 
         const windowsInBlock = blockEntries
@@ -257,7 +264,7 @@ export function TimelineIconsSection({
         // Fail silently - the UI will just not show an icon
       }
     },
-    [iconCache, iconInvocationCount]
+    [iconCache, iconInvocationCount],
   );
 
   useEffect(() => {

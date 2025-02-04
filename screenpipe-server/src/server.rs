@@ -1,51 +1,62 @@
 use axum::{
-    extract::{Json, Path, Query, State},
+    body::Body,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Json, Path, Query, State,
+    },
     http::StatusCode,
-    response::{sse::Event, IntoResponse, Json as JsonResponse, Sse},
+    response::{IntoResponse, Json as JsonResponse, Response},
     routing::{get, post},
     serve, Router,
 };
+use tokio_util::io::ReaderStream;
+
+use tokio::fs::File;
+
 use futures::{
     future::{try_join, try_join_all},
-    Stream,
+    SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
+use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
-    db_types::{ContentType, SearchResult, Speaker, TagContentType},
+    db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
-    video_cache::{FrameCache, TimeSeriesFrame},
+    video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        merge_videos, validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
+        MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
-use base64::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info};
-use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices,
-    realtime::RealtimeTranscriptionEvent, AudioDevice, DeviceControl, DeviceType,
-};
+use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
+
+use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
-use screenpipe_vision::{core::RealtimeVisionEvent, monitor::list_monitors};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
-    convert::Infallible,
     net::SocketAddr,
+    num::NonZeroUsize,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
+    sync::{atomic::Ordering, Arc},
+    time::{Duration, Instant},
 };
 
-use tokio::{net::TcpListener, sync::broadcast};
+use lru::LruCache;
+
+use tokio::{
+    net::TcpListener,
+    sync::{mpsc, Mutex},
+    time::timeout,
+};
+
 use tower_http::{cors::Any, trace::TraceLayer};
 use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 
@@ -61,9 +72,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    pub vision_control: Arc<AtomicBool>,
-    pub audio_devices_tx: Arc<broadcast::Sender<(AudioDevice, DeviceControl)>>,
-    pub devices_status: HashMap<AudioDevice, DeviceControl>,
+    pub device_manager: Arc<DeviceManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -71,10 +80,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
-    pub realtime_transcription_enabled: bool,
-    pub realtime_transcription_sender:
-        Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
-    pub realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
+    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
 }
 
 // Update the SearchQuery struct
@@ -193,7 +199,7 @@ pub struct AudioContent {
     pub offset_index: i64,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: DeviceType,
+    pub device_type: AudioDeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -696,7 +702,11 @@ async fn download_pipe_private_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
 ) -> Result<JsonResponse<serde_json::Value>, (StatusCode, JsonResponse<Value>)> {
-    match state.pipe_manager.download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id).await {
+    match state
+        .pipe_manager
+        .download_pipe_private(&payload.url, &payload.pipe_name, &payload.pipe_id)
+        .await
+    {
         Ok(pipe_dir) => Ok(JsonResponse(json!({
             "data": {
                 "pipe_id": pipe_dir,
@@ -830,7 +840,6 @@ async fn get_pipe_info_handler(
 }
 
 async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
-    debug!("Listing pipes");
     let pipes = state.pipe_manager.list_pipes().await;
     JsonResponse(json!({
         "data": pipes,
@@ -841,16 +850,12 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    vision_control: Arc<AtomicBool>,
-    audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+    device_manager: Arc<DeviceManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
     audio_disabled: bool,
     ui_monitoring_enabled: bool,
-    realtime_transcription_enabled: bool,
-    realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
-    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
 }
 
 impl Server {
@@ -858,36 +863,27 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        vision_control: Arc<AtomicBool>,
-        audio_devices_tx: Arc<tokio::sync::broadcast::Sender<(AudioDevice, DeviceControl)>>,
+        device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
-        realtime_transcription_enabled: bool,
-        realtime_transcription_sender: tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>,
-        realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
     ) -> Self {
         Server {
             db,
             addr,
-            vision_control,
-            audio_devices_tx,
+            device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
-            realtime_transcription_enabled,
-            realtime_transcription_sender,
-            realtime_vision_sender,
         }
     }
 
     pub async fn start<F>(
         self,
-        device_status: HashMap<AudioDevice, DeviceControl>,
         api_plugin: F,
         enable_frame_cache: bool,
     ) -> Result<(), std::io::Error>
@@ -896,9 +892,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            vision_control: self.vision_control,
-            audio_devices_tx: self.audio_devices_tx,
-            devices_status: device_status,
+            device_manager: self.device_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -914,9 +908,13 @@ impl Server {
             } else {
                 None
             },
-            realtime_transcription_enabled: self.realtime_transcription_enabled,
-            realtime_transcription_sender: Arc::new(self.realtime_transcription_sender),
-            realtime_vision_sender: self.realtime_vision_sender,
+            frame_image_cache: if enable_frame_cache {
+                Some(Arc::new(Mutex::new(LruCache::new(
+                    NonZeroUsize::new(100).unwrap(),
+                ))))
+            } else {
+                None
+            },
         });
 
         let app = create_router()
@@ -1126,7 +1124,7 @@ async fn add_transcription_to_db(
 
     let device = AudioDevice {
         name: device_name.to_string(),
-        device_type: DeviceType::Input,
+        device_type: AudioDeviceType::Input,
     };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
@@ -1330,8 +1328,16 @@ struct InputControlResponse {
 
 #[derive(Deserialize, PartialEq)]
 enum Order {
+    #[serde(rename = "ascending")]
     Ascending,
+    #[serde(rename = "descending")]
     Descending,
+}
+
+impl Order {
+    fn default() -> Self {
+        Order::Descending
+    }
 }
 
 // Add this new struct
@@ -1339,9 +1345,9 @@ enum Order {
 pub struct StreamFramesRequest {
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
-    // #[serde(rename = "order")]
-    // #[serde(default = "descending")]
-    // order: Order,
+    #[serde(rename = "order")]
+    #[serde(default = "Order::default")]
+    order: Order,
 }
 
 #[derive(Debug, Serialize)]
@@ -1353,7 +1359,8 @@ pub struct StreamTimeSeriesResponse {
 #[derive(Debug, Serialize)]
 pub struct DeviceFrameResponse {
     pub device_id: String,
-    pub frame: String, // base64 encoded image
+    // pub frame: String, // base64 encoded image
+    pub frame_id: i64,
     pub metadata: DeviceMetadata,
     pub audio: Vec<AudioData>,
 }
@@ -1386,7 +1393,8 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
                 .map(|device_frame| {
                     DeviceFrameResponse {
                         device_id: device_frame.device_id,
-                        frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        // frame: BASE64_STANDARD.encode(&device_frame.image_data),
+                        frame_id: device_frame.frame_id,
                         metadata: DeviceMetadata {
                             file_path: device_frame.metadata.file_path,
                             app_name: device_frame.metadata.app_name,
@@ -1621,43 +1629,11 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-
-async fn sse_transcription_handler(
-    State(state): State<Arc<AppState>>,
-) -> Result<
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    if !state.realtime_transcription_enabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            JsonResponse(json!({"error": "Real-time transcription is not enabled"})),
-        ));
-    }
-
-    // Get a new subscription - this won't affect the sender
-    let rx = state.realtime_transcription_sender.subscribe();
-
-    let stream = async_stream::stream! {
-        let mut rx = rx; // Create a new mutable reference to the receiver
-        while let Ok(event) = rx.recv().await {
-            yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
-        }
-        // Even if this stream ends, the sender remains active
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
-}
-
 #[derive(Deserialize)]
 pub struct AudioDeviceControlRequest {
     device_name: String,
     #[serde(default)]
-    device_type: Option<DeviceType>,
+    device_type: Option<AudioDeviceType>,
 }
 
 #[derive(Serialize)]
@@ -1673,7 +1649,7 @@ async fn start_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1698,11 +1674,12 @@ async fn start_audio_device(
     }
 
     let control = DeviceControl {
+        device: screenpipe_core::DeviceType::Audio(device.clone()),
         is_running: true,
         is_paused: false,
     };
 
-    let _ = state.audio_devices_tx.send((device.clone(), control));
+    let _ = state.device_manager.update_device(control).await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1716,7 +1693,7 @@ async fn stop_audio_device(
 ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
     let device = AudioDevice {
         name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(DeviceType::Input),
+        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
     };
 
     // Validate device exists
@@ -1740,13 +1717,14 @@ async fn stop_audio_device(
         ));
     }
 
-    let _ = state.audio_devices_tx.send((
-        device.clone(),
-        DeviceControl {
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
-        },
-    ));
+        })
+        .await;
 
     Ok(JsonResponse(AudioDeviceControlResponse {
         success: true,
@@ -1755,51 +1733,8 @@ async fn stop_audio_device(
 }
 
 #[derive(Deserialize)]
-struct VisionSSEQuery {
+struct EventsQuery {
     images: Option<bool>,
-}
-
-async fn sse_vision_handler(
-    Query(query): Query<VisionSSEQuery>,
-    State(state): State<Arc<AppState>>,
-) -> Result<
-    Sse<impl Stream<Item = Result<Event, Infallible>>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
-    if state.vision_disabled {
-        return Err((
-            StatusCode::FORBIDDEN,
-            JsonResponse(json!({"error": "Vision streaming is disabled"})),
-        ));
-    }
-    // Get a new subscription - this won't affect the sender
-    let rx = state.realtime_vision_sender.subscribe();
-
-    let include_images = query.images.unwrap_or(false);
-
-    let stream = async_stream::stream! {
-        let mut rx = rx; // Create a new mutable reference to the receiver
-        while let Ok(event) = rx.recv().await {
-            match event {
-                RealtimeVisionEvent::Ocr(mut frame) => {
-                    if !include_images {
-                        frame.image = None; // Remove the image data if not enabled
-                    }
-                    yield Ok(Event::default().data(serde_json::to_string(&frame).unwrap_or_default()));
-                }
-                _ => {
-                    yield Ok(Event::default().data(serde_json::to_string(&event).unwrap_or_default()));
-                }
-            }
-        }
-        // Even if this stream ends, the sender remains active
-    };
-
-    Ok(Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1853,6 +1788,148 @@ async fn semantic_search_handler(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct VisionDeviceControlRequest {
+    device_id: u32,
+}
+
+impl VisionDeviceControlRequest {
+    pub fn new(device_id: u32) -> Self {
+        Self { device_id }
+    }
+}
+
+#[derive(Serialize)]
+pub struct VisionDeviceControlResponse {
+    success: bool,
+    message: String,
+}
+
+async fn start_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("starting vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("starting vision device: {}", payload.device_id);
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: true,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("started vision device: {}", payload.device_id),
+    }))
+}
+
+async fn stop_vision_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<VisionDeviceControlRequest>,
+) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("stopping vision device: {}", payload.device_id);
+    // Validate device exists
+    let monitors = list_monitors().await;
+    if !monitors.iter().any(|m| m.id() == payload.device_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("monitor not found: {}", payload.device_id),
+                "success": false
+            })),
+        ));
+    }
+
+    debug!("stopping vision device: {}", payload.device_id);
+
+    let _ = state
+        .device_manager
+        .update_device(DeviceControl {
+            device: screenpipe_core::DeviceType::Vision(payload.device_id),
+            is_running: false,
+            is_paused: false,
+        })
+        .await;
+
+    Ok(JsonResponse(VisionDeviceControlResponse {
+        success: true,
+        message: format!("stopped vision device: {}", payload.device_id),
+    }))
+}
+
+// websocket events handler
+async fn ws_events_handler(ws: WebSocketUpgrade, query: Query<EventsQuery>) -> Response {
+    ws.on_upgrade(|socket| handle_socket(socket, query))
+}
+
+async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
+    let (mut sender, mut receiver) = socket.split();
+
+    let incoming = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(t) = msg {
+                if let Ok(event) = serde_json::from_str::<ScreenpipeEvent>(&t) {
+                    let _ = send_event(&event.name, event.data);
+                }
+            }
+        }
+    });
+    // Handle the WebSocket connection here
+    // You can add your logic to handle messages, upgrades, etc.
+
+    let outgoing = tokio::spawn(async move {
+        let mut stream = subscribe_to_all_events();
+        loop {
+            tokio::select! {
+                event = stream.next() => {
+                    if let Some(mut event) = event {
+                        if !query.images.unwrap_or(false) && (event.name == "ocr_result" || event.name == "ui_frame") {
+                            if let Some(data) = event.data.as_object_mut() {
+                                data.remove("image");
+                            }
+                        }
+                        if let Err(e) = sender
+                            .send(Message::Text(
+                                serde_json::to_string(&event).unwrap_or_default(),
+                            ))
+                            .await
+                        {
+                            tracing::error!("Failed to send websocket message: {}", e);
+                            break;
+                        }
+                    }
+                }
+                _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                    let _ = sender.send(Message::Ping(vec![])).await;
+                }
+            }
+        }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = incoming => {}
+        _ = outgoing => {}
+    }
+
+    debug!("WebSocket connection closed");
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1866,7 +1943,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
     let router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", post(api_list_monitors))
+        .route("/vision/list", get(api_list_monitors))
         .route(
             "/tags/:content_type/:id",
             post(add_tags).delete(remove_tags),
@@ -1874,7 +1951,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
         .route("/pipes/list", get(list_pipes_handler))
         .route("/pipes/download", post(download_pipe_handler))
-        .route("/pipes/download-private", post(download_pipe_private_handler))
+        .route(
+            "/pipes/download-private",
+            post(download_pipe_private_handler),
+        )
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
@@ -1895,11 +1975,13 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
-        .route("/sse/transcriptions", get(sse_transcription_handler))
         .route("/audio/start", post(start_audio_device))
         .route("/audio/stop", post(stop_audio_device))
-        .route("/sse/vision", get(sse_vision_handler))
+        .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
+        .route("/frames/:frame_id", get(get_frame_data))
+        .route("/vision/start", post(start_vision_device))
+        .route("/vision/stop", post(stop_vision_device))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -1910,90 +1992,306 @@ pub fn create_router() -> Router<Arc<AppState>> {
     router
 }
 
-// Add the new handler
-async fn stream_frames_handler(
-    Query(request): Query<StreamFramesRequest>,
+pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    info!(
-        "streaming frames from {} to {}",
-        request.start_time, request.end_time
-    );
+    Path(frame_id): Path<i64>,
+) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+    let start_time = Instant::now();
 
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
-
-    // Create a stream that will be used for both success and error cases
-    let stream = async_stream::stream! {
-        // Early validation of frame cache
-        let cache = match state.frame_cache.as_ref() {
-            Some(cache) => cache.clone(),
-            None => {
-                // error!("frame cache not initialized");
-                yield Ok(Event::default().data("{\"error\": \"frame cache not initialized\"}"));
-                return;
-            }
-        };
-
-        // Calculate duration in minutes between start and end time
-        let duration_minutes = (request.end_time - request.start_time).num_minutes().max(1);
-
-        // Calculate center timestamp
-        let center_timestamp = request.start_time + (request.end_time - request.start_time) / 2;
-
-        // Use a cancellation token to handle client disconnection
-        let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-
-        // Spawn frame extraction task using get_frames
-        tokio::spawn({
-            let frame_tx = frame_tx.clone();
-            async move {
-                tokio::select! {
-                    result = cache.get_frames(center_timestamp, duration_minutes, frame_tx.clone(), true) => {
-                        if let Err(e) = result {
-                            error!("frame extraction failed: {}", e);
-                            // Send error to client
-                            let _ = frame_tx.send(TimeSeriesFrame {
-                                timestamp: Utc::now(),
-                                frame_data: vec![],
-                                error: Some(format!("frame extraction failed: {}", e)),
-                            }).await;
+    match timeout(Duration::from_secs(5), async {
+        // Try to get frame from cache if enabled
+        if let Some(cache) = &state.frame_image_cache {
+            let cache_result = cache.try_lock();
+            match cache_result {
+                Ok(mut cache) => {
+                    if let Some((file_path, timestamp)) = cache.get(&frame_id) {
+                        if timestamp.elapsed() < Duration::from_secs(300) {
+                            debug!(
+                                "Cache hit for frame_id: {}. Retrieved in {:?}",
+                                frame_id,
+                                start_time.elapsed()
+                            );
+                            return serve_file(file_path).await;
                         }
-                    }
-                    _ = cancel_rx => {
-                        debug!("client disconnected, stopping frame stream");
+                        cache.pop(&frame_id);
                     }
                 }
-            }
-        });
-
-        let _cancel_guard = scopeguard::guard(cancel_tx, |tx| {
-            let _ = tx.send(());  // Signal cancellation when stream is dropped
-        });
-
-        while let Some(timeseries_frame) = frame_rx.recv().await {
-            // Handle potential error in the frame
-            if let Some(error) = timeseries_frame.error {
-                yield Ok(Event::default().data(format!("{{\"error\": \"{}\"}}", error)));
-                break; // Stop streaming on error
-            }
-
-            // Convert frame to response and send
-            match serde_json::to_string(&StreamTimeSeriesResponse::from(timeseries_frame)) {
-                Ok(json) => yield Ok(Event::default().data(json)),
-                Err(e) => {
-                    error!("failed to serialize frame: {}", e);
-                    yield Ok(Event::default().data(format!("{{\"error\": \"failed to serialize frame: {}\"}}", e)));
-                    break;
+                Err(_) => {
+                    debug!("Cache lock contention for frame_id: {}", frame_id);
                 }
             }
         }
-    };
 
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    )
+        // If not in cache or cache disabled, get from database
+        match state.db.get_frame(frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_frame_from_video(&file_path, offset_index).await {
+                    Ok(frame_path) => {
+                        // Store in cache if enabled and we can get the lock
+                        if let Some(cache) = &state.frame_image_cache {
+                            if let Ok(mut cache) = cache.try_lock() {
+                                cache.put(frame_id, (frame_path.clone(), Instant::now()));
+                            }
+                        }
+
+                        debug!("Frame {} extracted in {:?}", frame_id, start_time.elapsed());
+                        serve_file(&frame_path).await
+                    }
+                    Err(e) => {
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            JsonResponse(json!({
+                                "error": format!("Failed to extract frame: {}", e),
+                                "frame_id": frame_id,
+                                "file_path": file_path
+                            })),
+                        ))
+                    }
+                }
+            }
+            Ok(None) => Err((
+                StatusCode::NOT_FOUND,
+                JsonResponse(json!({
+                    "error": "Frame not found",
+                    "frame_id": frame_id
+                })),
+            )),
+            Err(e) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({
+                    "error": format!("Database error: {}", e),
+                    "frame_id": frame_id
+                })),
+            )),
+        }
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            error!("Request timeout for frame_id: {}", frame_id);
+            Err((
+                StatusCode::REQUEST_TIMEOUT,
+                JsonResponse(json!({
+                    "error": "Request timed out",
+                    "frame_id": frame_id
+                })),
+            ))
+        }
+    }
+}
+
+async fn serve_file(path: &str) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match File::open(path).await {
+        Ok(file) => {
+            let stream = ReaderStream::new(file);
+            let body = Body::from_stream(stream);
+
+            let response = Response::builder()
+                .header("content-type", "image/jpeg")
+                .header("cache-control", "public, max-age=604800") // Cache for 7 days
+                .body(body)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(json!({"error": format!("Failed to create response: {}", e)})),
+                    )
+                })?;
+
+            Ok(response)
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to open file: {}", e)})),
+        )),
+    }
+}
+
+// Add these new functions before stream_frames_handler
+async fn fetch_and_process_frames(
+    db: Arc<DatabaseManager>,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    frame_tx: mpsc::Sender<TimeSeriesFrame>,
+    is_descending: bool,
+) -> Result<(), anyhow::Error> {
+    let mut chunks = db.find_video_chunks(start_time, end_time).await?;
+
+    // Sort chunks based on order
+    if is_descending {
+        chunks
+            .frames
+            .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+    } else {
+        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+    }
+
+    for chunk in chunks.frames {
+        let frame = create_time_series_frame(chunk);
+        frame_tx.send(frame).await?;
+    }
+
+    Ok(())
+}
+
+fn create_time_series_frame(chunk: FrameData) -> TimeSeriesFrame {
+    TimeSeriesFrame {
+        timestamp: chunk.timestamp,
+        frame_data: chunk
+            .ocr_entries
+            .into_iter()
+            .map(|device_data| DeviceFrame {
+                device_id: device_data.device_name,
+                frame_id: chunk.frame_id,
+                image_data: vec![], // Empty since we don't need image data
+                metadata: FrameMetadata {
+                    file_path: device_data.video_file_path,
+                    app_name: device_data.app_name,
+                    window_name: device_data.window_name,
+                    transcription: chunk
+                        .audio_entries
+                        .iter()
+                        .map(|a| a.transcription.clone())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    ocr_text: device_data.text,
+                },
+                audio_entries: chunk
+                    .audio_entries
+                    .iter()
+                    .map(|a| AudioEntry {
+                        transcription: a.transcription.clone(),
+                        device_name: a.device_name.clone(),
+                        is_input: a.is_input,
+                        audio_file_path: a.audio_file_path.clone(),
+                        duration_secs: a.duration_secs,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        error: None,
+    }
+}
+
+async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel(100);
+    let db = state.db.clone();
+
+    // Create a buffer for batching frames
+    let mut frame_buffer = Vec::with_capacity(50);
+    let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
+
+    // Handle incoming messages for time range requests
+    let receive_handle = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(text) = msg {
+                match serde_json::from_str::<StreamFramesRequest>(&text) {
+                    Ok(request) => {
+                        debug!(
+                            "streaming frames from {} to {}",
+                            request.start_time, request.end_time
+                        );
+
+                        let frame_tx = frame_tx.clone();
+                        let db = db.clone();
+
+                        tokio::spawn(async move {
+                            if let Err(e) = fetch_and_process_frames(
+                                db,
+                                request.start_time,
+                                request.end_time,
+                                frame_tx,
+                                request.order == Order::Descending,
+                            )
+                            .await
+                            {
+                                error!("frame fetching failed: {}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("failed to parse stream request: {}", e);
+                    }
+                }
+            }
+        }
+    });
+
+    // Send frames to the client with batching
+    let send_handle = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                // Check for new frames
+                frame = frame_rx.recv() => {
+                    match frame {
+                        Some(timeseries_frame) => {
+                            if let Some(error) = timeseries_frame.error {
+                                if let Err(e) = sender
+                                    .send(Message::Text(format!("{{\"error\": \"{}\"}}", error)))
+                                    .await
+                                {
+                                    error!("failed to send error message: {}", e);
+                                    break;
+                                }
+                                continue;
+                            }
+
+                            // Add frame to buffer
+                            frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
+
+                            // If buffer is full, send immediately
+                            if frame_buffer.len() >= 50 {
+                                if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                                    error!("failed to send batch: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        None => break,
+                    }
+                }
+                // Timer for flushing partial batches
+                _ = buffer_timer.tick() => {
+                    if !frame_buffer.is_empty() {
+                        if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
+                            error!("failed to send batch: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Wait for either handle to complete
+    tokio::select! {
+        _ = receive_handle => debug!("receive handle completed"),
+        _ = send_handle => debug!("send handle completed"),
+    }
+}
+
+// Helper function to send batched frames
+async fn send_batch(
+    sender: &mut futures::stream::SplitSink<WebSocket, Message>,
+    buffer: &mut Vec<StreamTimeSeriesResponse>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if buffer.is_empty() {
+        return Ok(());
+    }
+
+    // Serialize the batch
+    let json = serde_json::to_string(&buffer)?;
+    sender.send(Message::Text(json)).await?;
+    buffer.clear();
+    Ok(())
+}
+async fn stream_frames_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_stream_frames_socket(socket, state))
 }
 
 // Add this new handler function

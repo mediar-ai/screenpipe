@@ -1,9 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use analytics::AnalyticsManager;
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
+use serde_json::json;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -33,7 +35,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
-use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
@@ -64,7 +65,7 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
-use tauri_plugin_sentry::{sentry};
+use tauri_plugin_sentry::sentry;
 mod health;
 use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
@@ -356,20 +357,10 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-async fn list_pipes() -> anyhow::Result<Value> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("http://localhost:3030/pipes/list")
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
-
-    Ok(response)
-}
-
-
-pub fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+pub fn get_base_dir(
+    app: &tauri::AppHandle,
+    custom_path: Option<String>,
+) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
@@ -681,6 +672,13 @@ async fn main() {
             get_env
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
@@ -790,24 +788,6 @@ async fn main() {
                         // Kill all pipes before quitting
                         let app_handle_clone = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Ok(response) = list_pipes().await {
-                                if let Some(pipes) = response["data"].as_array() {
-                                    for pipe in pipes {
-                                        if pipe["enabled"].as_bool().unwrap_or(false) {
-                                            if let Some(id) = pipe["id"].as_str() {
-                                                let _ = reqwest::Client::new()
-                                                    .post("http://localhost:3030/pipes/disable")
-                                                    .json(&serde_json::json!({
-                                                        "pipe_id": id
-                                                    }))
-                                                    .send()
-                                                    .await;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
                             if let Err(e) =
@@ -950,24 +930,23 @@ async fn main() {
                 .unwrap_or(true);
 
             let unique_id = store
-                .get("userId")
+                .get("user.id")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| {
-                    let new_id = Uuid::new_v4().to_string();
-                    store.set(
-                        "userId".to_string(),
-                        serde_json::Value::String(new_id.clone()),
-                    );
-                    store.save().unwrap();
-                    new_id
-                });
+                .unwrap_or_default();
+
+            let email = store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default();
 
             if is_analytics_enabled {
                 match start_analytics(
                     unique_id,
+                    email,
                     posthog_api_key,
                     interval_hours,
                     "http://localhost:3030".to_string(),
+                    base_dir.clone(),
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -1032,15 +1011,12 @@ async fn main() {
 
             // Start health check service
             // macos only
-            // #[cfg(target_os = "macos")]
-            // {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = start_health_check(app_handle).await {
                     error!("Failed to start health check service: {}", e);
                 }
             });
-            // }
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
@@ -1061,11 +1037,40 @@ async fn main() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
+            // Send app started event
+            let app_handle = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_started",
+                            Some(json!({
+                                "startup_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
 
-            // Add this to shut down the server
+            // Send app closed event before shutdown
+            let app_handle_v2 = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle_v2.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_closed",
+                            Some(json!({
+                                "shutdown_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
+
+            // Shutdown server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
                 drop(server_shutdown_tx.send(()));
             }

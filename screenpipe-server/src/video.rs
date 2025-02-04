@@ -1,12 +1,12 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use image::ImageFormat::{self};
 use log::{debug, error};
 use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -16,6 +16,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
@@ -25,10 +27,11 @@ pub struct VideoCapture {
     #[allow(unused)]
     video_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
+    shutdown_tx: watch::Sender<bool>,
+    handles: Vec<JoinHandle<()>>,
 }
 
 impl VideoCapture {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         output_path: &str,
         fps: f64,
@@ -36,15 +39,18 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Arc<OcrEngine>,
         monitor_id: u32,
-        ignore_list: &[String],
-        include_list: &[String],
-        languages: Vec<Language>,
+        ignore_list: Arc<Vec<String>>,
+        include_list: Arc<Vec<String>>,
+        languages: Arc<Vec<Language>>,
         capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
         } else {
-            warn!("Invalid FPS value: {}. Using default of 1.0", fps);
+            warn!(
+                "[monitor_id: {}] Invalid FPS value: {}. Using default of 1.0",
+                monitor_id, fps
+            );
             1.0
         };
         let interval = Duration::from_secs_f64(1.0 / fps);
@@ -56,48 +62,74 @@ impl VideoCapture {
         let capture_video_frame_queue = video_frame_queue.clone();
         let capture_ocr_frame_queue = ocr_frame_queue.clone();
         let (result_sender, mut result_receiver) = channel(512);
-        let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
+        let window_filters = Arc::new(WindowFilters::new(&ignore_list, &include_list));
         let window_filters_clone = Arc::clone(&window_filters);
-        let _capture_thread = tokio::spawn(async move {
-            continuous_capture(
-                result_sender,
-                interval,
-                (*ocr_engine).clone(),
-                monitor_id,
-                window_filters_clone,
-                languages.clone(),
-                capture_unfocused_windows,
-            )
-            .await;
-        });
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let mut handles = Vec::new();
+        let shutdown_rx_capture = shutdown_rx.clone();
+        let shutdown_rx_queue = shutdown_rx.clone();
+        let shutdown_rx_video = shutdown_rx.clone();
+        let languages_clone = languages.clone();
+        let result_sender_inner = result_sender.clone();
 
-        // In the _queue_thread
-        let _queue_thread = tokio::spawn(async move {
-            // Helper function to push to queue and handle errors
-            fn push_to_queue(
-                queue: &ArrayQueue<Arc<CaptureResult>>,
-                result: &Arc<CaptureResult>,
-                queue_name: &str,
-            ) -> bool {
-                if queue.push(Arc::clone(result)).is_err() {
-                    if queue.pop().is_none() {
-                        error!("{} queue is in an inconsistent state", queue_name);
-                        return false;
-                    }
-                    if queue.push(Arc::clone(result)).is_err() {
-                        error!(
-                            "Failed to push to {} queue after removing oldest frame",
-                            queue_name
-                        );
-                        return false;
-                    }
-                    debug!("{} queue was full, dropped oldest frame", queue_name);
+        let capture_handle = tokio::spawn(async move {
+            let mut rx = shutdown_rx_capture;
+            loop {
+                if *rx.borrow() {
+                    info!(
+                        "[monitor_id: {}] shutting down video capture thread",
+                        monitor_id
+                    );
+                    break;
                 }
-                true
+                let result_sender = result_sender_inner.clone();
+                let window_filters_clone = Arc::clone(&window_filters_clone);
+                let languages_clone = languages_clone.clone();
+
+                tokio::select! {
+                    _ = continuous_capture(
+                        result_sender,
+                        interval,
+                        ocr_engine.clone(),
+                        monitor_id,
+                        window_filters_clone,
+                        languages_clone.clone(),
+                        capture_unfocused_windows,
+                        rx.clone(),
+                    ) => {
+                        debug!("[monitor_id: {}] continuous capture completed, restarting", monitor_id);
+                    }
+                    _ = rx.changed() => {
+                        if *rx.borrow() {
+                            info!("[monitor_id: {}] shutting down video capture thread", monitor_id);
+                            break;
+                        }
+                    }
+                }
             }
+            debug!(
+                "[monitor_id: {}] exiting capture handle loop, dropping sender",
+                monitor_id
+            );
+            drop(result_sender_inner);
+        });
+        handles.push(capture_handle);
+
+        let queue_handle = tokio::spawn(async move {
+            let rx = shutdown_rx_queue;
             while let Some(result) = result_receiver.recv().await {
+                if *rx.borrow() {
+                    info!(
+                        "[monitor_id: {}] shutting down video queue thread",
+                        monitor_id
+                    );
+                    break;
+                }
                 let frame_number = result.frame_number;
-                debug!("Received frame {} for queueing", frame_number);
+                debug!(
+                    "[monitor_id: {}] received frame {} for queueing",
+                    monitor_id, frame_number
+                );
 
                 let result = Arc::new(result);
 
@@ -106,45 +138,66 @@ impl VideoCapture {
 
                 if !video_pushed || !ocr_pushed {
                     error!(
-                        "Failed to push frame {} to one or more queues",
-                        frame_number
+                        "[monitor_id: {}] failed to push frame {} to one or more queues, queue lengths: {}, {}",
+                        monitor_id, frame_number,
+                        capture_video_frame_queue.len(),
+                        capture_ocr_frame_queue.len()
                     );
                     continue; // Skip to next iteration instead of crashing
                 }
 
                 debug!(
-                    "Frame {} pushed to queues. Queue lengths: {}, {}",
+                    "[monitor_id: {}] frame {} pushed to queues. Queue lengths: {}, {}",
+                    monitor_id,
                     frame_number,
                     capture_video_frame_queue.len(),
                     capture_ocr_frame_queue.len()
                 );
             }
         });
+        handles.push(queue_handle);
 
         let video_frame_queue_clone = video_frame_queue.clone();
 
         let output_path = output_path.to_string();
-        let _video_thread = tokio::spawn(async move {
-            save_frames_as_video(
+        let video_handle = tokio::spawn(async move {
+            let rx = shutdown_rx_video;
+            save_frames_as_video_with_shutdown(
                 &video_frame_queue_clone,
                 &output_path,
                 fps,
                 new_chunk_callback_clone,
                 monitor_id,
                 video_chunk_duration,
+                rx,
             )
             .await;
         });
+        handles.push(video_handle);
 
         VideoCapture {
             video_frame_queue,
             ocr_frame_queue,
+            shutdown_tx,
+            handles,
         }
+    }
+
+    pub async fn shutdown(self) -> Result<(), anyhow::Error> {
+        info!("shutting down video capture");
+        self.shutdown_tx.send(true)?;
+
+        for handle in self.handles {
+            if let Err(e) = handle.await {
+                error!("error joining handle: {}", e);
+            }
+        }
+
+        Ok(())
     }
 }
 
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
-    // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
         MAX_FPS
@@ -152,14 +205,14 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         fps
     };
 
-    info!("Starting FFmpeg process for file: {}", output_file);
+    info!("starting FFmpeg process for file: {}", output_file);
     let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     let mut args = vec![
         "-f",
         "image2pipe",
         "-vcodec",
-        "png",
+        "png", // consider using mjpeg and change to encode to jpeg below too
         "-r",
         &fps_str,
         "-i",
@@ -211,21 +264,30 @@ async fn log_ffmpeg_output(stream: impl AsyncBufReadExt + Unpin, stream_name: &s
     }
 }
 
-async fn save_frames_as_video(
+async fn save_frames_as_video_with_shutdown(
     frame_queue: &Arc<ArrayQueue<Arc<CaptureResult>>>,
     output_path: &str,
     fps: f64,
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
     video_chunk_duration: Duration,
+    mut shutdown_rx: watch::Receiver<bool>,
 ) {
-    debug!("Starting save_frames_as_video function");
+    debug!("starting save_frames_as_video function");
     let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
     let mut frame_count = 0;
     let mut current_ffmpeg: Option<Child> = None;
     let mut current_stdin: Option<ChildStdin> = None;
 
     loop {
+        if *shutdown_rx.borrow() {
+            info!("shutting down video capture thread");
+            if let Some(child) = current_ffmpeg.take() {
+                finish_ffmpeg_process(child, current_stdin.take()).await;
+            }
+            break;
+        }
+
         if frame_count >= frames_per_video || current_ffmpeg.is_none() {
             if let Some(child) = current_ffmpeg.take() {
                 finish_ffmpeg_process(child, current_stdin.take()).await;
@@ -244,17 +306,17 @@ async fn save_frames_as_video(
                     spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());
 
                     if let Err(e) = write_frame_to_ffmpeg(&mut stdin, &buffer).await {
-                        error!("Failed to write first frame to ffmpeg: {}", e);
+                        error!("failed to write first frame to ffmpeg: {}", e);
                         continue;
                     }
                     frame_count += 1;
 
                     current_ffmpeg = Some(child);
                     current_stdin = Some(stdin);
-                    debug!("New FFmpeg process started for file: {}", output_file);
+                    debug!("new FFmpeg process started for file: {}", output_file);
                 }
                 Err(e) => {
-                    error!("Failed to start FFmpeg process: {}", e);
+                    error!("failed to start FFmpeg process: {}", e);
                     continue;
                 }
             }
@@ -266,10 +328,23 @@ async fn save_frames_as_video(
             &mut frame_count,
             frames_per_video,
             fps,
+            &shutdown_rx,
         )
         .await;
 
-        tokio::task::yield_now().await;
+        tokio::select! {
+            _ = shutdown_rx.changed() => {
+                if *shutdown_rx.borrow() {
+                    if let Some(child) = current_ffmpeg.take() {
+                        finish_ffmpeg_process(child, current_stdin.take()).await;
+                    }
+                    break;
+                }
+            }
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {
+                // Continue with normal processing
+            }
+        }
     }
 }
 
@@ -289,7 +364,10 @@ fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
     frame
         .image
-        .write_to(&mut std::io::Cursor::new(&mut buffer), ImageFormat::Png)
+        .write_to(
+            &mut std::io::Cursor::new(&mut buffer),
+            image::ImageFormat::Png,
+        )
         .expect("Failed to encode frame");
     buffer
 }
@@ -319,19 +397,23 @@ async fn process_frames(
     frame_count: &mut usize,
     frames_per_video: usize,
     fps: f64,
+    shutdown_rx: &watch::Receiver<bool>,
 ) {
     let write_timeout = Duration::from_secs_f64(1.0 / fps);
     while *frame_count < frames_per_video {
+        if *shutdown_rx.borrow() {
+            info!("process_frames: shutdown signal received, breaking out");
+            break;
+        }
         if let Some(frame) = frame_queue.pop() {
             let buffer = encode_frame(&frame);
             if let Some(stdin) = current_stdin.as_mut() {
                 if let Err(e) = write_frame_with_retry(stdin, &buffer).await {
-                    error!("Failed to write frame to ffmpeg after max retries: {}", e);
+                    error!("failed to write frame to ffmpeg after max retries: {}", e);
                     break;
                 }
                 *frame_count += 1;
-                debug!("Wrote frame {} to FFmpeg", frame_count);
-
+                debug!("wrote frame {} to ffmpeg", frame_count);
                 flush_ffmpeg_input(stdin, *frame_count, fps).await;
             }
         } else {
@@ -385,10 +467,34 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
     match child.wait_with_output().await {
         Ok(output) => {
             debug!("FFmpeg process exited with status: {}", output.status);
-            if !output.status.success() {
-                error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !output.status.success() && stderr != Cow::Borrowed("") {
+                error!("FFmpeg stderr: {}", stderr);
             }
         }
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),
+    }
+}
+
+fn push_to_queue(
+    queue: &ArrayQueue<Arc<CaptureResult>>,
+    result: &Arc<CaptureResult>,
+    queue_name: &str,
+) -> bool {
+    match queue.push(Arc::clone(result)) {
+        Ok(_) => {
+            debug!(
+                "{} queue: Successfully pushed frame {}",
+                queue_name, result.frame_number
+            );
+            true
+        }
+        Err(_) => {
+            warn!(
+                "{} queue full, dropping frame {}",
+                queue_name, result.frame_number
+            );
+            false
+        }
     }
 }

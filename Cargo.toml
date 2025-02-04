@@ -6,15 +6,14 @@ members = [
     "screenpipe-server",
     "screenpipe-integrations",
     "screenpipe-actions",
+    "screenpipe-events",
 ]
-exclude = [
-    "screenpipe-app-tauri/src-tauri"
-]
+exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 
 [workspace.package]
-version = "0.2.30"
+version = "0.2.33"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"

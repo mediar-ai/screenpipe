@@ -103,6 +103,7 @@ export type Settings = {
   enableRealtimeAudioTranscription: boolean;
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
+  useAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -161,6 +162,7 @@ const DEFAULT_SETTINGS: Settings = {
   enableRealtimeAudioTranscription: false,
   realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
   disableVision: false,
+  useAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -386,6 +388,13 @@ export function useSettings() {
       const userData = {
         ...data.user,
       } as User;
+
+      // if user was not logged in, send posthog event app_login with email
+      if (!settings.user?.id) {
+        posthog.capture("app_login", {
+          email: userData.email,
+        });
+      }
 
       setSettings({
         user: userData,

@@ -1,12 +1,9 @@
 "use client";
 import React, { useEffect, useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
-
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
 import {
   RefreshCw,
   UserCog,
@@ -18,9 +15,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
-
 import { toast } from "@/components/ui/use-toast";
-
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -86,13 +81,19 @@ export function AccountSection() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isAnnual, setIsAnnual] = useState(true);
   const [profileForm, setProfileForm] = useState({
-    bio: "",
-    github_username: "",
-    website: "",
-    contact: "",
+    bio: settings.user?.bio || "",
+    github_username: settings.user?.github_username || "",
+    website: settings.user?.website || "",
+    contact: settings.user?.contact || "",
   });
 
   useEffect(() => {
+    if (!settings.user?.email) {
+      posthog.capture("app_login", {
+        email: settings.user?.email,
+      });
+    }
+
     const setupDeepLink = async () => {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
@@ -266,15 +267,15 @@ export function AccountSection() {
     }
   };
 
+  // Initialize form only once when user data first loads
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
-
-  useEffect(() => {
-    if (settings.user) {
+    if (
+      settings.user &&
+      !profileForm.bio &&
+      !profileForm.github_username &&
+      !profileForm.website &&
+      !profileForm.contact
+    ) {
       setProfileForm({
         bio: settings.user.bio || "",
         github_username: settings.user.github_username || "",
@@ -282,7 +283,14 @@ export function AccountSection() {
         contact: settings.user.contact || "",
       });
     }
-  }, []);
+  }, [settings.user]); // Only run when settings.user changes
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
 
   return (
     <div className="w-full space-y-6 py-4">
@@ -327,6 +335,7 @@ export function AccountSection() {
                     features={plan.features}
                     onSelect={async () => {
                       if (plan.title.toLowerCase() === "enterprise") {
+                        posthog.capture("enterprise_plan_selected");
                         openUrl(plan.url);
                         return;
                       }
@@ -340,6 +349,7 @@ export function AccountSection() {
                         return;
                       }
                       if (!settings.user?.cloud_subscribed) {
+                        posthog.capture("cloud_plan_selected");
                         openUrl(plan.url);
                       }
                     }}

@@ -75,17 +75,39 @@ export const PipeStore: React.FC = () => {
       const plugins = await pipeApi.listStorePlugins();
 
       // Create PipeWithStatus objects for store plugins
-      const storePluginsWithStatus = plugins.map((plugin) => ({
-        ...plugin,
-        is_installed: installedPipes.some((p) => p.config?.id === plugin.id),
-        installed_config: installedPipes.find((p) => p.config?.id === plugin.id)
-          ?.config,
-        has_purchased: purchaseHistory.some((p) => p.plugin_id === plugin.id),
-        is_core_pipe: corePipes.includes(plugin.name),
-        is_enabled: installedPipes.some(
-          (p) => p.config?.id === plugin.id && p.config?.enabled
-        ),
-      }));
+      const storePluginsWithStatus = await Promise.all(
+        plugins.map(async (plugin) => {
+          const installedPipe = installedPipes.find(
+            (p) => p.config?.id === plugin.id
+          );
+          const currentVersion = installedPipe?.config?.version;
+
+          let has_update = false;
+          if (currentVersion) {
+            try {
+              const updateCheck = await pipeApi.checkUpdate(
+                plugin.id,
+                currentVersion
+              );
+              has_update = updateCheck.has_update;
+            } catch (error) {
+              console.error(`Failed to check updates for ${plugin.id}:`, error);
+            }
+          }
+
+          return {
+            ...plugin,
+            is_installed: !!installedPipe,
+            installed_config: installedPipe?.config,
+            has_purchased: purchaseHistory.some(
+              (p) => p.plugin_id === plugin.id
+            ),
+            is_core_pipe: corePipes.includes(plugin.name),
+            is_enabled: installedPipe?.config?.enabled ?? false,
+            has_update,
+          };
+        })
+      );
 
       const customPipes = installedPipes
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
