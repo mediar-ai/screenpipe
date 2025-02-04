@@ -45,16 +45,20 @@ jobs:
                 cd dist
                 zip -r ../../$pipe.zip .
                 cd ../..
+                echo "created zip for $pipe"
+                ls -la ../../$pipe.zip
               else
                 echo "warning: no dist directory found for $pipe"
               fi
               
-              # go back to root for next iteration
               cd ../../
             else
               echo "warning: pipe directory $pipe not found"
             fi
           done
+          
+          echo "listing all zip files:"
+          ls -la *.zip || echo "no zip files found"
 
       - name: generate release tag
         id: tag
@@ -64,6 +68,8 @@ jobs:
 
       - name: create release
         uses: softprops/action-gh-release@v1
+        permissions:
+          contents: write
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: pipes build ${{ steps.tag.outputs.tag }}
@@ -71,5 +77,6 @@ jobs:
             *.zip
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
