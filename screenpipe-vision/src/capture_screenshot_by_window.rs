@@ -7,10 +7,6 @@ use std::fmt;
 use std::time::Duration;
 use tokio::time;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::{Monitor, Window, XCapError};
-
-#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window, XCapError};
 
 #[derive(Debug)]

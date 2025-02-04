@@ -1,9 +1,4 @@
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
-
-#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
-
 
 pub async fn list_monitors() -> Vec<Monitor> {
     Monitor::all().unwrap().to_vec()
