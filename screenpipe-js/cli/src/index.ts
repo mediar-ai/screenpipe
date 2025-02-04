@@ -1,12 +1,12 @@
 import { Command } from "commander";
 import { 
   loginCommand,
-  createCommand, 
   componentsCommands, 
   registerCommand,
   publishCommand,
   listVersionsCommand,
-  logoutCommand
+  logoutCommand,
+  createCommands
 } from "./commands";
 
 process.on("SIGINT", () => process.exit(0))
@@ -22,7 +22,7 @@ async function main() {
 
   program.addCommand(loginCommand)
   program.addCommand(logoutCommand)
-  program.addCommand(createCommand)
+  program.addCommand(createCommands)
   program.addCommand(componentsCommands)
   program.addCommand(registerCommand)
   program.addCommand(publishCommand)
