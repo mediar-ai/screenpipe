@@ -33,7 +33,7 @@ async function downloadAndExtractSubdir(subdir: string, destPath: string) {
 }
 
 export const createPipeCommand = new Command()
-  .name('create')
+  .name('pipe')
   .description('create a new pipe')
   .action(async () => {
     console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
