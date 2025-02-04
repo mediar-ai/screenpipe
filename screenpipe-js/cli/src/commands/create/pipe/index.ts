@@ -98,7 +98,7 @@ async function downloadAndExtractRepo(
   });
 }
 
-export const createCommand = new Command()
+export const createPipeCommand = new Command()
   .name('create')
   .description('create a new pipe')
   .action(async () => {
