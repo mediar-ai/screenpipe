@@ -3,37 +3,28 @@ import { Credentials } from "../utils/credentials";
 import { API_BASE_URL } from "../constants";
 import { colors, symbols } from "../utils/colors";
 import { Command } from "commander";
+import { logger } from "./components/commands/add/utils/logger";
+import { handleError } from "./components/commands/add/utils/handle-error";
 
 export const registerCommand = new Command()
   .name('register')
-  .description('Register a new pipe')
-  .requiredOption('--name <name>', 'Name of the pipe')
-  .option('--paid', 'Set this flag to create a paid pipe')
-  .option('--price <price>', 'Price in USD (required for paid pipes)', parseFloat)
-  .option('--source <source>', 'Source code URL (e.g., GitHub repository)')
+  .description('register a new pipe')
+  .requiredOption('--name <name>', 'name of the pipe')
+  .option('--paid', 'set this flag to create a paid pipe')
+  .option('--price <price>', 'price in usd (required for paid pipes)', parseFloat)
+  .option('--source <source>', 'source code url (e.g., github repository)')
   .action(async (opts) => {
     if (opts.paid && opts.price == null) {
-      console.error('Error: Price is required for paid pipes, i.e., --price <amount>');
-      process.exit(1);
+      handleError('error: price is required for paid pipes, i.e., --price <amount>');
     }
     if (opts.paid && opts.price <= 0) {
-      console.error('Error: Price must be positive for paid pipes');
-      process.exit(1);
+      handleError('error: price must be positive for paid pipes');
     }
   
     try {
       const apiKey = Credentials.getApiKey();
       if (!apiKey) {
-        console.error(
-          colors.error(
-            `${
-              symbols.error
-            } Not logged in. Please login first using ${colors.highlight(
-              "screenpipe login"
-            )}`
-          )
-        );
-        process.exit(1);
+        handleError(symbols.error + " not logged in. please login first using" + colors.highlight("screenpipe login"))
       }
 
       let packageJson: {
@@ -43,12 +34,9 @@ export const registerCommand = new Command()
       try {
         packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
       } catch (error) {
-        console.error(
-          colors.error(
-            `${symbols.error} Failed to read package.json. Make sure you're in the correct directory.`
-          )
-        );
-        process.exit(1);
+        handleError(
+          `${symbols.error} failed to read package.json. make sure you're in the correct directory.`
+        )
       }
 
       const isPaid = opts.paid || false;
@@ -62,10 +50,8 @@ export const registerCommand = new Command()
           description = readmeContent;
         }
       } catch (error) {
-        console.log(
-          colors.dim(
-            `${symbols.arrow} No README.md found, required for description`
-          )
+        logger.warn(
+          `${symbols.arrow} no README.md found, required for description`
         );
       }
 
@@ -86,43 +72,36 @@ export const registerCommand = new Command()
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create plugin");
+        handleError(errorData.error || "failed to create plugin");
       }
 
       const data = await response.json();
-      console.log(
-        colors.success(
-          `\n${symbols.success} Successfully created pipe: ${colors.highlight(
-            opts.name
-          )}`
-        )
+      logger.success(
+        `\n${symbols.success} successfully created pipe: ${colors.highlight(
+          opts.name
+        )}`
       );
 
       // Display additional info
-      console.log(colors.info(`\n${symbols.info} Plugin Details:`));
-      console.log(colors.listItem(`${colors.label("Name")} ${opts.name}`));
+      logger.info(`\n${symbols.info} plugin details:`);
+      console.log(colors.listItem(`${colors.label("name")} ${opts.name}`));
       console.log(
         colors.listItem(
-          `${colors.label("Type")} ${isPaid ? `Paid ($${price})` : "Free"}`
+          `${colors.label("type")} ${isPaid ? `paid ($${price})` : "free"}`
         )
       );
       if (opts.source) {
         console.log(
-          colors.listItem(`${colors.label("Source")} ${opts.source}`)
+          colors.listItem(`${colors.label("source")} ${opts.source}`)
         );
       }
     } catch (error) {
       if (error instanceof Error) {
-        console.error(
-          colors.error(`\n${symbols.error} Creating failed: ${error.message}`)
-        );
+        handleError(`\n${symbols.error} creating failed: ${error.message}`)
       } else {
-        console.error(
-          colors.error(
-            `\n${symbols.error} Creating failed with unexpected error`
-          )
+        handleError(
+          `\n${symbols.error} creating failed with unexpected error`
         );
       }
-      process.exit(1);
     }
   })
