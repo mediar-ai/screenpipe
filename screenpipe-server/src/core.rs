@@ -4,7 +4,6 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use futures::future::join_all;
 use futures::StreamExt;
-use log::{debug, error, info, warn};
 use screenpipe_audio::{
     record_and_transcribe, AudioInput, AudioTranscriptionEngine, TranscriptionResult,
 };
@@ -20,6 +19,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone)]
 pub struct RecordingConfig {
@@ -306,7 +306,7 @@ async fn record_video(
                     _ => continue, // Ignore other devices or monitors
                 }
             }
-            // we should process faster than the fps we use to do OCR 
+            // we should process faster than the fps we use to do OCR
             _ = tokio::time::sleep(Duration::from_secs_f64(1.0 / (config.fps * 2.0))) => {
                 let frame = match video_capture.ocr_frame_queue.pop() {
                     Some(f) => f,

@@ -1,7 +1,6 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use log::{debug, error};
-use log::{info, warn};
+use tracing::{debug, error, info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
