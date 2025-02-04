@@ -16,6 +16,10 @@ export function useBrowserTranscriptionStream(
       return
     }
 
+    // Use env var with fallback to hardcoded key
+    const apiKey = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '646b887eceffbf128315d2f419e48a2ff174ab66'
+    console.log('using deepgram api key:', apiKey ? 'found' : 'not found')
+
     try {
       console.log('starting browser transcription stream...')
       console.log('requesting user media...')
@@ -40,7 +44,7 @@ export function useBrowserTranscriptionStream(
           interim_results: 'false',
           punctuate: 'true'
         }), 
-        ['token', process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY as string]
+        ['token', apiKey]
       )
       console.log('websocket created, waiting for open...')
 
@@ -97,16 +101,29 @@ export function useBrowserTranscriptionStream(
 
       ws.onerror = (error) => {
         console.error('deepgram websocket error:', error)
+        // Add more detailed error info
+        const errorDetails = error instanceof ErrorEvent ? error.message : 'unknown error'
         toast({
           title: "websocket error",
-          description: "connection to transcription service failed",
+          description: `connection failed: ${errorDetails}`,
           variant: "destructive"
         })
+        // Cleanup on error
+        stopTranscriptionBrowser()
       }
 
-      ws.onclose = () => {
-        console.log('deepgram websocket closed')
+      ws.onclose = (event) => {
+        console.log('deepgram websocket closed', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean
+        })
         streamingRef.current = false
+        // Attempt reconnection if not intentionally closed
+        if (event.code !== 1000) {
+          console.log('attempting to reconnect...')
+          setTimeout(startTranscriptionBrowser, 2000)
+        }
       }
 
       socketRef.current = ws
