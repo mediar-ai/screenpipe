@@ -10,19 +10,19 @@ export const highlighter = {
 
 export const logger = {
   error(...args: unknown[]) {
-    console.log(highlighter.error(args.join(" ")))
+    console.log(highlighter.error(args.join(" ").toLowerCase()))
   },
   warn(...args: unknown[]) {
-    console.log(highlighter.warn(args.join(" ")))
+    console.log(highlighter.warn(args.join(" ").toLowerCase()))
   },
   info(...args: unknown[]) {
-    console.log(highlighter.info(args.join(" ")))
+    console.log(highlighter.info(args.join(" ").toLowerCase()))
   },
   success(...args: unknown[]) {
-    console.log(highlighter.success(args.join(" ")))
+    console.log(highlighter.success(args.join(" ").toLowerCase()))
   },
   log(...args: unknown[]) {
-    console.log(args.join(" "))
+    console.log(args.join(" ").toLowerCase())
   },
   break() {
     console.log("")
