@@ -7,6 +7,8 @@ import crypto from "crypto";
 import ignore from "ignore";
 import { colors, symbols } from "../utils/colors";
 import { Command } from "commander";
+import { logger } from "./components/commands/add/utils/logger";
+import { handleError } from "./components/commands/add/utils/handle-error";
 
 interface ProjectFiles {
   required: string[];
@@ -70,62 +72,53 @@ function archiveStandardProject(
 
 export const publishCommand = new Command()
   .name('publish')
-  .description('Publish or update a pipe to the store')
-  .requiredOption('--name <name>', 'Name of the pipe')
-  .option('--verbose', 'Enable verbose logging', false)
+  .description('publish or update a pipe to the store')
+  .requiredOption('--name <name>', 'name of the pipe')
+  .option('--verbose', 'enable verbose logging', false)
   .action(async (opts) => {
     try {
       if (opts.verbose) {
-        console.log(colors.dim(`${symbols.arrow} starting publish command...`));
+        logger.info(`${symbols.arrow} starting publish command...`);
       }
 
       const apiKey = Credentials.getApiKey();
       if (!apiKey) {
-        console.error(
-          colors.error(
-            `${
-              symbols.error
-            } Not logged in. Please login first using ${colors.highlight(
-              "screenpipe login"
-            )}`
-          )
-        );
-        process.exit(1);
+        handleError(
+          `${
+            symbols.error
+          } not logged in. please login first using ${colors.highlight(
+            "screenpipe login"
+          )}`
+        )
       }
 
       if (opts.verbose) {
-        console.log(colors.dim(`${symbols.arrow} reading package.json...`));
+        logger.info(`${symbols.arrow} reading package.json...`);
       }
       // Read package.json
-      let packageJson: { name: string; version: string };
+      let packageJson: { name: string; version: string } | undefined
       try {
         packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
       } catch (error) {
-        console.error(
-          colors.error(
-            `${symbols.error} Failed to read package.json. Make sure you're in the correct directory.`
-          )
-        );
-        process.exit(1);
-      }
-
-      if (!packageJson.name || !packageJson.version) {
-        console.error(
-          colors.error(
-            `${symbols.error} Package name and version are required in package.json`
-          )
-        );
-        process.exit(1);
-      }
-
-      console.log(
-        colors.info(
-          `\n${symbols.info} Publishing ${colors.highlight(
-            packageJson.name
-          )} v${packageJson.version}...`
+        handleError(
+          `${symbols.error} failed to read package.json. make sure you're in the correct directory.`
         )
-      );
-      console.log(colors.dim(`${symbols.arrow} Creating package archive...`));
+      }
+
+      if (!packageJson || !packageJson.name || !packageJson.version) {
+        handleError(
+          `${symbols.error} package name and version are required in package.json`
+        );
+        // handleError terminates process but ts doesnt infer that. This return will never be executed, its ts friendly.
+        return
+      }
+
+      logger.info(
+        `\n${symbols.info} publishing ${colors.highlight(
+          packageJson.name
+        )} v${packageJson.version}...`
+      )
+      logger.info(colors.dim(`${symbols.arrow} creating package archive...`));
 
       // Create temporary zip file
       const zipPath = path.join(
@@ -163,14 +156,12 @@ export const publishCommand = new Command()
       });
 
       if (opts.verbose) {
-        console.log(
-          colors.dim(
-            `${symbols.arrow} detected project type: ${
-              isNextProject ? "nextjs" : "standard"
-            }`
-          )
+        logger.info(
+          `${symbols.arrow} detected project type: ${
+            isNextProject ? "nextjs" : "standard"
+          }`
         );
-        console.log(
+        logger.info(
           colors.dim(`${symbols.arrow} starting archive creation...`)
         );
       }
@@ -183,17 +174,14 @@ export const publishCommand = new Command()
       const fileSize = fs.statSync(zipPath).size;
 
       if (fileSize > MAX_FILE_SIZE) {
-        console.error(
-          colors.error(
-            `${symbols.error} Package size (${(fileSize / 1024 / 1024).toFixed(
-              2
-            )}MB) exceeds maximum allowed size (${
-              MAX_FILE_SIZE / 1024 / 1024
-            }MB)`
-          )
-        );
+        handleError(
+          `${symbols.error} package size (${(fileSize / 1024 / 1024).toFixed(
+            2
+          )}MB) exceeds maximum allowed size (${
+            MAX_FILE_SIZE / 1024 / 1024
+          }MB)`
+        )
         fs.unlinkSync(zipPath); // Clean up the zip file
-        process.exit(1);
       }
 
       let description = null;
@@ -203,25 +191,22 @@ export const publishCommand = new Command()
           description = readmeContent;
         }
       } catch (error) {
-        console.log(
-          colors.dim(
-            `${symbols.arrow} No README.md found, required for description`
-          )
-        );
+        logger.warn(
+          `${symbols.arrow} no README.md found, required for description`
+        )
       }
       if (!description) {
-        console.error(colors.error(`${symbols.error} Description is required`));
-        process.exit(1);
+        handleError(`${symbols.error} description is required`)
       }
 
       if (opts.verbose) {
-        console.log(colors.dim(`${symbols.arrow} calculating file hash...`));
+        logger.info(`${symbols.arrow} calculating file hash...`)
       }
 
       // Replace the upload section with this:
       try {
         // First get the signed URL
-        console.log(colors.dim(`${symbols.arrow} Getting upload URL...`));
+        logger.info(`${symbols.arrow} getting upload URL...`)
 
         const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
           method: "POST",
@@ -240,14 +225,14 @@ export const publishCommand = new Command()
 
         if (!urlResponse.ok) {
           throw new Error(
-            `Failed to get upload URL: ${await urlResponse.text()}`
+            `failed to get upload URL: ${await urlResponse.text()}`
           );
         }
 
         const { uploadUrl, path } = await urlResponse.json();
 
         // Upload directly to Supabase
-        console.log(colors.dim(`${symbols.arrow} Uploading to storage...`));
+        logger.info(`${symbols.arrow} uploading to storage...`);
         const uploadResponse = await fetch(uploadUrl, {
           method: "PUT",
           headers: {
@@ -258,11 +243,11 @@ export const publishCommand = new Command()
 
         if (!uploadResponse.ok) {
           const text = await uploadResponse.text();
-          throw new Error(`Failed to upload file to storage: ${text}`);
+          throw new Error(`failed to upload file to storage: ${text}`);
         }
 
         // Notify server that upload is complete
-        console.log(colors.dim(`${symbols.arrow} Finalizing upload...`));
+        logger.info(`${symbols.arrow} finalizing upload...`);
         const finalizeResponse = await fetch(
           `${API_BASE_URL}/api/plugins/publish/finalize`,
           {
@@ -284,70 +269,57 @@ export const publishCommand = new Command()
 
         if (!finalizeResponse.ok) {
           const text = await finalizeResponse.text();
-          throw new Error(`Failed to finalize upload: ${text}`);
+          throw new Error(`failed to finalize upload: ${text}`);
         }
 
         const data = await finalizeResponse.json();
 
         // Success messages
+        logger.success(`\n${symbols.success} successfully published plugin!`)
         console.log(
-          colors.success(`\n${symbols.success} Successfully published plugin!`)
+          colors.listItem(`${colors.label("name")} ${packageJson.name}`)
         );
         console.log(
-          colors.listItem(`${colors.label("Name")} ${packageJson.name}`)
-        );
-        console.log(
-          colors.listItem(`${colors.label("Version")} ${packageJson.version}`)
+          colors.listItem(`${colors.label("version")} ${packageJson.version}`)
         );
         console.log(
           colors.listItem(
-            `${colors.label("Size")} ${(fileSize / 1024).toFixed(2)} KB`
+            `${colors.label("size")} ${(fileSize / 1024).toFixed(2)} KB`
           )
         );
 
         if (data.message) {
-          console.log(colors.info(`\n${symbols.info} ${data.message}`));
+          logger.info(`\n${symbols.info} ${data.message}`);
         }
 
         // Cleanup zip file
         fs.unlinkSync(zipPath);
         if (opts.verbose) {
-          console.log(
-            colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
-          );
+          logger.log(`${symbols.arrow} cleaned up temporary zip file`)
         }
       } catch (error) {
         // Cleanup zip file even if upload failed
         if (fs.existsSync(zipPath)) {
           fs.unlinkSync(zipPath);
           if (opts.verbose) {
-            console.log(
-              colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
-            );
+            logger.log(`${symbols.arrow} cleaned up temporary zip file`)
           }
         }
 
         if (error instanceof Error) {
-          console.error(
-            colors.error(
-              `\n${symbols.error} Publishing failed: ${error.message}`
-            )
-          );
+            handleError(
+              `\n${symbols.error} publishing failed: ${error.message}`
+            );
         }
         process.exit(1);
       }
     } catch (error) {
       if (error instanceof Error) {
-        console.error(
-          colors.error(`\n${symbols.error} Publishing failed: ${error.message}`)
-        );
+        handleError(`\n${symbols.error} publishing failed: ${error.message}`)
       } else {
-        console.error(
-          colors.error(
-            `\n${symbols.error} Publishing failed with unexpected error`
-          )
-        );
+        handleError(
+          `\n${symbols.error} publishing failed with unexpected error`
+        )
       }
-      process.exit(1);
     }
   })
