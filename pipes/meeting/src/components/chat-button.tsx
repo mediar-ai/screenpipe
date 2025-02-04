@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { MessageCircle } from "lucide-react"
 import { motion } from "framer-motion"
+import { open } from '@tauri-apps/api/shell'
 
 export function ChatButton() {
   const supportLink = "https://wa.me/16507961489"
@@ -15,7 +16,7 @@ export function ChatButton() {
       whileHover={{ scale: 1.05 }}
     >
       <Button
-        onClick={() => window.open(supportLink, '_blank')}
+        onClick={() => open(supportLink)}
         size="sm"
         className="rounded-full shadow-lg"
       >
