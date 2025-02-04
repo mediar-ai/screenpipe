@@ -4,6 +4,7 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import PostHogProvider from "@/components/providers/posthog-provider"
 import { Analytics } from "@vercel/analytics/react"
+import { ChatButton } from "@/components/chat-button"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,7 @@ export default function RootLayout({
             {children}
           </main>
           <Toaster />
+          <ChatButton />
           <Analytics mode={process.env.NODE_ENV === 'development' ? 'development' : 'production'} />
         </PostHogProvider>
       </body>
