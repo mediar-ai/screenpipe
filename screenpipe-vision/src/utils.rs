@@ -2,6 +2,7 @@ use crate::capture_screenshot_by_window::{
     capture_all_visible_windows, CapturedWindow, WindowFilters,
 };
 use crate::core::MaxAverageFrame;
+use crate::custom_ocr::CustomOcrConfig;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error, warn};
@@ -14,19 +15,16 @@ use xcap_macos::Monitor;
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Default)]
 pub enum OcrEngine {
     Unstructured,
+    #[default]
     Tesseract,
     WindowsNative,
     AppleNative,
+    Custom(CustomOcrConfig),
 }
 
-impl Default for OcrEngine {
-    fn default() -> Self {
-        OcrEngine::Tesseract
-    }
-}
 pub fn calculate_hash(image: &DynamicImage) -> u64 {
     let mut hasher = DefaultHasher::new();
     image.as_bytes().hash(&mut hasher);

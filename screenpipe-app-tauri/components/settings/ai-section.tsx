@@ -30,7 +30,6 @@ import { Textarea } from "../ui/textarea";
 import { toast } from "../ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { useUser } from "@/lib/hooks/use-user";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "../ui/card";
@@ -48,6 +47,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import posthog from "posthog-js";
 
 interface AIProviderCardProps {
   type: "screenpipe-cloud" | "openai" | "native-ollama" | "custom" | "embedded";
@@ -114,130 +114,14 @@ const AIProviderCard = ({
 const AISection = () => {
   const { settings, updateSettings, resetSetting } = useSettings();
 
-  const [ollamaStatus, setOllamaStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
-
-  const [embeddedAIStatus, setEmbeddedAIStatus] = useState<
-    "idle" | "running" | "error"
-  >("idle");
-
   const [showApiKey, setShowApiKey] = React.useState(false);
-  const { user } = useUser();
 
-  const { credits } = user || {};
   const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     updateSettings({ openaiApiKey: e.target.value });
   };
 
   const handleMaxContextCharsChange = (value: number[]) => {
     updateSettings({ aiMaxContextChars: value[0] });
-  };
-
-  const handleEmbeddedLLMChange = (checked: boolean) => {
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        enabled: checked,
-      },
-    });
-    if (!checked) {
-      setOllamaStatus("idle");
-    }
-  };
-
-  const handleEmbeddedLLMModelChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const newModel = e.target.value;
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        model: newModel,
-      },
-      aiModel: newModel,
-    });
-  };
-
-  const handleEmbeddedLLMPortChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    updateSettings({
-      embeddedLLM: {
-        ...settings.embeddedLLM,
-        port: parseInt(e.target.value, 10),
-      },
-    });
-  };
-
-  const startOllamaSidecar = async () => {
-    setOllamaStatus("running");
-    toast({
-      title: "starting ai",
-      description:
-        "downloading and initializing the embedded ai, may take a while (check $HOME/.ollama/models)...",
-    });
-
-    try {
-      console.log(
-        "starting ollama sidecar with settings:",
-        settings.embeddedLLM
-      );
-      const result = await invoke<string>("start_ollama_sidecar", {
-        settings: {
-          enabled: settings.embeddedLLM.enabled,
-          model: settings.embeddedLLM.model,
-          port: settings.embeddedLLM.port,
-        },
-      });
-
-      setOllamaStatus("running");
-      setEmbeddedAIStatus("running");
-      toast({
-        title: "ai ready",
-        description: `${settings.embeddedLLM.model} is running.`,
-      });
-
-      // Show the LLM test result in a toast
-      toast({
-        title: `${settings.embeddedLLM.model} wants to tell you a joke.`,
-        description: result,
-        duration: 10000,
-      });
-    } catch (error) {
-      console.error("Error starting ai sidecar:", error);
-      setOllamaStatus("error");
-      setEmbeddedAIStatus("error");
-      toast({
-        title: "error starting ai",
-        description: "check the console for more details",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleStopLLM = async () => {
-    try {
-      await invoke("stop_ollama_sidecar");
-      setOllamaStatus("idle");
-      setEmbeddedAIStatus("idle");
-      toast({
-        title: "ai stopped",
-        description: "the embedded ai has been shut down",
-      });
-    } catch (error) {
-      console.error("error stopping ai:", error);
-      setEmbeddedAIStatus("error");
-      toast({
-        title: "error stopping ai",
-        description: "check the console for more details",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleModelChange = (value: string) => {
-    updateSettings({ aiModel: value });
   };
 
   const handleCustomPromptChange = (
@@ -254,10 +138,6 @@ const AISection = () => {
     let newUrl = "";
     let newModel = settings.aiModel;
 
-    if (newValue === "screenpipe-cloud" && !credits?.amount) {
-      openUrl("https://buy.stripe.com/5kA6p79qefweacg5kJ");
-      return;
-    }
     switch (newValue) {
       case "openai":
         newUrl = "https://api.openai.com/v1";
@@ -305,7 +185,7 @@ const AISection = () => {
           "gemini-1.5-pro",
         ];
       case "openai":
-        return ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
+        return ["o3-mini", "gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
       default:
         return [];
     }
@@ -341,22 +221,29 @@ const AISection = () => {
         </Label>
         <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
           <AIProviderCard
-            type="screenpipe-cloud"
-            title="screenpipe cloud"
-            description="use openai, anthropic and google models without worrying about api keys or usage"
-            imageSrc="/images/screenpipe.png"
-            selected={settings.aiProviderType === "screenpipe-cloud"}
-            onClick={() => handleAiProviderChange("screenpipe-cloud")}
-            warningText={!credits?.amount ? "requires credits" : undefined}
-          />
-
-          <AIProviderCard
             type="openai"
             title="openai"
             description="use your own openai api key for gpt-4 and other models"
             imageSrc="/images/openai.png"
             selected={settings.aiProviderType === "openai"}
             onClick={() => handleAiProviderChange("openai")}
+          />
+
+          <AIProviderCard
+            type="screenpipe-cloud"
+            title="screenpipe cloud"
+            description="use openai, anthropic and google models without worrying about api keys or usage"
+            imageSrc="/images/screenpipe.png"
+            selected={settings.aiProviderType === "screenpipe-cloud"}
+            onClick={() => handleAiProviderChange("screenpipe-cloud")}
+            disabled={!settings.user}
+            warningText={
+              !settings.user
+                ? "login required"
+                : !settings.user?.credits?.amount
+                ? "requires credits"
+                : undefined
+            }
           />
 
           <AIProviderCard
@@ -376,17 +263,6 @@ const AISection = () => {
             selected={settings.aiProviderType === "custom"}
             onClick={() => handleAiProviderChange("custom")}
           />
-
-          {embeddedAIStatus === "running" && (
-            <AIProviderCard
-              type="embedded"
-              title="embedded ai"
-              description="use the built-in ai engine for offline processing"
-              imageSrc="/images/embedded.png"
-              selected={settings.aiProviderType === "embedded"}
-              onClick={() => handleAiProviderChange("embedded")}
-            />
-          )}
         </div>
       </div>
       {settings.aiProviderType === "custom" && (
@@ -545,8 +421,8 @@ const AISection = () => {
                   <p>
                     maximum number of characters (think 4 characters per token)
                     to send to the ai model. <br />
-                    usually, openai models support up to 128k tokens, which is
-                    roughly 512k characters. <br />
+                    usually, openai models support up to 200k tokens, which is
+                    roughly 1m characters. <br />
                     we&apos;ll use this for UI purposes to show you how much you
                     can send.
                   </p>
@@ -557,9 +433,9 @@ const AISection = () => {
           <div className="flex-grow flex items-center">
             <Slider
               id="aiMaxContextChars"
-              min={1000}
-              max={512000}
-              step={1000}
+              min={10000}
+              max={1000000}
+              step={10000}
               value={[settings.aiMaxContextChars]}
               onValueChange={handleMaxContextCharsChange}
               className="flex-grow"
@@ -570,114 +446,6 @@ const AISection = () => {
           </div>
         </div>
       </div>
-
-      <div className="flex items-center gap-4 mb-4 w-full">
-        <div className="flex items-center justify-between w-full">
-          <div className="space-y-1">
-            <h4 className="font-medium">embedded ai</h4>
-            <p className="text-sm text-muted-foreground">
-              enable this to use local ai features in screenpipe.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="embeddedLLM"
-              checked={settings.embeddedLLM.enabled}
-              onCheckedChange={handleEmbeddedLLMChange}
-            />
-            {settings.embeddedLLM.enabled && (
-              <>
-                <Button
-                  onClick={startOllamaSidecar}
-                  disabled={ollamaStatus === "running"}
-                  className="ml-auto"
-                >
-                  {ollamaStatus === "running" ? (
-                    <Check className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "error" ? (
-                    <X className="h-4 w-4 mr-2" />
-                  ) : ollamaStatus === "idle" ? (
-                    <Play className="h-4 w-4 mr-2" />
-                  ) : (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  )}
-                  {ollamaStatus === "running"
-                    ? "running"
-                    : ollamaStatus === "error"
-                    ? "error"
-                    : "start ai"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleStopLLM}
-                  className="ml-auto"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  stop ai
-                </Button>
-                <LogFileButton isAppLog={true} />
-                <Badge>{embeddedAIStatus}</Badge>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {settings.embeddedLLM.enabled && (
-        <>
-          <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
-              <Label
-                htmlFor="embeddedLLMModel"
-                className="min-w-[80px] text-right"
-              >
-                llm model
-              </Label>
-              <div className="flex-grow flex items-center">
-                <Input
-                  id="embeddedLLMModel"
-                  value={settings.embeddedLLM.model}
-                  onChange={handleEmbeddedLLMModelChange}
-                  className="flex-grow"
-                  placeholder="enter embedded llm model"
-                />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="ml-2 h-4 w-4 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-[300px]">
-                      <p>
-                        supported models are the same as ollama. check the
-                        ollama documentation for a list of available models.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full">
-            <div className="flex items-center gap-4 mb-4">
-              <Label
-                htmlFor="embeddedLLMPort"
-                className="min-w-[80px] text-right"
-              >
-                llm port
-              </Label>
-              <Input
-                id="embeddedLLMPort"
-                type="number"
-                value={settings.embeddedLLM.port}
-                onChange={handleEmbeddedLLMPortChange}
-                className="flex-grow"
-                placeholder="enter embedded llm port"
-              />
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 };

@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-
 import { debounce } from "lodash";
-
 
 interface HealthCheckResponse {
   status: string;
@@ -45,21 +43,13 @@ export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
   const healthRef = useRef(health);
 
   const fetchHealth = useCallback(async () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    abortControllerRef.current = new AbortController();
-
     try {
       setIsLoading(true);
       const response = await fetch("http://localhost:3030/health", {
         cache: "no-store",
-        signal: abortControllerRef.current.signal,
         headers: {
           "Cache-Control": "no-cache",
           Pragma: "no-cache",
@@ -67,6 +57,7 @@ export function useHealthCheck() {
       });
 
       if (!response.ok) {
+        setIsServerDown(true);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -79,31 +70,24 @@ export function useHealthCheck() {
 
       setIsServerDown(false);
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      // console.error("Health check error:", error);
-      if (!isServerDown) {
-        setIsServerDown(true);
-        const errorHealth: HealthCheckResponse = {
-          last_frame_timestamp: null,
-          last_audio_timestamp: null,
-          last_ui_timestamp: null,
-          frame_status: "error",
-          audio_status: "error",
-          ui_status: "error",
-          status: "error",
-          status_code: 500,
-          message: "Failed to fetch health status. Server might be down.",
-        };
-        setHealth(errorHealth);
-        healthRef.current = errorHealth;
-      }
+      setIsServerDown(true);
+      const errorHealth: HealthCheckResponse = {
+        last_frame_timestamp: null,
+        last_audio_timestamp: null,
+        last_ui_timestamp: null,
+        frame_status: "error",
+        audio_status: "error",
+        ui_status: "error",
+        status: "error",
+        status_code: 500,
+        message: "Failed to fetch health status. Server might be down.",
+      };
+      setHealth(errorHealth);
+      healthRef.current = errorHealth;
     } finally {
       setIsLoading(false);
     }
-  }, [isServerDown, setIsLoading]);
+  }, []);
 
   const debouncedFetchHealth = useCallback(debounce(fetchHealth, 200), [
     fetchHealth,
@@ -111,13 +95,10 @@ export function useHealthCheck() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000);
+    const interval = setInterval(fetchHealth, 2000);
 
     return () => {
       clearInterval(interval);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
     };
   }, [fetchHealth]);
 
@@ -129,3 +110,4 @@ export function useHealthCheck() {
     debouncedFetchHealth,
   } as HealthCheckHook;
 }
+

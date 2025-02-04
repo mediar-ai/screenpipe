@@ -1,29 +1,28 @@
-use std::{
-    collections::HashMap,
-    env, fs,
-    io::Write,
-    net::SocketAddr,
-    ops::Deref,
-    path::PathBuf,
-    sync::{atomic::AtomicBool, Arc},
-    time::Duration,
-};
-
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
-use crossbeam::queue::SegQueue;
 use dirs::home_dir;
 use futures::pin_mut;
+use futures::StreamExt;
 use port_check::is_local_ipv4_port_free;
+use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    create_whisper_channel, default_input_device, default_output_device, list_audio_devices,
+    parse_audio_device, VadEngineEnum,
 };
-use screenpipe_core::find_ffmpeg_path;
+
+use screenpipe_audio::{AudioInput, TranscriptionResult};
+use screenpipe_core::DeviceControl;
+use screenpipe_core::DeviceType;
+use screenpipe_core::{find_ffmpeg_path, DeviceManager};
+use screenpipe_server::VisionDeviceControlRequest;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
-    highlight::{Highlight, HighlightConfig},
+    cli::{
+        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
+        PipeCommand, VisionCommand,
+    },
+    core::{AudioConfig, RecordingConfig, VisionConfig},
+    handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
 };
@@ -31,6 +30,16 @@ use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    io::Write,
+    net::SocketAddr,
+    ops::Deref,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -38,16 +47,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-
-fn print_devices(devices: &[AudioDevice]) {
-    println!("available audio devices:");
-    for device in devices.iter() {
-        println!("  {}", device);
-    }
-
-    #[cfg(target_os = "macos")]
-    println!("on macos, it's not intuitive but output devices are your displays");
-}
 
 const DISPLAY: &str = r"
                                             _          
@@ -134,6 +133,27 @@ async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
+    // Initialize Sentry only if telemetry is enabled
+    let _sentry_guard = if !cli.disable_telemetry {
+        // check if SENTRY_RELEASE_NAME_APPEND is set
+        let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
+        let release_name = format!(
+            "{:?}{}",
+            sentry::release_name!(),
+            sentry_release_name_append
+        );
+        Some(sentry::init((
+            "https://cf682877173997afc8463e5ca2fbe3c7@o4507617161314304.ingest.us.sentry.io/4507617170161664",
+            sentry::ClientOptions {
+                release: Some(release_name.into()),
+                traces_sample_rate: 0.1,
+                ..Default::default()
+            }
+        )))
+    } else {
+        None
+    };
+
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
@@ -145,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
                 PipeCommand::List {
                     output: OutputFormat::Text,
                     ..
-                } | PipeCommand::Download {
+                } | PipeCommand::Install {
                     output: OutputFormat::Text,
                     ..
                 } | PipeCommand::Info {
@@ -158,6 +178,32 @@ async fn main() -> anyhow::Result<()> {
                     | PipeCommand::Delete { .. }
             )
         }
+        Some(Command::Add {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
+        Some(Command::Doctor {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
+        Some(Command::Vision { subcommand }) => {
+            matches!(
+                subcommand,
+                VisionCommand::List {
+                    output: OutputFormat::Text,
+                    ..
+                }
+            )
+        }
+        Some(Command::Audio { subcommand }) => {
+            matches!(
+                subcommand,
+                AudioCommand::List {
+                    output: OutputFormat::Text,
+                    ..
+                }
+            )
+        }
         _ => true,
     };
 
@@ -168,20 +214,82 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    let h = Highlight::init(HighlightConfig {
-        project_id: String::from("82688"),
-        ..Default::default()
-    })
-    .expect("Failed to initialize Highlight.io");
-
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
+    if let Some(Command::Completions { shell }) = &cli.command {
+        cli.handle_completions(*shell)?;
+        return Ok(());
+    }
     if let Some(command) = cli.command {
         match command {
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
+            Command::Vision { subcommand } => match subcommand {
+                VisionCommand::List { output } => {
+                    let monitors = list_monitors().await;
+                    match output {
+                        OutputFormat::Json => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "data": monitors.iter().map(|m| {
+                                        json!({
+                                            "id": m.id(),
+                                            "name": m.name(),
+                                            "x": m.x(),
+                                            "y": m.y(),
+                                            "width": m.width(),
+                                            "height": m.height(),
+                                            "rotation": m.rotation(),
+                                            "scale_factor": m.scale_factor(),
+                                            "frequency": m.frequency(),
+                                            "is_primary": m.is_primary()
+                                        })
+                                    }).collect::<Vec<_>>(),
+                                    "success": true
+                                }))?
+                            );
+                        }
+                        OutputFormat::Text => {
+                            println!("available monitors:");
+                            for monitor in monitors.iter() {
+                                println!("  {}. {:?}", monitor.id(), monitor);
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
+            Command::Audio { subcommand } => match subcommand {
+                AudioCommand::List { output } => {
+                    let devices = list_audio_devices().await?;
+                    match output {
+                        OutputFormat::Json => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "data": devices.iter().map(|d| {
+                                        json!({
+                                            "name": d.name,
+                                            "device_type": d.device_type,
+                                        })
+                                    }).collect::<Vec<_>>(),
+                                    "success": true
+                                }))?
+                            );
+                        }
+                        OutputFormat::Text => {
+                            println!("available audio devices:");
+                            for device in devices.iter() {
+                                println!("  {:?}", device);
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
             #[allow(unused_variables)]
             Command::Setup { enable_beta } => {
                 #[cfg(feature = "beta")]
@@ -243,7 +351,7 @@ async fn main() -> anyhow::Result<()> {
                     Err(e) => {
                         warn!("ffmpeg check failed: {}", e);
                         warn!("please ensure ffmpeg is installed correctly and is in your PATH");
-                        return Err(e.into());
+                        return Err(e);
                     }
                 }
 
@@ -261,20 +369,89 @@ async fn main() -> anyhow::Result<()> {
                 info!("database migrations completed successfully");
                 return Ok(());
             }
+            Command::Add {
+                path,
+                output,
+                data_dir,
+                pattern,
+                ocr_engine,
+                metadata_override,
+                copy_videos,
+                debug,
+                use_embedding,
+            } => {
+                let local_data_dir = get_base_dir(&data_dir)?;
+
+                // Update logging filter if debug is enabled
+                if debug {
+                    tracing::subscriber::set_global_default(
+                        tracing_subscriber::registry()
+                            .with(
+                                EnvFilter::from_default_env()
+                                    .add_directive("screenpipe=debug".parse().unwrap()),
+                            )
+                            .with(fmt::layer().with_writer(std::io::stdout)),
+                    )
+                    .ok();
+                    debug!("debug logging enabled");
+                }
+
+                let db = Arc::new(
+                    DatabaseManager::new(&format!(
+                        "{}/db.sqlite",
+                        local_data_dir.to_string_lossy()
+                    ))
+                    .await
+                    .map_err(|e| {
+                        error!("failed to initialize database: {:?}", e);
+                        e
+                    })?,
+                );
+                handle_index_command(
+                    local_data_dir,
+                    path,
+                    pattern,
+                    db,
+                    output,
+                    ocr_engine,
+                    metadata_override,
+                    copy_videos,
+                    use_embedding,
+                )
+                .await?;
+                return Ok(());
+            }
+            Command::Doctor { output, fix } => {
+                handle_doctor_command(output, fix).await?;
+                return Ok(());
+            }
+            Command::AddToPath { yes } => {
+                if !yes {
+                    print!("add screenpipe to system PATH? [y/N] ");
+                    std::io::stdout().flush()?;
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        println!("operation cancelled");
+                        return Ok(());
+                    }
+                }
+
+                match ensure_screenpipe_in_path().await {
+                    Ok(_) => {
+                        println!("✓ screenpipe successfully added to PATH");
+                        println!("note: you may need to restart your terminal for changes to take effect");
+                    }
+                    Err(e) => {
+                        eprintln!("failed to add screenpipe to PATH: {}", e);
+                        return Err(e);
+                    }
+                }
+                return Ok(());
+            }
+            Command::Completions { .. } => todo!(),
         }
     }
-
-    // Check if Screenpipe is present in PATH
-    // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
-    match ensure_screenpipe_in_path().await {
-        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
-        Err(e) => {
-            warn!("screenpipe PATH check failed: {}", e);
-            warn!("please ensure screenpipe is installed correctly and is in your PATH");
-            // do not crash
-        }
-    }
-
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
@@ -289,28 +466,16 @@ async fn main() -> anyhow::Result<()> {
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
-    if cli.list_audio_devices {
-        print_devices(&all_audio_devices);
-        return Ok(());
-    }
     let all_monitors = list_monitors().await;
-    if cli.list_monitors {
-        println!("available monitors:");
-        for monitor in all_monitors.iter() {
-            println!("  {}. {:?}", monitor.id(), monitor);
-        }
-        return Ok(());
-    }
 
     let mut audio_devices = Vec::new();
-
-    let audio_devices_control = Arc::new(SegQueue::new());
-
-    let audio_devices_control_server = audio_devices_control.clone();
+    let device_manager = Arc::new(DeviceManager::default());
+    let mut realtime_audio_devices = Vec::new();
 
     // Add all available audio devices to the controls
     for device in &all_audio_devices {
         let device_control = DeviceControl {
+            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
         };
@@ -323,16 +488,16 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(Arc::new(input_device.clone()));
                 let device_control = DeviceControl {
+                    device: screenpipe_core::DeviceType::Audio(input_device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
                 devices_status.insert(input_device, device_control);
             }
-            // audio output only on macos <15.0 atm ?
-            // see https://github.com/mediar-ai/screenpipe/pull/106
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
+                    device: screenpipe_core::DeviceType::Audio(output_device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
@@ -344,6 +509,7 @@ async fn main() -> anyhow::Result<()> {
                 let device = parse_audio_device(d).expect("failed to parse audio device");
                 audio_devices.push(Arc::new(device.clone()));
                 let device_control = DeviceControl {
+                    device: screenpipe_core::DeviceType::Audio(device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
@@ -354,23 +520,56 @@ async fn main() -> anyhow::Result<()> {
         if audio_devices.is_empty() {
             eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
-            for device in &audio_devices {
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
+            for (index, device) in audio_devices.iter().enumerate() {
+                if cli.disable_audio {
+                    break;
+                }
                 let device_clone = device.deref().clone();
-                let sender_clone = audio_devices_control.clone();
-                // send signal after everything started
+                let sender_clone = device_manager.clone();
+                // send signal after everything started, with staggered delays
                 tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    sender_clone.push((device_clone, device_control));
+                    // Base delay of 15s + 5s for each device index
+                    let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
+                    tokio::time::sleep(delay).await;
+                    info!(
+                        "initializing audio device control for device: {}",
+                        device_clone.name
+                    );
+
+                    let _ = sender_clone
+                        .update_device(DeviceControl {
+                            device: screenpipe_core::DeviceType::Audio(device_clone),
+                            is_running: true,
+                            is_paused: false,
+                        })
+                        .await;
                 });
+            }
+        }
+
+        if cli.enable_realtime_audio_transcription {
+            if cli.realtime_audio_device.is_empty() {
+                // Use default devices
+                if let Ok(input_device) = default_input_device() {
+                    realtime_audio_devices.push(Arc::new(input_device.clone()));
+                }
+                if let Ok(output_device) = default_output_device() {
+                    realtime_audio_devices.push(Arc::new(output_device.clone()));
+                }
+            } else {
+                for d in &cli.realtime_audio_device {
+                    let device = parse_audio_device(d).expect("failed to parse audio device");
+                    realtime_audio_devices.push(Arc::new(device.clone()));
+                }
+            }
+
+            if realtime_audio_devices.is_empty() {
+                eprintln!("no realtime audio devices available. realtime audio transcription will be disabled.");
             }
         }
     }
 
-    let resource_monitor = ResourceMonitor::new();
+    let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
     resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
@@ -384,11 +583,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_server = db.clone();
 
-    // Channel for controlling the recorder ! TODO RENAME SHIT
-    let vision_control = Arc::new(AtomicBool::new(true));
-
-    let vision_control_server_clone = vision_control.clone();
-
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
@@ -396,6 +590,34 @@ async fn main() -> anyhow::Result<()> {
     } else {
         cli.monitor_id.clone()
     };
+
+    // Initialize vision devices control based on user selected monitors
+    {
+        for (index, monitor_id) in monitor_ids.clone().into_iter().enumerate() {
+            if cli.disable_vision {
+                break;
+            }
+            let device_manager = device_manager.clone();
+            // Send signal after everything started
+            tokio::spawn(async move {
+                // Base delay of 15s + 5s for each monitor index
+                let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
+                tokio::time::sleep(delay).await;
+                info!(
+                    "initializing vision device control for monitor: {}",
+                    monitor_id
+                );
+                let device_control = DeviceControl {
+                    device: DeviceType::Vision(monitor_id),
+                    is_running: true,
+                    is_paused: false,
+                };
+                if let Err(e) = device_manager.update_device(device_control).await {
+                    warn!("failed to initialize vision device control: {}", e);
+                }
+            });
+        }
+    }
 
     let languages = cli.unique_languages().unwrap();
     let languages_clone = languages.clone();
@@ -414,11 +636,10 @@ async fn main() -> anyhow::Result<()> {
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
-    let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
-    let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
+    let realtime_audio_devices_clone = realtime_audio_devices.clone();
 
     let fps = if cli.fps.is_finite() && cli.fps > 0.0 {
         cli.fps
@@ -428,6 +649,32 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+    let dm_clone = device_manager.clone();
+    let device_manager_clone = device_manager.clone();
+
+    let (whisper_sender, whisper_receiver) = if cli.disable_audio {
+        // Create a dummy channel if no audio devices are available, e.g. audio disabled
+        let (input_sender, _): (
+            crossbeam::channel::Sender<AudioInput>,
+            crossbeam::channel::Receiver<AudioInput>,
+        ) = crossbeam::channel::bounded(100);
+        let (_, output_receiver): (
+            crossbeam::channel::Sender<TranscriptionResult>,
+            crossbeam::channel::Receiver<TranscriptionResult>,
+        ) = crossbeam::channel::bounded(100);
+        (input_sender, output_receiver)
+    } else {
+        create_whisper_channel(
+            Arc::new(cli.audio_transcription_engine.clone().into()),
+            VadEngineEnum::from(cli.vad_engine),
+            cli.deepgram_api_key.clone(),
+            &PathBuf::from(output_path_clone.as_ref()),
+            VadSensitivity::from(cli.vad_sensitivity.clone()),
+            languages.clone(),
+            device_manager.clone(),
+        )
+        .await?
+    };
 
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
@@ -435,29 +682,45 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
+
+                // Create the configs
+                let recording_config = RecordingConfig {
+                    output_path: output_path_clone.clone(),
+                    fps,
+                    audio_chunk_duration,
+                    video_chunk_duration: Duration::from_secs(cli.video_chunk_duration),
+                    use_pii_removal: cli.use_pii_removal,
+                    capture_unfocused_windows: cli.capture_unfocused_windows,
+                    languages: Arc::new(languages.clone()),
+                };
+
+                let audio_config = AudioConfig {
+                    disabled: cli.disable_audio,
+                    transcription_engine: Arc::new(cli.audio_transcription_engine.clone().into()),
+                    vad_engine: vad_engine_clone,
+                    vad_sensitivity: cli.vad_sensitivity.clone(),
+                    deepgram_api_key: cli.deepgram_api_key.clone(),
+                    realtime_enabled: cli.enable_realtime_audio_transcription,
+                    realtime_devices: realtime_audio_devices.clone(),
+                    whisper_sender: whisper_sender.clone(),
+                    whisper_receiver: whisper_receiver.clone(),
+                };
+
+                let vision_config = VisionConfig {
+                    disabled: cli.disable_vision,
+                    ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
+                    ignored_windows: Arc::new(cli.ignored_windows.clone()),
+                    include_windows: Arc::new(cli.included_windows.clone()),
+                };
+
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
-                    output_path_clone.clone(),
-                    fps,
-                    audio_chunk_duration, // use the new setting
-                    Duration::from_secs(cli.video_chunk_duration),
-                    vision_control_clone.clone(),
-                    audio_devices_control.clone(),
-                    cli.disable_audio,
-                    Arc::new(cli.audio_transcription_engine.clone().into()),
-                    Arc::new(cli.ocr_engine.clone().into()),
-                    monitor_ids_clone.clone(),
-                    cli.use_pii_removal,
-                    cli.disable_vision,
-                    vad_engine_clone,
+                    recording_config,
+                    audio_config,
+                    vision_config,
                     &vision_handle,
                     &audio_handle,
-                    &cli.ignored_windows,
-                    &cli.included_windows,
-                    cli.deepgram_api_key.clone(),
-                    cli.vad_sensitivity.clone(),
-                    languages.clone(),
-                    cli.capture_unfocused_windows,
+                    device_manager.clone(),
                 );
 
                 let result = tokio::select! {
@@ -472,9 +735,6 @@ async fn main() -> anyhow::Result<()> {
                     error!("continuous recording error: {:?}", e);
                 }
             }
-
-            drop(vision_runtime);
-            drop(audio_runtime);
         })
     };
 
@@ -483,7 +743,7 @@ async fn main() -> anyhow::Result<()> {
     debug!("LLM initializing");
 
     #[cfg(feature = "llm")]
-    let llm = {
+    let _llm = {
         match cli.enable_llm {
             true => Some(screenpipe_core::LLM::new(
                 screenpipe_core::ModelName::Llama,
@@ -500,17 +760,90 @@ async fn main() -> anyhow::Result<()> {
             // Track search requests
         }
     };
+
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
-        vision_control_server_clone,
-        audio_devices_control_server,
+        dm_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
     );
+
+    tokio::spawn(async move {
+        // Watch for device changes using the new stream API
+        let mut device_changes = device_manager_clone.watch_devices().await;
+
+        while let Some(change) = device_changes.next().await {
+            // ignore if vision disabled and its a vision device
+            if cli.disable_vision && change.control.device.is_vision() {
+                continue;
+            }
+            if cli.disable_audio && change.control.device.is_audio() {
+                continue;
+            }
+            debug!("received device update: {:?}", change);
+            if let Err(e) = handle_device_update(
+                &change.control.device,
+                change.control.clone(),
+                &device_manager_clone,
+            )
+            .await
+            {
+                error!("Device update failed: {}", e);
+                continue;
+            }
+        }
+        info!("device control task stopped");
+    });
+
+    async fn handle_device_update(
+        device: &DeviceType,
+        control: DeviceControl,
+        devices_control: &Arc<DeviceManager>,
+    ) -> anyhow::Result<()> {
+        debug!("received device update");
+
+        match device {
+            DeviceType::Audio(device) => {
+                match list_audio_devices().await {
+                    Ok(available_devices) => {
+                        if !available_devices.contains(device) {
+                            warn!("attempted to control non-existent device: {}", device.name);
+                            return Err(anyhow::anyhow!(
+                                "attempted to control non-existent device: {}",
+                                device.name
+                            ));
+                        }
+
+                        // Update the device state using new DeviceManager API
+                        devices_control.update_device(control).await?;
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("failed to list audio devices: {}", e);
+                        Err(anyhow::anyhow!("failed to list audio devices: {}", e))
+                    }
+                }
+            }
+            DeviceType::Vision(monitor_id) => {
+                let monitors = list_monitors().await;
+                if !monitors.iter().any(|m| m.id() == *monitor_id) {
+                    warn!("attempted to control non-existent device: {}", monitor_id);
+                    return Err(anyhow::anyhow!(
+                        "attempted to control non-existent device: {}",
+                        monitor_id
+                    ));
+                }
+
+                // Update the device state using new DeviceManager API
+                devices_control.update_device(control).await?;
+                Ok(())
+            }
+        }
+    }
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -525,56 +858,70 @@ async fn main() -> anyhow::Result<()> {
         "open source | runs locally | developer friendly".bright_green()
     );
 
-    println!("┌─────────────────────┬────────────────────────────────────┐");
-    println!("│ setting             │ value                              │");
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ fps                 │ {:<34} │", cli.fps);
+    println!("┌────────────────────────┬────────────────────────────────────┐");
+    println!("│ setting                │ value                              │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ fps                    │ {:<34} │", cli.fps);
     println!(
-        "│ audio chunk duration│ {:<34} │",
+        "│ audio chunk duration   │ {:<34} │",
         format!("{} seconds", cli.audio_chunk_duration)
     );
     println!(
-        "│ video chunk duration│ {:<34} │",
+        "│ video chunk duration   │ {:<34} │",
         format!("{} seconds", cli.video_chunk_duration)
     );
-    println!("│ port                │ {:<34} │", cli.port);
-    println!("│ audio disabled      │ {:<34} │", cli.disable_audio);
-    println!("│ vision disabled     │ {:<34} │", cli.disable_vision);
+    println!("│ port                   │ {:<34} │", cli.port);
     println!(
-        "│ audio engine        │ {:<34} │",
+        "│ realtime audio enabled │ {:<34} │",
+        cli.enable_realtime_audio_transcription
+    );
+    println!("│ audio disabled         │ {:<34} │", cli.disable_audio);
+    println!("│ vision disabled        │ {:<34} │", cli.disable_vision);
+    println!(
+        "│ audio engine           │ {:<34} │",
         format!("{:?}", warning_audio_transcription_engine_clone)
     );
     println!(
-        "│ ocr engine          │ {:<34} │",
+        "│ ocr engine             │ {:<34} │",
         format!("{:?}", ocr_engine_clone)
     );
     println!(
-        "│ vad engine          │ {:<34} │",
+        "│ vad engine             │ {:<34} │",
         format!("{:?}", vad_engine_clone)
     );
     println!(
-        "│ vad sensitivity     │ {:<34} │",
+        "│ vad sensitivity        │ {:<34} │",
         format!("{:?}", vad_sensitivity_clone)
     );
     println!(
-        "│ data directory      │ {:<34} │",
+        "│ data directory         │ {:<34} │",
         local_data_dir_clone.display()
     );
-    println!("│ debug mode          │ {:<34} │", cli.debug);
-    println!("│ telemetry           │ {:<34} │", !cli.disable_telemetry);
-    println!("│ local llm           │ {:<34} │", cli.enable_llm);
-
-    println!("│ use pii removal     │ {:<34} │", cli.use_pii_removal);
+    println!("│ debug mode             │ {:<34} │", cli.debug);
     println!(
-        "│ ignored windows     │ {:<34} │",
+        "│ telemetry              │ {:<34} │",
+        !cli.disable_telemetry
+    );
+    println!("│ local llm              │ {:<34} │", cli.enable_llm);
+
+    println!("│ use pii removal        │ {:<34} │", cli.use_pii_removal);
+    println!(
+        "│ ignored windows        │ {:<34} │",
         format_cell(&format!("{:?}", &ignored_windows_clone), VALUE_WIDTH)
     );
     println!(
-        "│ included windows    │ {:<34} │",
+        "│ included windows       │ {:<34} │",
         format_cell(&format!("{:?}", &included_windows_clone), VALUE_WIDTH)
     );
-    println!("│ ui monitoring       │ {:<34} │", cli.enable_ui_monitoring);
-    println!("│ frame cache         │ {:<34} │", cli.enable_frame_cache);
+    println!(
+        "│ ui monitoring          │ {:<34} │",
+        cli.enable_ui_monitoring
+    );
+    println!(
+        "│ frame cache            │ {:<34} │",
+        cli.enable_frame_cache
+    );
+    println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
 
     const VALUE_WIDTH: usize = 34;
 
@@ -596,12 +943,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add languages section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ languages           │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ languages              │                                    │");
     const MAX_ITEMS_TO_DISPLAY: usize = 5;
 
     if cli.language.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "all languages");
+        println!("│ {:<22} │ {:<34} │", "", "all languages");
     } else {
         let total_languages = cli.language.len();
         for (_, language) in languages_clone
@@ -611,11 +958,11 @@ async fn main() -> anyhow::Result<()> {
         {
             let language_str = format!("id: {}", language);
             let formatted_language = format_cell(&language_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_language);
+            println!("│ {:<22} │ {:<34} │", "", formatted_language);
         }
         if total_languages > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_languages - MAX_ITEMS_TO_DISPLAY)
             );
@@ -623,23 +970,23 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Add monitors section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ monitors            │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ monitors               │                                    │");
 
     if cli.disable_vision {
-        println!("│ {:<19} │ {:<34} │", "", "vision disabled");
+        println!("│ {:<22} │ {:<34} │", "", "vision disabled");
     } else if monitor_ids.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no monitors available");
+        println!("│ {:<22} │ {:<34} │", "", "no monitors available");
     } else {
         let total_monitors = monitor_ids.len();
         for (_, monitor) in monitor_ids.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let monitor_str = format!("id: {}", monitor);
             let formatted_monitor = format_cell(&monitor_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_monitor);
+            println!("│ {:<22} │ {:<34} │", "", formatted_monitor);
         }
         if total_monitors > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_monitors - MAX_ITEMS_TO_DISPLAY)
             );
@@ -647,24 +994,52 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Audio devices section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ audio devices       │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ audio devices          │                                    │");
 
     if cli.disable_audio {
-        println!("│ {:<19} │ {:<34} │", "", "disabled");
+        println!("│ {:<22} │ {:<34} │", "", "disabled");
     } else if audio_devices.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no devices available");
+        println!("│ {:<22} │ {:<34} │", "", "no devices available");
     } else {
         let total_devices = audio_devices.len();
         for (_, device) in audio_devices.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
-            println!("│ {:<19} │ {:<34} │", "", formatted_device);
+            println!("│ {:<22} │ {:<34} │", "", formatted_device);
         }
         if total_devices > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
+                "",
+                format!("... and {} more", total_devices - MAX_ITEMS_TO_DISPLAY)
+            );
+        }
+    }
+    // Realtime Audio devices section
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ realtime audio devices │                                    │");
+
+    if cli.disable_audio || !cli.enable_realtime_audio_transcription {
+        println!("│ {:<22} │ {:<34} │", "", "disabled");
+    } else if realtime_audio_devices_clone.is_empty() {
+        println!("│ {:<22} │ {:<34} │", "", "no devices available");
+    } else {
+        let total_devices = realtime_audio_devices_clone.len();
+        for (_, device) in realtime_audio_devices_clone
+            .iter()
+            .enumerate()
+            .take(MAX_ITEMS_TO_DISPLAY)
+        {
+            let device_str = device.deref().to_string();
+            let formatted_device = format_cell(&device_str, VALUE_WIDTH);
+
+            println!("│ {:<22} │ {:<34} │", "", formatted_device);
+        }
+        if total_devices > MAX_ITEMS_TO_DISPLAY {
+            println!(
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_devices - MAX_ITEMS_TO_DISPLAY)
             );
@@ -672,11 +1047,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Pipes section
-    println!("├─────────────────────┼────────────────────────────────────┤");
-    println!("│ pipes               │                                    │");
+    println!("├────────────────────────┼────────────────────────────────────┤");
+    println!("│ pipes                  │                                    │");
     let pipes = pipe_manager.list_pipes().await;
     if pipes.is_empty() {
-        println!("│ {:<19} │ {:<34} │", "", "no pipes available");
+        println!("│ {:<22} │ {:<34} │", "", "no pipes available");
     } else {
         let total_pipes = pipes.len();
         for (_, pipe) in pipes.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
@@ -686,18 +1061,18 @@ async fn main() -> anyhow::Result<()> {
                 pipe.id,
             );
             let formatted_pipe = format_cell(&pipe_str, VALUE_WIDTH);
-            println!("│ {:<19} │ {:<34} │", "", formatted_pipe);
+            println!("│ {:<22} │ {:<34} │", "", formatted_pipe);
         }
         if total_pipes > MAX_ITEMS_TO_DISPLAY {
             println!(
-                "│ {:<19} │ {:<34} │",
+                "│ {:<22} │ {:<34} │",
                 "",
                 format!("... and {} more", total_pipes - MAX_ITEMS_TO_DISPLAY)
             );
         }
     }
 
-    println!("└─────────────────────┴────────────────────────────────────┘");
+    println!("└────────────────────────┴────────────────────────────────────┘");
 
     // Add warning for cloud arguments and telemetry
     if warning_audio_transcription_engine_clone == CliAudioTranscriptionEngine::Deepgram
@@ -720,12 +1095,11 @@ async fn main() -> anyhow::Result<()> {
     if !cli.disable_telemetry {
         println!(
             "{}",
-            "warning: telemetry is enabled. only error-level data will be sent to highlight.io.\n\
+            "warning: telemetry is enabled. only error-level data will be sent.\n\
             to disable, use the --disable-telemetry flag."
                 .bright_yellow()
         );
     } else {
-        h.shutdown();
         println!(
             "{}",
             "telemetry is disabled. no data will be sent to external services.".bright_green()
@@ -759,18 +1133,48 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let server_future = server.start(devices_status, api_plugin, cli.enable_frame_cache);
+    let server_future = server.start(api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
     // Add auto-destruct watcher
     if let Some(pid) = cli.auto_destruct_pid {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
+        let pipe_manager = pipe_manager.clone();
         tokio::spawn(async move {
             // sleep for 5 seconds
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
-                info!("watched pid {} has stopped, initiating shutdown", pid);
+                info!("Watched pid ({}) has stopped, initiating shutdown", pid);
+
+                // Get list of enabled pipes
+                let pipes = pipe_manager.list_pipes().await;
+                let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
+
+                // Stop all enabled pipes in parallel
+                let stop_futures = enabled_pipes.iter().map(|pipe| {
+                    let pipe_manager = pipe_manager.clone();
+                    let pipe_id = pipe.id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = pipe_manager.stop_pipe(&pipe_id).await {
+                            error!("failed to stop pipe {}: {}", pipe_id, e);
+                        }
+                    })
+                });
+
+                // Wait for all pipes to stop with timeout
+                let timeout = tokio::time::sleep(Duration::from_secs(10));
+                tokio::pin!(timeout);
+
+                tokio::select! {
+                    _ = futures::future::join_all(stop_futures) => {
+                        info!("all pipes stopped successfully");
+                    }
+                    _ = &mut timeout => {
+                        warn!("timeout waiting for pipes to stop");
+                    }
+                }
+
                 let _ = shutdown_tx_clone.send(());
             }
         });
@@ -833,6 +1237,78 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 
+    if cli.use_all_monitors && !cli.disable_vision {
+        let client = reqwest::Client::new();
+        let port = cli.port;
+        let mut shutdown_rx = shutdown_tx.subscribe();
+
+        tokio::spawn(async move {
+            // wait 10 seconds
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            // Start all available monitors immediately
+            let initial_monitors: HashSet<u32> =
+                list_monitors().await.into_iter().map(|m| m.id()).collect();
+
+            for monitor_id in &initial_monitors {
+                info!("starting monitor: {}", monitor_id);
+                let _ = client
+                    .post(format!("http://127.0.0.1:{}/vision/start", port))
+                    .json(&VisionDeviceControlRequest::new(*monitor_id))
+                    .send()
+                    .await
+                    .map_err(|e| error!("failed to start monitor {}: {}", monitor_id, e));
+            }
+
+            let mut previous_monitors = initial_monitors;
+
+            loop {
+                tokio::select! {
+                    _ = shutdown_rx.recv() => {
+                        info!("stopping monitor polling due to shutdown signal");
+                        break;
+                    }
+                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
+                        let current_monitors: HashSet<u32> = list_monitors()
+                            .await
+                            .into_iter()
+                            .map(|m| m.id())
+                            .collect();
+
+                        // Handle new monitors
+                        for monitor_id in current_monitors.difference(&previous_monitors) {
+                            info!("new monitor detected: {}", monitor_id);
+
+                            // Start recording the new monitor using the API
+                            let _ = client
+                                .post(format!("http://127.0.0.1:{}/vision/start", port))
+                                .json(&VisionDeviceControlRequest::new(*monitor_id))
+                                .send()
+                                .await
+                                .map_err(|e| error!("failed to start new monitor {}: {}", monitor_id, e));
+                        }
+
+                        // Handle removed monitors
+                        for monitor_id in previous_monitors.difference(&current_monitors) {
+                            info!("monitor removed: {}", monitor_id);
+
+                            // Stop recording the removed monitor using the API
+                            let _ = client
+                                .post(format!("http://127.0.0.1:{}/vision/stop", port))
+                                .json(&VisionDeviceControlRequest::new(*monitor_id))
+                                .send()
+                                .await
+                                .map_err(|e| {
+                                    error!("failed to stop removed monitor {}: {}", monitor_id, e)
+                                });
+                        }
+
+                        previous_monitors = current_monitors;
+                    }
+                }
+            }
+        });
+    }
+
     tokio::select! {
         _ = handle => info!("recording completed"),
         result = &mut server_future => {
@@ -847,7 +1323,11 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    h.shutdown();
+    tokio::task::block_in_place(|| {
+        drop(vision_runtime);
+        drop(audio_runtime);
+    });
+
     info!("shutdown complete");
 
     Ok(())
@@ -864,7 +1344,7 @@ async fn handle_pipe_command(
         PipeCommand::List { output, port } => {
             let server_url = format!("{}:{}", server_url, port);
             let pipes = match client
-                .get(&format!("{}/pipes/list", server_url))
+                .get(format!("{}/pipes/list", server_url))
                 .send()
                 .await
             {
@@ -906,9 +1386,11 @@ async fn handle_pipe_command(
             }
         }
 
-        PipeCommand::Download { url, output, port } => {
+        #[allow(deprecated)]
+        PipeCommand::Download { url, output, port }
+        | PipeCommand::Install { url, output, port } => {
             match client
-                .post(&format!("{}:{}/pipes/download", server_url, port))
+                .post(format!("{}:{}/pipes/download", server_url, port))
                 .json(&json!({ "url": url }))
                 .send()
                 .await
@@ -958,7 +1440,7 @@ async fn handle_pipe_command(
 
         PipeCommand::Info { id, output, port } => {
             let info = match client
-                .get(&format!("{}:{}/pipes/info/{}", server_url, port, id))
+                .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
                 .send()
                 .await
             {
@@ -979,7 +1461,7 @@ async fn handle_pipe_command(
         }
         PipeCommand::Enable { id, port } => {
             match client
-                .post(&format!("{}:{}/pipes/enable", server_url, port))
+                .post(format!("{}:{}/pipes/enable", server_url, port))
                 .json(&json!({ "pipe_id": id }))
                 .send()
                 .await
@@ -998,7 +1480,7 @@ async fn handle_pipe_command(
 
         PipeCommand::Disable { id, port } => {
             match client
-                .post(&format!("{}:{}/pipes/disable", server_url, port))
+                .post(format!("{}:{}/pipes/disable", server_url, port))
                 .json(&json!({ "pipe_id": id }))
                 .send()
                 .await
@@ -1020,7 +1502,7 @@ async fn handle_pipe_command(
                 .map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
 
             match client
-                .post(&format!("{}:{}/pipes/update", server_url, port))
+                .post(format!("{}:{}/pipes/update", server_url, port))
                 .json(&json!({
                     "pipe_id": id,
                     "config": config
@@ -1051,7 +1533,7 @@ async fn handle_pipe_command(
             }
 
             match client
-                .delete(&format!("{}:{}/pipes/delete/{}", server_url, port, id))
+                .delete(format!("{}:{}/pipes/delete/{}", server_url, port, id))
                 .send()
                 .await
             {
@@ -1078,7 +1560,7 @@ async fn handle_pipe_command(
             }
 
             match client
-                .post(&format!("{}:{}/pipes/purge", server_url, port))
+                .post(format!("{}:{}/pipes/purge", server_url, port))
                 .send()
                 .await
             {
@@ -1248,6 +1730,96 @@ async fn check_ffmpeg() -> anyhow::Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+async fn handle_doctor_command(output: OutputFormat, fix: bool) -> anyhow::Result<()> {
+    let mut checks = Vec::new();
+
+    // Check ffmpeg
+    let ffmpeg_status = match find_ffmpeg_path() {
+        Some(path) => ("ffmpeg", true, format!("found at {}", path.display())),
+        None => ("ffmpeg", false, "not found in PATH".to_string()),
+    };
+    checks.push(ffmpeg_status);
+
+    // Check data directory
+    let data_dir = get_base_dir(&None)?;
+    let data_dir_status = (
+        "data directory",
+        data_dir.exists(),
+        format!("{}", data_dir.display()),
+    );
+    checks.push(data_dir_status);
+
+    // Check database
+    let db_path = data_dir.join("db.sqlite");
+    let db_exists = db_path.exists();
+    let db_status = ("database", db_exists, format!("{}", db_path.display()));
+    checks.push(db_status);
+
+    // Check audio devices
+    let audio_devices = match list_audio_devices().await {
+        Ok(devices) => {
+            let count = devices.len();
+            (
+                "audio devices",
+                count > 0,
+                format!("{} devices found", count),
+            )
+        }
+        Err(e) => ("audio devices", false, format!("error: {}", e)),
+    };
+    checks.push(audio_devices);
+
+    // Check monitors
+    let monitors = list_monitors().await;
+    let monitor_status = (
+        "monitors",
+        !monitors.is_empty(),
+        format!("{} found", monitors.len()),
+    );
+    checks.push(monitor_status);
+
+    // Output results
+    match output {
+        OutputFormat::Json => {
+            let json = serde_json::json!({
+                "checks": checks.iter().map(|(name, status, msg)| {
+                    serde_json::json!({
+                        "name": name,
+                        "status": status,
+                        "message": msg,
+                    })
+                }).collect::<Vec<_>>(),
+                "healthy": checks.iter().all(|(_, status, _)| *status),
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        }
+        OutputFormat::Text => {
+            println!("\n🔍 screenpipe system diagnostics\n");
+
+            for (name, status, msg) in &checks {
+                let symbol = if *status { "✅" } else { "❌" };
+                println!("{} {}: {}", symbol, name, msg);
+            }
+
+            if fix {
+                println!("\n🔧 attempting to fix issues...");
+                // Add auto-fix logic here if needed
+                let db = DatabaseManager::new(&db_path.to_string_lossy()).await?;
+                db.repair_database().await?;
+            }
+
+            let healthy = checks.iter().all(|(_, status, _)| *status);
+            println!(
+                "\n{} overall health: {}\n",
+                if healthy { "✅" } else { "❌" },
+                if healthy { "healthy" } else { "issues found" }
+            );
+        }
     }
 
     Ok(())

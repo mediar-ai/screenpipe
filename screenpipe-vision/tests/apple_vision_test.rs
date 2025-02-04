@@ -2,8 +2,9 @@
 #[cfg(test)]
 mod tests {
     use image::GenericImageView;
+    use screenpipe_core::Language;
     use screenpipe_vision::perform_ocr_apple;
-    use std::path::PathBuf;
+    use std::{path::PathBuf, sync::Arc};
 
     #[tokio::test]
     async fn test_apple_native_ocr() {
@@ -25,13 +26,13 @@ mod tests {
         let rgb_image = image.to_rgb8();
         println!("RGB image dimensions: {:?}", rgb_image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let (ocr_text, _, _) = perform_ocr_apple(&image, Arc::new([].to_vec()));
 
-        println!("OCR text: {:?}", result);
+        println!("OCR text: {:?}", ocr_text);
         assert!(
-            result.contains("receiver_count"),
+            ocr_text.contains("receiver_count"),
             "OCR failed: {:?}",
-            result
+            ocr_text
         );
     }
     // # 中文测试
@@ -45,13 +46,13 @@ mod tests {
         let image = image::open(&path).expect("Failed to open Chinese test image");
         println!("Image dimensions: {:?}", image.dimensions());
 
-        let result = perform_ocr_apple(&image, vec![]);
+        let (ocr_text, _, _) = perform_ocr_apple(&image, Arc::new([Language::Chinese].to_vec()));
 
-        println!("OCR text: {:?}", result);
+        println!("OCR text: {:?}", ocr_text);
         assert!(
-            result.contains("管理分支"), // 替换为您的测试图像中的实际中文文本
+            ocr_text.contains("管理分支"),
             "OCR failed to recognize Chinese text: {:?}",
-            result
+            ocr_text
         );
     }
 }

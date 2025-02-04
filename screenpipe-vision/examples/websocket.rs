@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
 use image::ImageEncoder;
+use screenpipe_vision::capture_screenshot_by_window::WindowFilters;
 use screenpipe_vision::{
     continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
@@ -76,29 +77,32 @@ async fn main() -> Result<()> {
 
     let (result_tx, result_rx) = channel(512);
 
-    let save_text_files = cli.save_text_files;
     let ws_port = cli.ws_port;
 
     let monitor = get_default_monitor().await;
     let id = monitor.id();
+    let window_filters = Arc::new(WindowFilters::new(
+        &cli.ignored_windows,
+        &cli.included_windows,
+    ));
 
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
             Duration::from_secs_f64(1.0 / cli.fps),
-            save_text_files,
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
-                OcrEngine::AppleNative
+                Arc::new(OcrEngine::AppleNative)
             } else if cfg!(target_os = "windows") {
-                OcrEngine::WindowsNative
+                Arc::new(OcrEngine::WindowsNative)
             } else {
-                OcrEngine::Tesseract
+                Arc::new(OcrEngine::Tesseract)
             },
             id,
-            &cli.ignored_windows,
-            &cli.included_windows,
-            vec![],
+            window_filters,
+            Arc::new([].to_vec()),
+            false,
+            tokio::sync::watch::channel(false).1,
         )
         .await
     });

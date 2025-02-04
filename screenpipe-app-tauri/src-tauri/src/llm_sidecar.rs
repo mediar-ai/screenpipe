@@ -50,10 +50,10 @@ impl LLMSidecar {
         info!("Starting Ollama serve command...");
         let mut serve_command = app.shell().sidecar("ollama").unwrap();
         serve_command = serve_command
-            .args(&["serve"])
+            .args(["serve"])
             .env(
                 "OLLAMA_HOST",
-                &format!("http://localhost:{}", self.settings.port),
+                format!("http://localhost:{}", self.settings.port),
             )
             .env("CUDA_PATH", &new_cuda_path);
 
@@ -74,7 +74,7 @@ impl LLMSidecar {
         info!("Starting Ollama model...");
         let mut model_command = app.shell().sidecar("ollama").unwrap();
         model_command = model_command
-            .args(&["run", &self.settings.model])
+            .args(["run", &self.settings.model])
             .env("CUDA_PATH", &new_cuda_path);
 
         #[cfg(target_os = "windows")]
@@ -172,7 +172,7 @@ impl LLMSidecar {
     async fn attempt_model_test(&self) -> Result<String> {
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!(
+            .post(format!(
                 "http://localhost:{}/v1/chat/completions",
                 self.settings.port
             ))
@@ -212,7 +212,7 @@ impl LLMSidecar {
         {
             app.shell()
                 .command("taskkill")
-                .args(&["/F", "/IM", "ollama.exe"])
+                .args(["/F", "/IM", "ollama.exe"])
                 .spawn()
                 .unwrap();
         }

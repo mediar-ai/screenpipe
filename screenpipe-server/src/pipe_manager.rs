@@ -1,5 +1,8 @@
 use anyhow::Result;
-use screenpipe_core::download_pipe;
+use killport::cli::Mode;
+use killport::killport::{Killport, KillportOperations};
+use killport::signal::KillportSignal;
+use screenpipe_core::{download_pipe, download_pipe_private, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -10,7 +13,7 @@ use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
@@ -19,10 +22,11 @@ pub struct PipeInfo {
     pub config: Value,
     pub source: String,
     pub port: Option<u16>,
+    pub is_nextjs: bool,
 }
 
 struct PipeHandle {
-    pid: i32,
+    state: PipeState,
     kill_tx: Sender<()>,
 }
 
@@ -77,10 +81,20 @@ impl PipeManager {
 
         debug!("is_enabled: {}", is_enabled.unwrap_or(false));
 
+        // Handle both top-level properties and nested fields
         if let Value::Object(existing_config) = &mut config {
             if let Value::Object(updates) = new_config {
-                for (key, value) in updates {
-                    existing_config.insert(key, value);
+                // Update top-level properties
+                for (key, value) in updates.iter() {
+                    if key != "fields" {
+                        // Handle non-fields properties directly
+                        existing_config.insert(key.clone(), value.clone());
+                    }
+                }
+
+                // Handle fields separately if they exist
+                if let Some(Value::Array(new_fields)) = updates.get("fields") {
+                    existing_config.insert("fields".to_string(), Value::Array(new_fields.clone()));
                 }
             } else {
                 return Err(anyhow::anyhow!("new configuration must be an object"));
@@ -132,7 +146,7 @@ impl PipeManager {
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
-            .unwrap_or_else(|_| Value::Null);
+            .unwrap_or(Value::Null);
 
         PipeInfo {
             id: pipe_id,
@@ -151,6 +165,10 @@ impl PipeManager {
                 .get("port")
                 .and_then(Value::as_u64)
                 .and_then(|p| u16::try_from(p).ok()),
+            is_nextjs: config
+                .get("is_nextjs")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }
     }
 
@@ -203,9 +221,65 @@ impl PipeManager {
         Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
     }
 
+    pub async fn download_pipe_private(
+        &self,
+        url: &str,
+        pipe_name: &str,
+        pipe_id: &str,
+    ) -> Result<String> {
+        let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
+
+        let package_json_path = pipe_dir.join("package.json");
+        let version = if package_json_path.exists() {
+            let package_json = tokio::fs::read_to_string(&package_json_path).await?;
+            let package_data: Value = serde_json::from_str(&package_json)?;
+            package_data["version"]
+                .as_str()
+                .unwrap_or("1.0.0")
+                .to_string()
+        } else {
+            "1.0.0".to_string()
+        };
+
+        // update the config with the source url and version
+        self.update_config(
+            &pipe_dir.file_name().unwrap().to_string_lossy(),
+            serde_json::json!({
+                "source": "store",
+                "version": version,
+                "id": pipe_id,
+            }),
+        )
+        .await?;
+
+        info!(
+            "pipe {} downloaded",
+            pipe_dir.file_name().unwrap().to_string_lossy()
+        );
+
+        Ok(pipe_dir.file_name().unwrap().to_string_lossy().into_owned())
+    }
+
     pub async fn purge_pipes(&self) -> Result<()> {
+        // First, get all running pipes
+        let pipes = self.list_pipes().await;
+
+        // Stop all running pipes
+        for pipe in pipes {
+            if pipe.enabled {
+                debug!("stopping pipe {} before purge", pipe.id);
+                self.stop_pipe(&pipe.id).await?;
+            }
+        }
+
+        // Wait for all pipes to stop
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        // Then remove the directory
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
+
+        debug!("all pipes purged");
         Ok(())
     }
 
@@ -227,7 +301,7 @@ impl PipeManager {
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
-            info!("stopping pipe: {} with pid {}", id, handle.pid);
+            info!("stopping pipe: {}", id);
 
             // Send kill signal and wait for confirmation
             handle.kill_tx.send(()).await?;
@@ -238,28 +312,62 @@ impl PipeManager {
             // Wait a bit for the process to actually terminate
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-            // Force kill the process if it's still running
-            #[cfg(unix)]
-            {
-                use nix::sys::signal::{kill, Signal};
-                use nix::unistd::Pid;
-                let _ = kill(Pid::from_raw(handle.pid), Signal::SIGKILL);
-            }
-            #[cfg(windows)]
-            {
-                use windows::Win32::System::Threading::{
-                    OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                };
-                unsafe {
-                    if let Ok(h_process) = OpenProcess(
-                        PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                        false,
-                        handle.pid as u32,
-                    ) {
-                        let _ = TerminateProcess(h_process, 1);
+            match handle.state {
+                PipeState::Port(port) => {
+                    tokio::task::spawn_blocking(move || {
+                        let killport = Killport;
+                        let signal: KillportSignal = "SIGKILL".parse().unwrap();
+
+                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                        {
+                            Ok(killed_services) => {
+                                if killed_services.is_empty() {
+                                    debug!("no services found using port {}", port);
+                                } else {
+                                    for (killable_type, name) in killed_services {
+                                        debug!(
+                                            "successfully killed {} '{}' listening on port {}",
+                                            killable_type, name, port
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("error killing port {}: {}", port, e);
+                            }
+                        }
+                    })
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                }
+                PipeState::Pid(pid) => {
+                    // Force kill the process if it's still running
+                    #[cfg(unix)]
+                    {
+                        use nix::sys::signal::{kill, Signal};
+                        use nix::unistd::Pid;
+                        let _ = kill(Pid::from_raw(pid), Signal::SIGKILL);
+                    }
+                    #[cfg(windows)]
+                    {
+                        use windows::Win32::System::Threading::{
+                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
+                        };
+                        unsafe {
+                            if let Ok(h_process) = OpenProcess(
+                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
+                                false,
+                                pid as u32,
+                            ) {
+                                let _ = TerminateProcess(h_process, 1);
+                            }
+                        }
                     }
                 }
             }
+
+            // Clean up cron jobs
+            screenpipe_core::pipes::cleanup_pipe_crons(id).await?;
 
             info!("stopped pipe: {}", id);
         }
@@ -273,19 +381,25 @@ impl PipeManager {
 
         Ok(async move {
             match screenpipe_core::run_pipe(&id, screenpipe_dir.clone()).await {
-                Ok(mut child) => {
-                    let pid = child.id().expect("Failed to get child pid") as i32;
+                Ok((mut child, pipe_state)) => {
                     let (kill_tx, mut kill_rx) = mpsc::channel::<()>(1);
 
                     running_pipes.write().await.insert(
                         id_for_map.clone(),
                         PipeHandle {
-                            pid,
+                            state: pipe_state,
                             kill_tx: kill_tx.clone(),
                         },
                     );
 
-                    info!("started pipe: {} with pid {}", id, pid);
+                    match pipe_state {
+                        PipeState::Port(port) => {
+                            info!("started pipe: {} on port {}", id, port);
+                        }
+                        PipeState::Pid(pid) => {
+                            info!("started pipe: {} on pid {}", id, pid);
+                        }
+                    }
 
                     tokio::select! {
                         status = child.wait() => {

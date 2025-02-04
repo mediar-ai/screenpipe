@@ -1,10 +1,10 @@
 {
-  "name": "search",
-  "version": "0.1.0",
+  "name": "identify-speakers",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "next start",
     "lint": "next lint"
   },
@@ -22,7 +22,8 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.1.5",
-    "@screenpipe/js": "0.1.10-beta.24",
+    "@screenpipe/browser": "^0.1.26",
+    "@screenpipe/js": "^1.0.9",
     "@shadcn/ui": "^0.0.4",
     "@tanstack/react-query": "^5.62.7",
     "@types/js-levenshtein": "^1.1.3",

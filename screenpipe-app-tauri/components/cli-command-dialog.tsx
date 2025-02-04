@@ -27,24 +27,11 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
   const generateCliCommand = () => {
     const cliPath = getCliPath();
     let args = [];
-    let envVars = [];
-
-    if (settings.user?.credits) {
-      envVars.push(
-        'DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"'
-      );
-
-      if (settings.user.token) {
-        envVars.push(`CUSTOM_DEEPGRAM_API_TOKEN="${settings.user.token}"`);
-      }
-    }
 
     if (settings.audioTranscriptionEngine !== "default") {
-      const audioTranscriptionEngine =
-        settings.audioTranscriptionEngine === "screenpipe-cloud"
-          ? "deepgram"
-          : settings.audioTranscriptionEngine;
-      args.push(`--audio-transcription-engine ${audioTranscriptionEngine}`);
+      // TBD hard coded for now
+      // if someone wants to use deepgram / screenpipe cloud in CLI mode they'll ask us
+      args.push(`--audio-transcription-engine whisper-large-v3-turbo`);
     }
     if (settings.ocrEngine !== "default") {
       args.push(`--ocr-engine ${settings.ocrEngine}`);
@@ -110,8 +97,11 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-ui-monitoring");
     }
 
-    const envString = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
-    return `${envString}${cliPath} ${args.join(" ")}`;
+    if (settings.enableRealtimeAudioTranscription) {
+      args.push("--enable-realtime-audio-transcription");
+    }
+
+    return `${cliPath} ${args.join(" ")}`;
   };
 
   const handleCopyCliCommand = () => {

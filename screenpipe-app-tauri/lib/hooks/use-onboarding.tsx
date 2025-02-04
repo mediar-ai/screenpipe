@@ -1,5 +1,6 @@
-import localforage from "localforage";
 import React, { createContext, useState, useContext, useEffect } from "react";
+import { useSettings } from "./use-settings";
+import localforage from "localforage";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
@@ -14,15 +15,21 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const { settings } = useSettings();
   useEffect(() => {
     const checkFirstTimeUser = async () => {
-      const isFirstTime = await localforage.getItem<boolean>("isFirstTimeUser");
-      if (isFirstTime === null) {
+      // settings unreliable here ... race condition
+      const showOnboarding = await localforage.getItem("showOnboarding");
+      if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
         setShowOnboarding(true);
+        localforage.setItem("showOnboarding", false);
       }
     };
     checkFirstTimeUser();
-  }, []);
+  }, [settings]);
+  useEffect(() => {
+    localforage.setItem("showOnboarding", showOnboarding);
+  }, [showOnboarding]);
   return (
     <OnboardingContext.Provider value={{ showOnboarding, setShowOnboarding }}>
       {children}

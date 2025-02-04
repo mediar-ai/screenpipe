@@ -1,10 +1,23 @@
 
 
+
+https://github.com/user-attachments/assets/7466a689-7703-4f0b-b3e1-b1cb9ed70cff
+
+
 ### 1. Configure Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+[Download Claude desktop app ](https://claude.ai/download)
+
+Clone the repo: 
+
+```bash
+git clone https://github.com/mediar-ai/screenpipe
+```
+
+Edit claude app config
+
 - Windows: `notepad $env:AppData\Claude\claude_desktop_config.json`
-- Mac: `code ~/Library/Application Support/Claude/claude_desktop_config.json`
+- Mac: `code "~/Library/Application Support/Claude/claude_desktop_config.json"` (or `cursor` or `vim`)
 
 ```json
 {

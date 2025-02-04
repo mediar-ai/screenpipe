@@ -1,5 +1,6 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 <p align="center">
-   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a>
+   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | <a href="README-ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -13,8 +14,8 @@
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">build ai agents that have the full context</p>
-   <p align="center">open source | runs locally | developer friendly | 24/7 screen, mic, keyboard recording and control</p>
+   <p align="center">library & platform to build, distribute, monetize ai apps that have the full context (like rewind, granola, etc.)</p>
+   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic, keyboard recording and control</p>
 </p>
 
 <!-- Slogan -->
@@ -50,7 +51,7 @@
 
 <p align="center">
    
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
+<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/26b2986d-01aa-43de-acf0-375a72752894" />
 <img width="1312" alt="Screenshot 2024-12-16 at 2 39 32 PM" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
 
 <img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
@@ -58,12 +59,11 @@
 
 
 
-
-
 ---
 
 *news* 🔥
-- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Loom pipe, LinkedIn agent ...)
+- [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
+- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, LinkedIn agent, Timeline ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
@@ -77,7 +77,7 @@
 
 # how it works?
 
-- we record everything 24/7, 100% locally
+- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
@@ -89,7 +89,7 @@
 
 # why?
 
-1. data is the biggest bottleneck in AI right now
+1. context is the dark matter of intelligence
 2. every second you are not recording is a missing context for AGI
 
 ## get started
@@ -97,13 +97,13 @@
 macos, linux:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+curl -fsSL get.screenpi.pe/cli | sh
 ```
 
 or on windows
 
 ```bash
-irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+iwr get.screenpi.pe/cli.ps1 | iex
 ```
 
 then
@@ -120,14 +120,23 @@ make sure to allow permissions on macos (screen, mic)
 ## create plugins
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev@latest create
 ```
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
-## other examples
+you can then publish these to our store and make money:
 
-[check examples](https://docs.screenpi.pe/docs/examples)
+```bash
+bunx @screenpipe/dev@latest register --name foo [--paid --price 50] # subscription
+bun run build
+bunx @screenpipe/dev@latest publish --name foo
+```
+
+## community 
+
+- [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
+- [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
 
 ## star history
 

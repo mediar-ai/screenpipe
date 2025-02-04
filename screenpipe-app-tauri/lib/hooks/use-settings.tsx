@@ -3,16 +3,18 @@ import { platform } from "@tauri-apps/plugin-os";
 import { Pipe } from "./use-pipes";
 import { Language } from "@/lib/language";
 import {
-  createStore as createStoreEasyPeasy,
   action,
   Action,
   persist,
-  createTypedHooks,
   PersistStorage,
+  createContextStore,
 } from "easy-peasy";
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { invoke } from "@tauri-apps/api/core";
+import { useEffect } from "react";
+import posthog from "posthog-js";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -35,17 +37,25 @@ export enum Shortcut {
   STOP_RECORDING = "stop_recording",
 }
 
-export interface User {
+export type User = {
   id?: string;
   email?: string;
   name?: string;
   image?: string;
   token?: string;
   clerk_id?: string;
+  api_key?: string;
   credits?: {
     amount: number;
   };
-}
+  stripe_connected?: boolean;
+  stripe_account_status?: "active" | "pending";
+  github_username?: string;
+  bio?: string;
+  website?: string;
+  contact?: string;
+  cloud_subscribed?: boolean;
+};
 
 export type Settings = {
   openaiApiKey: string;
@@ -87,6 +97,13 @@ export type Settings = {
   showScreenpipeShortcut: string;
   startRecordingShortcut: string;
   stopRecordingShortcut: string;
+  startAudioShortcut: string;
+  stopAudioShortcut: string;
+  pipeShortcuts: Record<string, string>;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
+  useAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -127,7 +144,7 @@ const DEFAULT_SETTINGS: Settings = {
   embeddedLLM: {
     enabled: false,
     model: "llama3.2:1b-instruct-q4_K_M",
-    port: 11438,
+    port: 11434,
   },
   enableBeta: false,
   isFirstTimeUser: true,
@@ -139,6 +156,13 @@ const DEFAULT_SETTINGS: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   startRecordingShortcut: "Super+Alt+R",
   stopRecordingShortcut: "Super+Alt+X",
+  startAudioShortcut: "",
+  stopAudioShortcut: "",
+  pipeShortcuts: {},
+  enableRealtimeAudioTranscription: false,
+  realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
+  disableVision: false,
+  useAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -181,7 +205,7 @@ export interface StoreModel {
   resetSetting: Action<StoreModel, keyof Settings>;
 }
 
-function createDefaultSettingsObject(): Settings {
+export function createDefaultSettingsObject(): Settings {
   let defaultSettings = { ...DEFAULT_SETTINGS };
   try {
     const currentPlatform = platform();
@@ -211,11 +235,26 @@ function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
-const getStore = async () => {
+/**
+ * @warning Do not change autoSave to true, it causes race conditions
+ */
+export const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
-      return new TauriStore(`${dir}/screenpipe/store.bin`);
+      const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
+        autoSave: false,
+      });
+      const activeProfile =
+        (await profilesStore.get("activeProfile")) || "default";
+      const file =
+        activeProfile === "default"
+          ? `store.bin`
+          : `store-${activeProfile}.bin`;
+      console.log("activeProfile", activeProfile, file);
+      return new TauriStore(`${dir}/screenpipe/${file}`, {
+        autoSave: false,
+      });
     })();
   }
   return storePromise;
@@ -261,7 +300,7 @@ const tauriStorage: PersistStorage = {
   },
 };
 
-export const store = createStoreEasyPeasy<StoreModel>(
+export const store = createContextStore<StoreModel>(
   persist(
     {
       settings: createDefaultSettingsObject(),
@@ -286,15 +325,25 @@ export const store = createStoreEasyPeasy<StoreModel>(
   )
 );
 
-const typedHooks = createTypedHooks<StoreModel>();
-const useStoreActions = typedHooks.useStoreActions;
-const useStoreState = typedHooks.useStoreState;
-
 export function useSettings() {
-  const settings = useStoreState((state) => state.settings);
-  const setSettings = useStoreActions((actions) => actions.setSettings);
-  const resetSettings = useStoreActions((actions) => actions.resetSettings);
-  const resetSetting = useStoreActions((actions) => actions.resetSetting);
+  const settings = store.useStoreState((state) => state.settings);
+  const setSettings = store.useStoreActions((actions) => actions.setSettings);
+  const resetSettings = store.useStoreActions(
+    (actions) => actions.resetSettings
+  );
+  const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
+
+  useEffect(() => {
+    if (settings.user?.id) {
+      posthog.identify(settings.user?.id, {
+        email: settings.user?.email,
+        name: settings.user?.name,
+        github_username: settings.user?.github_username,
+        website: settings.user?.website,
+        contact: settings.user?.contact,
+      });
+    }
+  }, [settings.user?.id]);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
@@ -316,10 +365,50 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
+  const loadUser = async (token: string) => {
+    try {
+      const BASE_URL =
+        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
+        "https://screenpi.pe";
+
+      const response = await fetch(`https://screenpi.pe/api/user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("failed to verify token");
+      }
+
+      const data = await response.json();
+      console.log("data", data);
+      const userData = {
+        ...data.user,
+      } as User;
+
+      // if user was not logged in, send posthog event app_login with email
+      if (!settings.user?.id) {
+        posthog.capture("app_login", {
+          email: userData.email,
+        });
+      }
+
+      setSettings({
+        user: userData,
+      });
+    } catch (err) {
+      console.error("failed to load user:", err);
+    }
+  };
+
   return {
     settings,
     updateSettings: setSettings,
     resetSettings,
+    loadUser,
     resetSetting,
     getDataDir,
   };

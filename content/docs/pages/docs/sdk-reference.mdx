@@ -1,0 +1,240 @@
+import MotionDiv from '../../components/motion-div'
+import { Tabs, Tab } from 'nextra/components'
+
+# javascript sdk reference
+
+<MotionDiv>
+
+screenpipe provides two sdk packages:
+- `@screenpipe/js` - for node.js environments (nextjs api routes, etc)
+- `@screenpipe/browser` - for browser environments
+
+both sdks provide type-safe interfaces to interact with screenpipe's core functionality.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+### installation
+
+#### node.js sdk
+
+<Tabs items={['npm', 'pnpm', 'bun', 'yarn']}>
+  <Tab>
+    ```bash copy
+    npm install @screenpipe/js
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @screenpipe/js
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @screenpipe/js
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @screenpipe/js
+    ```
+  </Tab>
+</Tabs>
+
+#### browser sdk
+
+<Tabs items={['npm', 'pnpm', 'bun', 'yarn']}>
+  <Tab>
+    ```bash copy
+    npm install @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    pnpm add @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    bun add @screenpipe/browser
+    ```
+  </Tab>
+  <Tab>
+    ```bash copy
+    yarn add @screenpipe/browser
+    ```
+  </Tab>
+</Tabs>
+
+### basic usage
+
+```typescript
+// node.js
+import { pipe } from '@screenpipe/js'
+
+// browser
+import { pipe } from '@screenpipe/browser'
+```
+
+### search api
+
+```typescript
+const results = await pipe.queryScreenpipe({
+  q: "meeting notes",
+  contentType: "ocr", // "ocr" | "audio" | "ui" | "all" | "audio+ui" | "ocr+ui" | "audio+ocr"
+  limit: 10,
+  offset: 0,
+  startTime: "2024-03-10T12:00:00Z",
+  endTime: "2024-03-10T13:00:00Z",
+  appName: "chrome",
+  windowName: "meeting",
+  includeFrames: true,
+  minLength: 10,
+  maxLength: 1000,
+  speakerIds: [1, 2],
+  frameName: "screenshot.png"
+})
+```
+
+### input control api
+
+```typescript
+// type text
+await pipe.input.type("hello world")
+
+// press key
+await pipe.input.press("enter")
+
+// move mouse
+await pipe.input.moveMouse(100, 200)
+
+// click
+await pipe.input.click("left") // "left" | "right" | "middle"
+```
+
+### realtime streams
+
+```typescript
+// stream transcriptions
+for await (const chunk of pipe.streamTranscriptions()) {
+  console.log(chunk.choices[0].text)
+  console.log(chunk.metadata) // { timestamp, device, isInput }
+}
+
+// stream vision events
+for await (const event of pipe.streamVision(true)) { // true to include images
+  console.log(event.data.text)
+  console.log(event.data.app_name)
+  console.log(event.data.image) // base64 if includeImages=true
+}
+```
+
+### notifications (desktop)
+
+```typescript
+await pipe.sendDesktopNotification({
+  title: "meeting starting",
+  body: "your standup begins in 5 minutes",
+  actions: [
+    {
+      id: "join",
+      label: "join meeting"
+    }
+  ],
+  timeout: 5000,
+  persistent: false
+})
+```
+
+### node.js specific features
+
+the node sdk includes additional features not available in the browser:
+
+```typescript
+// settings management
+const settings = await pipe.settings.getAll()
+await pipe.settings.update({ aiModel: "gpt-4" })
+
+// inbox management (node only)
+const messages = await pipe.inbox.getMessages()
+await pipe.inbox.clearMessages()
+```
+
+### typescript types
+
+both sdks export comprehensive typescript types:
+
+```typescript
+import type {
+  ContentType,
+  ScreenpipeQueryParams,
+  ScreenpipeResponse,
+  OCRContent,
+  AudioContent,
+  UiContent,
+  Speaker,
+  NotificationOptions,
+  Settings,
+  // ... and more
+} from '@screenpipe/js' // or @screenpipe/browser
+```
+
+key types include:
+
+```typescript
+type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
+
+interface ScreenpipeQueryParams {
+  q?: string
+  contentType?: ContentType
+  limit?: number
+  offset?: number
+  startTime?: string
+  endTime?: string
+  appName?: string
+  windowName?: string
+  includeFrames?: boolean
+  minLength?: number
+  maxLength?: number
+  speakerIds?: number[]
+  frameName?: string
+}
+
+interface ScreenpipeResponse {
+  data: ContentItem[] // OCR | Audio | UI content
+  pagination: {
+    limit: number
+    offset: number
+    total: number
+  }
+}
+```
+
+### error handling
+
+```typescript
+try {
+  const results = await pipe.queryScreenpipe({
+    q: "meeting",
+    contentType: "ocr"
+  })
+} catch (error) {
+  console.error("screenpipe api error:", error)
+}
+```
+
+### examples
+
+check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) to see real-world usage of the sdk:
+
+- data visualization pipe
+- linkedin ai assistant
+- meeting summarizer
+- memories gallery
+- obsidian integration
+- search interface
+
+these examples demonstrate best practices and common patterns when building with screenpipe's sdk.
+
+</MotionDiv>

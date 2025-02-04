@@ -1,7 +1,11 @@
-use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
-use screenpipe_vision::utils::OcrEngine as CoreOcrEngine;
+use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
+use anyhow::Result;
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
 
@@ -41,6 +45,7 @@ pub enum CliOcrEngine {
     WindowsNative,
     #[cfg(target_os = "macos")]
     AppleNative,
+    Custom,
 }
 
 impl From<CliOcrEngine> for CoreOcrEngine {
@@ -53,6 +58,20 @@ impl From<CliOcrEngine> for CoreOcrEngine {
             CliOcrEngine::WindowsNative => CoreOcrEngine::WindowsNative,
             #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => CoreOcrEngine::AppleNative,
+            CliOcrEngine::Custom => {
+                // Try to read config from environment variable
+                if let Ok(config_str) = std::env::var("SCREENPIPE_CUSTOM_OCR_CONFIG") {
+                    match serde_json::from_str(&config_str) {
+                        Ok(config) => CoreOcrEngine::Custom(config),
+                        Err(e) => {
+                            log::warn!("failed to parse custom ocr config from env: {}", e);
+                            CoreOcrEngine::Custom(CustomOcrConfig::default())
+                        }
+                    }
+                } else {
+                    CoreOcrEngine::Custom(CustomOcrConfig::default())
+                }
+            }
         }
     }
 }
@@ -124,12 +143,17 @@ pub struct Cli {
     #[arg(short = 'i', long)]
     pub audio_device: Vec<String>,
 
-    /// List available audio devices
+    // Audio devices to use for realtime audio transcription
+    #[arg(short = 'r', long)]
+    pub realtime_audio_device: Vec<String>,
+
+    /// List available audio devices (deprecated: use 'audio list' instead)
     #[arg(long)]
+    #[deprecated(since = "0.2.30", note = "please use 'audio list' instead")]
     pub list_audio_devices: bool,
 
     /// Data directory. Default to $HOME/.screenpipe
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
 
     /// Enable debug logging for screenpipe modules
@@ -143,6 +167,10 @@ pub struct Cli {
     /// WhisperLargeV3Turbo is a local, lightweight transcription model (-a whisper-large-v3-turbo), recommended for higher quality audio than tiny.
     #[arg(short = 'a', long, value_enum, default_value_t = CliAudioTranscriptionEngine::WhisperLargeV3Turbo)]
     pub audio_transcription_engine: CliAudioTranscriptionEngine,
+
+    /// Enable realtime audio transcription
+    #[arg(long, default_value_t = false)]
+    pub enable_realtime_audio_transcription: bool,
 
     /// OCR engine to use.
     /// AppleNative is the default local OCR engine for macOS.
@@ -163,8 +191,9 @@ pub struct Cli {
     )]
     pub ocr_engine: CliOcrEngine,
 
-    /// List available monitors, then you can use --monitor-id to select one (with the ID)
+    /// List available monitors (deprecated: use 'vision list' instead)
     #[arg(long)]
+    #[deprecated(since = "0.2.30", note = "please use 'vision list' instead")]
     pub list_monitors: bool,
 
     /// Monitor IDs to use, these will be used to select the monitors to record
@@ -239,6 +268,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
+    /// Automatically detect and use all monitors, including newly connected ones
+    #[arg(long, default_value_t = false)]
+    pub use_all_monitors: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 
@@ -256,6 +289,12 @@ impl Cli {
         }
         Ok(unique_langs.into_iter().collect())
     }
+
+    pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
+        let mut cmd = Self::command();
+        generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
+        Ok(())
+    }
 }
 
 #[derive(Subcommand)]
@@ -265,16 +304,76 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: PipeCommand,
     },
+    /// Vision device management commands
+    Vision {
+        #[command(subcommand)]
+        subcommand: VisionCommand,
+    },
+    /// Audio device management commands
+    Audio {
+        #[command(subcommand)]
+        subcommand: AudioCommand,
+    },
+    /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
+    Add {
+        /// Path to folder containing video files
+        path: String,
+        /// Data directory. Default to $HOME/.screenpipe
+        #[arg(long, value_hint = ValueHint::DirPath)]
+        data_dir: Option<String>,
+        /// Output format
+        #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Regex pattern to filter files (e.g. "monitor.*\.mp4$")
+        #[arg(long)]
+        pattern: Option<String>,
+        /// OCR engine to use
+        #[arg(short = 'o', long, value_enum)]
+        ocr_engine: Option<CliOcrEngine>,
+        /// Path to JSON file containing metadata overrides
+        #[arg(long, value_hint = ValueHint::FilePath)]
+        metadata_override: Option<PathBuf>,
+        /// Copy videos to screenpipe data directory
+        #[arg(long, default_value_t = true)]
+        copy_videos: bool,
+        /// Enable debug logging for screenpipe modules
+        #[arg(long)]
+        debug: bool,
+        /// Enable embedding generation for OCR text
+        #[arg(long, default_value_t = false)]
+        use_embedding: bool,
+    },
     /// Setup screenpipe environment
     Setup {
         /// Enable beta features
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
     },
+     /// Generate shell completions
+     Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
     /// Run database migrations
     Migrate,
+    /// Run system diagnostics and health checks
+    Doctor {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        
+        /// Fix issues automatically when possible
+        #[arg(short, long, default_value_t = false)]
+        fix: bool,
+    },
+    /// Add screenpipe to system PATH
+    AddToPath {
+        /// Skip confirmation prompt
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
-
 
 #[derive(Subcommand)]
 pub enum PipeCommand {
@@ -287,9 +386,21 @@ pub enum PipeCommand {
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
     },
-    /// Download a new pipe
+    /// Download a new pipe (deprecated: use 'install' instead)
+    #[deprecated(since = "0.2.26", note = "please use `install` instead")]
     Download {
         /// URL of the pipe to download
+        url: String,
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Server port
+        #[arg(short = 'p', long, default_value_t = 3030)]
+        port: u16,
+    },
+    /// Install a new pipe
+    Install {
+        /// URL of the pipe to install
         url: String,
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
@@ -354,6 +465,26 @@ pub enum PipeCommand {
         /// Server port
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VisionCommand {
+    /// List available vision devices (monitors)
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AudioCommand {
+    /// List available audio devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
     },
 }
 

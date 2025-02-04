@@ -3,7 +3,7 @@
 mod tests {
     use screenpipe_vision::core::OcrTaskData;
     use screenpipe_vision::monitor::get_default_monitor;
-    use screenpipe_vision::{process_ocr_task, OcrEngine};
+    use screenpipe_vision::{process_ocr_task, OcrEngine, WindowFilters};
     use std::{path::PathBuf, time::Instant};
     use tokio::sync::mpsc;
 
@@ -42,8 +42,8 @@ mod tests {
                 timestamp,
                 result_tx: tx,
             },
-            false,
             &ocr_engine,
+            vec![],
         )
         .await;
 
@@ -64,6 +64,7 @@ mod tests {
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
         let ocr_engine = OcrEngine::WindowsNative;
+        let window_filters = Arc::new(WindowFilters::new(&[], &[]));
 
         // Spawn the continuous_capture function
         let capture_handle = tokio::spawn(continuous_capture(
@@ -72,8 +73,10 @@ mod tests {
             save_text_files_flag,
             ocr_engine,
             monitor,
-            &[],
-            &[],
+            window_filters,
+            vec![],
+            false,
+            tokio::sync::watch::channel(false).1,
         ));
 
         // Wait for a short duration to allow some captures to occur

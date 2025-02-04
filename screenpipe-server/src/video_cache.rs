@@ -30,6 +30,7 @@ pub struct TimeSeriesFrame {
 #[derive(Debug, Clone)]
 pub struct DeviceFrame {
     pub device_id: String,
+    pub frame_id: i64,
     pub image_data: Vec<u8>,
     pub metadata: FrameMetadata,
     pub audio_entries: Vec<AudioEntry>,
@@ -65,6 +66,9 @@ pub struct FrameMetadata {
     pub ocr_text: String,
 }
 
+type GetFrameResponse =
+    oneshot::Sender<Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>>>;
+
 #[derive(Debug)]
 enum CacheMessage {
     Store {
@@ -76,8 +80,7 @@ enum CacheMessage {
     },
     Get {
         cache_key: String,
-        response:
-            oneshot::Sender<Result<Option<(Vec<u8>, FrameMetadata, (DateTime<Utc>, String))>>>,
+        response: GetFrameResponse,
     },
 }
 
@@ -121,9 +124,9 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             cache_dir: PathBuf::from("frame_cache"),
-            max_cache_size_gb: 3.0,
-            frame_retention_days: 1,
-            compression_quality: 50,
+            max_cache_size_gb: 10.0,
+            frame_retention_days: 7,
+            compression_quality: 35,
         }
     }
 }
@@ -218,7 +221,7 @@ impl FrameDiskCache {
 
         let timestamp = parse_timestamp(timestamp_str)?;
 
-        let frame_path = self.get_frame_path(&timestamp.into(), device_id);
+        let frame_path = self.get_frame_path(&timestamp, device_id);
 
         if let Some(parent) = frame_path.parent() {
             fs::create_dir_all(parent).await?;
@@ -229,7 +232,7 @@ impl FrameDiskCache {
         let checksum = format!("{:x}", hasher.finalize());
 
         let cached_frame = CachedFrame {
-            timestamp: timestamp.into(),
+            timestamp,
             device_id: device_id.to_string(),
             checksum,
             metadata: FrameMetadata {
@@ -255,7 +258,7 @@ impl FrameDiskCache {
         fs::write(&frame_path, frame_data).await?;
 
         self.entries.insert(
-            (timestamp.into(), device_id.to_string()),
+            (timestamp, device_id.to_string()),
             CacheEntry {
                 frame: cached_frame,
                 path: frame_path,
@@ -289,7 +292,7 @@ impl FrameDiskCache {
         };
 
         // First check if we have the entry before reading the file
-        if let Some(entry) = self.entries.get(&(timestamp.into(), device_id.to_string())) {
+        if let Some(entry) = self.entries.get(&(timestamp, device_id.to_string())) {
             let frame_path = &entry.path;
 
             // Only verify checksum periodically (e.g., every 100th access) or if file size changed
@@ -316,7 +319,7 @@ impl FrameDiskCache {
                 Ok(Some((
                     frame_data,
                     entry.frame.metadata.clone(),
-                    (timestamp.into(), device_id.to_string()),
+                    (timestamp, device_id.to_string()),
                 )))
             } else {
                 // Fast path - skip checksum verification
@@ -324,7 +327,7 @@ impl FrameDiskCache {
                 Ok(Some((
                     frame_data,
                     entry.frame.metadata.clone(),
-                    (timestamp.into(), device_id.to_string()),
+                    (timestamp, device_id.to_string()),
                 )))
             }
         } else {
@@ -353,7 +356,7 @@ impl FrameDiskCache {
         let mut frames_to_remove = Vec::new();
 
         // Identify frames to remove based on age and total size
-        for (&(timestamp, ref device_id), _entry) in &self.entries {
+        for &(timestamp, ref device_id) in self.entries.keys() {
             if timestamp < retention_cutoff {
                 frames_to_remove.push((timestamp, device_id.clone()));
                 continue;
@@ -458,6 +461,7 @@ impl FrameCache {
         start_time: DateTime<Utc>,
         end_time: DateTime<Utc>,
         frame_tx: FrameChannel,
+        descending: bool,
     ) -> Result<()> {
         let mut extraction_queue = HashMap::new();
         let mut total_frames = 0;
@@ -469,7 +473,15 @@ impl FrameCache {
 
         let mut chunks = self.db.find_video_chunks(start_time, end_time).await?;
         // Sort by timestamp to ensure consistent ordering
-        chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+        if descending {
+            // For descending, sort in reverse chronological order
+            chunks
+                .frames
+                .sort_by_key(|a| std::cmp::Reverse((a.timestamp, a.offset_index)));
+        } else {
+            // For ascending, sort in chronological order (default behavior)
+            chunks.frames.sort_by_key(|a| (a.timestamp, a.offset_index));
+        }
 
         debug!("found {} chunks to process", chunks.frames.len());
 
@@ -497,6 +509,7 @@ impl FrameCache {
                     Ok(Some((frame_data, metadata, _))) => {
                         debug!("cache hit for {}", cache_key);
                         timeseries_frame.frame_data.push(DeviceFrame {
+                            frame_id: chunk.frame_id,
                             device_id: device_data.device_name.clone(),
                             image_data: frame_data,
                             metadata,
@@ -567,15 +580,14 @@ impl FrameCache {
 
         let (extract_tx, mut extract_rx) = mpsc::channel(100);
 
-        let mut streamer =
-            OrderedFrameStreamer::new(frame_tx, Duration::seconds(60 * 1), descending);
+        let mut streamer = OrderedFrameStreamer::new(frame_tx, Duration::seconds(60), descending);
 
         // Spawn extraction task
         let mut extraction_handle = {
             let cache_clone = self.clone();
             tokio::spawn(async move {
                 let result = cache_clone
-                    .extract_frames_batch(start, end, extract_tx)
+                    .extract_frames_batch(start, end, extract_tx, descending)
                     .await;
                 debug!("extraction task completed: {:?}", result.is_ok());
                 result
@@ -654,8 +666,12 @@ async fn extract_frame(
     let temp_dir = tempfile::tempdir()?;
     let output_pattern = temp_dir.path().join("frame%d.jpg");
 
-    // Calculate frame interval based on target FPS
-    let frame_interval = (source_fps / 0.1).round() as i64; // Using 0.1 as target FPS
+    // Reduce frame rate even further for older content
+    let frame_interval = if is_older_than_24h(&tasks[0].0.timestamp) {
+        (source_fps / 0.05).round() as i64 // 1 frame every 20 seconds for older content
+    } else {
+        (source_fps / 0.1).round() as i64 // 1 frame every 10 seconds for recent content
+    };
 
     debug!(
         "extracting frames with interval {} (source: {}fps, target: {}fps)",
@@ -667,7 +683,7 @@ async fn extract_frame(
         .iter()
         .filter_map(|(frame, _)| {
             // Only select frames that align with our target FPS
-            if frame.offset_index as i64 % frame_interval == 0 {
+            if frame.offset_index % frame_interval == 0 {
                 Some(frame.offset_index.to_string())
             } else {
                 None
@@ -688,21 +704,23 @@ async fn extract_frame(
         "-i",
         &video_file_path,
         "-vf",
-        &format!("{},format=yuv420p,scale=iw:ih", select_filter),
+        &format!("{},format=yuv420p,scale=iw*0.8:ih*0.8", select_filter),
         "-strict",
         "unofficial",
         "-c:v",
         "mjpeg",
         "-q:v",
-        "8",
-        "-qmin",
-        "8",
-        "-qmax",
         "12",
+        "-qmin",
+        "12",
+        "-qmax",
+        "15",
         "-vsync",
         "0",
         "-threads",
-        "2",
+        "1",         // Limit to single thread
+        "-cpu-used", // Faster encoding
+        "4",
         output_pattern.to_str().unwrap(),
     ]);
 
@@ -731,6 +749,7 @@ async fn extract_frame(
             break;
         }
 
+        let (frame, _) = &tasks[task_index];
         let frame_data = &all_frames[task_index];
         let cache_key = format!("{}||{}", chunk.timestamp, device_data.device_name);
         debug!("processing frame {} with key {}", task_index, cache_key);
@@ -760,6 +779,7 @@ async fn extract_frame(
                 error: None,
                 timestamp: chunk.timestamp,
                 frame_data: vec![DeviceFrame {
+                    frame_id: frame.frame_id,
                     device_id: device_data.device_name.clone(),
                     image_data: frame_data.clone(),
                     metadata: FrameMetadata {
@@ -808,8 +828,8 @@ async fn is_video_file_complete(ffmpeg_path: &PathBuf, file_path: &str) -> Resul
         }
     }
 
-    match Command::new(&ffmpeg_path)
-        .args(&["-v", "error", "-i", file_path, "-f", "null", "-"])
+    match Command::new(ffmpeg_path)
+        .args(["-v", "error", "-i", file_path, "-f", "null", "-"])
         .output()
         .await
     {
@@ -990,4 +1010,8 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
 
     debug!("detected fps from video metadata: {}", fps);
     Ok(fps)
+}
+
+fn is_older_than_24h(timestamp: &DateTime<Utc>) -> bool {
+    Utc::now() - *timestamp > Duration::hours(24)
 }

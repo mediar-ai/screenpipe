@@ -1,10 +1,11 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use analytics::AnalyticsManager;
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
-use llm_sidecar::EmbeddedLLMSettings;
+use serde_json::json;
 use serde_json::Value;
 use sidecar::SidecarManager;
 use std::env;
@@ -29,22 +30,22 @@ use tauri_plugin_store::StoreBuilder;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
-use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
-use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
+mod disk_usage;
 mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
+mod store;
 mod tray;
 mod updates;
 pub use commands::reset_all_pipes;
@@ -53,15 +54,20 @@ pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
 pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use store::get_profiles_store;
+pub use store::get_store;
 
 use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
+use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use tauri_plugin_sentry::sentry;
+mod health;
+use health::start_health_check;
 pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
@@ -70,16 +76,56 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    start_audio: String,
+    stop_audio: String,
+    profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
 }
 
 impl ShortcutConfig {
     async fn from_store(app: &AppHandle) -> Result<Self, String> {
-        let base_dir = get_base_dir(app, None).map_err(|e| e.to_string())?;
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(app, path)
-            .build()
-            .map_err(|e| e.to_string())?;
+        let store = get_store(app, None).map_err(|e| e.to_string())?;
+
+        let profile_shortcuts = match get_profiles_store(app) {
+            Ok(profiles_store) => {
+                let profiles = profiles_store
+                    .get("profiles")
+                    .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
+                    .unwrap_or_default();
+
+                profiles
+                    .into_iter()
+                    .filter_map(|profile| {
+                        profiles_store
+                            .get(format!("shortcuts.{}", profile))
+                            .and_then(|v| v.as_str().map(String::from))
+                            .map(|shortcut| (profile, shortcut))
+                    })
+                    .collect()
+            }
+            Err(_) => HashMap::new(),
+        };
+
+        let pipe_shortcuts = store
+            .keys()
+            .into_iter()
+            .filter_map(|key| {
+                if key.starts_with("pipeShortcuts.") {
+                    store
+                        .get(key.clone())
+                        .and_then(|v| v.as_str().map(String::from))
+                        .map(|v| {
+                            (
+                                key.trim_start_matches("pipeShortcuts.").to_string(),
+                                v.to_string(),
+                            )
+                        })
+                } else {
+                    None
+                }
+            })
+            .collect::<HashMap<String, String>>();
 
         Ok(Self {
             show: store
@@ -94,6 +140,16 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            start_audio: store
+                .get("startAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
+            stop_audio: store
+                .get("stopAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
+            profile_shortcuts,
+            pipe_shortcuts,
             disabled: store
                 .get("disabledShortcuts")
                 .and_then(|v| serde_json::from_value(v.clone()).ok())
@@ -125,23 +181,32 @@ async fn register_shortcut(
         .on_shortcut(shortcut, move |app, _shortcut, event| {
             // Only trigger on key press, not release
             if matches!(event.state, ShortcutState::Pressed) {
-                handler(&app);
+                handler(app);
             }
         })
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn update_global_shortcuts(
     app: AppHandle,
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    start_audio_shortcut: String,
+    stop_audio_shortcut: String,
+    profile_shortcuts: HashMap<String, String>,
+    pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
     let config = ShortcutConfig {
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        start_audio: start_audio_shortcut,
+        stop_audio: stop_audio_shortcut,
+        profile_shortcuts,
+        pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
     };
     apply_shortcuts(&app, &config).await
@@ -154,7 +219,6 @@ async fn initialize_global_shortcuts(app: &AppHandle) -> Result<(), String> {
 
 async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(), String> {
     let global_shortcut = app.global_shortcut();
-    // Unregister all existing shortcuts first
     global_shortcut.unregister_all().unwrap();
 
     // Register show shortcut
@@ -201,7 +265,79 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     )
     .await?;
 
+    // Register profile shortcuts
+    for (profile, shortcut) in &config.profile_shortcuts {
+        if !shortcut.is_empty() {
+            let profile = profile.clone();
+            register_shortcut(app, shortcut, false, move |app| {
+                info!("switch-profile shortcut triggered for profile: {}", profile);
+                let _ = app.emit("switch-profile", profile.clone());
+            })
+            .await?;
+        }
+    }
+
+    // Register start audio shortcut
+    register_shortcut(
+        app,
+        &config.start_audio,
+        config.is_disabled("start_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", false);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-start-audio", ());
+            info!("start audio shortcut triggered");
+        },
+    )
+    .await?;
+
+    // Register stop audio shortcut
+    register_shortcut(
+        app,
+        &config.stop_audio,
+        config.is_disabled("stop_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", true);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-stop-audio", ());
+            info!("stop audio shortcut triggered");
+        },
+    )
+    .await?;
+
+    info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
+
+    // Register pipe shortcuts
+    for (pipe_id, shortcut) in &config.pipe_shortcuts {
+        if !shortcut.is_empty() {
+            let pipe_id = pipe_id.clone();
+            let shortcut_id = format!("pipe_{}", pipe_id);
+            info!(
+                "registering pipe shortcut for pipe: {}, is disabled: {}",
+                shortcut_id,
+                config.is_disabled(&shortcut_id)
+            );
+            register_shortcut(
+                app,
+                shortcut,
+                config.is_disabled(&shortcut_id),
+                move |app| {
+                    info!("pipe shortcut triggered for pipe: {}", pipe_id);
+                    let _ = app.emit("open-pipe", pipe_id.clone());
+                },
+            )
+            .await?;
+        }
+    }
+
     Ok(())
+}
+
+#[tauri::command]
+fn get_env(name: &str) -> String {
+    std::env::var(String::from(name)).unwrap_or(String::from(""))
 }
 
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
@@ -221,13 +357,80 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
+pub fn get_base_dir(
+    app: &tauri::AppHandle,
+    custom_path: Option<String>,
+) -> anyhow::Result<PathBuf> {
     let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
 
     let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
 
-    fs::create_dir_all(&local_data_dir.join("data"))?;
+    fs::create_dir_all(local_data_dir.join("data"))?;
     Ok(local_data_dir)
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct LogFile {
+    name: String,
+    path: String,
+    modified_at: u64,
+}
+
+#[tauri::command]
+async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
+    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let mut log_files = Vec::new();
+
+    // Collect all entries first
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
+    }
+
+    // Sort by modified time descending (newest first)
+    entries.sort_by_key(|(_, metadata)| {
+        std::cmp::Reverse(
+            metadata
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        )
+    });
+
+    // Process sorted entries
+    for (entry, metadata) in entries {
+        let path = entry.path();
+        if let Some(extension) = path.extension() {
+            if extension == "log" {
+                let modified = metadata
+                    .modified()
+                    .map_err(|e| e.to_string())?
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_secs();
+
+                log_files.push(LogFile {
+                    name: path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    modified_at: modified,
+                });
+            }
+        }
+    }
+
+    Ok(log_files)
 }
 
 fn send_recording_notification(
@@ -264,16 +467,18 @@ fn send_recording_notification(
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
-    let base_dir = get_base_dir(app, None)?;
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(app, path).build();
+    // Create a new runtime for this synchronous function
+
+    let store = get_store(app, None)?;
 
     let default_path = app.path().home_dir().unwrap().join(".screenpipe");
-    let data_dir = store?
+
+    let data_dir = store
         .get("dataDir")
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
-    if data_dir == "default" {
+
+    if data_dir == "default" || data_dir.is_empty() {
         Ok(default_path)
     } else {
         get_base_dir(app, Some(data_dir))
@@ -372,6 +577,15 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Initialize Sentry early
+    let sentry_guard = sentry::init((
+        "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
     {
@@ -433,6 +647,7 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_sentry::init(&sentry_guard))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
@@ -450,14 +665,24 @@ async fn main() {
             commands::update_show_screenpipe_shortcut,
             commands::show_meetings,
             commands::show_identify_speakers,
+            commands::get_disk_usage,
             commands::open_pipe_window,
+            get_log_files,
             update_global_shortcuts,
+            get_env
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+                get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
 
             // Set up rolling file appender
             let file_appender = RollingFileAppender::builder()
@@ -466,7 +691,7 @@ async fn main() {
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    &get_data_dir(&app.handle())
+                    get_data_dir(app.handle())
                         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
                 )?;
 
@@ -525,9 +750,9 @@ async fn main() {
                 let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
 
                 let start_recording =
-                    MenuItemBuilder::with_id("start_recording", "Start Recording").build(app)?;
+                    MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
                 let stop_recording =
-                    MenuItemBuilder::with_id("stop_recording", "Stop Recording").build(app)?;
+                    MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
 
                 let version = MenuItemBuilder::with_id(
                     "version",
@@ -560,10 +785,14 @@ async fn main() {
                     }
                     "quit" => {
                         debug!("Quit requested");
-                        // First try to stop any running recordings
-                        let state = app_handle.state::<SidecarState>();
-                        tauri::async_runtime::block_on(async {
-                            if let Err(e) = kill_all_sreenpipes(state, app_handle.clone()).await {
+                        // Kill all pipes before quitting
+                        let app_handle_clone = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            // Stop any running recordings
+                            let state = app_handle_clone.state::<SidecarState>();
+                            if let Err(e) =
+                                kill_all_sreenpipes(state, app_handle_clone.clone()).await
+                            {
                                 error!("Error stopping recordings during quit: {}", e);
                             }
                         });
@@ -665,7 +894,7 @@ async fn main() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             } else {
-                                show_main_window(&app, true);
+                                show_main_window(app, true);
                             }
                         }
                     }
@@ -678,7 +907,8 @@ async fn main() {
                 .build()
                 .unwrap();
 
-            if store.keys().len() == 0 {
+            // TODO: proper lookup of keys rather than assuming they exist
+            if store.is_empty() {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
                 store.set(
                     "config".to_string(),
@@ -700,24 +930,23 @@ async fn main() {
                 .unwrap_or(true);
 
             let unique_id = store
-                .get("userId")
+                .get("user.id")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| {
-                    let new_id = Uuid::new_v4().to_string();
-                    store.set(
-                        "userId".to_string(),
-                        serde_json::Value::String(new_id.clone()),
-                    );
-                    store.save().unwrap();
-                    new_id
-                });
+                .unwrap_or_default();
+
+            let email = store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default();
 
             if is_analytics_enabled {
                 match start_analytics(
                     unique_id,
+                    email,
                     posthog_api_key,
                     interval_hours,
                     "http://localhost:3030".to_string(),
+                    base_dir.clone(),
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -735,12 +964,6 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            // if first time user do t start sidecar yet
-            let mut is_first_time_user = store
-                .get("isFirstTimeUser")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-
             // double-check if they have any files in the data dir
             let data_dir = app
                 .path()
@@ -754,25 +977,18 @@ async fn main() {
 
             info!("has_files: {}", has_files);
 
-            if has_files {
-                is_first_time_user = false;
-                // Update the store with the new value
-                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
-                store.save().unwrap();
-            }
-
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            info!(
-                "will start sidecar: {}",
-                !use_dev_mode && !is_first_time_user
-            );
+            info!("use_dev_mode: {}", use_dev_mode);
 
-            if !use_dev_mode && !is_first_time_user {
+            info!("will start sidecar: {}", !use_dev_mode && has_files);
+
+            // if non dev mode and previously started sidecar, start sidecar
+            if !use_dev_mode && has_files {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {
@@ -793,37 +1009,23 @@ async fn main() {
             let server_shutdown_tx = spawn_server(app.handle().clone(), 11435);
             app.manage(server_shutdown_tx);
 
+            // Start health check service
+            // macos only
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = start_health_check(app_handle).await {
+                    error!("Failed to start health check service: {}", e);
+                }
+            });
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
-            // LLM Sidecar setup
-            let embedded_llm: EmbeddedLLMSettings = store
-                .get("embeddedLLM")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| EmbeddedLLMSettings {
-                    enabled: false,
-                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
-                    port: 11438,
-                });
-
-            if embedded_llm.enabled {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
-                        Ok(result) => {
-                            info!("LLM Sidecar started successfully: {}", result);
-                        }
-                        Err(e) => {
-                            error!("Failed to start LLM Sidecar: {}", e);
-                        }
-                    }
-                });
-            }
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle).await {
-                    error!("Failed to initialize global shortcuts: {}", e);
+                    warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });
             Ok(())
@@ -835,13 +1037,42 @@ async fn main() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
+            // Send app started event
+            let app_handle = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_started",
+                            Some(json!({
+                                "startup_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
 
-            // Add this to shut down the server
+            // Send app closed event before shutdown
+            let app_handle_v2 = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle_v2.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_closed",
+                            Some(json!({
+                                "shutdown_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
+
+            // Shutdown server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
-                let _ = server_shutdown_tx.send(());
+                drop(server_shutdown_tx.send(()));
             }
         }
         tauri::RunEvent::WindowEvent {
@@ -861,7 +1092,7 @@ async fn main() {
             ..
         } => {
             if !has_visible_windows {
-                show_main_window(&app_handle, false);
+                show_main_window(app_handle, false);
             }
         }
         _ => {}

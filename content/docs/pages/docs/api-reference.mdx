@@ -352,3 +352,193 @@ curl "http://localhost:3030/stream/frames?start_time=2024-03-10T12:00:00Z&end_ti
 ```
 
 </MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+### experimental api
+
+#### merge frames
+- **endpoint**: `/experimental/frames/merge`
+- **method**: `post`
+- **description**: merges multiple video frames into a single video
+
+##### request body:
+```json
+{
+  "video_paths": ["path/to/video1.mp4", "path/to/video2.mp4"]
+}
+```
+
+##### sample response:
+```json
+{
+  "video_path": "/path/to/merged/video.mp4"
+}
+```
+
+#### validate media
+- **endpoint**: `/experimental/validate/media`
+- **method**: `get`
+- **description**: validates media file format and integrity
+
+##### query parameters:
+- `file_path` (string): path to media file to validate
+
+##### sample response:
+```json
+{
+  "status": "valid media file"
+}
+```
+
+#### input control (experimental feature)
+- **endpoint**: `/experimental/input_control`
+- **method**: `post`
+- **description**: control keyboard and mouse input programmatically
+
+##### request body:
+```json
+{
+  "action": {
+    "type": "KeyPress",
+    "data": "enter"
+  }
+}
+```
+or
+```json
+{
+  "action": {
+    "type": "MouseMove",
+    "data": {
+      "x": 100,
+      "y": 200
+    }
+  }
+}
+```
+or
+```json
+{
+  "action": {
+    "type": "MouseClick",
+    "data": "left"
+  }
+}
+```
+or
+```json
+{
+  "action": {
+    "type": "WriteText",
+    "data": "hello world"
+  }
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+### database api
+
+#### execute raw sql
+- **endpoint**: `/raw_sql`
+- **method**: `post`
+- **description**: execute raw SQL queries against the database (use with caution)
+
+##### request body:
+```json
+{
+  "query": "SELECT * FROM frames LIMIT 5"
+}
+```
+
+#### add content
+- **endpoint**: `/add`
+- **method**: `post`
+- **description**: add new content (frames or transcriptions) to the database
+
+##### request body:
+```json
+{
+  "device_name": "device1",
+  "content": {
+    "content_type": "frames",
+    "data": {
+      "frames": [
+        {
+          "file_path": "/path/to/frame.png",
+          "timestamp": "2024-03-10T12:00:00Z",
+          "app_name": "chrome",
+          "window_name": "meeting",
+          "ocr_results": [
+            {
+              "text": "detected text",
+              "text_json": "{\"additional\": \"metadata\"}",
+              "ocr_engine": "tesseract",
+              "focused": true
+            }
+          ],
+          "tags": ["meeting", "important"]
+        }
+      ]
+    }
+  }
+}
+```
+or
+```json
+{
+  "device_name": "microphone1",
+  "content": {
+    "content_type": "transcription",
+    "data": {
+      "transcription": "transcribed text",
+      "transcription_engine": "whisper"
+    }
+  }
+}
+```
+
+</MotionDiv>
+
+<MotionDiv delay={1.7}>
+
+### realtime streaming api
+
+#### transcription stream
+- **endpoint**: `/sse/transcriptions`
+- **method**: `get`
+- **description**: stream real-time transcriptions using server-sent events (SSE)
+
+##### sample event data:
+```json
+{
+  "transcription": "live transcribed text",
+  "timestamp": "2024-03-10T12:00:00Z",
+  "device": "microphone1"
+}
+```
+
+#### vision stream
+- **endpoint**: `/sse/vision`
+- **method**: `get`
+- **description**: stream real-time vision events using server-sent events (SSE)
+
+##### query parameters:
+- `images` (bool, optional): include base64 encoded images in events
+
+##### sample event data:
+```json
+{
+  "type": "Ocr",
+  "text": "detected text",
+  "timestamp": "2024-03-10T12:00:00Z",
+  "image": "base64_encoded_image_data",
+  "app_name": "chrome",
+  "window_name": "meeting"
+}
+```
+
+</MotionDiv>

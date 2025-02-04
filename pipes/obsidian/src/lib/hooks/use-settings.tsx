@@ -1,31 +1,35 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Settings } from "@screenpipe/js";
+import { getDefaultSettings, type Settings } from "@screenpipe/browser";
 
 export function useSettings() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
+  const defaultSettings = getDefaultSettings();
+
+  defaultSettings.customSettings = {
+    ...(defaultSettings.customSettings || {}),
+    obsidian: {
+      prompt: `yo, you're my personal data detective! 🕵️‍♂️
+
+rules for the investigation:
+- extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
+- identify recurring topics/themes in my convos, use tags or [[Link them]] to my notes
+- spot any promises or commitments made (by me or others)
+- catch interesting ideas or insights dropped in casual chat
+- note emotional vibes and energy levels in conversations
+- highlight potential opportunities or connections
+- track project progress and blockers mentioned
+
+style rules:
+- keep it real and conversational
+- use bullet points for clarity
+- include relevant timestamps
+- group related info together
+- max 4 lines per insight
+- no corporate speak, keep it human
+- for tags use hyphen between words, no spaces, eg: #my-tag not #my tag nor #myTag nor #my_tag
+
+remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!`,
     },
   };
 
@@ -57,7 +61,7 @@ export function useSettings() {
     window.addEventListener("focus", onFocus);
 
     // Optional: periodic refresh every 30s
-    const interval = setInterval(loadSettings, 30000);
+    const interval = setInterval(loadSettings, 2000);
 
     return () => {
       window.removeEventListener("focus", onFocus);

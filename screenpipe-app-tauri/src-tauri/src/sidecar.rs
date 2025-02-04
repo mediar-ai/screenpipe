@@ -1,4 +1,5 @@
-use crate::{get_base_dir, SidecarState};
+use crate::get_store;
+use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -9,7 +10,6 @@ use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
-use tauri_plugin_store::StoreBuilder;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
@@ -38,6 +38,8 @@ pub struct User {
     pub clerk_id: Option<String>,
     #[serde(default)]
     pub credits: Option<UserCredits>,
+    #[serde(rename = "user.cloud_subscribed", default)]
+    pub cloud_subscribed: Option<bool>,
 }
 
 impl User {
@@ -70,6 +72,7 @@ impl User {
                     .get("user.credits.created_at")
                     .and_then(|v| v.as_str().map(String::from)),
             }),
+            cloud_subscribed: store.get("user.cloud_subscribed").and_then(|v| v.as_bool()),
         }
     }
 }
@@ -106,7 +109,7 @@ pub async fn kill_all_sreenpipes(
 
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::process::Command::new("taskkill")
-                .args(&["/F", "/IM", "screenpipe.exe"])
+                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
@@ -144,9 +147,7 @@ pub async fn spawn_screenpipe(
 }
 
 fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
-    let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-    let path = base_dir.join("store.bin");
-    let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+    let store = get_store(app, None).unwrap();
 
     let audio_transcription_engine = store
         .get("audioTranscriptionEngine")
@@ -247,6 +248,16 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
+    let enable_realtime_audio_transcription = store
+        .get("enableRealtimeAudioTranscription")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let use_all_monitors = store
+        .get("useAllMonitors")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -290,7 +301,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
     }
 
-    if deepgram_api_key != "default" {
+    if deepgram_api_key != "default" && deepgram_api_key != "" {
         args.push("--deepgram-api-key");
         let key = deepgram_api_key.as_str();
         args.push(key);
@@ -359,35 +370,53 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-ui-monitoring");
     }
 
-    if data_dir != "default" && data_dir != "" {
+    if data_dir != "default" && !data_dir.is_empty() {
         args.push("--data-dir");
         args.push(data_dir.as_str());
     }
 
-    args.push("--debug");
+    if enable_realtime_audio_transcription {
+        args.push("--enable-realtime-audio-transcription");
+    }
 
+    if use_all_monitors {
+        args.push("--use-all-monitors");
+    }
+
+    let disable_vision = store
+        .get("disableVision")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    if disable_vision {
+        args.push("--disable-vision");
+    }
+
+    // args.push("--debug");
 
 
     if cfg!(windows) {
-        let mut c = app
-            .shell()
-            .sidecar("screenpipe")
-            .unwrap();
+        let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
             c = c.env("HF_ENDPOINT", "https://hf-mirror.com");
         }
 
         // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-        if user.credits.is_some() {
+        if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
             c = c.env(
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
             );
+            c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev");
             // Add token if screenpipe-cloud is selected and user has a token
-            if user.token.is_some() {
-                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+            if user.id.is_some() {
+                c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+                args.push("--deepgram-api-key");
+                args.push(user.id.as_ref().unwrap());
             }
         }
+
+        c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
         let c = c.args(&args);
 
@@ -408,16 +437,25 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-    if user.credits.is_some() {
+    if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
+        info!(
+            "Adding AI proxy env vars for deepgram: {:?}",
+            user.id.as_ref().unwrap()
+        );
         c = c.env(
             "DEEPGRAM_API_URL",
             "https://ai-proxy.i-f9f.workers.dev/v1/listen",
         );
+        c = c.env("DEEPGRAM_WEBSOCKET_URL", "wss://ai-proxy.i-f9f.workers.dev");
         // Add token if screenpipe-cloud is selected and user has a token
-        if user.token.is_some() {
-            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.token.as_ref().unwrap());
+        if user.id.is_some() {
+            c = c.env("CUSTOM_DEEPGRAM_API_TOKEN", user.id.as_ref().unwrap());
+            args.push("--deepgram-api-key");
+            args.push(user.id.as_ref().unwrap());
         }
     }
+
+    c = c.env("SENTRY_RELEASE_NAME_APPEND", "tauri");
 
     let c = c.args(&args);
 
@@ -517,9 +555,7 @@ impl SidecarManager {
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let base_dir = get_base_dir(app, None).expect("Failed to ensure local data directory");
-        let path = base_dir.join("store.bin");
-        let store = StoreBuilder::new(&app.clone(), path).build().unwrap();
+        let store = get_store(app, None).unwrap();
 
         let restart_interval = store
             .get("restartInterval")

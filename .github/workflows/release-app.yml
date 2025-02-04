@@ -103,8 +103,29 @@ jobs:
           command: release draft ${{ secrets.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
 
+  check_runner:
+    runs-on: ubuntu-latest
+    outputs:
+      runner_type: ${{ steps.check.outputs.runner_type }}
+    steps:
+      - id: check
+        run: |
+          # Try to ping self-hosted runner for 2 minutes
+          timeout=120
+          start_time=$SECONDS
+          while [ $(( SECONDS - start_time )) -lt $timeout ]; do
+            if curl -s "${{ github.api_url }}/repos/${{ github.repository }}/actions/runners" \
+               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" | \
+               jq -e '.runners[] | select(.name | contains("self-hosted")) | select(.status=="online")' > /dev/null; then
+              echo "runner_type=[self-hosted, Windows, X64]" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "runner_type=windows-latest" >> $GITHUB_OUTPUT
+
   publish-tauri:
-    needs: [check_commit, draft]
+    needs: [check_commit, draft, check_runner]
     if: github.event_name == 'workflow_dispatch' || needs.check_commit.outputs.should_release == 'true'
     permissions:
       contents: write
@@ -112,17 +133,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm based macs (M1 and above).
+          - platform: "macos-latest"
             args: "--target aarch64-apple-darwin --features metal,beta"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest" # for Intel based macs.
+          - platform: "macos-latest"
             args: "--target x86_64-apple-darwin --features metal,beta"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin"
-          - platform: [self-hosted, Windows, X64] # Windows x86_64
-            args: "--target x86_64-pc-windows-msvc --features mkl" # TODO CUDA --features "openblas"
-            pre-build-args: "" # --openblas
+          - platform: ${{ needs.check_runner.outputs.runner_type }}
+            args: "--target x86_64-pc-windows-msvc --features mkl"
+            pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc"
 
     runs-on: ${{ matrix.platform }}
@@ -161,6 +182,8 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.43
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -317,15 +340,15 @@ jobs:
           # Download and install LLVM
           $installerUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-10.0.0/LLVM-10.0.0-win64.exe"
           $installerPath = Join-Path $env:TEMP "LLVM-10.0.0-win64.exe"
-          
+
           Write-Host "Downloading LLVM installer..."
           Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
-          
+
           Write-Host "Installing LLVM..."
           Start-Process -FilePath $installerPath -ArgumentList "/S","/D=$llvmPath" -Wait -NoNewWindow
-          
+
           Remove-Item $installerPath -Force
-          
+
           # Verify installation
           if (!(Test-Path "$llvmPath\bin\clang.exe")) {
             throw "LLVM installation failed - clang.exe not found"
@@ -407,29 +430,52 @@ jobs:
           # Create target directory
           $mkl_dir = "screenpipe-app-tauri/src-tauri/mkl"
           New-Item -ItemType Directory -Force -Path $mkl_dir | Out-Null
-          
+
           # Install and copy Intel OpenMP
           python -m pip install --upgrade pip
           $temp_dir = "temp_omp"
           New-Item -ItemType Directory -Force -Path $temp_dir | Out-Null
-          
+
           Write-Host "Installing Intel OpenMP..."
           python -m pip install intel-openmp --target $temp_dir
-          
+
           Write-Host "Copying DLL files..."
           Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
             Write-Host "Copying $_"
             Copy-Item $_.FullName -Destination $mkl_dir -Force
           }
-          
+
           # Verify DLLs were copied
           $dll_count = (Get-ChildItem -Path $mkl_dir -Filter "*.dll").Count
           Write-Host "Found $dll_count DLLs in target directory"
           if ($dll_count -eq 0) {
             throw "No DLLs found in target directory!"
           }
-          
+
           Remove-Item -Path $temp_dir -Recurse -Force
+
+      - name: Copy library for vcredist
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          # Create target directory
+          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+
+          # Install and copy VcRedist
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
+
+          Write-Host "Copying DLL files..."
+          Copy-Item C:\Windows\System32\vcruntime140.dll -Destination $vcredist_dir -Force
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
+          Write-Host "Found $dll_count DLLs in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
 
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
@@ -472,9 +518,10 @@ jobs:
         shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
+          CN_VERBOSE: "2"
           USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          MAX_RETRIES: 3
-          RETRY_DELAY: 10
+          MAX_RETRIES: 5
+          RETRY_DELAY: 30
         run: |
           # create temp directory for cli
           $cliDir = Join-Path $Env:GITHUB_WORKSPACE "cn-cli-temp"
@@ -488,18 +535,18 @@ jobs:
 
           # move to the directory we want to upload from
           cd screenpipe-app-tauri/src-tauri
-          
+
           # upload assets with retry logic
           $cliFullPath = Join-Path $cliDir "cn.exe"
           Write-Host "uploading assets from $(pwd) using $cliFullPath..."
-          
+
           $attempt = 1
           $success = $false
-          
+
           while (-not $success -and $attempt -le $env:MAX_RETRIES) {
             Write-Host "Attempt $attempt of $env:MAX_RETRIES"
             try {
-              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+              & $cliFullPath release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
               if ($LASTEXITCODE -eq 0) {
                 $success = $true
                 Write-Host "Upload successful!"
@@ -515,7 +562,7 @@ jobs:
             }
             $attempt++
           }
-          
+
           if (-not $success) {
             Write-Host "Failed to upload after $env:MAX_RETRIES attempts"
             exit 1
@@ -524,8 +571,10 @@ jobs:
       - name: Upload Assets to CrabNebula Cloud (Non-Windows)
         if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
         uses: crabnebula-dev/cloud-release@v0.2.6
+        env:
+          CN_VERBOSE: "2"
         with:
-          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri
+          command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
 
@@ -561,6 +610,8 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.43
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -697,6 +748,32 @@ jobs:
           mkdir screenpipe-app-tauri/src-tauri/mkl/ -ErrorAction SilentlyContinue
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
+      - name: Copy library for vcredist
+        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        shell: powershell
+        run: |
+          # Create target directory
+          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
+
+          # Install and copy VcRedist
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+          iex ((New-Object System.Net.WebClient).DownloadString('https://vcredist.com/install.ps1'))
+
+          Write-Host "Copying DLL files..."
+          Get-ChildItem -Path $temp_dir -Recurse -Filter "*.dll" | ForEach-Object {
+            Write-Host "Copying $_"
+            Copy-Item $_.FullName -Destination $vcredist_dir -Force
+          }
+
+          # Verify DLLs were copied
+          $dll_count = (Get-ChildItem -Path $vcredist_dir -Filter "*.dll").Count
+          Write-Host "Found $dll_count DLLs in target directory"
+          if ($dll_count -eq 0) {
+            throw "No DLLs found in target directory!"
+          }
+
       - name: Build
         uses: tauri-apps/tauri-action@v0.5.17
         env:
@@ -745,7 +822,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get version from Cargo.toml
         id: get_version
         run: |

@@ -2,11 +2,7 @@
     "bundle": {
         "externalBin": [
             "screenpipe",
-            "bun",
-            "ollama"
-        ],
-        "resources": [
-            "lib/ollama/*"
+            "bun"
         ],
         "linux": {
             "deb": {

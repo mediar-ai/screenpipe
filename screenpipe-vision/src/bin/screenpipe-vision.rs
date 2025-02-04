@@ -5,7 +5,7 @@ use screenpipe_vision::{
     OcrEngine,
 };
 use std::{sync::Arc, time::Duration};
-use tokio::sync::mpsc::channel;
+use tokio::sync::{mpsc::channel, watch};
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 #[derive(Parser)]
@@ -39,15 +39,18 @@ async fn main() {
     let id = monitor.id();
     let window_filters = WindowFilters::new(&[], &[]);
 
+    let (_, shutdown_rx) = watch::channel(false);
+
     tokio::spawn(async move {
         continuous_capture(
             result_tx,
             Duration::from_secs_f32(1.0 / cli.fps),
-            OcrEngine::AppleNative,
+            Arc::new(OcrEngine::AppleNative),
             id,
             Arc::new(window_filters),
-            languages.clone(),
+            Arc::new(languages),
             false,
+            shutdown_rx,
         )
         .await
     });

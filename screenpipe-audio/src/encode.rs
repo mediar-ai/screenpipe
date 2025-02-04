@@ -1,7 +1,7 @@
 use screenpipe_core::find_ffmpeg_path;
 use std::io::Write;
 use std::{
-    path::PathBuf,
+    path::Path,
     process::{Command, Stdio},
 };
 use tracing::{debug, error};
@@ -10,13 +10,13 @@ pub fn encode_single_audio(
     data: &[u8],
     sample_rate: u32,
     channels: u16,
-    output_path: &PathBuf,
+    output_path: &Path,
 ) -> anyhow::Result<()> {
     debug!("Starting FFmpeg process");
 
     let mut command = Command::new(find_ffmpeg_path().unwrap());
     command
-        .args(&[
+        .args([
             "-f",
             "f32le",
             "-ar",
@@ -43,6 +43,7 @@ pub fn encode_single_audio(
 
     debug!("FFmpeg command: {:?}", command);
 
+    #[allow(clippy::zombie_processes)]
     let mut ffmpeg = command.spawn().expect("Failed to spawn FFmpeg process");
     debug!("FFmpeg process spawned");
     let mut stdin = ffmpeg.stdin.take().expect("Failed to open stdin");
