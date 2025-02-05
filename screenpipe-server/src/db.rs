@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
-use log::{debug, error, warn};
+use tracing::{debug, error, warn};
 use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;

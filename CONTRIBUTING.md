@@ -321,6 +321,16 @@ run locally: https://github.com/nektos/act
 
 ### debugging memory errors
 
+using tokio-console:
+
+```bash
+# terminal 1
+RUST_LOG="tokio=debug,runtime=debug" RUSTFLAGS="--cfg tokio_unstable" cargo run --bin screenpipe --features debug-console
+# terminal 2
+cargo install tokio-console
+tokio-console
+```
+
 ```bash
 RUSTFLAGS="-Z sanitizer=address" cargo run --bin screenpipe
 # or

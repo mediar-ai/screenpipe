@@ -9,6 +9,9 @@
    </a>
 </p>
 
+<p align="center">
+   <a href="https://trendshift.io/repositories/11785" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11785" alt="mediar-ai%2Fscreenpipe | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
 
 
 <!-- ScreenPipe Title and Subtitle -->

@@ -29,6 +29,7 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -47,6 +48,14 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+
+// Add this struct to handle the server response structure
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct ApiResponse<T> {
+    data: T,
+    success: bool,
+}
 
 const DISPLAY: &str = r"
                                             _          
@@ -84,6 +93,8 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let env_filter = EnvFilter::from_default_env()
+        .add_directive("tokio=debug".parse().unwrap()) // Add this
+        .add_directive("runtime=debug".parse().unwrap()) // Add this
         .add_directive("info".parse().unwrap())
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
@@ -157,7 +168,7 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    // Only set up logging if we're not running a pipe command with JSON output
+    // Determine initial logging state based on command
     let should_log = match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
@@ -205,6 +216,15 @@ async fn main() -> anyhow::Result<()> {
             )
         }
         _ => true,
+    };
+
+    // Override logging state if debug console is enabled
+    #[cfg(feature = "debug-console")]
+    let should_log = if cfg!(all(debug_assertions, feature = "debug-console")) {
+        console_subscriber::init();
+        false
+    } else {
+        should_log
     };
 
     // Store the guard in a variable that lives for the entire main function
@@ -1439,24 +1459,24 @@ async fn handle_pipe_command(
         }
 
         PipeCommand::Info { id, output, port } => {
-            let info = match client
+            let info: ApiResponse<PipeInfo> = match client
                 .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
                 .send()
                 .await
             {
                 Ok(response) if response.status().is_success() => response.json().await?,
-                _ => {
-                    println!("note: server not running, showing pipe configuration");
-                    pipe_manager
+                _ => ApiResponse {
+                    data: pipe_manager
                         .get_pipe_info(&id)
                         .await
-                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
-                }
+                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?,
+                    success: true,
+                },
             };
 
             match output {
-                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info)?),
-                OutputFormat::Text => println!("pipe info: {:?}", info),
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info.data)?),
+                OutputFormat::Text => println!("pipe info: {:?}", info.data),
             }
         }
         PipeCommand::Enable { id, port } => {

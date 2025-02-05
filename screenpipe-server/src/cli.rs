@@ -64,7 +64,7 @@ impl From<CliOcrEngine> for CoreOcrEngine {
                     match serde_json::from_str(&config_str) {
                         Ok(config) => CoreOcrEngine::Custom(config),
                         Err(e) => {
-                            log::warn!("failed to parse custom ocr config from env: {}", e);
+                            tracing::warn!("failed to parse custom ocr config from env: {}", e);
                             CoreOcrEngine::Custom(CustomOcrConfig::default())
                         }
                     }
