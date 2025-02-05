@@ -176,6 +176,9 @@ async fn record_vision(
     let mut handles: HashMap<u32, JoinHandle<()>> = HashMap::new();
     let mut device_states = device_manager.watch_devices().await;
 
+    // Create weak reference to device_manager
+    let device_manager_weak = Arc::downgrade(&device_manager);
+
     loop {
         tokio::select! {
             Some(state_change) = device_states.next() => {
@@ -200,7 +203,6 @@ async fn record_vision(
                             continue;
                         }
 
-
                         if handles.contains_key(&monitor_id) {
                             continue;
                         }
@@ -212,7 +214,8 @@ async fn record_vision(
                         let ocr_engine = Arc::clone(&ocr_engine);
 
                         let languages = languages.clone();
-                        let device_manager_vision_clone = device_manager.clone();
+                        // Use weak reference for the device manager
+                        let device_manager_weak = device_manager_weak.clone();
                         let ignored_windows = ignored_windows.clone();
                         let include_windows = include_windows.clone();
                         let handle = tokio::spawn(async move {
@@ -230,7 +233,16 @@ async fn record_vision(
                                 capture_unfocused_windows,
                             };
 
-                            if let Err(e) = record_video(device_manager_vision_clone, config).await {
+                            // Upgrade weak reference when needed
+                            let device_manager = match device_manager_weak.upgrade() {
+                                Some(dm) => dm,
+                                None => {
+                                    warn!("device manager no longer exists");
+                                    return;
+                                }
+                            };
+
+                            if let Err(e) = record_video(device_manager, config).await {
                                 error!(
                                     "Error in video recording thread for monitor {}: {}",
                                     monitor_id, e
@@ -403,6 +415,9 @@ async fn record_audio(
     let mut previous_transcript = String::new();
     let mut previous_transcript_id: Option<i64> = None;
 
+    // Create a weak reference to device_manager
+    let device_manager_weak = Arc::downgrade(&device_manager);
+
     loop {
         tokio::select! {
             Some(state_change) = device_states.next() => {
@@ -437,8 +452,8 @@ async fn record_audio(
                         let audio_device = Arc::new(audio_device);
                         let is_running = Arc::new(AtomicBool::new(true));
 
-                        // Create a single clone of required values for the spawned task
-                        let device_manager = Arc::clone(&device_manager);
+                        // Use weak reference for the spawned task
+                        let device_manager_weak = device_manager_weak.clone();
                         let whisper_sender = whisper_sender.clone();
                         let languages = Arc::clone(&languages);
                         let deepgram_api_key = deepgram_api_key.clone();
@@ -456,6 +471,15 @@ async fn record_audio(
 
                                 while is_running.load(Ordering::Relaxed) {
                                     let device_id = audio_device.to_string();
+
+                                    // Upgrade weak reference when needed
+                                    let device_manager = match device_manager_weak.upgrade() {
+                                        Some(dm) => dm,
+                                        None => {
+                                            warn!("device manager no longer exists");
+                                            break;
+                                        }
+                                    };
 
                                     // Monitor device state changes
                                     let mut device_states = device_manager.watch_devices().await;
