@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Power, Search, Trash2 } from "lucide-react";
+import { Loader2, Power, Search, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Command } from "@tauri-apps/plugin-shell";
@@ -1011,7 +1011,7 @@ export const PipeStore: React.FC = () => {
                         )
                       }
                     >
-                      <Loader2 className="h-4 w-4" />
+                      <RefreshCw className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
