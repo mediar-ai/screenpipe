@@ -212,9 +212,9 @@ export const LogFileButton = ({
     const files = await getLogFiles();
     setLogFiles(files);
 
-    // Find most recent app log or fall back to first file
+    // Find most recent non-app log or fall back to first file
     const appLog = files
-      .filter((f) => f.name.toLowerCase().includes("app"))
+      .filter((f) => !f.name.toLowerCase().includes("app"))
       .sort((a, b) => b.modified_at - a.modified_at)[0];
 
     if (files.length > 0) {

@@ -21,6 +21,7 @@ rules for the investigation:
 - track project progress and blockers mentioned
 
 style rules:
+- always put people's names in double square brackets, eg: [[John Doe]] to link to their notes, same for companies, eg: [[Google]], or projects, eg: [[Project X]]
 - keep it real and conversational
 - use bullet points for clarity
 - include relevant timestamps
@@ -29,7 +30,10 @@ style rules:
 - no corporate speak, keep it human
 - for tags use hyphen between words, no spaces, eg: #my-tag not #my tag nor #myTag nor #my_tag
 
-remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!`,
+remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!
+you'll get chunks of 5 mins roughly of data screen & audio recordings and have to write logs.
+this data will be used later for analysis, it must contains valuable insights on what i am doing.
+if you do your job well, i'll give you a 🍺 and $1m`,
     },
   };
 

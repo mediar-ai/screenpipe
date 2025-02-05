@@ -165,7 +165,13 @@ export const PipeStore: React.FC = () => {
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.purchasePipe(pipe.id);
 
-      if (response.data.used_credits) {
+      if (response.data.payment_successful) {
+        await handleInstallPipe(pipe);
+        toast({
+          title: "purchase & install successful",
+          description: "payment processed with saved card",
+        });
+      } else if (response.data.used_credits) {
         await handleInstallPipe(pipe);
         toast({
           title: "purchase & install successful",

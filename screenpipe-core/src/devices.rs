@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
+use tokio_stream::Stream;
 use tracing::debug;
 
 #[derive(Clone, Debug)]
@@ -125,7 +125,7 @@ pub struct DeviceManager {
     sender: tokio::sync::broadcast::Sender<DeviceControl>,
     #[allow(dead_code)]
     _dummy: tokio::sync::broadcast::Receiver<DeviceControl>,
-    state_sender: tokio::sync::mpsc::UnboundedSender<DeviceStateRequest>,
+    state_sender: tokio::sync::mpsc::Sender<DeviceStateRequest>,
 }
 
 impl Clone for DeviceManager {
@@ -145,7 +145,7 @@ enum DeviceStateRequest {
     },
     Update(DeviceControl),
     Watch {
-        respond_to: tokio::sync::mpsc::UnboundedSender<DeviceStateChange>,
+        respond_to: tokio::sync::mpsc::Sender<DeviceStateChange>,
     },
 }
 
@@ -158,7 +158,7 @@ pub struct DeviceStateChange {
 impl DeviceManager {
     pub fn default() -> Self {
         let (sender, dummy_receiver) = tokio::sync::broadcast::channel(32);
-        let (state_sender, state_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (state_sender, state_receiver) = tokio::sync::mpsc::channel(32);
 
         tokio::spawn(async move {
             Self::manage_state(state_receiver).await;
@@ -166,13 +166,12 @@ impl DeviceManager {
 
         Self {
             sender,
-            // this ensures that even if devices go to 0 it still stays open
             _dummy: dummy_receiver,
             state_sender,
         }
     }
 
-    async fn manage_state(mut receiver: tokio::sync::mpsc::UnboundedReceiver<DeviceStateRequest>) {
+    async fn manage_state(mut receiver: tokio::sync::mpsc::Receiver<DeviceStateRequest>) {
         let mut devices = HashMap::new();
         let mut watchers = Vec::new();
 
@@ -199,9 +198,9 @@ impl DeviceManager {
 
                         // Notify watchers of the change
                         watchers.retain(
-                            |watcher: &tokio::sync::mpsc::UnboundedSender<DeviceStateChange>| {
+                            |watcher: &tokio::sync::mpsc::Sender<DeviceStateChange>| {
                                 watcher
-                                    .send(DeviceStateChange {
+                                    .try_send(DeviceStateChange {
                                         device: device_id.clone(),
                                         control: control.clone(),
                                     })
@@ -220,9 +219,10 @@ impl DeviceManager {
 
     pub async fn get_active_devices(&self) -> HashMap<String, DeviceControl> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Get { respond_to: tx });
+        self.state_sender
+            .send(DeviceStateRequest::Get { respond_to: tx })
+            .await
+            .expect("state manager task has terminated");
         rx.await
             .unwrap_or_default()
             .into_iter()
@@ -231,18 +231,18 @@ impl DeviceManager {
     }
 
     pub async fn watch_devices(&self) -> impl Stream<Item = DeviceStateChange> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Watch { respond_to: tx });
-        UnboundedReceiverStream::new(rx)
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        self.state_sender
+            .send(DeviceStateRequest::Watch { respond_to: tx })
+            .await
+            .expect("state manager task has terminated");
+        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
 
     pub async fn update_device(&self, control: DeviceControl) -> anyhow::Result<()> {
-        // Update state and broadcast change
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Update(control.clone()));
+        self.state_sender
+            .send(DeviceStateRequest::Update(control.clone()))
+            .await?;
         self.sender.send(control)?;
         Ok(())
     }
