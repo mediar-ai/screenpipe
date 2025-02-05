@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Check, HelpCircle, Lock, Video, X } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
-import { Command } from "@tauri-apps/plugin-shell";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import {
@@ -55,6 +54,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     screenshots: number;
     audioSeconds: number;
   } | null>(null);
+  const [isMacOS, setIsMacOS] = useState(false);
 
   useEffect(() => {
     const checkRestartStatus = async () => {
@@ -139,6 +139,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
     // cleanup interval on unmount
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const checkPlatform = () => {
+      const currentPlatform = platform();
+      setIsMacOS(currentPlatform === "macos");
+    };
+    checkPlatform();
   }, []);
 
   const handlePermissionButton = async (
@@ -272,76 +280,78 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         </DialogTitle>
       </DialogHeader>
 
-      <div className="w-3/4 space-y-4 mt-4 flex flex-col items-center">
-        <div className="flex items-center justify-between mx-auto w-full">
-          <div className="flex items-right gap-2">
-            {permissions && (
-              <span>
-                {permissions.screenRecording.toLowerCase() === "granted" ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <X className="h-4 w-4 text-red-500" />
-                )}
-              </span>
-            )}
-            <span className="text-sm">screen recording permission</span>
+      {isMacOS && (
+        <div className="w-3/4 space-y-4 mt-4 flex flex-col items-center">
+          <div className="flex items-center justify-between mx-auto w-full">
+            <div className="flex items-right gap-2">
+              {permissions && (
+                <span>
+                  {permissions.screenRecording.toLowerCase() === "granted" ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </span>
+              )}
+              <span className="text-sm">screen recording permission</span>
+            </div>
+            <Button
+              variant="outline"
+              className="w-[260px] text-sm justify-start"
+              onClick={() => handlePermissionButton("screen")}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              grant screen permission
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            className="w-[260px] text-sm justify-start"
-            onClick={() => handlePermissionButton("screen")}
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            grant screen permission
-          </Button>
-        </div>
 
-        <div className="flex items-center justify-between mx-auto w-full">
-          <div className="flex items-center gap-2">
-            {permissions && (
-              <span>
-                {permissions.microphone.toLowerCase() === "granted" ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <X className="h-4 w-4 text-red-500" />
-                )}
-              </span>
-            )}
-            <span className="text-sm">audio recording permission</span>
+          <div className="flex items-center justify-between mx-auto w-full">
+            <div className="flex items-center gap-2">
+              {permissions && (
+                <span>
+                  {permissions.microphone.toLowerCase() === "granted" ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </span>
+              )}
+              <span className="text-sm">audio recording permission</span>
+            </div>
+            <Button
+              variant="outline"
+              className="w-[260px] text-sm justify-start"
+              onClick={() => handlePermissionButton("audio")}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              grant audio permission
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            className="w-[260px] text-sm justify-start"
-            onClick={() => handlePermissionButton("audio")}
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            grant audio permission
-          </Button>
-        </div>
 
-        <div className="flex items-center justify-between mx-auto w-full">
-          <div className="flex items-center gap-2">
-            {permissions && (
-              <span>
-                {permissions.accessibility.toLowerCase() === "granted" ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <X className="h-4 w-4 text-red-500" />
-                )}
-              </span>
-            )}
-            <span className="text-sm">accessibility permission</span>
+          <div className="flex items-center justify-between mx-auto w-full">
+            <div className="flex items-center gap-2">
+              {permissions && (
+                <span>
+                  {permissions.accessibility.toLowerCase() === "granted" ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </span>
+              )}
+              <span className="text-sm">accessibility permission</span>
+            </div>
+            <Button
+              variant="outline"
+              className="w-[260px] text-sm justify-start"
+              onClick={() => handlePermissionButton("accessibility")}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              grant accessibility permission
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            className="w-[260px] text-sm justify-start"
-            onClick={() => handlePermissionButton("accessibility")}
-          >
-            <Lock className="h-4 w-4 mr-2" />
-            grant accessibility permission
-          </Button>
         </div>
-      </div>
+      )}
 
       <Separator className="w-full my-2" />
 
