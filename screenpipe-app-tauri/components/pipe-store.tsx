@@ -23,6 +23,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { LoginDialog, useLoginCheck } from "./login-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const corePipes: string[] = ["data-table", "search"];
 
@@ -409,17 +415,122 @@ export const PipeStore: React.FC = () => {
 
   const handleResetAllPipes = async () => {
     try {
+      const t = toast({
+        title: "resetting pipes",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">deleting all pipes...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+
       const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
       await cmd.execute();
       await fetchInstalledPipes();
-      toast({
-        title: "all pipes deleted",
-        description: "the pipes folder has been reset.",
+
+      t.update({
+        id: t.id,
+        title: "pipes reset",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">all pipes have been deleted</p>
+          </div>
+        ),
+        duration: 2000,
       });
     } catch (error) {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error resetting pipes",
+        description: "please try again or check the logs",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateAllPipes = async () => {
+    try {
+      if (!checkLogin(settings.user)) return;
+
+      posthog.capture("update_all_pipes", {});
+
+      const t = toast({
+        title: "checking for updates",
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">checking installed pipes...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+
+      // Filter installed pipes that have updates available
+      const pipesToUpdate = pipes.filter(
+        (pipe) => pipe.is_installed && pipe.has_update
+      );
+
+      if (pipesToUpdate.length === 0) {
+        t.update({
+          id: t.id,
+          title: "no updates available",
+          description: "all pipes are up to date",
+          duration: 2000,
+        });
+        return;
+      }
+
+      // Update progress message
+      t.update({
+        id: t.id,
+        title: `updating ${pipesToUpdate.length} pipes`,
+        description: (
+          <div className="space-y-2">
+            <Progress value={0} className="h-1" />
+            <p className="text-xs">starting updates...</p>
+          </div>
+        ),
+        duration: 100000,
+      });
+
+      // Update each pipe sequentially
+      for (let i = 0; i < pipesToUpdate.length; i++) {
+        const pipe = pipesToUpdate[i];
+        const progress = Math.round((i / pipesToUpdate.length) * 100);
+
+        t.update({
+          id: t.id,
+          title: `updating pipes (${i + 1}/${pipesToUpdate.length})`,
+          description: (
+            <div className="space-y-2">
+              <Progress value={progress} className="h-1" />
+              <p className="text-xs">updating {pipe.name}...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+
+        await handleUpdatePipe(pipe);
+      }
+
+      t.update({
+        id: t.id,
+        title: "all pipes updated",
+        description: (
+          <div className="space-y-2">
+            <Progress value={100} className="h-1" />
+            <p className="text-xs">completed successfully</p>
+          </div>
+        ),
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error("failed to update all pipes:", error);
+      toast({
+        title: "error updating pipes",
         description: "please try again or check the logs",
         variant: "destructive",
       });
@@ -694,6 +805,20 @@ export const PipeStore: React.FC = () => {
         });
 
         await handleInstallPipe(pipe);
+
+        // Enable the pipe after installation
+        const response = await fetch(`http://localhost:3030/pipes/enable`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pipe_id: pipe.name }),
+        });
+
+        const data = await response.json();
+        if (!data.success) {
+          console.warn("failed to enable pipe:", data.error);
+        }
       }
 
       t.update({
@@ -839,14 +964,45 @@ export const PipeStore: React.FC = () => {
                 checked={showInstalledOnly}
                 onCheckedChange={setShowInstalledOnly}
               />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleResetAllPipes}
-                className="flex items-center gap-2"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleResetAllPipes}
+                      className="flex items-center gap-2"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>reset all pipes</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleUpdateAllPipes}
+                      className="flex items-center gap-2"
+                      disabled={
+                        !pipes.some(
+                          (pipe) => pipe.is_installed && pipe.has_update
+                        )
+                      }
+                    >
+                      <Loader2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>update all pipes</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>
