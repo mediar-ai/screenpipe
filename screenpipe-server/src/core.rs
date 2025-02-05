@@ -16,6 +16,7 @@ use screenpipe_vision::{CaptureResult, OcrEngine};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::Weak;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
@@ -58,7 +59,7 @@ pub struct VideoRecordingConfig {
     pub db: Arc<DatabaseManager>,
     pub output_path: Arc<String>,
     pub fps: f64,
-    pub ocr_engine: Arc<OcrEngine>,
+    pub ocr_engine: Weak<OcrEngine>,
     pub monitor_id: u32,
     pub use_pii_removal: bool,
     pub ignored_windows: Arc<Vec<String>>,
@@ -211,7 +212,7 @@ async fn record_vision(
 
                         let db_manager_video = Arc::clone(&db);
                         let output_path_video = Arc::clone(&output_path);
-                        let ocr_engine = Arc::clone(&ocr_engine);
+                        let ocr_engine_weak = Arc::downgrade(&ocr_engine);
 
                         let languages = languages.clone();
                         // Use weak reference for the device manager
@@ -223,7 +224,7 @@ async fn record_vision(
                                 db: db_manager_video,
                                 output_path: output_path_video,
                                 fps,
-                                ocr_engine,
+                                ocr_engine: ocr_engine_weak,
                                 monitor_id,
                                 use_pii_removal,
                                 ignored_windows,
@@ -294,7 +295,7 @@ async fn record_video(
         config.fps,
         config.video_chunk_duration,
         new_chunk_callback,
-        Arc::clone(&config.ocr_engine),
+        config.ocr_engine.clone(),
         config.monitor_id,
         config.ignored_windows,
         config.include_windows,
@@ -344,8 +345,16 @@ async fn process_ocr_frame(
     db: &DatabaseManager,
     device_name: &str,
     use_pii_removal: bool,
-    ocr_engine: Arc<OcrEngine>,
+    ocr_engine: Weak<OcrEngine>,
 ) {
+    let ocr_engine = match ocr_engine.upgrade() {
+        Some(engine) => engine,
+        None => {
+            warn!("OCR engine no longer exists");
+            return;
+        }
+    };
+
     for window_result in &frame.window_ocr_results {
         let frame_id = match db.insert_frame(device_name, None).await {
             Ok(id) => id,

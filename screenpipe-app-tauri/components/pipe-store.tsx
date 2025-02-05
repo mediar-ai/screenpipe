@@ -137,12 +137,7 @@ export const PipeStore: React.FC = () => {
 
       setPipes([...storePluginsWithStatus, ...customPipes]);
     } catch (error) {
-      console.error("Failed to fetch store plugins:", error);
-      toast({
-        title: "error loading store",
-        description: "failed to fetch available pipes",
-        variant: "destructive",
-      });
+      console.warn("Failed to fetch store plugins:", error);
     }
   };
 

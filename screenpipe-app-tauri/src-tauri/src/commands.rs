@@ -247,8 +247,6 @@ pub struct AuthStatus {
     message: Option<String>,
 }
 
-
-
 #[tauri::command]
 pub async fn open_pipe_window(
     app_handle: tauri::AppHandle<tauri::Wry>,
@@ -270,8 +268,9 @@ pub async fn open_pipe_window(
     )
     .title(title)
     .inner_size(1200.0, 850.0)
-    // .always_on_top(true)
-    .visible_on_all_workspaces(true)
+    .min_inner_size(600.0, 400.0)
+    .focused(true)
+    .fullscreen(false)
     .build()
     {
         Ok(window) => window,
@@ -290,7 +289,7 @@ pub async fn open_pipe_window(
     }
 
     #[cfg(target_os = "macos")]
-    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular) {
         error!("failed to set activation policy: {}", e);
     }
 
@@ -301,18 +300,16 @@ pub async fn open_pipe_window(
 pub async fn get_disk_usage(
     app_handle: tauri::AppHandle<tauri::Wry>,
 ) -> Result<serde_json::Value, String> {
-    let screenpipe_dir_path = get_data_dir(&app_handle)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe"));
+    let screenpipe_dir_path =
+        get_data_dir(&app_handle).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe"));
     match crate::disk_usage::disk_usage(&screenpipe_dir_path).await {
-        Ok(Some(disk_usage)) => {
-            match serde_json::to_value(&disk_usage) {
-                Ok(json_value) => Ok(json_value),
-                Err(e) => {
-                    error!("Failed to serialize disk usage: {}", e);
-                    Err(format!("Failed to serialize disk usage: {}", e))
-                }
+        Ok(Some(disk_usage)) => match serde_json::to_value(&disk_usage) {
+            Ok(json_value) => Ok(json_value),
+            Err(e) => {
+                error!("Failed to serialize disk usage: {}", e);
+                Err(format!("Failed to serialize disk usage: {}", e))
             }
-        }
+        },
         Ok(None) => Err("No disk usage data found".to_string()),
         Err(e) => {
             error!("Failed to get disk usage: {}", e);
@@ -320,4 +317,3 @@ pub async fn get_disk_usage(
         }
     }
 }
-

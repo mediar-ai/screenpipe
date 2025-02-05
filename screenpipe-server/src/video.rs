@@ -1,6 +1,5 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
-use tracing::{debug, error, info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
@@ -9,6 +8,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::Weak;
 use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
@@ -18,6 +18,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
+use tracing::{debug, error, info, warn};
 
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -36,7 +37,7 @@ impl VideoCapture {
         fps: f64,
         video_chunk_duration: Duration,
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
-        ocr_engine: Arc<OcrEngine>,
+        ocr_engine: Weak<OcrEngine>,
         monitor_id: u32,
         ignore_list: Arc<Vec<String>>,
         include_list: Arc<Vec<String>>,
@@ -85,11 +86,19 @@ impl VideoCapture {
                 let window_filters_clone = Arc::clone(&window_filters_clone);
                 let languages_clone = languages_clone.clone();
 
+                let ocr_engine = match ocr_engine.upgrade() {
+                    Some(engine) => engine,
+                    None => {
+                        warn!("[monitor_id: {}] OCR engine no longer exists", monitor_id);
+                        break;
+                    }
+                };
+
                 tokio::select! {
                     _ = continuous_capture(
                         result_sender,
                         interval,
-                        ocr_engine.clone(),
+                        ocr_engine,
                         monitor_id,
                         window_filters_clone,
                         languages_clone.clone(),
