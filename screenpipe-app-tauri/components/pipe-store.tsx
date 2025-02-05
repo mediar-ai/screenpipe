@@ -172,6 +172,12 @@ export const PipeStore: React.FC = () => {
           title: "purchase & install successful",
           description: "payment processed with saved card",
         });
+      } else if (response.data.already_purchased) {
+        await handleInstallPipe(pipe);
+        toast({
+          title: "pipe already purchased",
+          description: "installing pipe...",
+        });
       } else if (response.data.used_credits) {
         await handleInstallPipe(pipe);
         toast({
@@ -883,14 +889,24 @@ export const PipeStore: React.FC = () => {
               return;
             }
 
-            toast({
-              title: "purchase successful",
-              description: "installing your new pipe...",
-            });
-
             await new Promise((resolve) => setTimeout(resolve, 1000));
 
-            fetchPurchaseHistory();
+            // First update purchase history to reflect the new purchase
+            await fetchPurchaseHistory();
+
+            // Find the pipe in the store
+            const purchasedPipe = pipes.find((pipe) => pipe.id === pipeId);
+            if (!purchasedPipe) {
+              toast({
+                title: "error installing pipe",
+                description: "could not find the purchased pipe",
+                variant: "destructive",
+              });
+              return;
+            }
+
+            // Install the pipe
+            await handleInstallPipe(purchasedPipe);
           }
         }
       });
@@ -905,7 +921,7 @@ export const PipeStore: React.FC = () => {
     return () => {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, []);
+  }, [pipes]);
 
   if (health?.status === "error") {
     return (

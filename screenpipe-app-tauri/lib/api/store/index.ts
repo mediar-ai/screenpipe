@@ -48,6 +48,7 @@ interface PurchaseUrlResponse {
     checkout_url?: string;
     used_credits?: boolean;
     payment_successful?: boolean;
+    already_purchased?: boolean;
   };
 }
 
