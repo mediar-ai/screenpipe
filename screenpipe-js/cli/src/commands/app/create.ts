@@ -2,9 +2,9 @@
 import { input } from "@inquirer/prompts"; // Import select from inquirer prompts
 import { Command } from "commander";
 import inquirer from "inquirer";
-import { logger, spinner } from "../../components/commands/add/utils/logger";
-import { handleError } from "../../components/commands/add/utils/handle-error";
 import simpleGit from "simple-git";
+import { logger, spinner } from "../components/commands/add/utils/logger";
+import { handleError } from "../components/commands/add/utils/handle-error";
 
 const TEMPLATE_REPOS = {
   electron: "https://github.com/neo773/screenpipe-electron",
@@ -12,7 +12,7 @@ const TEMPLATE_REPOS = {
 };
 
 export const createAppCommand = new Command()
-  .name("app")
+  .name("create")
   .description("create a new desktop app project")
   .option(
     "-a, --name <name>",

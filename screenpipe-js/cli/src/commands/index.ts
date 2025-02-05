@@ -1,4 +1,5 @@
-export { createCommands } from './create/index';
+export { createPipeCommand } from './create';
+export { appCommands } from './app';
 export { loginCommand } from './login';
 export { logoutCommand } from './logout';
 export { publishCommand } from './publish';

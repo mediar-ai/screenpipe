@@ -52633,7 +52633,7 @@ var {
   Help
 } = import__.default;
 
-// src/commands/create/pipe/index.ts
+// src/commands/create/index.ts
 var import_fs_extra = __toESM(require_lib(), 1);
 init_esm13();
 import path from "path";
@@ -61820,7 +61820,7 @@ var ERRORS = {
   BUILD_MISSING_REGISTRY_FILE: "3"
 };
 
-// src/commands/create/pipe/index.ts
+// src/commands/create/index.ts
 process.removeAllListeners("warning");
 var PIPE_ADDITIONS = {
   dependencies: {
@@ -61838,7 +61838,7 @@ async function downloadAndExtractSubdir(subdir, destPath) {
   await import_fs_extra.default.copy(sourcePath, destPath);
   await import_fs_extra.default.remove(tempDir);
 }
-var createPipeCommand = new Command().name("pipe").description("create a new pipe").action(async () => {
+var createPipeCommand = new Command().name("create").description("create a new pipe").action(async () => {
   console.log(source_default.bold(`
 welcome to screenpipe! \uD83D\uDE80
 `));
@@ -61889,15 +61889,14 @@ when you're ready, you can ship your pipe to the app by adding it to the pipe st
     handleError(error);
   }
 });
-
-// src/commands/create/app/index.ts
+// src/commands/app/create.ts
 init_esm13();
 init_esm14();
 var TEMPLATE_REPOS = {
   electron: "https://github.com/neo773/screenpipe-electron",
   tauri: "https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev"
 };
-var createAppCommand = new Command().name("app").description("create a new desktop app project").option("-a, --name <name>", "the name of your app (optional)").option("-t, --appType <type>", "the type of desktop app (electron or tauri)").action(async (options) => {
+var createAppCommand = new Command().name("create").description("create a new desktop app project").option("-a, --name <name>", "the name of your app (optional)").option("-t, --appType <type>", "the type of desktop app (electron or tauri)").action(async (options) => {
   let { name, appType } = options;
   if (!appType) {
     let { appTypePrompt } = await esm_default13.prompt({
@@ -61949,10 +61948,9 @@ when you're ready, you can deploy your app following the documentation for the r
   }
 });
 
-// src/commands/create/index.ts
-var createCommands = new Command().name("create").description("commands to initiate projects that contribute to screenpipe");
-createCommands.addCommand(createPipeCommand);
-createCommands.addCommand(createAppCommand);
+// src/commands/app/index.ts
+var appCommands = new Command().name("app").description("create a new screenpipe application using default templates");
+appCommands.addCommand(createAppCommand);
 // src/constants.ts
 var API_BASE_URL = process.env.SC_API_BASE_URL || "https://screenpi.pe";
 
@@ -62107,31 +62105,51 @@ function archiveStandardProject(archive, ig) {
     mark: true
   });
 }
-var publishCommand = new Command().name("publish").description("publish or update a pipe to the store").requiredOption("--name <name>", "name of the pipe").option("--verbose", "enable verbose logging", false).action(async (opts) => {
+async function retryFetch(url, options, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 1;attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.ok)
+        return response;
+      if (attempt === maxRetries) {
+        throw new Error(`Failed after ${maxRetries} attempts: ${await response.text()}`);
+      }
+    } catch (error) {
+      if (attempt === maxRetries)
+        throw error;
+    }
+    const delay2 = baseDelay * Math.pow(2, attempt - 1);
+    await new Promise((resolve) => setTimeout(resolve, delay2));
+  }
+  throw new Error("Retry failed");
+}
+var publishCommand = new Command("publish").description("publish or update a pipe to the store").requiredOption("-n, --name <name>", "name of the pipe").option("-v, --verbose", "enable verbose logging", false).action(async (opts) => {
   try {
     if (opts.verbose) {
-      logger.info(`${symbols.arrow} starting publish command...`);
+      console.log(colors8.dim(`${symbols.arrow} starting publish command...`));
     }
     const apiKey = Credentials.getApiKey();
     if (!apiKey) {
-      handleError(`${symbols.error} not logged in. please login first using ${colors8.highlight("screenpipe login")}`);
+      console.error(colors8.error(`${symbols.error} Not logged in. Please login first using ${colors8.highlight("screenpipe login")}`));
+      process.exit(1);
     }
     if (opts.verbose) {
-      logger.info(`${symbols.arrow} reading package.json...`);
+      console.log(colors8.dim(`${symbols.arrow} reading package.json...`));
     }
     let packageJson;
     try {
       packageJson = JSON.parse(fs3.readFileSync("package.json", "utf-8"));
     } catch (error) {
-      handleError(`${symbols.error} failed to read package.json. make sure you're in the correct directory.`);
+      console.error(colors8.error(`${symbols.error} Failed to read package.json. Make sure you're in the correct directory.`));
+      process.exit(1);
     }
-    if (!packageJson || !packageJson.name || !packageJson.version) {
-      handleError(`${symbols.error} package name and version are required in package.json`);
-      return;
+    if (!packageJson.name || !packageJson.version) {
+      console.error(colors8.error(`${symbols.error} Package name and version are required in package.json`));
+      process.exit(1);
     }
-    logger.info(`
-${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson.version}...`);
-    logger.info(colors8.dim(`${symbols.arrow} creating package archive...`));
+    console.log(colors8.info(`
+${symbols.info} Publishing ${colors8.highlight(packageJson.name)} v${packageJson.version}...`));
+    console.log(colors8.dim(`${symbols.arrow} Creating package archive...`));
     const zipPath = path3.join(process.cwd(), `${packageJson.name}-${packageJson.version}.zip`);
     const output = fs3.createWriteStream(zipPath);
     const archive = import_archiver.default("zip", { zlib: { level: 9 } });
@@ -62152,8 +62170,8 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
       archive.finalize();
     });
     if (opts.verbose) {
-      logger.info(`${symbols.arrow} detected project type: ${isNextProject ? "nextjs" : "standard"}`);
-      logger.info(colors8.dim(`${symbols.arrow} starting archive creation...`));
+      console.log(colors8.dim(`${symbols.arrow} detected project type: ${isNextProject ? "nextjs" : "standard"}`));
+      console.log(colors8.dim(`${symbols.arrow} starting archive creation...`));
     }
     const fileBuffer = fs3.readFileSync(zipPath);
     const hashSum = crypto.createHash("sha256");
@@ -62161,8 +62179,9 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
     const fileHash = hashSum.digest("hex");
     const fileSize = fs3.statSync(zipPath).size;
     if (fileSize > MAX_FILE_SIZE) {
-      handleError(`${symbols.error} package size (${(fileSize / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (${MAX_FILE_SIZE / 1024 / 1024}MB)`);
+      console.error(colors8.error(`${symbols.error} Package size (${(fileSize / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (${MAX_FILE_SIZE / 1024 / 1024}MB)`));
       fs3.unlinkSync(zipPath);
+      process.exit(1);
     }
     let description = null;
     try {
@@ -62171,16 +62190,17 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
         description = readmeContent;
       }
     } catch (error) {
-      logger.warn(`${symbols.arrow} no README.md found, required for description`);
+      console.log(colors8.dim(`${symbols.arrow} No README.md found, required for description`));
     }
     if (!description) {
-      handleError(`${symbols.error} description is required`);
+      console.error(colors8.error(`${symbols.error} Description is required`));
+      process.exit(1);
     }
     if (opts.verbose) {
-      logger.info(`${symbols.arrow} calculating file hash...`);
+      console.log(colors8.dim(`${symbols.arrow} calculating file hash...`));
     }
     try {
-      logger.info(`${symbols.arrow} getting upload URL...`);
+      console.log(colors8.dim(`${symbols.arrow} Getting upload URL...`));
       const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
         method: "POST",
         headers: {
@@ -62196,11 +62216,11 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
         })
       });
       if (!urlResponse.ok) {
-        throw new Error(`failed to get upload URL: ${await urlResponse.text()}`);
+        throw new Error(`Failed to get upload URL: ${await urlResponse.text()}`);
       }
       const { uploadUrl, path: path4 } = await urlResponse.json();
-      logger.info(`${symbols.arrow} uploading to storage...`);
-      const uploadResponse = await fetch(uploadUrl, {
+      console.log(colors8.dim(`${symbols.arrow} Uploading to storage...`));
+      const uploadResponse = await retryFetch(uploadUrl, {
         method: "PUT",
         headers: {
           "Content-Type": "application/zip"
@@ -62209,9 +62229,9 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
       });
       if (!uploadResponse.ok) {
         const text = await uploadResponse.text();
-        throw new Error(`failed to upload file to storage: ${text}`);
+        throw new Error(`Failed to upload file to storage: ${text}`);
       }
-      logger.info(`${symbols.arrow} finalizing upload...`);
+      console.log(colors8.dim(`${symbols.arrow} Finalizing upload...`));
       const finalizeResponse = await fetch(`${API_BASE_URL}/api/plugins/publish/finalize`, {
         method: "POST",
         headers: {
@@ -62229,43 +62249,44 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
       });
       if (!finalizeResponse.ok) {
         const text = await finalizeResponse.text();
-        throw new Error(`failed to finalize upload: ${text}`);
+        throw new Error(`Failed to finalize upload: ${text}`);
       }
       const data = await finalizeResponse.json();
-      logger.success(`
-${symbols.success} successfully published plugin!`);
-      console.log(colors8.listItem(`${colors8.label("name")} ${packageJson.name}`));
-      console.log(colors8.listItem(`${colors8.label("version")} ${packageJson.version}`));
-      console.log(colors8.listItem(`${colors8.label("size")} ${(fileSize / 1024).toFixed(2)} KB`));
+      console.log(colors8.success(`
+${symbols.success} Successfully published plugin!`));
+      console.log(colors8.listItem(`${colors8.label("Name")} ${packageJson.name}`));
+      console.log(colors8.listItem(`${colors8.label("Version")} ${packageJson.version}`));
+      console.log(colors8.listItem(`${colors8.label("Size")} ${(fileSize / 1024).toFixed(2)} KB`));
       if (data.message) {
-        logger.info(`
-${symbols.info} ${data.message}`);
+        console.log(colors8.info(`
+${symbols.info} ${data.message}`));
       }
       fs3.unlinkSync(zipPath);
       if (opts.verbose) {
-        logger.log(`${symbols.arrow} cleaned up temporary zip file`);
+        console.log(colors8.dim(`${symbols.arrow} cleaned up temporary zip file`));
       }
     } catch (error) {
       if (fs3.existsSync(zipPath)) {
         fs3.unlinkSync(zipPath);
         if (opts.verbose) {
-          logger.log(`${symbols.arrow} cleaned up temporary zip file`);
+          console.log(colors8.dim(`${symbols.arrow} cleaned up temporary zip file`));
         }
       }
       if (error instanceof Error) {
-        handleError(`
-${symbols.error} publishing failed: ${error.message}`);
+        console.error(colors8.error(`
+${symbols.error} Publishing failed: ${error.message}`));
       }
       process.exit(1);
     }
   } catch (error) {
     if (error instanceof Error) {
-      handleError(`
-${symbols.error} publishing failed: ${error.message}`);
+      console.error(colors8.error(`
+${symbols.error} Publishing failed: ${error.message}`));
     } else {
-      handleError(`
-${symbols.error} publishing failed with unexpected error`);
+      console.error(colors8.error(`
+${symbols.error} Publishing failed with unexpected error`));
     }
+    process.exit(1);
   }
 });
 // src/commands/register.ts
@@ -69415,7 +69436,8 @@ async function main2() {
   program2.name("screenpipe-dev").description("screenpipe development CLI tool").version("0.0.1");
   program2.addCommand(loginCommand);
   program2.addCommand(logoutCommand);
-  program2.addCommand(createCommands);
+  program2.addCommand(appCommands);
+  program2.addCommand(createPipeCommand);
   program2.addCommand(componentsCommands);
   program2.addCommand(registerCommand);
   program2.addCommand(publishCommand);
