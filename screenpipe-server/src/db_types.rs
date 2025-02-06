@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use screenpipe_audio::DeviceType;
+use screenpipe_core::AudioDeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
@@ -105,7 +105,7 @@ pub struct AudioResult {
     pub transcription_engine: String,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: DeviceType,
+    pub device_type: AudioDeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -136,6 +136,7 @@ pub struct UiContent {
 
 #[derive(Debug, Clone)]
 pub struct FrameData {
+    pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub offset_index: i64,
     pub ocr_entries: Vec<OCREntry>,

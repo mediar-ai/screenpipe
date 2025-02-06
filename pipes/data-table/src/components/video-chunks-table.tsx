@@ -14,8 +14,12 @@ import {
 import {
   ArrowUpDown,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   MoreHorizontal,
   RefreshCw,
+  Search,
+  Monitor,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -142,15 +146,13 @@ const columns: ColumnDef<VideoChunk>[] = [
 export function VideoChunksTable() {
   const [data, setData] = React.useState<VideoChunk[]>([]);
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters] = React.useState<ColumnFiltersState>(
-    []
-  );
+  const [columnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [pageSize, setPageSize] = React.useState(10);
+  const [pageSize, setPageSize] = React.useState(9);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
   const [filePathFilter] = React.useState("");
@@ -229,7 +231,11 @@ export function VideoChunksTable() {
       const response = await fetch("http://localhost:3030/vision/list", {
         method: "POST",
       });
-      if (!response.ok) throw new Error("failed to fetch monitors");
+      if (!response.ok) {
+        const error = await response.text();
+        console.warn("failed to fetch monitors:", error);
+        return;
+      }
       const monitors: MonitorDevice[] = await response.json();
       setAvailableMonitors(monitors);
     } catch (error) {
@@ -283,16 +289,19 @@ export function VideoChunksTable() {
     <div className="w-full">
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-4">
-          <Input
-            placeholder="filter by file path..."
-            value={
-              (table.getColumn("file_path")?.getFilterValue() as string) ?? ""
-            }
-            onChange={(event) =>
-              table.getColumn("file_path")?.setFilterValue(event.target.value)
-            }
-            className="max-w-sm"
-          />
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="filter by file path..."
+              value={
+                (table.getColumn("file_path")?.getFilterValue() as string) ?? ""
+              }
+              onChange={(event) =>
+                table.getColumn("file_path")?.setFilterValue(event.target.value)
+              }
+              className="max-w-sm pl-8"
+            />
+          </div>
           {availableMonitors.length > 0 && (
             <Select
               value={deviceFilter}
@@ -302,13 +311,17 @@ export function VideoChunksTable() {
               }}
             >
               <SelectTrigger className="w-[200px]">
+                <Monitor className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="filter by device..." />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>monitors</SelectLabel>
                   {availableMonitors.map((monitor) => (
-                    <SelectItem key={monitor.id} value={`monitor_${monitor.id}`}>
+                    <SelectItem
+                      key={monitor.id}
+                      value={`monitor_${monitor.id}`}
+                    >
                       {monitor.name} {monitor.is_default && "(default)"}
                     </SelectItem>
                   ))}
@@ -320,6 +333,7 @@ export function VideoChunksTable() {
           <Button
             variant="outline"
             size="icon"
+            className="w-12"
             onClick={fetchData}
             disabled={isLoading}
           >
@@ -418,22 +432,26 @@ export function VideoChunksTable() {
           </Table>
         </div>
       )}
-      <div className="flex items-center justify-end space-x-2 py-4">
+      <div className="flex items-center justify-center space-x-2 py-4">
         <Button
           variant="outline"
-          size="sm"
+          size="lg"
+          className="w-32"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
+          <ChevronLeft className="h-4 w-4" />
           previous
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="lg"
+          className="w-32"
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
           next
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

@@ -357,18 +357,6 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-async fn list_pipes() -> anyhow::Result<Value> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("http://localhost:3030/pipes/list")
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
-
-    Ok(response)
-}
-
 pub fn get_base_dir(
     app: &tauri::AppHandle,
     custom_path: Option<String>,
@@ -684,6 +672,13 @@ async fn main() {
             get_env
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
@@ -793,24 +788,6 @@ async fn main() {
                         // Kill all pipes before quitting
                         let app_handle_clone = app_handle.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Ok(response) = list_pipes().await {
-                                if let Some(pipes) = response["data"].as_array() {
-                                    for pipe in pipes {
-                                        if pipe["enabled"].as_bool().unwrap_or(false) {
-                                            if let Some(id) = pipe["id"].as_str() {
-                                                let _ = reqwest::Client::new()
-                                                    .post("http://localhost:3030/pipes/disable")
-                                                    .json(&serde_json::json!({
-                                                        "pipe_id": id
-                                                    }))
-                                                    .send()
-                                                    .await;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
                             // Stop any running recordings
                             let state = app_handle_clone.state::<SidecarState>();
                             if let Err(e) =

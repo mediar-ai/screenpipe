@@ -12,15 +12,20 @@ import { Tabs, Tab } from 'nextra/components'
 ### why build pipes? 🚀
 
 <MotionDiv delay={0.3}>
-agents are quite dumb without context. screenpipe is the bridge between human context and AI understanding.
+
+regardless of progress in AI architecture, it's as good as the given context. screenpipe is the bridge between dull hallunicating AI and super intelligent agents.
+
 
 #### for developers
-- **zero infrastructure**: run locally, no servers or complex setups, access to your auth tokens (unlike cloud agents)
-- **typescript + rust + bun**: blazing fast environment
+- **zero infrastructure**: 100% local by default, no servers or complex setups, access to your auth tokens (unlike cloud agents)
+- **typescript + rust + bun**: blazing fast environment, highly optimized pipeline, 4 AI models, running on $200 laptops
 - **full context**: rich OCR, desktop scrapping, keyboard/mouse, and audio transcription APIs
-- **open source**: contribute to augmenting collective human intelligence
+- **open source**: no BS, no tricks, MIT license
 - **monetization ready**: Stripe integration to monetize your pipes
-- **no lock-in**: ship a startup in 1h in screenpipe's store and export it later as a desktop native app using screenpipe as a library (we will even help you with that)
+- **no lock-in**: use our store for distribution, then drive traffic into your exported standalone app
+  - [screenpipe-tauri-template](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
+  - [screenpipe-electron-template](https://github.com/neo773/screenpipe-electron)
+
 
 #### killer features
 - **ai flexibility**: OpenAI, local LLMs (ollama), Anthropic, Gemini, etc.
@@ -46,22 +51,22 @@ The fastest way to create a new pipe is using our CLI:
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-    bunx @screenpipe/create-pipe@latest
+bunx @screenpipe/dev@latest create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    npx @screenpipe/create-pipe@latest
+    npx @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    yarn @screenpipe/create-pipe
+    yarn @screenpipe/dev create
     ```
   </Tab>
   <Tab>
     ```bash copy
-    pnpx @screenpipe/create-pipe
+    pnpx @screenpipe/dev create
     ```
   </Tab>
 </Tabs>
@@ -84,25 +89,36 @@ available commands:
 
 ```bash copy
 # authenticate with your API key
-bunx @screenpipe/dev login --apiKey <your-key>
+bunx @screenpipe/dev@latest login --apiKey <your-key>
 
 # create a new pipe
-bunx @screenpipe/dev create --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
+bunx @screenpipe/dev@latest register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
 # you'll receive payouts to your stripe account on a daily basis
 
+# add predefined components to your pipe
+bunx @screenpipe/dev@latest components add
+# select components from the interactive menu:
+# - use-health: health monitoring hooks
+# - use-settings: settings management
+# - route-settings: settings page routing
+# - use-sql-autocomplete: SQL query assistance
+# - sql-autocomplete-input: SQL input component
+# - use-search-history: search history management
+# - use-ai-provider: AI integration hooks
+
 # publish your pipe to the store
-bunx @screenpipe/dev publish --name my-pipe
+bunx @screenpipe/dev@latest publish --name my-pipe
 # our team will review your pipe and publish it to the store
 # if approved, your pipe will be available in the store to everyone
 
 # list all versions of your pipe
-bunx @screenpipe/dev list-versions --name my-pipe
+bunx @screenpipe/dev@latest list-versions --name my-pipe
 
 # end current session
-bunx @screenpipe/dev logout
+bunx @screenpipe/dev@latest logout
 ```
 
-you can deploy your pipe to your screenpipe app through the UI or using `screenpipe install <path>` and `screenpipe enable <id/folder of your pipe>`.
+you can deploy your pipe to your screenpipe app through the UI or using `screenpipe pipe install <path>` and `screenpipe pipe enable <id/folder of your pipe>`.
 
 when you're ready to deploy, send a PR to the [screenpipe repo](https://github.com/mediar-ai/screenpipe) to add your pipe to the store.
 

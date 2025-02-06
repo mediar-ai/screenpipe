@@ -1,9 +1,10 @@
-import { DurableObject } from 'cloudflare:workers';
 import { Langfuse } from 'langfuse-node';
 import { verifyToken } from '@clerk/backend';
 import { createProvider } from './providers';
 import { Env, RequestBody } from './types';
 import * as Sentry from '@sentry/cloudflare';
+import { Deepgram, DeepgramClient, LiveClient } from '@deepgram/sdk';
+import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
 
 // Add cache for subscription status
 class SubscriptionCache {
@@ -37,7 +38,6 @@ class SubscriptionCache {
 const subscriptionCache = new SubscriptionCache();
 
 async function validateSubscription(env: Env, userId: string): Promise<boolean> {
-	console.log('validating user id has cloud sub', userId);
 	console.log('validating user id has cloud sub', userId);
 	// Check cache first
 	const cached = subscriptionCache.get(userId);
@@ -186,11 +186,100 @@ async function handleOptions(request: Request) {
 	});
 }
 
+async function handleWebSocketUpgrade(request: Request, env: Env): Promise<Response> {
+	try {
+		// Generate a unique request ID
+		const requestId = crypto.randomUUID();
+
+		// Create WebSocket pair
+		const webSocketPair = new WebSocketPair();
+		const [client, server] = Object.values(webSocketPair);
+		server.accept();
+
+		let params = new URL(request.url).searchParams;
+		let sampleRate = params.get('sample_rate');
+
+		let url = new URL('wss://api.deepgram.com/v1/listen');
+		// for each key in params, set the url search param
+		for (let [key, value] of params.entries()) {
+			url.searchParams.set(key, value);
+		}
+
+		let deepgram: DeepgramClient | null = null;
+		try {
+			deepgram = createClient(env.DEEPGRAM_API_KEY);
+		} catch (error: any) {
+			console.error('Error creating Deepgram client:', error);
+			return new Response(`Deepgram client creation failed: ${error.message}`, { status: 500 });
+		}
+
+		if (!deepgram) {
+			return new Response('Deepgram client creation failed', { status: 500 });
+		}
+
+		let deepgramSocket: LiveClient;
+
+		try {
+			deepgramSocket = deepgram.listen.live({}, url.toString());
+		} catch (error: any) {
+			console.error('Error creating Deepgram socket:', error);
+			return new Response(`Deepgram socket creation failed: ${error.message}`, { status: 500 });
+		}
+
+		deepgramSocket.on(LiveTranscriptionEvents.Open, () => {
+			server.send(
+				JSON.stringify({
+					type: 'connected',
+					message: 'WebSocket connection established',
+				})
+			);
+		});
+
+		// Simple passthrough: client -> Deepgram
+		server.addEventListener('message', (event) => {
+			if (deepgramSocket.getReadyState() === WebSocket.OPEN) {
+				deepgramSocket.send(event.data);
+			}
+		});
+
+		// Simple passthrough: Deepgram -> client
+		deepgramSocket.on(LiveTranscriptionEvents.Transcript, (data) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.send(JSON.stringify(data));
+			}
+		});
+
+		// Handle connection close
+		server.addEventListener('close', () => {
+			deepgramSocket.requestClose();
+		});
+
+		// Handle errors
+		deepgramSocket.on(LiveTranscriptionEvents.Error, (error) => {
+			if (server.readyState === WebSocket.OPEN) {
+				server.close(1011, 'Deepgram error: ' + error.message);
+			}
+		});
+
+		return new Response(null, {
+			status: 101,
+			webSocket: client,
+			headers: {
+				'dg-request-id': requestId,
+			},
+		});
+	} catch (error) {
+		console.error('WebSocket upgrade failed:', error);
+		return new Response('WebSocket upgrade failed', { status: 500 });
+	}
+}
+
 export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
 		tracesSampleRate: 0.1,
 		environment: env.NODE_ENV || 'development',
+		enabled: (env.NODE_ENV || 'development') === 'production',
 	}),
 	{
 		/**
@@ -252,10 +341,17 @@ export default Sentry.withSentry(
 				const url = new URL(request.url);
 				const path = url.pathname;
 
+				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
+				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
+					console.log('websocket request to /v1/listen detected, bypassing auth');
+					return await handleWebSocketUpgrade(request, env);
+				}
+
 				// Add auth check for protected routes
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
-					if (!authHeader?.startsWith('Bearer ')) {
+					console.log('authHeader', authHeader);
+					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
 						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
 							headers: {
@@ -271,16 +367,12 @@ export default Sentry.withSentry(
 					}
 
 					const token = authHeader.split(' ')[1];
-					console.log('validating token:', token.slice(0, 10) + '...');
 
-					// First try to validate as a user ID with subscription
 					let isValid = await validateSubscription(env, token);
-					console.log('subscription validation result:', isValid);
 
 					// If not valid, try to verify as a Clerk token
 					if (!isValid) {
 						isValid = await verifyClerkToken(env, token);
-						console.log('clerk validation result:', isValid);
 					}
 
 					if (!isValid) {
@@ -299,6 +391,8 @@ export default Sentry.withSentry(
 						return response;
 					}
 				}
+
+				console.log('path', path);
 
 				if (path === '/test') {
 					const response = new Response('ai proxy is working!', {
@@ -414,6 +508,62 @@ export default Sentry.withSentry(
 					}
 				}
 
+				if (path === '/v1/models' && request.method === 'GET') {
+					try {
+						// Create instances of all providers
+						const providers = {
+							anthropic: createProvider('claude-3-5-sonnet-latest', env),
+							openai: createProvider('gpt-4', env),
+							gemini: createProvider('gemini-1.5-pro', env),
+						};
+
+						// Fetch models from all providers in parallel
+						const results = await Promise.allSettled([
+							providers.anthropic.listModels(),
+							providers.openai.listModels(),
+							providers.gemini.listModels(),
+						]);
+
+						// Combine and filter out failed requests
+						const models = results
+							.filter(
+								(result): result is PromiseFulfilledResult<{ id: string; name: string; provider: string }[]> =>
+									result.status === 'fulfilled'
+							)
+							.flatMap((result) => result.value);
+
+						const response = new Response(JSON.stringify({ models }), {
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Content-Type': 'application/json',
+							},
+						});
+						response.headers.append('Vary', 'Origin');
+						return response;
+					} catch (error) {
+						console.error('Error fetching models:', error);
+						const response = new Response(
+							JSON.stringify({
+								error: 'Failed to fetch models',
+								details: error instanceof Error ? error.message : 'Unknown error',
+							}),
+							{
+								status: 500,
+								headers: {
+									'Access-Control-Allow-Origin': '*',
+									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+									'Access-Control-Allow-Headers': '*',
+									'Content-Type': 'application/json',
+								},
+							}
+						);
+						response.headers.append('Vary', 'Origin');
+						return response;
+					}
+				}
+
 				const response = new Response('not found', {
 					status: 404,
 					headers: {
@@ -456,6 +606,9 @@ terminal 2
 HOST=https://ai-proxy.i-f9f.workers.dev
 HOST=http://localhost:8787
 TOKEN=foobar (check app settings)
+in 
+less "$HOME/Library/Application Support/screenpipe/store.bin"
+
 
 curl $HOST/test
 

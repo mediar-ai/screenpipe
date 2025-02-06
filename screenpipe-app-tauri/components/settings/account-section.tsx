@@ -1,12 +1,9 @@
 "use client";
 import React, { useEffect, useState } from "react";
-
 import { Button } from "@/components/ui/button";
 import { useSettings } from "@/lib/hooks/use-settings";
-
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
 import {
   RefreshCw,
   UserCog,
@@ -18,9 +15,7 @@ import {
   BookOpen,
   X,
 } from "lucide-react";
-
 import { toast } from "@/components/ui/use-toast";
-
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Card } from "../ui/card";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -94,7 +89,9 @@ export function AccountSection() {
 
   useEffect(() => {
     if (!settings.user?.email) {
-      posthog.capture("app_login");
+      posthog.capture("app_login", {
+        email: settings.user?.email,
+      });
     }
 
     const setupDeepLink = async () => {
@@ -298,26 +295,56 @@ export function AccountSection() {
   return (
     <div className="w-full space-y-6 py-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">account settings</h1>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">account settings</h1>
+          {settings.user?.email ? (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+              logged in as {settings.user.email}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <span className="inline-flex h-2 w-2 rounded-full bg-yellow-500" />
+              not logged in - some features will be limited
+            </p>
+          )}
+        </div>
         <div className="flex gap-2">
-          {settings.user?.token && (
+          {settings.user?.token ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openUrl("https://accounts.screenpi.pe/user")}
+                className="hover:bg-secondary/80"
+              >
+                manage account <UserCog className="w-4 h-4 ml-2" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  updateSettings({ user: { token: undefined } });
+                  toast({
+                    title: "logged out",
+                    description: "you have been logged out",
+                  });
+                }}
+                className="hover:bg-secondary/80"
+              >
+                logout <ExternalLinkIcon className="w-4 h-4 ml-2" />
+              </Button>
+            </>
+          ) : (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => openUrl("https://accounts.screenpi.pe/user")}
+              onClick={() => openUrl("https://screenpi.pe/login")}
               className="hover:bg-secondary/80"
             >
-              manage account <UserCog className="w-4 h-4 ml-2" />
+              login <ExternalLinkIcon className="w-4 h-4 ml-2" />
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => openUrl("https://screenpi.pe/login")}
-            className="hover:bg-secondary/80"
-          >
-            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
-          </Button>
         </div>
       </div>
 

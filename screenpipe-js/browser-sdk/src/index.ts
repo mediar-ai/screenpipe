@@ -1,4 +1,5 @@
 import type {
+  EventStreamResponse,
   InputAction,
   InputControlResponse,
   NotificationOptions,
@@ -10,11 +11,43 @@ import type {
   VisionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
-import {
-  captureEvent,
-  captureMainFeatureEvent,
-  identifyUser,
-} from "../../common/analytics";
+import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+
+const WS_URL = "ws://localhost:3030/ws/events";
+
+// At the top of the file, add WebSocket instances
+let wsWithImages: WebSocket | null = null;
+let wsWithoutImages: WebSocket | null = null;
+
+// Update the wsEvents generator to accept includeImages parameter and manage connections
+async function* wsEvents(
+  includeImages: boolean = false
+): AsyncGenerator<EventStreamResponse, void, unknown> {
+  // Reuse existing connection or create new one
+  let ws = includeImages ? wsWithImages : wsWithoutImages;
+
+  if (!ws || ws.readyState === WebSocket.CLOSED) {
+    ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
+    if (includeImages) {
+      wsWithImages = ws;
+    } else {
+      wsWithoutImages = ws;
+    }
+
+    // Wait for connection to establish
+    await new Promise((resolve, reject) => {
+      ws!.onopen = resolve;
+      ws!.onerror = reject;
+    });
+  }
+
+  while (true) {
+    const event: MessageEvent = await new Promise((resolve) => {
+      ws!.addEventListener("message", (ev: MessageEvent) => resolve(ev));
+    });
+    yield JSON.parse(event.data);
+  }
+}
 
 async function sendInputControl(action: InputAction): Promise<boolean> {
   const apiUrl = "http://localhost:3030";
@@ -62,14 +95,16 @@ export interface BrowserPipe {
     name: string,
     properties?: Record<string, any>
   ) => Promise<void>;
+  streamEvents(
+    includeImages: boolean
+  ): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
 class BrowserPipeImpl implements BrowserPipe {
-  private userProperties?: Record<string, any>;
-
   private async initAnalyticsIfNeeded(): Promise<{
     analyticsEnabled: boolean;
     userId?: string;
+    email?: string;
   }> {
     try {
       // Connect to settings SSE stream
@@ -81,6 +116,7 @@ class BrowserPipeImpl implements BrowserPipe {
       const settings = await new Promise<{
         analyticsEnabled: boolean;
         userId?: string;
+        email?: string;
       }>((resolve, reject) => {
         const timeout = setTimeout(() => {
           settingsStream.close();
@@ -98,7 +134,10 @@ class BrowserPipeImpl implements BrowserPipe {
           const userId =
             settingsArray.find(([key]) => key === "user.clerk_id")?.[1] ??
             undefined;
-          resolve({ analyticsEnabled, userId });
+          const userEmail =
+            settingsArray.find(([key]) => key === "user.email")?.[1] ??
+            undefined;
+          resolve({ analyticsEnabled, userId, email: userEmail });
         };
 
         settingsStream.onerror = (error) => {
@@ -108,12 +147,10 @@ class BrowserPipeImpl implements BrowserPipe {
         };
       });
 
-      if (settings.analyticsEnabled && settings.userId) {
-        await identifyUser(settings.userId, this.userProperties);
-      }
       return {
         analyticsEnabled: settings.analyticsEnabled,
         userId: settings.userId,
+        email: settings.email,
       };
     } catch (error) {
       console.error(
@@ -130,7 +167,7 @@ class BrowserPipeImpl implements BrowserPipe {
   async sendDesktopNotification(
     options: NotificationOptions
   ): Promise<boolean> {
-    await this.initAnalyticsIfNeeded();
+    const { userId, email } = await this.initAnalyticsIfNeeded();
     const notificationApiUrl = "http://localhost:11435";
     try {
       await fetch(`${notificationApiUrl}/notify`, {
@@ -138,12 +175,18 @@ class BrowserPipeImpl implements BrowserPipe {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options),
       });
-      await this.captureEvent("notification_sent", { success: true });
+      await this.captureEvent("notification_sent", {
+        distinct_id: userId,
+        email: email,
+        success: true,
+      });
       return true;
     } catch (error) {
       await this.captureEvent("error_occurred", {
         feature: "notification",
         error: "send_failed",
+        distinct_id: userId,
+        email: email,
       });
       return false;
     }
@@ -153,7 +196,7 @@ class BrowserPipeImpl implements BrowserPipe {
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {
     console.log("queryScreenpipe:", params);
-    await this.initAnalyticsIfNeeded();
+    const { userId, email } = await this.initAnalyticsIfNeeded();
     const queryParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined && value !== "") {
@@ -190,14 +233,18 @@ class BrowserPipeImpl implements BrowserPipe {
       }
       const data = await response.json();
       await captureEvent("search_performed", {
+        distinct_id: userId,
         content_type: params.contentType,
         result_count: data.pagination.total,
+        email: email,
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       await captureEvent("error_occurred", {
         feature: "search",
         error: "query_failed",
+        distinct_id: userId,
+        email: email,
       });
       console.error("error querying screenpipe:", error);
       return null;
@@ -223,88 +270,52 @@ class BrowserPipeImpl implements BrowserPipe {
     void,
     unknown
   > {
-    const eventSource = new EventSource(
-      "http://localhost:3030/sse/transcriptions"
-    );
-
     try {
-      await this.captureEvent("stream_started", {
-        feature: "transcription",
-      });
-
       while (true) {
-        const chunk: TranscriptionChunk = await new Promise(
-          (resolve, reject) => {
-            eventSource.onmessage = (event) => {
-              if (event.data.trim() === "keep-alive-text") {
-                return;
-              }
-              resolve(JSON.parse(event.data));
-            };
-            eventSource.onerror = (error) => {
-              reject(error);
+        for await (const event of wsEvents()) {
+          if (event.name === "transcription") {
+            let chunk: TranscriptionChunk = event.data as TranscriptionChunk;
+            yield {
+              id: crypto.randomUUID(),
+              object: "text_completion_chunk",
+              created: Date.now(),
+              model: "screenpipe-realtime",
+              choices: [
+                {
+                  text: chunk.transcription,
+                  index: 0,
+                  finish_reason: chunk.is_final ? "stop" : null,
+                },
+              ],
+              metadata: {
+                timestamp: chunk.timestamp,
+                device: chunk.device,
+                isInput: chunk.is_input,
+              },
             };
           }
-        );
-
-        yield {
-          id: crypto.randomUUID(),
-          object: "text_completion_chunk",
-          created: Date.now(),
-          model: "screenpipe-realtime",
-          choices: [
-            {
-              text: chunk.transcription,
-              index: 0,
-              finish_reason: chunk.is_final ? "stop" : null,
-            },
-          ],
-          metadata: {
-            timestamp: chunk.timestamp,
-            device: chunk.device,
-            isInput: chunk.is_input,
-          },
-        };
+        }
       }
-    } finally {
-      await this.captureEvent("stream_ended", {
-        feature: "transcription",
-      });
-      eventSource.close();
+    } catch (error) {
+      console.error("error streaming transcriptions:", error);
     }
   }
 
   async *streamVision(
     includeImages: boolean = false
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
-    const eventSource = new EventSource(
-      `http://localhost:3030/sse/vision?images=${includeImages}`
-    );
     try {
-      await this.captureEvent("stream_started", {
-        feature: "vision",
-      });
-
-      while (true) {
-        const event: VisionEvent = await new Promise((resolve, reject) => {
-          eventSource.onmessage = (event) => {
-            resolve(JSON.parse(event.data));
+      for await (const event of wsEvents(includeImages)) {
+        if (event.name === "ocr_result" || event.name === "ui_frame") {
+          let data: VisionEvent = event.data as VisionEvent;
+          yield {
+            type: event.name,
+            data,
           };
-          eventSource.onerror = (error) => {
-            reject(error);
-          };
-        });
-
-        yield {
-          type: "vision_stream",
-          data: event,
-        };
+        }
       }
-    } finally {
-      await this.captureEvent("stream_ended", {
-        feature: "vision",
-      });
-      eventSource.close();
+    } catch (error) {
+      console.error("error streaming vision:", error);
     }
   }
 
@@ -324,6 +335,14 @@ class BrowserPipeImpl implements BrowserPipe {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
     return captureMainFeatureEvent(featureName, properties);
+  }
+
+  public async *streamEvents(
+    includeImages: boolean = false
+  ): AsyncGenerator<EventStreamResponse, void, unknown> {
+    for await (const event of wsEvents(includeImages)) {
+      yield event;
+    }
   }
 }
 

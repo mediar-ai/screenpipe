@@ -1,16 +1,17 @@
-import { command, string } from "@drizzle-team/brocli";
 import { API_BASE_URL } from "../constants";
 import { Credentials } from "../utils/credentials";
 import { colors, symbols } from "../utils/colors";
+import { Command } from "commander";
+import { logger } from "./components/commands/add/utils/logger";
+import { handleError } from "./components/commands/add/utils/handle-error";
 
-export const loginCommand = command({
-  name: "login",
-  options: {
-    apiKey: string().required().desc("API key to login with"),
-  },
-  handler: async (opts) => {
+export const loginCommand = new Command()
+  .name('login')
+  .description('login with an API key')
+  .requiredOption('--apiKey <apiKey>', 'API key to login with')
+  .action(async (opts) => {
     try {
-      console.log(colors.info(`\n${symbols.info} Validating API key...`));
+      logger.info(`\n${symbols.info} validating API key...`);
 
       const response = await fetch(`${API_BASE_URL}/api/plugins/dev-status`, {
         method: "GET",
@@ -34,13 +35,13 @@ export const loginCommand = command({
           {
             type: 'input',
             name: 'developerName',
-            message: 'Enter your developer name:',
+            message: 'enter your developer name:',
             validate: (input: string) => {
               if (input.length < 2) {
-                return 'Developer name must be at least 2 characters';
+                return 'developer name must be at least 2 characters';
               }
               if (input.length > 50) {
-                return 'Developer name must be less than 50 characters';
+                return 'developer name must be less than 50 characters';
               }
               return true;
             }
@@ -58,25 +59,24 @@ export const loginCommand = command({
 
         if (!updateResponse.ok) {
           const error = await updateResponse.json();
-          throw new Error(`Failed to set developer name: ${error.error}`);
+          throw new Error(`failed to set developer name: ${error.error}`);
         }
         
         const updateData = await updateResponse.json();
         data.data.developer_name = updateData.data.developer_name;
       }
 
-      console.log(colors.success(`\n${symbols.success} Successfully logged in!`));
-      console.log(colors.listItem(`${colors.label('Developer ID')} ${data.data.developer_id}`));
-      console.log(colors.listItem(`${colors.label('Developer Name')} ${data.data.developer_name}`));
+      logger.info(`\n${symbols.success} successfully logged in!`);
+      console.log(colors.listItem(`${colors.label('developer id')} ${data.data.developer_id}`));
+      console.log(colors.listItem(`${colors.label('developer name')} ${data.data.developer_name}`));
       Credentials.setApiKey(opts.apiKey, data.data.developer_id);
 
     } catch (error) {
       if (error instanceof Error) {
-        console.error(colors.error(`\n${symbols.error} Login failed: ${error.message}`));
+        handleError(`\n${symbols.error} login failed: ${error.message}`);
       } else {
-        console.error(colors.error(`\n${symbols.error} Login failed with unexpected error`));
+        handleError(`\n${symbols.error} login failed with unexpected error`);
       }
       process.exit(1);
     }
-  }
-});
+  });

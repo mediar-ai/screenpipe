@@ -13,8 +13,14 @@ export async function GET() {
       throw new Error("settingsManager not found");
     }
 
+    // get home dir
+    const homeDir = process.env.HOME;
+
     // Load persisted settings if they exist
-    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const screenpipeDir =
+      process.env.SCREENPIPE_DIR ||
+      (homeDir && path.join(homeDir, ".screenpipe")) ||
+      process.cwd();
     const settingsPath = path.join(
       screenpipeDir,
       "pipes",
@@ -39,8 +45,10 @@ export async function GET() {
         },
       });
     } catch (err) {
+      console.log("route err", err);
       // If no persisted settings, return normal settings
       const rawSettings = await settingsManager.getAll();
+      console.log("route rawSettings", rawSettings);
       return NextResponse.json(rawSettings);
     }
   } catch (error) {

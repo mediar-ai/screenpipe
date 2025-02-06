@@ -150,4 +150,30 @@ export class AnthropicProvider implements AIProvider {
 			],
 		};
 	}
+
+	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
+		try {
+			const response = await this.client.models.list();
+			return response.data.map((model) => ({
+				id: model.id,
+				name: model.display_name,
+				provider: 'anthropic',
+			}));
+		} catch (error) {
+			console.error('Failed to fetch Anthropic models:', error);
+			// Fallback to known models if API fails
+			return [
+				{
+					id: 'claude-3-5-sonnet-latest',
+					name: 'Claude 3.5 Sonnet',
+					provider: 'anthropic',
+				},
+				{
+					id: 'claude-3-5-haiku-latest',
+					name: 'Claude 3.5 Haiku',
+					provider: 'anthropic',
+				},
+			];
+		}
+	}
 }

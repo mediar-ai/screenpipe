@@ -16,10 +16,18 @@ export function useSettings() {
       setLoading(true);
       try {
         const response = await fetch("/api/settings");
+        if (!response.ok) {
+          // If API fails (e.g. on web), fallback to default settings
+          console.log("using default settings (web mode)")
+          setSettings(defaultSettings);
+          return;
+        }
         const data = await response.json();
         setSettings({ ...defaultSettings, ...data });
       } catch (err) {
-        setError(err as Error);
+        console.log("failed to load settings, using defaults:", err)
+        // Fallback to default settings on error
+        setSettings(defaultSettings);
       } finally {
         setLoading(false);
       }
@@ -46,34 +54,69 @@ export function useSettings() {
     value: Settings[T]
   ) => {
     try {
-      await fetch("/api/settings", {
+      const response = await fetch("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ key, value }),
       });
+      
+      if (!response.ok) {
+        // For web users, just update state without persistence
+        console.log("updating settings in memory only (web mode)")
+        setSettings((prev) => ({ ...prev, [key]: value }));
+        return;
+      }
+      
       setSettings((prev) => ({ ...prev, [key]: value }));
     } catch (err) {
-      setError(err as Error);
+      console.log("failed to update setting, updating in memory:", err)
+      // Update state even if API fails
+      setSettings((prev) => ({ ...prev, [key]: value }));
     }
   };
 
   const updateSettings = async (newSettings: Partial<Settings>) => {
     try {
-      await fetch("/api/settings", {
+      const response = await fetch("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ value: newSettings, isPartialUpdate: true }),
       });
+      
+      if (!response.ok) {
+        // For web users, just update state without persistence
+        console.log("updating settings in memory only (web mode)")
+        setSettings((prev) => ({ ...prev, ...newSettings }));
+        return;
+      }
+      
       setSettings((prev) => ({ ...prev, ...newSettings }));
     } catch (err) {
-      setError(err as Error);
+      console.log("failed to update settings, updating in memory:", err)
+      // Update state even if API fails
+      setSettings((prev) => ({ ...prev, ...newSettings }));
     }
   };
 
   const resetSettings = async (settingKey?: keyof Settings) => {
     try {
-      await fetch("/api/settings", {
+      const response = await fetch("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ reset: true, key: settingKey }),
       });
+      
+      if (!response.ok) {
+        // For web users, just update state without persistence
+        console.log("resetting settings in memory only (web mode)")
+        if (settingKey) {
+          setSettings((prev) => ({
+            ...prev,
+            [settingKey]: defaultSettings[settingKey],
+          }));
+        } else {
+          setSettings(defaultSettings);
+        }
+        return;
+      }
+
       if (settingKey) {
         setSettings((prev) => ({
           ...prev,
@@ -83,7 +126,16 @@ export function useSettings() {
         setSettings(defaultSettings);
       }
     } catch (err) {
-      setError(err as Error);
+      console.log("failed to reset settings, updating in memory:", err)
+      // Reset state even if API fails
+      if (settingKey) {
+        setSettings((prev) => ({
+          ...prev,
+          [settingKey]: defaultSettings[settingKey],
+        }));
+      } else {
+        setSettings(defaultSettings);
+      }
     }
   };
 

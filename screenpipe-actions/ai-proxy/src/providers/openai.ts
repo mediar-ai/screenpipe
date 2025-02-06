@@ -105,4 +105,32 @@ export class OpenAIProvider implements AIProvider {
 			],
 		};
 	}
+
+	async listModels(): Promise<{ id: string; name: string; provider: string }[]> {
+		try {
+			const response = await this.client.models.list();
+			const sixMonthsAgo = new Date();
+			sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+			return response.data
+				.filter((model) => {
+					// Filter out non-LLM models
+					const isNonLLM =
+						model.id.includes('dall-e') || model.id.includes('whisper') || model.id.includes('tts') || model.id.includes('embedding');
+					if (isNonLLM) return false;
+
+					// Check if model is recent (created within last 6 months)
+					const createdAt = new Date(model.created * 1000); // Convert Unix timestamp to Date
+					return createdAt > sixMonthsAgo;
+				})
+				.map((model) => ({
+					id: model.id,
+					name: model.id,
+					provider: 'openai',
+				}));
+		} catch (error) {
+			console.error('Failed to fetch OpenAI models:', error);
+			return [];
+		}
+	}
 }
