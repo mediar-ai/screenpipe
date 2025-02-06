@@ -186,8 +186,7 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    // Determine initial logging state based on command
-    let should_log = match &cli.command {
+    match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
                 subcommand,
