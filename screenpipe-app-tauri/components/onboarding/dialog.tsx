@@ -14,12 +14,10 @@ import { useOnboarding } from "@/components/onboarding/context";
 import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
 import { SlideKey } from "./flow";
-import { useOnboardingFlow } from "./hooks/use-onboarding-flow";
 
 const Onboarding: React.FC = () => {
-  const { currentSlide, error, handleNextSlide, handlePrevSlide } = useOnboardingFlow();
+  const { showOnboarding, currentSlide, error, handleNextSlide, handlePrevSlide } = useOnboarding();
   const [isVisible, setIsVisible] = useState(false);
-  const { showOnboarding } = useOnboarding();
   const { toast } = useToast();
 
   useEffect(() => {

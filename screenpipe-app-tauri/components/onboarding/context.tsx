@@ -1,6 +1,8 @@
 import React, { createContext, useContext, SetStateAction, Dispatch } from "react";
 import { useOnboardingVisibility } from "./hooks/use-onboarding-visibility";
 import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
+import { useOnboardingFlow } from "./hooks/use-onboarding-flow";
+import { SlideKey } from "./flow";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
@@ -12,6 +14,10 @@ interface OnboardingContextType {
   setSelectedPreference: Dispatch<SetStateAction<string | null>>;
   setShowOnboardingToFalse: () => void,
   setShowOnboardingToTrue: () => void,
+  currentSlide: SlideKey;
+  error: string | null;
+  handleNextSlide: () => void;
+  handlePrevSlide: () => void;
 } 
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -36,6 +42,13 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     setSelectedPreference 
   } = useOnboardingUserInput();
 
+  const { 
+    currentSlide, 
+    error, 
+    handleNextSlide, 
+    handlePrevSlide 
+  } = useOnboardingFlow();
+
   return (
     <OnboardingContext.Provider value={{ 
         showOnboarding,
@@ -46,7 +59,11 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
         setSelectedPersonalization,
         setSelectedPreference,
         setShowOnboardingToFalse,
-        setShowOnboardingToTrue
+        setShowOnboardingToTrue,
+        currentSlide,
+        error,
+        handleNextSlide,
+        handlePrevSlide
     }}>
       {children}
     </OnboardingContext.Provider>
