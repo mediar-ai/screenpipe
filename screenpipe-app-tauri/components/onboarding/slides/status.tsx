@@ -36,10 +36,8 @@ const setRestartPending = async () => {
   await localforage.setItem("screenPermissionRestartPending", true);
 };
 
-const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
-  className = "",
-}) => {
-  const { handleNextSlide, handlePrevSlide } = useOnboarding();
+const OnboardingStatus = () => {
+  const { handleNextSlide, handlePrevSlide, currentSlide } = useOnboarding();
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
@@ -269,7 +267,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   return (
     <div
-      className={`${className} w-full flex justify-between flex-col items-center`}
+      className={`w-full flex justify-between flex-col items-center`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img className="w-24 h-24 " src="/128x128.png" alt="screenpipe-logo" />

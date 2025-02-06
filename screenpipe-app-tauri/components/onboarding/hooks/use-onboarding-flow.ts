@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { SlideKey, slideFlow, trackOnboardingStep } from "../flow";
-import { useOnboarding } from "../context";
 import posthog from "posthog-js";
 
-export function useOnboardingFlow() {
-  const { selectedOptions, selectedPreference, selectedPersonalization, setShowOnboardingToFalse } = useOnboarding();
+export function useOnboardingFlow(
+  selectedOptions: string[],
+  selectedPreference: string | null,
+  selectedPersonalization: string | null,
+  setShowOnboardingToFalse: () => void
+) {
   const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
   const [error, setError] = useState<string | null>(null);
 

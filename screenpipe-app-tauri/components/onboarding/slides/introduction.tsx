@@ -9,13 +9,10 @@ interface OnboardingIntroProps {
   className?: string;
 }
 
-const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
-  className = "",
-}) => {
-  const { skipOnboarding, handleNextSlide } = useOnboarding();
-
+const OnboardingIntro = () => {
+  const { skipOnboarding, handleNextSlide, currentSlide } = useOnboarding();
   return (
-    <div className={` flex justify-center items-center flex-col ${className}`}>
+    <div className={` flex justify-center items-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"

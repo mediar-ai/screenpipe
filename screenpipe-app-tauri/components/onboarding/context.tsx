@@ -53,7 +53,12 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     skipOnboarding,
     completeOnboarding,
     handleEnd
-  } = useOnboardingFlow();
+  } = useOnboardingFlow(
+    selectedOptions,
+    selectedPreference,
+    selectedPersonalization,
+    setShowOnboardingToFalse
+  );
 
   return (
     <OnboardingContext.Provider value={{ 

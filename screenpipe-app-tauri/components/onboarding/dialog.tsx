@@ -15,6 +15,25 @@ import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
 import { SlideKey } from "./flow";
 
+const SlidesPerKey: Record<SlideKey, () => React.JSX.Element> = {
+  [SlideKey.INTRO]: () => <OnboardingIntro/>,
+  [SlideKey.STATUS]: () => <OnboardingStatus/>,
+  [SlideKey.LOGIN]: () => <OnboardingLogin/>,
+  [SlideKey.SELECTION]: () => <OnboardingSelection/>,
+  [SlideKey.PERSONALIZE]: () => <OnboardingPersonalize/>,
+  [SlideKey.API_SETUP]: () => <OnboardingAPISetup/>,
+  [SlideKey.PIPE_STORE]: () => <OnboardingPipeStore/>,
+  [SlideKey.DEV_OR_NON_DEV]: () => <OnboardingDevOrNonDev/>,
+  [SlideKey.DEV_CONFIG]: () => <OnboardingDevConfig/>,
+  [SlideKey.PIPES]: () => <OnboardingPipes/>,
+  [SlideKey.INSTRUCTIONS]: () => <OnboardingInstructions/>,
+}
+
+{/* <OnboardingIntro
+  className={`transition-opacity duration-300 
+  ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
+  /> */}
+
 const Onboarding: React.FC = () => {
   const { showOnboarding, currentSlide, error } = useOnboarding();
   const [isVisible, setIsVisible] = useState(false);
@@ -49,73 +68,8 @@ const Onboarding: React.FC = () => {
   return (
     <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
       <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
-        <div className="flex flex-col w-full h-full overflow-hidden">
-          {currentSlide === "intro" && (
-            <OnboardingIntro
-              className={`transition-opacity duration-300 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.STATUS && (
-            <OnboardingStatus
-              className={`transition-opacity duration-300 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.LOGIN && (
-            <OnboardingLogin
-              className={`transition-opacity duration-300 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.SELECTION && (
-            <OnboardingSelection
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.PERSONALIZE && (
-            <OnboardingPersonalize
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.API_SETUP && (
-            <OnboardingAPISetup
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.PIPE_STORE && (
-            <OnboardingPipeStore
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.DEV_OR_NON_DEV && (
-            <OnboardingDevOrNonDev
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.DEV_CONFIG && (
-            <OnboardingDevConfig
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === SlideKey.PIPES && (
-            <OnboardingPipes
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
-          {currentSlide === "instructions" && (
-            <OnboardingInstructions
-              className={`transition-opacity duration-300 ease-in-out 
-              ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-            />
-          )}
+        <div key={currentSlide} className="flex flex-col w-full h-full overflow-hidden">
+          {SlidesPerKey[currentSlide]()}
         </div>
       </DialogContent>
     </Dialog>
