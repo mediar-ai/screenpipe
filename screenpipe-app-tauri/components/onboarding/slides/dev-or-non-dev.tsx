@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Info } from "lucide-react";
 import { Wrench, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -13,7 +12,6 @@ interface OnboardingDevOrNonDevProps {
   className?: string;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
-  handleOptionClick: (option: string) => void;
 }
 
 const DEV_OPTIONS = [
@@ -62,11 +60,10 @@ const CardItem: React.FC<{
 
 const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   className = "",
-  handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
-  const { selectedPreference } = useOnboarding();
+  const { selectedPreference, setSelectedPreference } = useOnboarding();
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
@@ -74,7 +71,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   const handleNextWithPreference = async (option: string) => {
     try {
       if (option === "devMode") {
-        await updateSettings({ devMode: true });
+        updateSettings({ devMode: true });
         setLocalSettings({ ...localSettings, devMode: true });
         toast({
           title: "success",
@@ -82,7 +79,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           variant: "default",
         });
       } else if (option === "nonDevMode") {
-        await updateSettings({ devMode: false });
+        updateSettings({ devMode: false });
         setLocalSettings({ ...localSettings, devMode: false });
         toast({
           title: "success",
@@ -121,7 +118,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
             key={option.key}
             option={option}
             isSelected={selectedPreference === option.key}
-            onClick={() => handleOptionClick(option.key)}
+            onClick={() => setSelectedPreference(option.key)}
           />
         ))}
       </div>

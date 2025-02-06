@@ -180,7 +180,6 @@ const Onboarding: React.FC = () => {
             <OnboardingDevOrNonDev
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleOptionClick={setSelectedPreference}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />
