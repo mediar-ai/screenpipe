@@ -1,10 +1,11 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
-import { useSettings } from "./use-settings";
+import { useSettings } from "../../lib/hooks/use-settings";
 import localforage from "localforage";
+import posthog from "posthog-js";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
-  setShowOnboarding: (show: boolean) => void;
+  setShowOnboardingToFalse: (show: boolean) => void;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -14,24 +15,37 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const { settings } = useSettings();
+
   useEffect(() => {
     const checkFirstTimeUser = async () => {
-      // settings unreliable here ... race condition
       const showOnboarding = await localforage.getItem("showOnboarding");
+
       if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
         setShowOnboarding(true);
-        localforage.setItem("showOnboarding", false);
       }
     };
     checkFirstTimeUser();
   }, [settings]);
-  useEffect(() => {
-    localforage.setItem("showOnboarding", showOnboarding);
-  }, [showOnboarding]);
+
+  function setShowOnboardingToFalse() {
+    setShowOnboarding(false);
+    localforage.setItem("showOnboarding", false);
+  }
+
+  function skipOnboarding() {
+    setShowOnboardingToFalse();
+    posthog.capture("onboarding_skipped");
+  }
+
+  function completeOnboarding() {
+    setShowOnboardingToFalse();
+    posthog.capture("onboarding_completed");
+  }
+
   return (
-    <OnboardingContext.Provider value={{ showOnboarding, setShowOnboarding }}>
+    <OnboardingContext.Provider value={{ showOnboarding, setShowOnboardingToFalse }}>
       {children}
     </OnboardingContext.Provider>
   );
