@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -14,7 +14,9 @@
     "targets": [
       "app",
       "dmg",
+      "deb",
       "appimage",
+      "rpm",
       "nsis"
     ],
     "externalBin": [],

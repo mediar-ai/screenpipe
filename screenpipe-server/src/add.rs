@@ -188,7 +188,7 @@ pub async fn handle_index_command(
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    return perform_ocr_tesseract(&frame, Arc::new([].to_vec()));
+                    perform_ocr_tesseract(&frame, Arc::new([].to_vec()));
 
                     panic!("unsupported ocr engine");
                 }
