@@ -11,7 +11,6 @@ import OnboardingDevConfig from "@/components/onboarding/slides/dev-configuratio
 import OnboardingSelection from "@/components/onboarding/slides/usecases-selection";
 import OnboardingInstructions from "@/components/onboarding/slides/explain-instructions";
 import { useOnboarding } from "@/components/onboarding/context";
-import { useSettings } from "@/lib/hooks/use-settings";
 import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
 import { slideFlow, SlideKey, trackOnboardingStep } from "./flow";
@@ -112,15 +111,6 @@ const Onboarding: React.FC = () => {
     }, 300);
   };
 
-  const handleOptionClick = (option: string) => {
-    setSelectedOptions((prevOptions) =>
-      prevOptions.includes(option)
-        ? prevOptions.filter((opt) => opt !== option)
-        : [...prevOptions, option]
-    );
-    setError(null);
-  };
-
   const handleDialogClose = (open: boolean) => {
     if (!open && currentSlide) {
       // setShowOnboarding(open);
@@ -168,7 +158,6 @@ const Onboarding: React.FC = () => {
             <OnboardingSelection
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleOptionClick={handleOptionClick}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />

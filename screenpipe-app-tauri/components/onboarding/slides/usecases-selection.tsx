@@ -13,7 +13,6 @@ import { useOnboarding } from "../context";
 
 interface OnboardingSelectionProps {
   className?: string;
-  handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
 }
@@ -76,11 +75,19 @@ const SelectionItem: React.FC<{
 
 const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   className,
-  handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
-  const { selectedOptions } = useOnboarding();
+  const { selectedOptions, setSelectedOptions } = useOnboarding();
+
+  const handleOptionClick = (option: string) => {
+    setSelectedOptions((prevOptions: string[]) =>
+      prevOptions.includes(option)
+        ? prevOptions.filter((opt) => opt !== option)
+        : [...prevOptions, option]
+    );
+    // setError(null);
+  };
 
   const handleNext = () => {
     // Track selected options in Posthog
