@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, SetStateAction, Dispatch } from "react";
 import posthog from "posthog-js";
 import { useOnboardingVisibility } from "./hooks/use-onboarding-visibility";
 import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
@@ -8,9 +8,9 @@ interface OnboardingContextType {
   selectedOptions: string[];
   selectedPersonalization: string | null;
   selectedPreference: string | null;
-  setSelectedOptions: (options: string[]) => void;
-  setSelectedPersonalization: (personalization: string | null) => void;
-  setSelectedPreference: (preference: string | null) => void;
+  setSelectedOptions: Dispatch<SetStateAction<string[]>>;
+  setSelectedPersonalization: Dispatch<SetStateAction<string | null>>;
+  setSelectedPreference: Dispatch<SetStateAction<string | null>>;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
