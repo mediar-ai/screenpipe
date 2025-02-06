@@ -39,6 +39,7 @@ import {
   SpeechIcon,
   ChevronsUpDown,
   Bot,
+  Settings,
 } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -100,6 +101,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { SearchFilterGenerator } from "./search-filter-generator";
 
 interface Agent {
   id: string;
@@ -317,18 +319,50 @@ export function SearchChat() {
   }, [selectedSpeakers]);
 
   useEffect(() => {
-    // More reliable OS detection
-    const platform = window.navigator.platform.toLowerCase();
-    const os = platform.includes("mac")
-      ? "macos"
-      : platform.includes("win")
-      ? "windows"
-      : platform.includes("linux")
-      ? "linux"
-      : "unknown";
-
-    setCurrentPlatform(os);
+    // More reliable OS detection using navigator.userAgentData when available
+    if ("userAgentData" in navigator) {
+      // @ts-ignore - TypeScript doesn't know about userAgentData yet
+      const platform = navigator.userAgent.toLowerCase();
+      setCurrentPlatform(
+        platform.includes("mac")
+          ? "macos"
+          : platform.includes("win")
+          ? "windows"
+          : platform.includes("linux")
+          ? "linux"
+          : "unknown"
+      );
+    } else {
+      // Fallback to platform for older browsers
+      const platform = window.navigator.platform.toLowerCase();
+      setCurrentPlatform(
+        platform.includes("mac")
+          ? "macos"
+          : platform.includes("win")
+          ? "windows"
+          : platform.includes("linux")
+          ? "linux"
+          : "unknown"
+      );
+    }
   }, []);
+
+  // Add keyboard shortcut handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.key === "Enter" &&
+        ((currentPlatform === "macos" && e.metaKey) ||
+          (currentPlatform !== "macos" && e.ctrlKey))
+      ) {
+        e.preventDefault();
+        handleSearch(0);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentPlatform]);
 
   const handleSpeakerChange = (speaker: Speaker) => {
     setSelectedSpeakers((prev) => {
@@ -397,6 +431,18 @@ export function SearchChat() {
     } else {
       setContentType("all");
     }
+  };
+
+  const handleContentTypeFromFilter = (contentType: string) => {
+    // Update content type
+    setContentType(contentType);
+
+    // Update checkbox states based on content type
+    setSelectedTypes({
+      ocr: contentType.includes("ocr") || contentType === "all",
+      audio: contentType.includes("audio") || contentType === "all",
+      ui: contentType.includes("ui") || contentType === "all",
+    });
   };
 
   const [selectedAgent, setSelectedAgent] = useState<Agent>(AGENTS[0]);
@@ -1139,7 +1185,6 @@ export function SearchChat() {
     // Add any other reset logic you need
   };
 
-
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
@@ -1153,105 +1198,104 @@ export function SearchChat() {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+
+      <div className="flex items-center justify-center mb-16">
+        {/* Add the new SearchFilterGenerator component */}
+        <SearchFilterGenerator
+          onApplyFilters={(filters) => {
+            // Update all the relevant state variables
+            if (filters.query !== undefined) setQuery(filters.query);
+            if (filters.contentType !== undefined)
+              handleContentTypeFromFilter(filters.contentType);
+            if (filters.appName !== undefined) setAppName(filters.appName);
+            if (filters.windowName !== undefined)
+              setWindowName(filters.windowName);
+            if (filters.startDate !== undefined)
+              setStartDate(filters.startDate);
+            if (filters.endDate !== undefined) setEndDate(filters.endDate);
+            if (filters.limit !== undefined) setLimit(filters.limit);
+
+            // Automatically perform search with new filters
+            handleSearch(0);
+          }}
+        />
+      </div>
       {/* Content Type Checkboxes and Code Button */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-1">
-            <Checkbox
-              id="audio-type"
-              checked={selectedTypes.audio}
-              onCheckedChange={() => handleContentTypeChange("audio")}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="audio-type" className="text-xs">
-              speech
-            </Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>audio transcripts</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          {currentPlatform === "macos" && (
+      <div className="flex items-center justify-center mb-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-1">
               <Checkbox
-                id="ui-type"
-                checked={selectedTypes.ui}
-                onCheckedChange={() => handleContentTypeChange("ui")}
+                id="audio-type"
+                checked={selectedTypes.audio}
+                onCheckedChange={() => handleContentTypeChange("audio")}
                 className="h-4 w-4"
               />
-              <Label htmlFor="ui-type" className="text-xs">
-                screen UI
-              </Label>
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
+                    <Label htmlFor="audio-type" className="text-xs">
+                      speech
+                    </Label>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>audio transcripts</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {currentPlatform === "macos" && (
+              <div className="flex items-center space-x-1">
+                <Checkbox
+                  id="ui-type"
+                  checked={selectedTypes.ui}
+                  onCheckedChange={() => handleContentTypeChange("ui")}
+                  className="h-4 w-4"
+                />
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor="ui-type" className="text-xs">
+                        screen UI
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        text emitted directly from the source code of the
+                        desktop applications
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+            <div className="flex items-center space-x-1">
+              <Checkbox
+                id="ocr-type"
+                checked={selectedTypes.ocr}
+                onCheckedChange={() => handleContentTypeChange("ocr")}
+                className="h-4 w-4"
+              />
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Label htmlFor="ocr-type" className="text-xs">
+                      screen capture
+                    </Label>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p>
-                      text emitted directly from the source code of the desktop
-                      applications
+                      recognized text from screenshots taken every 5s by default
                     </p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
-          )}
-          <div className="flex items-center space-x-1">
-            <Checkbox
-              id="ocr-type"
-              checked={selectedTypes.ocr}
-              onCheckedChange={() => handleContentTypeChange("ocr")}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="ocr-type" className="text-xs">
-              screen capture
-            </Label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3 w-3 text-muted-foreground ml-0.5" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>
-                    recognized text from screenshots taken every 5s by default
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           </div>
         </div>
-
-        <Dialog open={isCurlDialogOpen} onOpenChange={setIsCurlDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="text-sm">
-              <IconCode className="h-4 w-4 mx-2" />
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>curl command</DialogTitle>
-              <DialogDescription>
-                you can use this curl command to make the same search request
-                from the command line.
-                <br />
-                <br />
-                <span className="text-xs text-gray-500">
-                  note: you need to have `jq` installed to use the command.
-                </span>{" "}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="overflow-x-auto">
-              <CodeBlock language="bash" value={generateCurlCommand()} />
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
 
       {/* Existing search bar and other controls */}
@@ -1288,7 +1332,7 @@ export function SearchChat() {
           variant="outline"
           onClick={() => setIsQueryParamsDialogOpen(true)}
         >
-          advanced
+          <Settings className="h-4 w-4" />
         </Button>
 
         <TooltipProvider>
@@ -1313,7 +1357,7 @@ export function SearchChat() {
                   ) : (
                     <>
                       <Search className="mr-2 h-4 w-4" />
-                      search
+                      {currentPlatform === "macos" ? "⌘" : "ctrl"} + ↵
                     </>
                   )}
                 </Button>
@@ -1352,11 +1396,10 @@ export function SearchChat() {
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="start-date">start date</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                  <Label htmlFor="start-date">start date</Label>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>select the start date to search for content</p>
@@ -1373,11 +1416,10 @@ export function SearchChat() {
 
         <div className="flex-grow space-y-2">
           <div className="flex items-center space-x-2">
-            <Label htmlFor="end-date">end date</Label>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-4 w-4 text-gray-400" />
+                  <Label htmlFor="end-date">end date</Label>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>select the end date to search for content</p>
@@ -1448,7 +1490,37 @@ export function SearchChat() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            {/* Keep other advanced search options */}
+            {/* Add the curl command button at the top */}
+            <div className="flex justify-end">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="text-sm">
+                    <IconCode className="h-4 w-4 mx-2" />
+                    curl command
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>curl command</DialogTitle>
+                    <DialogDescription>
+                      you can use this curl command to make the same search
+                      request from the command line.
+                      <br />
+                      <br />
+                      <span className="text-xs text-gray-500">
+                        note: you need to have `jq` installed to use the
+                        command.
+                      </span>{" "}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="overflow-x-auto">
+                    <CodeBlock language="bash" value={generateCurlCommand()} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* Rest of the advanced settings content */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
                 app name
@@ -1834,8 +1906,11 @@ export function SearchChat() {
                           type="text"
                           placeholder="ask a question about the results..."
                           value={floatingInput}
-                          disabled={ 
-                            calculateSelectedContentLength() > MAX_CONTENT_LENGTH || isAiDisabled || !isAvailable
+                          disabled={
+                            calculateSelectedContentLength() >
+                              MAX_CONTENT_LENGTH ||
+                            isAiDisabled ||
+                            !isAvailable
                           }
                           onChange={(e) => setFloatingInput(e.target.value)}
                           className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
