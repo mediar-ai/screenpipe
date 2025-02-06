@@ -508,6 +508,62 @@ export default Sentry.withSentry(
 					}
 				}
 
+				if (path === '/v1/models' && request.method === 'GET') {
+					try {
+						// Create instances of all providers
+						const providers = {
+							anthropic: createProvider('claude-3-5-sonnet-latest', env),
+							openai: createProvider('gpt-4', env),
+							gemini: createProvider('gemini-1.5-pro', env),
+						};
+
+						// Fetch models from all providers in parallel
+						const results = await Promise.allSettled([
+							providers.anthropic.listModels(),
+							providers.openai.listModels(),
+							providers.gemini.listModels(),
+						]);
+
+						// Combine and filter out failed requests
+						const models = results
+							.filter(
+								(result): result is PromiseFulfilledResult<{ id: string; name: string; provider: string }[]> =>
+									result.status === 'fulfilled'
+							)
+							.flatMap((result) => result.value);
+
+						const response = new Response(JSON.stringify({ models }), {
+							headers: {
+								'Access-Control-Allow-Origin': '*',
+								'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+								'Access-Control-Allow-Headers': '*',
+								'Content-Type': 'application/json',
+							},
+						});
+						response.headers.append('Vary', 'Origin');
+						return response;
+					} catch (error) {
+						console.error('Error fetching models:', error);
+						const response = new Response(
+							JSON.stringify({
+								error: 'Failed to fetch models',
+								details: error instanceof Error ? error.message : 'Unknown error',
+							}),
+							{
+								status: 500,
+								headers: {
+									'Access-Control-Allow-Origin': '*',
+									'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+									'Access-Control-Allow-Headers': '*',
+									'Content-Type': 'application/json',
+								},
+							}
+						);
+						response.headers.append('Vary', 'Origin');
+						return response;
+					}
+				}
+
 				const response = new Response('not found', {
 					status: 404,
 					headers: {
@@ -550,6 +606,9 @@ terminal 2
 HOST=https://ai-proxy.i-f9f.workers.dev
 HOST=http://localhost:8787
 TOKEN=foobar (check app settings)
+in 
+less "$HOME/Library/Application Support/screenpipe/store.bin"
+
 
 curl $HOST/test
 

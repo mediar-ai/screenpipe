@@ -53,10 +53,10 @@ tokio = { version = "1.15", features = ["full", "tracing"] }
 tower-http = { version = "0.5.2", features = ["cors", "trace"] }
 
 # Log
-log = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
+console-subscriber = { version = "0.4.1", optional = true }
 # Cli ! shouldn't be required if using as lib
 clap = { version = "4.3", features = ["derive", "env"] }
 
@@ -146,6 +146,7 @@ pipes = ["screenpipe-core/pipes", "url"]
 llm = ["screenpipe-core/llm"]
 beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
 experimental = ["enigo"]
+debug-console = ["console-subscriber"]
 
 [[bin]]
 name = "screenpipe"

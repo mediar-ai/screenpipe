@@ -13,8 +13,13 @@ import {
 import {
   ArrowUpDown,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   MoreHorizontal,
   RefreshCw,
+  Search,
+  Mic2,
+  Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -55,6 +60,7 @@ interface AudioTranscription {
   device: string;
   is_input_device: boolean;
   speaker_id: number | null;
+  speaker_name: string | null;
   transcription_engine: string;
 }
 interface AudioDevice {
@@ -117,19 +123,37 @@ const columns: ColumnDef<AudioTranscription>[] = [
   {
     accessorKey: "device",
     header: "Device",
+    cell: ({ row }) => {
+      const deviceName = `${row.getValue("device")}${
+        row.original.is_input_device ? " (input)" : " (output)"
+      }`;
+      return (
+        <div className="relative group">
+          <Badge variant="outline" className="max-w-[200px] truncate">
+            {deviceName}
+          </Badge>
+          <div className="absolute z-50 hidden group-hover:block bg-popover text-popover-foreground px-2 py-1 rounded-md text-sm -top-8 left-0 whitespace-nowrap shadow-md">
+            {deviceName}
+          </div>
+        </div>
+      );
+    },
+  },
+  {
+    accessorKey: "speaker_id",
+    header: "Speaker ID",
     cell: ({ row }) => (
-      <Badge variant="outline">
-        {row.getValue("device")}
-        {row.original.is_input_device ? " (input)" : " (output)"}
+      <Badge variant="secondary">
+        {row.getValue("speaker_id") ?? "unknown"}
       </Badge>
     ),
   },
   {
-    accessorKey: "speaker_id",
-    header: "Speaker",
+    accessorKey: "speaker_name",
+    header: "Speaker Name",
     cell: ({ row }) => (
-      <Badge variant="secondary">
-        {row.getValue("speaker_id") ?? "unknown"}
+      <Badge variant="outline">
+        {row.getValue("speaker_name") ?? "unnamed"}
       </Badge>
     ),
   },
@@ -184,14 +208,18 @@ export function AudioTranscriptionsTable() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [pageSize, setPageSize] = React.useState(10);
+  const [pageSize, setPageSize] = React.useState(9);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [totalRows, setTotalRows] = React.useState(0);
 
   const [transcriptionFilter, setTranscriptionFilter] = React.useState("");
   const [deviceFilter, setDeviceFilter] = React.useState("");
+  const [speakerFilter, setSpeakerFilter] = React.useState("");
   const [availableAudioDevices, setAvailableAudioDevices] = React.useState<
     AudioDevice[]
+  >([]);
+  const [availableSpeakers, setAvailableSpeakers] = React.useState<
+    { id: number; name: string }[]
   >([]);
 
   const fetchData = async () => {
@@ -210,6 +238,9 @@ export function AudioTranscriptionsTable() {
               .toLowerCase()
               .replace(/'/g, "''")}%'`
           : null,
+        speakerFilter
+          ? `s.name = '${speakerFilter.replace(/'/g, "''")}'`
+          : null,
       ]
         .filter(Boolean)
         .join(" AND ");
@@ -223,7 +254,8 @@ export function AudioTranscriptionsTable() {
         body: JSON.stringify({
           query: `
             SELECT COUNT(*) as total
-            FROM audio_transcriptions 
+            FROM audio_transcriptions at
+            LEFT JOIN speakers s ON at.speaker_id = s.id 
             WHERE ${filterClauses}
           `,
         }),
@@ -245,18 +277,20 @@ export function AudioTranscriptionsTable() {
         body: JSON.stringify({
           query: `
             SELECT 
-              id,
-              audio_chunk_id,
-              offset_index,
-              timestamp,
-              transcription,
-              device,
-              is_input_device,
-              speaker_id,
-              transcription_engine
-            FROM audio_transcriptions 
+              at.id,
+              at.audio_chunk_id,
+              at.offset_index,
+              at.timestamp,
+              at.transcription,
+              at.device,
+              at.is_input_device,
+              at.speaker_id,
+              s.name as speaker_name,
+              at.transcription_engine
+            FROM audio_transcriptions at
+            LEFT JOIN speakers s ON at.speaker_id = s.id 
             WHERE ${filterClauses}
-            ORDER BY timestamp DESC
+            ORDER BY at.timestamp DESC
             LIMIT ${pageSize}
             OFFSET ${pageIndex * pageSize}
           `,
@@ -303,16 +337,40 @@ export function AudioTranscriptionsTable() {
       console.error("Failed to load devices:", error);
     }
   };
+  const loadSpeakers = async () => {
+    try {
+      const response = await fetch("http://localhost:3030/raw_sql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          query: `SELECT DISTINCT id, name FROM speakers WHERE name IS NOT NULL ORDER BY name`,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch speakers");
+      }
+      const speakers = await response.json();
+      setAvailableSpeakers(speakers);
+    } catch (error) {
+      console.error("Failed to load speakers:", error);
+    }
+  };
   React.useEffect(() => {
     const timer = setTimeout(() => {
       fetchData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [transcriptionFilter, deviceFilter, pageIndex, pageSize]);
+  }, [transcriptionFilter, deviceFilter, speakerFilter, pageIndex, pageSize]);
 
   React.useEffect(() => {
     loadDevices();
+  }, []);
+
+  React.useEffect(() => {
+    loadSpeakers();
   }, []);
 
   const table = useReactTable({
@@ -349,15 +407,19 @@ export function AudioTranscriptionsTable() {
     <div className="w-full">
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-4">
-          <Input
-            placeholder="filter transcription..."
-            value={transcriptionFilter}
-            onChange={(event) => {
-              setTranscriptionFilter(event.target.value);
-              setPageIndex(0);
-            }}
-            className="max-w-sm"
-          />
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="filter transcription..."
+              value={transcriptionFilter}
+              onChange={(event) => {
+                setTranscriptionFilter(event.target.value);
+                setPageIndex(0);
+              }}
+              className="max-w-sm pl-8"
+            />
+          </div>
+
           {availableAudioDevices.length > 0 && (
             <Select
               value={deviceFilter}
@@ -367,6 +429,7 @@ export function AudioTranscriptionsTable() {
               }}
             >
               <SelectTrigger className="w-[200px]">
+                <Mic2 className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="filter by device..." />
               </SelectTrigger>
               <SelectContent>
@@ -382,9 +445,35 @@ export function AudioTranscriptionsTable() {
             </Select>
           )}
 
+          {availableSpeakers.length > 0 && (
+            <Select
+              value={speakerFilter}
+              onValueChange={(value) => {
+                setSpeakerFilter(value);
+                setPageIndex(0);
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <Users className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="filter by speaker..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>speakers</SelectLabel>
+                  {availableSpeakers.map((speaker) => (
+                    <SelectItem key={speaker.id} value={speaker.name}>
+                      {speaker.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          )}
+
           <Button
             variant="outline"
             size="icon"
+            className="w-12"
             onClick={fetchData}
             disabled={isLoading}
           >
@@ -483,22 +572,26 @@ export function AudioTranscriptionsTable() {
           </Table>
         </div>
       )}
-      <div className="flex items-center justify-end space-x-2 py-4">
+      <div className="flex items-center justify-center space-x-2 py-4">
         <Button
           variant="outline"
-          size="sm"
+          size="lg"
+          className="w-32"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
+          <ChevronLeft className="h-4 w-4" />
           previous
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="lg"
+          className="w-32"
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
         >
           next
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

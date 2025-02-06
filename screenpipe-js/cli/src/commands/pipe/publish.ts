@@ -1,12 +1,12 @@
 import fs from "fs";
 import path from "path";
-import { command, string, boolean } from "@drizzle-team/brocli";
-import { Credentials } from "../utils/credentials";
-import { API_BASE_URL } from "../constants";
+import { Credentials } from "../../utils/credentials";
+import { API_BASE_URL } from "../../constants";
 import archiver from "archiver";
 import crypto from "crypto";
 import ignore from "ignore";
-import { colors, symbols } from "../utils/colors";
+import { colors, symbols } from "../../utils/colors";
+import { Command } from "commander";
 
 interface ProjectFiles {
   required: string[];
@@ -96,14 +96,11 @@ async function retryFetch(
   throw new Error("Retry failed"); // Fallback error
 }
 
-export const publishCommand = command({
-  name: "publish",
-  desc: "publish or update a pipe to the store",
-  options: {
-    name: string().required().desc("name of the pipe"),
-    verbose: boolean().desc("enable verbose logging").default(false),
-  },
-  handler: async (opts) => {
+export const publishCommand = new Command('publish')
+  .description('publish or update a pipe to the store')
+  .requiredOption('-n, --name <name>', 'name of the pipe')
+  .option('-v, --verbose', 'enable verbose logging', false)
+  .action(async (opts) => {
     try {
       if (opts.verbose) {
         console.log(colors.dim(`${symbols.arrow} starting publish command...`));
@@ -380,5 +377,4 @@ export const publishCommand = command({
       }
       process.exit(1);
     }
-  },
-});
+  })

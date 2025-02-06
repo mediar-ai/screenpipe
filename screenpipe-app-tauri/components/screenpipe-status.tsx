@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import { platform } from "@tauri-apps/plugin-os";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -37,6 +38,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(
     null
   );
+  const [isMacOS, setIsMacOS] = useState(false);
 
   useEffect(() => {
     const checkPermissions = async () => {
@@ -55,6 +57,14 @@ const HealthStatus = ({ className }: { className?: string }) => {
       }
     };
     checkPermissions();
+  }, []);
+
+  useEffect(() => {
+    const checkPlatform = () => {
+      const currentPlatform = platform();
+      setIsMacOS(currentPlatform === "macos");
+    };
+    checkPlatform();
   }, []);
 
   const handleOpenDataDir = async () => {
@@ -264,25 +274,27 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     {formatTimestamp(health?.last_frame_timestamp ?? null)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {permissions && (
-                    <span>
-                      {permissions.screenRecording ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <X className="h-4 w-4 text-red-500" />
-                      )}
-                    </span>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton("screen")}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    grant screen permission
-                  </Button>
-                </div>
+                {isMacOS && (
+                  <div className="flex items-center gap-2">
+                    {permissions && (
+                      <span>
+                        {permissions.screenRecording ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="w-[260px] text-sm justify-start"
+                      onClick={() => handlePermissionButton("screen")}
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      grant screen permission
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* Audio Recording Status */}
@@ -311,26 +323,28 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       : formatTimestamp(health?.last_audio_timestamp ?? null)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {permissions && (
-                    <span>
-                      {permissions.microphone ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <X className="h-4 w-4 text-red-500" />
-                      )}
-                    </span>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton("audio")}
-                    disabled={settings.disableAudio}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    grant audio permission
-                  </Button>
-                </div>
+                {isMacOS && (
+                  <div className="flex items-center gap-2">
+                    {permissions && (
+                      <span>
+                        {permissions.microphone ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <X className="h-4 w-4 text-red-500" />
+                        )}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="w-[260px] text-sm justify-start"
+                      onClick={() => handlePermissionButton("audio")}
+                      disabled={settings.disableAudio}
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      grant audio permission
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* UI Monitoring Status */}
@@ -352,25 +366,27 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       )}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.accessibility ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("accessibility")}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant accessibility permission
-                    </Button>
-                  </div>
+                  {isMacOS && (
+                    <div className="flex items-center gap-2">
+                      {permissions && (
+                        <span>
+                          {permissions.accessibility ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <X className="h-4 w-4 text-red-500" />
+                          )}
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        className="w-[260px] text-sm justify-start"
+                        onClick={() => handlePermissionButton("accessibility")}
+                      >
+                        <Lock className="h-4 w-4 mr-2" />
+                        grant accessibility permission
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

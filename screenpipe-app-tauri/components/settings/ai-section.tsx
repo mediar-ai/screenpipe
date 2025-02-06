@@ -68,6 +68,12 @@ interface OllamaModel {
   modified_at: string;
 }
 
+interface AIModel {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 const AIProviderCard = ({
   type,
   title,
@@ -169,47 +175,66 @@ const AISection = () => {
     settings.aiUrl !== "http://localhost:11434/v1" &&
     settings.aiUrl !== "embedded";
 
-  const getModelSuggestions = (provider: AIProviderType) => {
-    switch (provider) {
-      case "screenpipe-cloud":
-        return [
-          "gpt-4o",
-          "gpt-4o-mini",
-          "o1-mini",
-          "o1",
-          "claude-3-5-sonnet-latest",
-          "claude-3-5-haiku-latest",
-          "gemini-2.0-flash-exp",
-          "gemini-1.5-flash",
-          "gemini-1.5-flash-8b",
-          "gemini-1.5-pro",
-        ];
-      case "openai":
-        return ["o3-mini", "gpt-4o", "gpt-4o-mini", "o1-mini", "o1"];
-      default:
-        return [];
+  const [models, setModels] = useState<AIModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const fetchModels = async () => {
+    setIsLoadingModels(true);
+    try {
+      switch (settings.aiProviderType) {
+        case "screenpipe-cloud":
+          const response = await fetch(
+            "https://ai-proxy.i-f9f.workers.dev/v1/models",
+            {
+              headers: {
+                Authorization: `Bearer ${settings.user?.id || ""}`,
+              },
+            }
+          );
+          if (!response.ok) throw new Error("Failed to fetch models");
+          const data = await response.json();
+          setModels(data.models);
+          break;
+
+        case "native-ollama":
+          const ollamaResponse = await fetch("http://localhost:11434/api/tags");
+          if (!ollamaResponse.ok)
+            throw new Error("Failed to fetch Ollama models");
+          const ollamaData = (await ollamaResponse.json()) as {
+            models: OllamaModel[];
+          };
+          setModels(
+            (ollamaData.models || []).map((model) => ({
+              id: model.name,
+              name: model.name,
+              provider: "ollama",
+            }))
+          );
+          break;
+
+        case "openai":
+          setModels([
+            { id: "gpt-4", name: "gpt-4", provider: "openai" },
+            { id: "gpt-3.5-turbo", name: "gpt-3.5-turbo", provider: "openai" },
+          ]);
+          break;
+
+        default:
+          setModels([]);
+      }
+    } catch (error) {
+      console.error(
+        `Failed to fetch models for ${settings.aiProviderType}:`,
+        error
+      );
+      setModels([]);
+    } finally {
+      setIsLoadingModels(false);
     }
   };
-  console.log(getModelSuggestions(settings.aiProviderType));
-
-  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
 
   useEffect(() => {
-    const fetchOllamaModels = async () => {
-      if (settings.aiProviderType !== "native-ollama") return;
-
-      try {
-        const response = await fetch("http://localhost:11434/api/tags");
-        if (!response.ok) throw new Error("Failed to fetch Ollama models");
-        const data = (await response.json()) as { models: OllamaModel[] };
-        setOllamaModels(data.models || []);
-      } catch (error) {
-        console.error("Failed to fetch Ollama models:", error);
-        setOllamaModels([]);
-      }
-    };
-
-    fetchOllamaModels();
+    fetchModels();
   }, [settings.aiProviderType]);
 
   return (
@@ -349,31 +374,27 @@ const AISection = () => {
                       press enter to use &quot;{settings.aiModel}&quot;
                     </CommandEmpty>
                     <CommandGroup heading="Suggestions">
-                      {settings.aiProviderType === "native-ollama"
-                        ? ollamaModels?.map((model) => (
-                            <CommandItem
-                              key={model.name}
-                              value={model.name}
-                              onSelect={() => {
-                                updateSettings({ aiModel: model.name });
-                              }}
-                            >
-                              {model.name}
-                            </CommandItem>
-                          ))
-                        : getModelSuggestions(settings.aiProviderType)?.map(
-                            (model) => (
-                              <CommandItem
-                                key={model}
-                                value={model}
-                                onSelect={() => {
-                                  updateSettings({ aiModel: model });
-                                }}
-                              >
-                                {model}
-                              </CommandItem>
-                            )
-                          )}
+                      {isLoadingModels ? (
+                        <CommandItem value="loading" disabled>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          loading models...
+                        </CommandItem>
+                      ) : (
+                        models.map((model) => (
+                          <CommandItem
+                            key={model.id}
+                            value={model.id}
+                            onSelect={() => {
+                              updateSettings({ aiModel: model.id });
+                            }}
+                          >
+                            {model.name}
+                            <Badge variant="outline" className="ml-2">
+                              {model.provider}
+                            </Badge>
+                          </CommandItem>
+                        ))
+                      )}
                     </CommandGroup>
                   </CommandList>
                 </Command>
