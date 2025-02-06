@@ -1,20 +1,20 @@
 import localforage from "localforage";
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import OnboardingPipes from "@/components/onboarding/pipes";
+import OnboardingPipes from "@/components/onboarding/slides/pipes";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import OnboardingStatus from "@/components/onboarding/status";
-import OnboardingIntro from "@/components/onboarding/introduction";
-import OnboardingAPISetup from "@/components/onboarding/api-setup";
-import OnboardingPersonalize from "@/components/onboarding/personalize";
-import OnboardingDevOrNonDev from "@/components/onboarding/dev-or-non-dev";
-import OnboardingDevConfig from "@/components/onboarding/dev-configuration";
-import OnboardingSelection from "@/components/onboarding/usecases-selection";
-import OnboardingInstructions from "@/components/onboarding/explain-instructions";
-import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import OnboardingStatus from "@/components/onboarding/slides/status";
+import OnboardingIntro from "@/components/onboarding/slides/introduction";
+import OnboardingAPISetup from "@/components/onboarding/slides/api-setup";
+import OnboardingPersonalize from "@/components/onboarding/slides/personalize";
+import OnboardingDevOrNonDev from "@/components/onboarding/slides/dev-or-non-dev";
+import OnboardingDevConfig from "@/components/onboarding/slides/dev-configuration";
+import OnboardingSelection from "@/components/onboarding/slides/usecases-selection";
+import OnboardingInstructions from "@/components/onboarding/slides/explain-instructions";
+import { useOnboarding } from "@/components/onboarding/context";
 import { useSettings } from "@/lib/hooks/use-settings";
-import OnboardingLogin from "./onboarding/login";
-import OnboardingPipeStore from "./onboarding/pipe-store";
+import OnboardingLogin from "./slides/login";
+import OnboardingPipeStore from "./slides/pipe-store";
 import posthog from "posthog-js";
 
 type SlideKey =
@@ -152,7 +152,7 @@ const Onboarding: React.FC = () => {
   ); // dev or non dev
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const { showOnboarding, setShowOnboardingToFalse } = useOnboarding();
   const { updateSettings } = useSettings();
 
   useEffect(() => {
@@ -255,7 +255,7 @@ const Onboarding: React.FC = () => {
 
   const handleDialogClose = (open: boolean) => {
     if (!open && currentSlide) {
-      setShowOnboarding(open);
+      // setShowOnboarding(open);
     }
   };
 
@@ -266,13 +266,11 @@ const Onboarding: React.FC = () => {
       finalPersonalization: selectedPersonalization,
     });
 
-    setShowOnboarding(false);
-    localforage.setItem("showOnboarding", false);
-
+    setShowOnboardingToFalse(false);
   };
 
   return (
-    <Dialog open={showOnboarding} onOpenChange={handleDialogClose}>
+    <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
       <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
         <div className="flex flex-col w-full h-full overflow-hidden">
           {currentSlide === "intro" && (
