@@ -1,6 +1,5 @@
 import { chromium, Page } from "playwright";
 import { NotionCredentials } from "@/lib/types";
-import path from "node:path";
 
 // Integration Name
 const INTEGRATION_NAME = "Screenpipe Logger";
@@ -99,17 +98,13 @@ async function getAccessToken(page: Page) {
 	return accessToken;
 }
 
-// Login Userf
-async function loginUser(page: Page, email: string, password: string) {
-	await page.goto("https://www.notion.so/login");
-	await page.getByPlaceholder("Enter your email address...").fill(email);
+// switch to workspace
+async function switchWorkspace(page: Page, workspace: string) {
+	await page.goto("https://www.notion.so");
 
-	await page.locator("form").locator("text=Continue").click();
+	await page.locator("div.notion-sidebar-switcher").click();
 
-	await page.getByPlaceholder("Enter your password...").fill(password);
-	await page.locator("form").locator("text=Continue with password").click();
-
-	await page.waitForTimeout(1000);
+	await page.click(`text=${workspace}`, { delay: 1000 });
 }
 
 // const STORAGE_PATH = path.join(process.cwd(), ".notion-storage");
@@ -177,7 +172,7 @@ export async function automateNotionSetup(
 			isIntegrationPresent = false;
 		}
 
-		console.log("integrations", isIntegrationPresent);
+		console.log(`integrations ${INTEGRATION_NAME}`, isIntegrationPresent);
 
 		let accessToken: string;
 
@@ -186,6 +181,8 @@ export async function automateNotionSetup(
 		} else {
 			accessToken = await createIntegration(setupPage, workspace);
 		}
+
+		await switchWorkspace(setupPage, workspace);
 
 		const logsDbId = await createTable(setupPage, "Activity Logs");
 
@@ -211,7 +208,6 @@ export async function automateNotionSetup(
 	} catch (error) {
 		console.log(error);
 		await loginBrowser?.close();
-
 		await setupBrowser?.close();
 		throw error;
 	}
