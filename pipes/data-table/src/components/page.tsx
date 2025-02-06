@@ -24,7 +24,11 @@ export default function DataPage() {
       case "audio_transcriptions":
         return <AudioTranscriptionsTable />;
       case "ui_monitoring":
-        return <UiMonitoringTable />;
+        return navigator.userAgent.toLowerCase().includes("mac") ? (
+          <UiMonitoringTable />
+        ) : (
+          <div></div>
+        );
       default:
         return <div>select a table</div>;
     }
