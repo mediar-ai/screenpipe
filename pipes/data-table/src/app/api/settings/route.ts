@@ -1,24 +1,62 @@
-// app/api/settings/route.ts
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
-import { getDefaultSettings } from "@screenpipe/browser";
-// Force Node.js runtime
-export const runtime = "nodejs"; // Add this line
+import { promises as fs } from "fs";
+import path from "path";
+
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const defaultSettings = getDefaultSettings();
-
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
       throw new Error("settingsManager not found");
     }
-    const rawSettings = await settingsManager.getAll();
-    return NextResponse.json(rawSettings);
+
+    // get home dir
+    const homeDir = process.env.HOME;
+
+    // Load persisted settings if they exist
+    const screenpipeDir =
+      process.env.SCREENPIPE_DIR ||
+      (homeDir && path.join(homeDir, ".screenpipe")) ||
+      process.cwd();
+    const settingsPath = path.join(
+      screenpipeDir,
+      "pipes",
+      "obsidian",
+      "pipe.json"
+    );
+
+    try {
+      const settingsContent = await fs.readFile(settingsPath, "utf8");
+      const persistedSettings = JSON.parse(settingsContent);
+
+      // Merge with current settings
+      const rawSettings = await settingsManager.getAll();
+      return NextResponse.json({
+        ...rawSettings,
+        customSettings: {
+          ...rawSettings.customSettings,
+          ["obsidian"]: {
+            ...(rawSettings.customSettings?.["obsidian"] || {}),
+            ...persistedSettings,
+          },
+        },
+      });
+    } catch (err) {
+      console.log("route err", err);
+      // If no persisted settings, return normal settings
+      const rawSettings = await settingsManager.getAll();
+      console.log("route rawSettings", rawSettings);
+      return NextResponse.json(rawSettings);
+    }
   } catch (error) {
     console.error("failed to get settings:", error);
-    return NextResponse.json(defaultSettings);
+    return NextResponse.json(
+      { error: "failed to get settings" },
+      { status: 500 }
+    );
   }
 }
 
@@ -30,18 +68,37 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { key, value, isPartialUpdate, reset } = body;
+    const { key, value, isPartialUpdate, reset, namespace } = body;
 
     if (reset) {
-      if (key) {
-        await settingsManager.resetKey(key);
+      if (namespace) {
+        if (key) {
+          await settingsManager.setCustomSetting(namespace, key, undefined);
+        } else {
+          await settingsManager.updateNamespaceSettings(namespace, {});
+        }
       } else {
-        await settingsManager.reset();
+        if (key) {
+          await settingsManager.resetKey(key);
+        } else {
+          await settingsManager.reset();
+        }
       }
       return NextResponse.json({ success: true });
     }
 
-    if (isPartialUpdate) {
+    if (namespace) {
+      if (isPartialUpdate) {
+        const currentSettings =
+          (await settingsManager.getNamespaceSettings(namespace)) || {};
+        await settingsManager.updateNamespaceSettings(namespace, {
+          ...currentSettings,
+          ...value,
+        });
+      } else {
+        await settingsManager.setCustomSetting(namespace, key, value);
+      }
+    } else if (isPartialUpdate) {
       const serializedSettings = JSON.parse(JSON.stringify(value));
       await settingsManager.update(serializedSettings);
     } else {

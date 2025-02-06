@@ -7,6 +7,7 @@ import { VideoChunksTable } from "./video-chunks-table";
 import { AudioTranscriptionsTable } from "./audio-transcriptions-table";
 import { UiMonitoringTable } from "./ui-monitoring-table";
 import { pipe } from "@screenpipe/browser";
+import { SearchCommand } from "./search-command";
 
 export default function DataPage() {
   const [currentTable, setCurrentTable] = useState("ocr_text");
@@ -43,6 +44,9 @@ export default function DataPage() {
         />
       </div>
       <div className="w-[80%] p-8">
+        <div className="flex justify-end mb-4">
+          <SearchCommand />
+        </div>
         <div className="w-full">{renderTable()}</div>
       </div>
     </div>
