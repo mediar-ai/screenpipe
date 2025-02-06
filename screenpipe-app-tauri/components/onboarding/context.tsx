@@ -1,7 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
-import { useSettings } from "../../lib/hooks/use-settings";
-import localforage from "localforage";
 import posthog from "posthog-js";
+import { useOnboardingVisibility } from "./hooks/use-onboarding-visibility";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
@@ -15,24 +14,11 @@ const OnboardingContext = createContext<OnboardingContextType | undefined>(
 export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [showOnboarding, setShowOnboarding] = useState(true);
-  const { settings } = useSettings();
-
-  useEffect(() => {
-    const checkFirstTimeUser = async () => {
-      const showOnboarding = await localforage.getItem("showOnboarding");
-
-      if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
-        setShowOnboarding(true);
-      }
-    };
-    checkFirstTimeUser();
-  }, [settings]);
-
-  function setShowOnboardingToFalse() {
-    setShowOnboarding(false);
-    localforage.setItem("showOnboarding", false);
-  }
+  const { 
+    showOnboarding, 
+    setShowOnboardingToFalse, 
+    setShowOnboardingToTrue 
+  } = useOnboardingVisibility();
 
   function skipOnboarding() {
     setShowOnboardingToFalse();
@@ -58,3 +44,4 @@ export const useOnboarding = () => {
   }
   return context;
 };
+
