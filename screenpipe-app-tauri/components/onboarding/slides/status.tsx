@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { Check, HelpCircle, Lock, Video, X } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
-import { Button } from "../ui/button";
-import { Switch } from "../ui/switch";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
+import { Button } from "../../ui/button";
+import { Switch } from "../../ui/switch";
 import {
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from "../ui/tooltip";
+} from "../../ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Label } from "../ui/label";
+import { Label } from "../../ui/label";
 import { platform } from "@tauri-apps/plugin-os";
-import { LogFileButton } from "../log-file-button";
-import { Separator } from "../ui/separator";
+import { LogFileButton } from "../../log-file-button";
+import { Separator } from "../../ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
@@ -55,6 +55,8 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     audioSeconds: number;
   } | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
+
+  console.log({status, permissions, isRestartNeeded, stats, isMacOS, useChineseMirror})
 
   useEffect(() => {
     const checkRestartStatus = async () => {

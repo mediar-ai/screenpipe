@@ -1,11 +1,10 @@
 import React from "react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RainbowButton } from "../ui/rainbow-button";
+import { RainbowButton } from "../../ui/rainbow-button";
 import { ArrowRight } from "lucide-react";
-import { useSettings } from "@/lib/hooks/use-settings";
 import posthog from "posthog-js";
-import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { useOnboarding } from "@/components/onboarding/context";
 
 interface OnboardingIntroProps {
   className?: string;
@@ -16,9 +15,9 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   className = "",
   handleNextSlide,
 }) => {
-  const { setShowOnboarding } = useOnboarding();
+  const { setShowOnboardingToFalse } = useOnboarding();
   const handleSkip = () => {
-    setShowOnboarding(false);
+    setShowOnboardingToFalse(false);
     posthog.capture("onboarding_skipped");
   };
 

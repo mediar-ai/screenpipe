@@ -2,7 +2,7 @@ import React from "react";
 import { HelpCircle, Info } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import {
   Tooltip,
   TooltipContent,

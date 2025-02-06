@@ -7,7 +7,7 @@ import {
   Wrench,
   SlidersHorizontal,
 } from "lucide-react";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import posthog from "posthog-js";
 
 interface OnboardingSelectionProps {

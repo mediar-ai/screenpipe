@@ -2,9 +2,9 @@ import React, { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import { platform } from "@tauri-apps/plugin-os";
-import { CodeBlock } from "@/components/onboarding/single-codeblock";
+import { CodeBlock } from "@/components/onboarding/slides/single-codeblock";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 
 interface OnboardingDevConfigProps {
   className?: string;

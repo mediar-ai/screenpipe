@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { invoke } from "@tauri-apps/api/core";
 
 interface OnboardingDevOrNonDevProps {

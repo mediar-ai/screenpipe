@@ -2,7 +2,7 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TextSearch, BotMessageSquare } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 
 interface OnboardingPersonalizeProps {
   handleOptionClick: (option: string) => void;

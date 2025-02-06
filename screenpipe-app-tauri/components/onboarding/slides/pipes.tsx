@@ -1,8 +1,8 @@
 import React from "react";
-import { CodeBlock } from "@/components/onboarding/single-codeblock";
+import { CodeBlock } from "@/components/onboarding/slides/single-codeblock";
 import { ArrowUpRight } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
+import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { open } from "@tauri-apps/plugin-shell";
 
 interface OnboardingPipesProps {
