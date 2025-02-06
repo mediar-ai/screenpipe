@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState } from "react";
-import { Search, Database } from "lucide-react";
+import { Search, Database, Bot, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandDialog, CommandInput } from "@/components/ui/command";
 import OpenAI from "openai";
@@ -20,13 +20,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function SearchCommand() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [sqlQuery, setSqlQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [generatedSql, setGeneratedSql] = useState("");
   const { settings } = useSettings();
   const [results, setResults] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
@@ -68,24 +73,73 @@ export function SearchCommand() {
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `You are an SQL expert. Generate SQLite queries based on natural language input.
+          content: `You are an SQL expert helping developers query Screenpipe's 24/7 recording context database. Generate SQLite queries based on natural language input.
+
           Important rules:
           - Only return the SQL query, no explanations
           - Use proper SQLite syntax
-          - Use FTS tables when searching text: ocr_text_fts, audio_transcriptions_fts, ui_monitoring_fts
-          - Common joins:
-            - frames + ocr_text for screen content
-            - audio_chunks + audio_transcriptions for voice
-            - ui_monitoring for UI interactions
-          - Always include proper timestamp filtering
-          - Use proper escaping for text searches
+          - Use FTS tables for text search: ocr_text_fts (screen text), audio_transcriptions_fts (voice), ui_monitoring_fts (UI), frames_fts (file names)
           - Keep queries efficient by using indexes
           - Return results ordered by timestamp DESC
-          Schema highlights:
-          - Screen content: frames, ocr_text, ocr_text_fts
-          - Audio: audio_chunks, audio_transcriptions, audio_transcriptions_fts 
-          - UI: ui_monitoring, ui_monitoring_fts
-          - All tables have timestamp columns
+          - Limit results to 100 rows by default
+          - Use JOIN operations to correlate data across different sources
+
+          Core Tables:
+
+          1. Screen Recording:
+            - frames: captures of screen content
+              (id, video_chunk_id, offset_index, timestamp, name)
+            - ocr_text: text extracted from screens
+              (frame_id, text, text_json, app_name, window_name, focused)
+            - ocr_text_fts: optimized text search
+              (text, app_name, window_name, frame_id)
+            - ocr_text_embeddings: vector embeddings
+              (id, frame_id, embedding, created_at)
+          
+          2. Audio Recording:
+            - audio_chunks: recorded audio segments
+              (id, file_path, timestamp)
+            - audio_transcriptions: speech-to-text
+              (id, audio_chunk_id, offset_index, timestamp, transcription, device, is_input_device, speaker_id, start_time, end_time)
+            - audio_transcriptions_fts: optimized voice search
+              (transcription, device, audio_chunk_id, speaker_id, start_time, end_time)
+            - speakers: voice identification
+              (id, name, metadata, hallucination)
+          
+          3. UI Monitoring:
+            - ui_monitoring: app/window state
+              (id, text_output, timestamp, app, window, initial_traversal_at)
+            - ui_monitoring_fts: optimized UI search
+              (text_output, app, window, ui_id)
+          
+          4. Tagging System:
+            - tags: user-defined categories
+              (id, name, created_at)
+            - vision_tags: tags for screen content
+              (vision_id, tag_id)
+            - audio_tags: tags for audio content
+              (audio_chunk_id, tag_id)
+            - ui_monitoring_tags: tags for UI events
+              (ui_monitoring_id, tag_id)
+
+          Optimized Join Patterns:
+          - Screen content: JOIN frames f ON ocr_text.frame_id = f.id
+          - Voice transcriptions: JOIN audio_chunks ac ON at.audio_chunk_id = ac.id
+          - UI events: JOIN ui_monitoring_fts umf ON um.id = umf.ui_id
+          - Tagged content: JOIN tags t ON vt.tag_id = t.id
+          
+          Performance Indexes:
+          - frames: timestamp, video_chunk_id
+          - ocr_text: frame_id, app_name, window_name
+          - audio_transcriptions: audio_chunk_id, timestamp
+          - ui_monitoring: timestamp, app, window
+
+          Common Query Patterns:
+          - Time-based filtering: WHERE timestamp BETWEEN x AND y
+          - Cross-source correlation: JOIN multiple recording types
+          - Full-text search: Using _fts tables with MATCH
+          - App/window context: Filtering by app_name/window_name
+          - Tagged content: JOIN with tags tables
           `,
         },
         {
@@ -97,11 +151,12 @@ export function SearchCommand() {
       const completion = await openai.chat.completions.create({
         model: settings.aiModel,
         messages,
-        temperature: 0.3, // Lower temperature for more precise SQL
+        temperature: 0.3,
       });
 
-      const sql = completion.choices[0].message.content!;
-      setGeneratedSql(sql);
+      let sql = completion.choices[0].message.content!;
+      // Remove SQL code fence markers if present
+      sql = sql.replace(/```sql\n?|\n?```/g, "").trim();
       setSqlQuery(sql);
 
       // Here you would execute the SQL query
@@ -136,10 +191,9 @@ export function SearchCommand() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `query failed: ${response.statusText}`
-        );
+        const errorData = await response.text();
+        console.error("error executing query:", errorData);
+        throw new Error(errorData || `query failed: ${errorData}`);
       }
 
       const data = await response.json();
@@ -155,6 +209,29 @@ export function SearchCommand() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const copyTableToClipboard = () => {
+    if (results.length === 0) return;
+
+    // Create markdown table
+    const headers = `| ${columns.join(" | ")} |`;
+    const separator = `| ${columns.map(() => "---").join(" | ")} |`;
+    const rows = results
+      .map(
+        (row) =>
+          `| ${columns
+            .map((col) => row[col]?.toString() || "N/A")
+            .join(" | ")} |`
+      )
+      .join("\n");
+
+    const tableText = `${headers}\n${separator}\n${rows}`;
+    navigator.clipboard.writeText(tableText);
+
+    toast({
+      description: "copied table as markdown",
+    });
   };
 
   return (
@@ -188,7 +265,17 @@ export function SearchCommand() {
         />
         <div className="px-4 pb-4">
           <div className="mt-4 space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Bot className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p className="text-xs">using {settings.aiModel}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Button
                 onClick={handleGenerateSql}
                 disabled={isLoading}
@@ -218,6 +305,12 @@ export function SearchCommand() {
                   "min-h-[100px] resize-none font-mono",
                   error && "border-red-500"
                 )}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.shiftKey) {
+                    e.preventDefault();
+                    executeQuery();
+                  }
+                }}
               />
               {error && (
                 <div className="text-sm text-red-500 font-mono">{error}</div>
@@ -230,7 +323,16 @@ export function SearchCommand() {
               onClick={executeQuery}
               disabled={isLoading}
             >
-              {isLoading ? "executing..." : "execute sql"}
+              {isLoading ? (
+                "executing..."
+              ) : (
+                <span className="flex items-center gap-2">
+                  execute sql
+                  <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                    shift + enter
+                  </kbd>
+                </span>
+              )}
             </Button>
 
             {results.length === 0 && !error && !isLoading && sqlQuery && (
@@ -240,29 +342,42 @@ export function SearchCommand() {
             )}
 
             {results.length > 0 && (
-              <div className="rounded-md border mt-4 max-h-[400px] overflow-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {columns.map((column) => (
-                        <TableHead key={column}>{column}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {results.map((row, i) => (
-                      <TableRow key={i}>
+              <div className="rounded-md border mt-4">
+                <div className="flex justify-end p-2 border-b">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={copyTableToClipboard}
+                    className="text-xs"
+                  >
+                    <Copy className="h-3 w-3 mr-2" />
+                    copy table
+                  </Button>
+                </div>
+                <div className="max-h-[400px] overflow-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
                         {columns.map((column) => (
-                          <TableCell key={column}>
-                            <div className="max-w-[300px] truncate">
-                              {row[column]?.toString() || "N/A"}
-                            </div>
-                          </TableCell>
+                          <TableHead key={column}>{column}</TableHead>
                         ))}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {results.map((row, i) => (
+                        <TableRow key={i}>
+                          {columns.map((column) => (
+                            <TableCell key={column}>
+                              <div className="max-w-[300px] truncate">
+                                {row[column]?.toString() || "N/A"}
+                              </div>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </div>
