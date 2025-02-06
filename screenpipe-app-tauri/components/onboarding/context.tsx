@@ -31,12 +31,6 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { 
-    showOnboarding, 
-    setShowOnboardingToFalse, 
-    setShowOnboardingToTrue 
-  } = useOnboardingVisibility();
-
-  const { 
     selectedOptions, 
     setSelectedOptions, 
     selectedPersonalization, 
@@ -46,18 +40,27 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
   } = useOnboardingUserInput();
 
   const { 
+    showOnboarding, 
+    setShowOnboardingToFalse, 
+    setShowOnboardingToTrue,
+    skipOnboarding,
+    completeOnboarding,
+    handleEnd
+  } = useOnboardingVisibility(
+    selectedOptions,
+    selectedPreference,
+    selectedPersonalization,
+  );
+
+  const { 
     currentSlide, 
     error, 
     handleNextSlide, 
     handlePrevSlide,
-    skipOnboarding,
-    completeOnboarding,
-    handleEnd
   } = useOnboardingFlow(
     selectedOptions,
     selectedPreference,
     selectedPersonalization,
-    setShowOnboardingToFalse
   );
 
   return (

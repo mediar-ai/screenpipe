@@ -1,7 +1,13 @@
 import localforage from "localforage";
+import posthog from "posthog-js";
 import { useEffect, useState } from "react";
+import { trackOnboardingStep } from "../flow";
 
-export function useOnboardingVisibility() {
+export function useOnboardingVisibility(
+  selectedOptions: string[],
+  selectedPreference: string | null,
+  selectedPersonalization: string | null,
+) {
     const [showOnboarding, setShowOnboarding] = useState(true);
   
     function setShowOnboardingToFalse() {
@@ -22,6 +28,27 @@ export function useOnboardingVisibility() {
       };
       checkFirstTimeUser();
     }, []);
+
+
+  function skipOnboarding() {
+    setShowOnboardingToFalse();
+    posthog.capture("onboarding_skipped");
+  }
+
+  function completeOnboarding() {
+    setShowOnboardingToFalse();
+    posthog.capture("onboarding_completed");
+  }
+
+  async function handleEnd() {
+    trackOnboardingStep("completed", {
+      finalOptions: selectedOptions,
+      finalPreference: selectedPreference,
+      finalPersonalization: selectedPersonalization,
+    });
+
+    setShowOnboardingToFalse();
+  };
   
-    return { showOnboarding, setShowOnboardingToFalse, setShowOnboardingToTrue };
+    return { showOnboarding, setShowOnboardingToFalse, setShowOnboardingToTrue, skipOnboarding, completeOnboarding, handleEnd };
   }

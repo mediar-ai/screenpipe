@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { SlideKey, slideFlow, trackOnboardingStep } from "../flow";
-import posthog from "posthog-js";
 
 export function useOnboardingFlow(
   selectedOptions: string[],
   selectedPreference: string | null,
   selectedPersonalization: string | null,
-  setShowOnboardingToFalse: () => void
 ) {
   const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
   const [error, setError] = useState<string | null>(null);
@@ -71,41 +69,10 @@ export function useOnboardingFlow(
     }, 300);
   };
 
-  const handleDialogClose = (open: boolean) => {
-    if (!open && currentSlide) {
-      // setShowOnboarding(open);
-    }
-  };
-
-
-  function skipOnboarding() {
-    setShowOnboardingToFalse();
-    posthog.capture("onboarding_skipped");
-  }
-
-  function completeOnboarding() {
-    setShowOnboardingToFalse();
-    posthog.capture("onboarding_completed");
-  }
-
-  async function handleEnd() {
-    trackOnboardingStep("completed", {
-      finalOptions: selectedOptions,
-      finalPreference: selectedPreference,
-      finalPersonalization: selectedPersonalization,
-    });
-
-    setShowOnboardingToFalse();
-  };
-  
   return {
     currentSlide,
     error,
     handleNextSlide,
     handlePrevSlide,
-    handleDialogClose,
-    skipOnboarding,
-    completeOnboarding,
-    handleEnd,
   };
 }
