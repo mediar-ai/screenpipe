@@ -11,13 +11,7 @@ import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import AISection from "../../settings/ai-section";
 import { useOnboarding } from "../context";
 
-interface OnboardingAPISetupProps {
-  className?: string;
-}
-
-const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
-  className,
-}) => {
+const OnboardingAPISetup = () => {
   const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
@@ -120,7 +114,7 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   }, [settings]);
 
   return (
-    <div className={`flex h-[80%] flex-col ${className}`}>
+    <div className={`flex h-[80%] flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"

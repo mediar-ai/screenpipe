@@ -5,10 +5,6 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { useOnboarding } from "../context";
 
-interface OnboardingPersonalizeProps {
-  className?: string;
-}
-
 const PERSONALIZATION_OPTIONS = [
   {
     key: "withoutAI",
@@ -66,14 +62,12 @@ const CardItem: React.FC<{
   );
 };
 
-const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
-  className = "",
-}) => {
+const OnboardingPersonalize = () => {
   const { selectedPersonalization, setSelectedPersonalization, handleNextSlide, handlePrevSlide } = useOnboarding();
 
   return (
     <div
-      className={`${className} w-full flex justify-center flex-col relative`}
+      className={`w-full flex justify-center flex-col relative`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img

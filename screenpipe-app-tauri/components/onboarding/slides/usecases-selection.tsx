@@ -11,10 +11,6 @@ import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import posthog from "posthog-js";
 import { useOnboarding } from "../context";
 
-interface OnboardingSelectionProps {
-  className?: string;
-}
-
 const OPTIONS = [
   {
     key: "personalUse",
@@ -71,9 +67,7 @@ const SelectionItem: React.FC<{
   );
 };
 
-const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
-  className,
-}) => {
+const OnboardingSelection = () => {
   const { selectedOptions, setSelectedOptions, handleNextSlide, handlePrevSlide } = useOnboarding();
 
   const handleOptionClick = (option: string) => {
@@ -96,7 +90,7 @@ const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   };
 
   return (
-    <div className={`${className} flex flex-col h-full`}>
+    <div className={`flex flex-col h-full`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"

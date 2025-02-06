@@ -5,16 +5,11 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { open } from "@tauri-apps/plugin-shell";
 import { useOnboarding } from "../context";
-interface OnboardingPipesProps {
-  className?: string;
-}
 
-const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
-  className = "",
-}) => {
+const OnboardingPipes = () => {
   const { handleNextSlide, handlePrevSlide } = useOnboarding();
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
+    <div className={`w-full flex justify-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"

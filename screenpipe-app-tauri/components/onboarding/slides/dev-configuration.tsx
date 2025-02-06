@@ -7,10 +7,6 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { useOnboarding } from "../context";
 
-interface OnboardingDevConfigProps {
-  className?: string;
-}
-
 interface devInstructionsItemsTypes {
   label: string;
   description: string;
@@ -19,9 +15,7 @@ interface devInstructionsItemsTypes {
 
 type devInstructionItems = Record<string, devInstructionsItemsTypes[]>;
 
-const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
-  className = "",
-}) => {
+const OnboardingDevConfig = () => {
   const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const [instructions, setInstructions] = useState<devInstructionsItemsTypes[]>(
     []
@@ -86,7 +80,7 @@ const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
   }, []);
 
   return (
-    <div className={`${className} w-full flex justify-center flex-col`}>
+    <div className={`w-full flex justify-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
           className="w-24 h-24 justify-center"
