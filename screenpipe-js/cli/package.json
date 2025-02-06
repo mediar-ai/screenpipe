@@ -13,8 +13,7 @@
     "dev": "bun run src/index.ts"
   },
   "dependencies": {
-    "@drizzle-team/brocli": "^0.11.0",
-    "@screenpipe/browser": "^0.1.24",
+    "@screenpipe/browser": "^0.1.26",
     "@screenpipe/js": "^1.0.7",
     "archiver": "^7.0.1",
     "chalk": "^5.4.1",
@@ -24,9 +23,8 @@
     "fs-extra": "^11.3.0",
     "ignore": "^7.0.3",
     "inquirer": "^12.3.2",
-    "kleur": "^4.1.5",
+    "lodash": "^4.17.21",
     "ora": "^8.1.1",
-    "prompts": "^2.4.2",
     "simple-git": "^3.27.0",
     "unzip-stream": "^0.3.4",
     "zod": "^3.24.1"
@@ -34,6 +32,7 @@
   "devDependencies": {
     "@types/archiver": "^6.0.3",
     "@types/fs-extra": "^11.0.4",
+    "@types/lodash": "^4.17.15",
     "@types/node": "^20.11.5",
     "@types/prompts": "^2.4.9",
     "@types/unzip-stream": "^0.3.4",

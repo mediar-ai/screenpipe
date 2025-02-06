@@ -16,7 +16,7 @@ export async function addComponents(
       silent: options.silent,
     })?.start()
 
-    const tree = await registryResolveItemsTree(components)
+    const tree = registryResolveItemsTree(components)
 
     if (!tree) {
       registrySpinner?.fail()

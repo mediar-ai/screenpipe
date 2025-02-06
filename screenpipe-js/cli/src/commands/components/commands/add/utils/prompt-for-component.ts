@@ -3,6 +3,7 @@ import prompts from 'prompts';
 import { handleError } from "./handle-error";
 import { getRegistry } from "../registry/api";
 import { logger } from "./logger";
+import inquirer from "inquirer";
 
 export async function promptForRegistryComponents(
     all?: boolean
@@ -19,19 +20,21 @@ export async function promptForRegistryComponents(
       return Object.values(registryIndex).map((entry) => entry.name)
     }
   
-    const { components } = await prompts({
-      type: "multiselect",
-      name: "components",
-      message: "Which components would you like to add?",
-      hint: "Space to select. A to toggle all. Enter to submit.",
-      instructions: false,
-      choices: Object.values(registryIndex).filter((item) => item.internal !== true)
-        .map((entry) => ({
-          title: entry.name,
-          value: entry.name,
-          // selected: options.all ? true : options.components?.includes(entry.name),
-        })),
-    })
+    const { components } = await inquirer.prompt([
+      {
+        type: "checkbox",
+        name: "components",
+        message: "Which components would you like to add?",
+        choices: Object.values(registryIndex)
+          .filter((item) => item.internal !== true)
+          .map((entry) => ({
+            name: entry.name,
+            value: entry.name,
+            // checked: options.all ? true : options.components?.includes(entry.name),
+          })),
+      },
+    ]);
+    
   
     if (!components?.length) {
       logger.warn("No components selected. Exiting.")
