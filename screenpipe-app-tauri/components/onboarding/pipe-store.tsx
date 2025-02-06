@@ -5,6 +5,8 @@ import OnboardingNavigation from "./navigation";
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
+import { PipeApi } from "@/lib/api/store";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 interface OnboardingPipeStoreProps {
   className?: string;
@@ -18,7 +20,8 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
   handleNextSlide,
 }) => {
   const [isLoading, setIsLoading] = React.useState(false);
-
+  const [status, setStatus] = React.useState<string>("");
+  const { settings } = useSettings();
   const handleOpenSearchPipe = async () => {
     setIsLoading(true);
     try {
@@ -42,7 +45,40 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
         await new Promise((resolve) => setTimeout(resolve, 5_000));
       }
 
-      // Enable the search pipe if not already enabled
+      // First check if pipe is installed by listing pipes
+      const listResponse = await fetch("http://localhost:3030/pipes/list");
+      const listData = await listResponse.json();
+      const searchPipe = listData.data.find(
+        (p: any) => p.config?.id === "search"
+      );
+
+      // If not installed, download it first
+      if (!searchPipe) {
+        setStatus("downloading search pipe... (~10s)");
+        const pipeApi = await PipeApi.create(settings.user?.token!);
+        const storePlugins = await pipeApi.listStorePlugins();
+        const downloadData = await pipeApi.downloadPipe(
+          storePlugins.find((p) => p.name === "search")?.id!
+        );
+
+        await fetch("http://localhost:3030/pipes/download-private", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pipe_name: "search",
+            pipe_id: "search",
+            url: downloadData.download_url,
+          }),
+        });
+
+        // Wait for download to complete
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      // Enable the search pipe
+      setStatus("enabling search pipe... (~10s)");
       await fetch("http://localhost:3030/pipes/enable", {
         method: "POST",
         headers: {
@@ -52,20 +88,23 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
       });
 
       // Wait for pipe to initialize
+      setStatus("initializing search pipe... (~10s)");
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Get pipe info to find the port
+      // Get updated pipe info to find the port
       const response = await fetch("http://localhost:3030/pipes/list");
       const data = await response.json();
-      const searchPipe = data.data.find((p: any) => p.id === "search");
+      const updatedSearchPipe = data.data.find(
+        (p: any) => p.config?.id === "search"
+      );
 
-      if (!searchPipe?.config?.port) {
+      if (!updatedSearchPipe?.config?.port) {
         throw new Error("search pipe not found or port not configured");
       }
 
-      // Check if pipe is actually running by trying to connect to its port
+      // Check if pipe is actually running
       try {
-        await fetch(`http://localhost:${searchPipe.config.port}`, {
+        await fetch(`http://localhost:${updatedSearchPipe.config.port}`, {
           mode: "no-cors",
         });
       } catch (error) {
@@ -74,7 +113,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
 
       // Open the pipe window
       await invoke("open_pipe_window", {
-        port: searchPipe.config.port,
+        port: updatedSearchPipe.config.port,
         title: "search",
       });
 
@@ -84,9 +123,6 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
         description: "you can now search through your recordings",
         duration: 2000,
       });
-
-      // Move to next slide
-      // handleNextSlide();
     } catch (error) {
       console.error("failed to open search pipe:", error);
       toast({
@@ -96,6 +132,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
       });
     } finally {
       setIsLoading(false);
+      setStatus("");
     }
   };
 
@@ -122,24 +159,29 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
               screenpipe records your screen and audio 24/7 and makes it easy
               for AI to search through your recordings. developers can create
               powerful apps on top of screenpipe. let&apos;s start with
-              &quot;search&quot; to explore your recordings.
-              once in the search pipe, you can use the &quot;search&quot;
-              button to search through your recordings and ask a summary to AI.
+              &quot;search&quot; to explore your recordings. once in the search
+              pipe, you can use the &quot;search&quot; button to search through
+              your recordings and ask a summary to AI.
             </p>
 
-            <Button
-              size="lg"
-              className="gap-2 my-8"
-              onClick={handleOpenSearchPipe}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
+            <div className="flex flex-col items-center">
+              <Button
+                size="lg"
+                className="gap-2 my-8"
+                onClick={handleOpenSearchPipe}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Search className="w-4 h-4" />
+                )}
+                {isLoading ? "opening search..." : "open search pipe"}
+              </Button>
+              {status && (
+                <p className="text-sm text-muted-foreground mt-1">{status}</p>
               )}
-              {isLoading ? "opening search..." : "open search pipe"}
-            </Button>
+            </div>
           </div>
         </div>
       </div>
