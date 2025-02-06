@@ -1,13 +1,8 @@
 import React from "react";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { useOnboarding } from "../context";
 import { motion } from 'framer-motion'
 import { Terminal } from 'lucide-react'
-
-interface OnboardingInstructionsProps {
-  className?: string;
-}
 
 const container = {
   hidden: { opacity: 0 },
@@ -24,9 +19,7 @@ const item = {
   show: { opacity: 1, y: 0 }
 }
 
-const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
-  className = "",
-}) => {
+const OnboardingInstructions = () => {
   const { handleEnd, handlePrevSlide } = useOnboarding();
 
   return (

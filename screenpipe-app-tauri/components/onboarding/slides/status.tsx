@@ -21,10 +21,6 @@ import { toast } from "@/components/ui/use-toast";
 import localforage from "localforage";
 import { useOnboarding } from "../context";
 
-interface OnboardingStatusProps {
-  className?: string;
-}
-
 // Add PermissionsStatus type
 type PermissionsStatus = {
   screenRecording: string;

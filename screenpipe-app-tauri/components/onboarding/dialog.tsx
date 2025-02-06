@@ -30,11 +30,6 @@ const SlidesPerKey: Record<SlideKey, () => React.JSX.Element> = {
   [SlideKey.INSTRUCTIONS]: () => <OnboardingInstructions/>,
 }
 
-{/* <OnboardingIntro
-  className={`transition-opacity duration-300 
-  ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-  /> */}
-
 const Onboarding: React.FC = () => {
   const { showOnboarding, currentSlide, error } = useOnboarding();
   const { toast } = useToast();
