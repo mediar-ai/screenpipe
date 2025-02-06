@@ -17,17 +17,20 @@ import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
 import posthog from "posthog-js";
 import { slideFlow, SlideKey, trackOnboardingStep } from "./flow";
+import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
 
 const Onboarding: React.FC = () => {
+  const { 
+    selectedOptions, 
+    setSelectedOptions, 
+    selectedPersonalization, 
+    setSelectedPersonalization, 
+    selectedPreference, 
+    setSelectedPreference 
+  } = useOnboardingUserInput();
+  
   const { toast } = useToast();
   const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]); // use case selection (four options)
-  const [selectedPersonalization, setSelectedPersonalization] = useState<
-    string | null
-  >(null); // with ai or without ai
-  const [selectedPreference, setSelectedPreference] = useState<string | null>(
-    null
-  ); // dev or non dev
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const { showOnboarding, setShowOnboardingToFalse } = useOnboarding();
@@ -144,7 +147,7 @@ const Onboarding: React.FC = () => {
       finalPersonalization: selectedPersonalization,
     });
 
-    setShowOnboardingToFalse(false);
+    setShowOnboardingToFalse();
   };
 
   return (
@@ -236,7 +239,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === SlideKey.INSTRUCTIONS && (
+          {currentSlide === "instructions" && (
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
