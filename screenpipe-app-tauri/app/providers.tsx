@@ -3,7 +3,7 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
-import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
+import { OnboardingProvider } from "@/components/onboarding/context";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
 import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";

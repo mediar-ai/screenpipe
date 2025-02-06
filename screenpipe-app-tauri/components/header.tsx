@@ -32,7 +32,7 @@ import {
   Message,
 } from "@/components/inbox-messages";
 import { useState, useEffect } from "react";
-import { useOnboarding } from "@/lib/hooks/use-onboarding";
+import { useOnboarding } from "@/components/onboarding/context";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
