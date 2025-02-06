@@ -278,7 +278,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <div className="flex items-center gap-2">
                     {permissions && (
                       <span>
-                        {permissions.screenRecording ? (
+                        {permissions.screenRecording.toLowerCase() === "granted" ? (
                           <Check className="h-4 w-4 text-green-500" />
                         ) : (
                           <X className="h-4 w-4 text-red-500" />
@@ -327,7 +327,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   <div className="flex items-center gap-2">
                     {permissions && (
                       <span>
-                        {permissions.microphone ? (
+                        {permissions.microphone.toLowerCase() === "granted" ? (
                           <Check className="h-4 w-4 text-green-500" />
                         ) : (
                           <X className="h-4 w-4 text-red-500" />
@@ -370,7 +370,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     <div className="flex items-center gap-2">
                       {permissions && (
                         <span>
-                          {permissions.accessibility ? (
+                          {permissions.accessibility.toLowerCase() === "granted" ? (
                             <Check className="h-4 w-4 text-green-500" />
                           ) : (
                             <X className="h-4 w-4 text-red-500" />
