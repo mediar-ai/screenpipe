@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Settings } from "@screenpipe/browser";
+import type { Settings, AIProviderType } from "@screenpipe/browser";
 import { getDefaultSettings } from "@screenpipe/browser";
 
 export function useSettings() {
@@ -11,7 +11,7 @@ export function useSettings() {
     user: {
       token: "user_2rQBgoyVpTpGhU6812L9jruuz6Z",
     },
-    aiProviderType: "screenpipe-cloud", // This ensures the token is used
+    aiProviderType: "screenpipe-cloud" as AIProviderType, // Fix the type here
   };
 
   const [settings, setSettings] = useState<Settings>(defaultSettings);
