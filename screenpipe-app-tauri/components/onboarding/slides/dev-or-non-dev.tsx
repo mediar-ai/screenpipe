@@ -7,13 +7,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { invoke } from "@tauri-apps/api/core";
+import { useOnboarding } from "../context";
 
 interface OnboardingDevOrNonDevProps {
   className?: string;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
   handleOptionClick: (option: string) => void;
-  selectedPreference?: string | null;
 }
 
 const DEV_OPTIONS = [
@@ -62,11 +62,11 @@ const CardItem: React.FC<{
 
 const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   className = "",
-  selectedPreference = "",
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
+  const { selectedPreference } = useOnboarding();
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);

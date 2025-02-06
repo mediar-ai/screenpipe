@@ -1,4 +1,3 @@
-import localforage from "localforage";
 import React, { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import OnboardingPipes from "@/components/onboarding/slides/pipes";
@@ -15,26 +14,14 @@ import { useOnboarding } from "@/components/onboarding/context";
 import { useSettings } from "@/lib/hooks/use-settings";
 import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
-import posthog from "posthog-js";
 import { slideFlow, SlideKey, trackOnboardingStep } from "./flow";
-import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
 
 const Onboarding: React.FC = () => {
-  const { 
-    selectedOptions, 
-    setSelectedOptions, 
-    selectedPersonalization, 
-    setSelectedPersonalization, 
-    selectedPreference, 
-    setSelectedPreference 
-  } = useOnboardingUserInput();
-  
   const { toast } = useToast();
   const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
-  const { showOnboarding, setShowOnboardingToFalse } = useOnboarding();
-  const { updateSettings } = useSettings();
+  const { showOnboarding } = useOnboarding();
 
   useEffect(() => {
     setIsVisible(true);
@@ -182,7 +169,6 @@ const Onboarding: React.FC = () => {
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={handleOptionClick}
-              selectedOptions={selectedOptions}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />
@@ -192,7 +178,6 @@ const Onboarding: React.FC = () => {
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={setSelectedPersonalization}
-              selectedPersonalization={selectedPersonalization}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />
@@ -218,7 +203,6 @@ const Onboarding: React.FC = () => {
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
               handleOptionClick={setSelectedPreference}
-              selectedPreference={selectedPreference}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />

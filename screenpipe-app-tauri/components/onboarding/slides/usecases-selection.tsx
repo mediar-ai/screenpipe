@@ -9,10 +9,10 @@ import {
 } from "lucide-react";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import posthog from "posthog-js";
+import { useOnboarding } from "../context";
 
 interface OnboardingSelectionProps {
   className?: string;
-  selectedOptions: string[] | null;
   handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
@@ -76,11 +76,12 @@ const SelectionItem: React.FC<{
 
 const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   className,
-  selectedOptions,
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
+  const { selectedOptions } = useOnboarding();
+
   const handleNext = () => {
     // Track selected options in Posthog
     posthog.capture("onboarding_usecases_selected", {

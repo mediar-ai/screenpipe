@@ -3,12 +3,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { TextSearch, BotMessageSquare } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
+import { useOnboarding } from "../context";
 
 interface OnboardingPersonalizeProps {
   handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
-  selectedPersonalization?: string | null;
   className?: string;
 }
 
@@ -71,11 +71,12 @@ const CardItem: React.FC<{
 
 const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   className = "",
-  selectedPersonalization = "",
   handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
+  const { selectedPersonalization, setSelectedPersonalization } = useOnboarding();
+
   return (
     <div
       className={`${className} w-full flex justify-center flex-col relative`}
