@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, SetStateAction, 
 import posthog from "posthog-js";
 import { useOnboardingVisibility } from "./hooks/use-onboarding-visibility";
 import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
-import { trackOnboardingStep } from "./flow";
+import { slideFlow, trackOnboardingStep } from "./flow";
 
 interface OnboardingContextType {
   showOnboarding: boolean;

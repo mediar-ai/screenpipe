@@ -13,12 +13,12 @@ import OnboardingInstructions from "@/components/onboarding/slides/explain-instr
 import { useOnboarding } from "@/components/onboarding/context";
 import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
-import { slideFlow, SlideKey, trackOnboardingStep } from "./flow";
+import { SlideKey } from "./flow";
+import { useOnboardingFlow } from "./hooks/use-onboarding-flow";
 
 const Onboarding: React.FC = () => {
   const { toast } = useToast();
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
-  const [error, setError] = useState<string | null>(null);
+  const { currentSlide, error, handleNextSlide, handlePrevSlide } = useOnboardingFlow();
   const [isVisible, setIsVisible] = useState(false);
   const { showOnboarding } = useOnboarding();
 
@@ -47,75 +47,6 @@ const Onboarding: React.FC = () => {
       });
     }
   }, [error, toast]);
-
-  const handleNextSlide = () => {
-    const nextSlide = slideFlow[currentSlide].next(
-      selectedOptions,
-      selectedPreference,
-      selectedPersonalization
-    );
-
-    trackOnboardingStep(currentSlide, {
-      selectedOptions,
-      selectedPreference,
-      selectedPersonalization,
-      direction: "next",
-    });
-
-    if (
-      currentSlide === "selection" &&
-      (!selectedOptions || selectedOptions.length === 0)
-    ) {
-      setError("please select at least one option before proceeding!");
-      return;
-    }
-    if (currentSlide === "personalize" && !selectedPersonalization) {
-      setError("please choose a personalization option!");
-      return;
-    }
-    if (currentSlide === "devOrNonDev" && !selectedPreference) {
-      setError("please choose a preference option!");
-      return;
-    }
-    if (nextSlide) {
-      setIsVisible(false);
-      setTimeout(() => {
-        setCurrentSlide(nextSlide);
-        setError(null);
-      }, 300);
-    } else {
-      setError("Please validate selection");
-    }
-  };
-
-  const handlePrevSlide = () => {
-    setIsVisible(false);
-
-    trackOnboardingStep(currentSlide, {
-      selectedOptions,
-      selectedPreference,
-      selectedPersonalization,
-      direction: "back",
-    });
-
-    setTimeout(() => {
-      const prevSlide = slideFlow[currentSlide].prev(
-        selectedOptions,
-        selectedPreference,
-        selectedPersonalization
-      );
-      if (prevSlide) {
-        setError(null);
-        setCurrentSlide(prevSlide);
-      }
-    }, 300);
-  };
-
-  const handleDialogClose = (open: boolean) => {
-    if (!open && currentSlide) {
-      // setShowOnboarding(open);
-    }
-  };
 
   return (
     <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
