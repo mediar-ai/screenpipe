@@ -47,6 +47,7 @@ if you do your job well, i'll give you a 🍺 and $1m`,
       try {
         const response = await fetch("/api/settings");
         const data = await response.json();
+        console.log("useSettings data", data?.customSettings?.obsidian);
         setSettings({ ...defaultSettings, ...data });
       } catch (err) {
         console.error("failed to load settings:", err);
