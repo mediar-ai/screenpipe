@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect, SetStateAction, 
 import posthog from "posthog-js";
 import { useOnboardingVisibility } from "./hooks/use-onboarding-visibility";
 import { useOnboardingUserInput } from "./hooks/use-onboarding-user-input";
+import { trackOnboardingStep } from "./flow";
 
 interface OnboardingContextType {
   showOnboarding: boolean;
@@ -11,7 +12,8 @@ interface OnboardingContextType {
   setSelectedOptions: Dispatch<SetStateAction<string[]>>;
   setSelectedPersonalization: Dispatch<SetStateAction<string | null>>;
   setSelectedPreference: Dispatch<SetStateAction<string | null>>;
-}
+  handleEnd: () => Promise<void>;
+} 
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
   undefined
@@ -45,6 +47,16 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     posthog.capture("onboarding_completed");
   }
 
+  async function handleEnd() {
+    trackOnboardingStep("completed", {
+      finalOptions: selectedOptions,
+      finalPreference: selectedPreference,
+      finalPersonalization: selectedPersonalization,
+    });
+
+    setShowOnboardingToFalse();
+  };
+
   return (
     <OnboardingContext.Provider value={{ 
         showOnboarding,
@@ -53,7 +65,8 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
         selectedPreference,
         setSelectedOptions,
         setSelectedPersonalization,
-        setSelectedPreference
+        setSelectedPreference,
+        handleEnd
     }}>
       {children}
     </OnboardingContext.Provider>

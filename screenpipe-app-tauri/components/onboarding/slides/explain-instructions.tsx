@@ -1,26 +1,19 @@
 import React from "react";
-import { HelpCircle, Info } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { useOnboarding } from "../context";
 
 interface OnboardingInstructionsProps {
   className?: string;
   handlePrevSlide: () => void;
-  handleNextSlide: () => void;
 }
 
 const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
   className = "",
   handlePrevSlide,
-  handleNextSlide,
 }) => {
+  const { handleEnd } = useOnboarding();
+
   return (
     <div className={`${className} w-full flex justify-center flex-col overflow-y-auto`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
@@ -118,7 +111,7 @@ const OnboardingInstructions: React.FC<OnboardingInstructionsProps> = ({
       <OnboardingNavigation
         className="mt-8"
         handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
+        handleNextSlide={handleEnd}
         prevBtnText="previous"
         nextBtnText="next"
       />

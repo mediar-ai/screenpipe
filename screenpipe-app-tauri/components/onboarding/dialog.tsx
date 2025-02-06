@@ -117,16 +117,6 @@ const Onboarding: React.FC = () => {
     }
   };
 
-  const handleEnd = async () => {
-    trackOnboardingStep("completed", {
-      finalOptions: selectedOptions,
-      finalPreference: selectedPreference,
-      finalPersonalization: selectedPersonalization,
-    });
-
-    setShowOnboardingToFalse();
-  };
-
   return (
     <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
       <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
@@ -183,7 +173,6 @@ const Onboarding: React.FC = () => {
             <OnboardingPipeStore
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
           )}
@@ -216,7 +205,6 @@ const Onboarding: React.FC = () => {
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleEnd}
               handlePrevSlide={handlePrevSlide}
             />
           )}
