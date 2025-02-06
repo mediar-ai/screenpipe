@@ -5,7 +5,14 @@ import type { Settings } from "@screenpipe/browser";
 import { getDefaultSettings } from "@screenpipe/browser";
 
 export function useSettings() {
-  const defaultSettings = getDefaultSettings();
+  const defaultSettings = {
+    ...getDefaultSettings(),
+    // Add hardcoded user token for testing
+    user: {
+      token: "user_2rQBgoyVpTpGhU6812L9jruuz6Z",
+    },
+    aiProviderType: "screenpipe-cloud", // This ensures the token is used
+  };
 
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading] = useState(false);
