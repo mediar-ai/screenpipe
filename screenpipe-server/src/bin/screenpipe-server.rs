@@ -1348,8 +1348,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tokio::task::block_in_place(|| {
-        drop(vision_runtime);
-        drop(audio_runtime);
+        vision_runtime.shutdown_timeout(Duration::from_secs(10));
+        audio_runtime.shutdown_timeout(Duration::from_secs(10));
     });
 
     info!("shutdown complete");

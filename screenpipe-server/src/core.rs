@@ -161,6 +161,7 @@ pub async fn start_continuous_recording(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_vision(
     device_manager: Arc<DeviceManager>,
     ocr_engine: Arc<OcrEngine>,
@@ -407,6 +408,7 @@ async fn process_ocr_frame(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_audio(
     device_manager: Arc<DeviceManager>,
     db: Arc<DatabaseManager>,

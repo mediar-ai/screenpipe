@@ -70,7 +70,8 @@ pub async fn start_deepgram_stream(
 
     info!(
         "Starting deepgram stream with api key: {:?} and url: {:?}",
-        api_key, DEEPGRAM_WEBSOCKET_URL.as_str()
+        api_key,
+        DEEPGRAM_WEBSOCKET_URL.as_str()
     );
 
     let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
