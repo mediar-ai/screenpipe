@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/dev",
-  "version": "1.1.4",
+  "version": "1.1.5-beta.2",
   "description": "screenpipe development CLI",
   "type": "module",
   "main": "dist/index.js",
