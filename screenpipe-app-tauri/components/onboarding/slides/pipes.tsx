@@ -4,18 +4,15 @@ import { ArrowUpRight } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { open } from "@tauri-apps/plugin-shell";
-
+import { useOnboarding } from "../context";
 interface OnboardingPipesProps {
   className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
 }
 
 const OnboardingPipes: React.FC<OnboardingPipesProps> = ({
   className = "",
-  handlePrevSlide,
-  handleNextSlide,
 }) => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   return (
     <div className={`${className} w-full flex justify-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">

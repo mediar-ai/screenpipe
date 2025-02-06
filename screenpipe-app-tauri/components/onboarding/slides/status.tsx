@@ -19,11 +19,10 @@ import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
 import localforage from "localforage";
+import { useOnboarding } from "../context";
 
 interface OnboardingStatusProps {
   className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
 }
 
 // Add PermissionsStatus type
@@ -39,9 +38,8 @@ const setRestartPending = async () => {
 
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
-  handlePrevSlide,
-  handleNextSlide,
 }) => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
@@ -55,8 +53,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     audioSeconds: number;
   } | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
-
-  console.log({status, permissions, isRestartNeeded, stats, isMacOS, useChineseMirror})
 
   useEffect(() => {
     const checkRestartStatus = async () => {

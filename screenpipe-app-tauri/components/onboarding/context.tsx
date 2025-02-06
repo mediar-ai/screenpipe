@@ -18,6 +18,9 @@ interface OnboardingContextType {
   error: string | null;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
+  skipOnboarding: () => void;
+  completeOnboarding: () => void;
+  handleEnd: () => Promise<void>;
 } 
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -46,7 +49,10 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     currentSlide, 
     error, 
     handleNextSlide, 
-    handlePrevSlide 
+    handlePrevSlide,
+    skipOnboarding,
+    completeOnboarding,
+    handleEnd
   } = useOnboardingFlow();
 
   return (
@@ -63,7 +69,10 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
         currentSlide,
         error,
         handleNextSlide,
-        handlePrevSlide
+        handlePrevSlide,
+        skipOnboarding,
+        completeOnboarding,
+        handleEnd
     }}>
       {children}
     </OnboardingContext.Provider>

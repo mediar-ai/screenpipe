@@ -5,11 +5,10 @@ import { platform } from "@tauri-apps/plugin-os";
 import { CodeBlock } from "@/components/onboarding/slides/single-codeblock";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
+import { useOnboarding } from "../context";
 
 interface OnboardingDevConfigProps {
   className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
 }
 
 interface devInstructionsItemsTypes {
@@ -22,9 +21,8 @@ type devInstructionItems = Record<string, devInstructionsItemsTypes[]>;
 
 const OnboardingDevConfig: React.FC<OnboardingDevConfigProps> = ({
   className = "",
-  handlePrevSlide,
-  handleNextSlide,
 }) => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const [instructions, setInstructions] = useState<devInstructionsItemsTypes[]>(
     []
   );

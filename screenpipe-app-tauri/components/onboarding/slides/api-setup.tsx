@@ -9,18 +9,16 @@ import { open } from "@tauri-apps/plugin-shell";
 import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 
 import AISection from "../../settings/ai-section";
+import { useOnboarding } from "../context";
 
 interface OnboardingAPISetupProps {
   className?: string;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
 }
 
 const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
   className,
-  handleNextSlide,
-  handlePrevSlide,
 }) => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = React.useState(settings);

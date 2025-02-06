@@ -13,8 +13,6 @@ import { useOnboarding } from "../context";
 
 interface OnboardingSelectionProps {
   className?: string;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
 }
 
 const OPTIONS = [
@@ -75,10 +73,8 @@ const SelectionItem: React.FC<{
 
 const OnboardingSelection: React.FC<OnboardingSelectionProps> = ({
   className,
-  handleNextSlide,
-  handlePrevSlide,
 }) => {
-  const { selectedOptions, setSelectedOptions } = useOnboarding();
+  const { selectedOptions, setSelectedOptions, handleNextSlide, handlePrevSlide } = useOnboarding();
 
   const handleOptionClick = (option: string) => {
     setSelectedOptions((prevOptions: string[]) =>

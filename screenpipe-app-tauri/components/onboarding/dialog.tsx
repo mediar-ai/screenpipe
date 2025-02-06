@@ -16,7 +16,7 @@ import OnboardingPipeStore from "./slides/pipe-store";
 import { SlideKey } from "./flow";
 
 const Onboarding: React.FC = () => {
-  const { showOnboarding, currentSlide, error, handleNextSlide, handlePrevSlide } = useOnboarding();
+  const { showOnboarding, currentSlide, error } = useOnboarding();
   const [isVisible, setIsVisible] = useState(false);
   const { toast } = useToast();
 
@@ -54,85 +54,66 @@ const Onboarding: React.FC = () => {
             <OnboardingIntro
               className={`transition-opacity duration-300 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === SlideKey.STATUS && (
             <OnboardingStatus
               className={`transition-opacity duration-300 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === SlideKey.LOGIN && (
             <OnboardingLogin
               className={`transition-opacity duration-300 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === SlideKey.SELECTION && (
             <OnboardingSelection
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === SlideKey.PERSONALIZE && (
             <OnboardingPersonalize
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === SlideKey.API_SETUP && (
             <OnboardingAPISetup
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === SlideKey.PIPE_STORE && (
             <OnboardingPipeStore
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === SlideKey.DEV_OR_NON_DEV && (
             <OnboardingDevOrNonDev
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
-              handleNextSlide={handleNextSlide}
             />
           )}
           {currentSlide === SlideKey.DEV_CONFIG && (
             <OnboardingDevConfig
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === SlideKey.PIPES && (
             <OnboardingPipes
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleNextSlide={handleNextSlide}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
           {currentSlide === "instructions" && (
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handlePrevSlide={handlePrevSlide}
             />
           )}
         </div>

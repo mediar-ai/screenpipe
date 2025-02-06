@@ -3,23 +3,16 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { RainbowButton } from "../../ui/rainbow-button";
 import { ArrowRight } from "lucide-react";
-import posthog from "posthog-js";
 import { useOnboarding } from "@/components/onboarding/context";
 
 interface OnboardingIntroProps {
   className?: string;
-  handleNextSlide: () => void;
 }
 
 const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
   className = "",
-  handleNextSlide,
 }) => {
-  const { setShowOnboardingToFalse } = useOnboarding();
-  const handleSkip = () => {
-    setShowOnboardingToFalse(false);
-    posthog.capture("onboarding_skipped");
-  };
+  const { skipOnboarding, handleNextSlide } = useOnboarding();
 
   return (
     <div className={` flex justify-center items-center flex-col ${className}`}>
@@ -49,7 +42,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
       <div className="flex gap-4 mt-4">
         <Button
           variant="ghost"
-          onClick={handleSkip}
+          onClick={skipOnboarding}
           className="text-muted-foreground"
         >
           skip onboarding
