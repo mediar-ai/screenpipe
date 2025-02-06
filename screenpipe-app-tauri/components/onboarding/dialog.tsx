@@ -14,6 +14,7 @@ import { useOnboarding } from "@/components/onboarding/context";
 import OnboardingLogin from "./slides/login";
 import OnboardingPipeStore from "./slides/pipe-store";
 import { SlideKey } from "./flow";
+import { AnimatePresence, motion } from "framer-motion";
 
 const SlidesPerKey: Record<SlideKey, () => React.JSX.Element> = {
   [SlideKey.INTRO]: () => <OnboardingIntro/>,
@@ -36,12 +37,7 @@ const SlidesPerKey: Record<SlideKey, () => React.JSX.Element> = {
 
 const Onboarding: React.FC = () => {
   const { showOnboarding, currentSlide, error } = useOnboarding();
-  const [isVisible, setIsVisible] = useState(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    setIsVisible(true);
-  }, [currentSlide]);
 
   useEffect(() => {
     if (showOnboarding) {
@@ -68,9 +64,18 @@ const Onboarding: React.FC = () => {
   return (
     <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
       <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
-        <div key={currentSlide} className="flex flex-col w-full h-full overflow-hidden">
-          {SlidesPerKey[currentSlide]()}
-        </div>
+        <AnimatePresence mode="wait">
+          <motion.div 
+          key={currentSlide} 
+          className="flex flex-col w-full h-full overflow-hidden"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          >
+            {SlidesPerKey[currentSlide]()}
+          </motion.div>
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );
