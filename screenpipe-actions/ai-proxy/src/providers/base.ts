@@ -9,4 +9,5 @@ export interface AIProvider {
 	createStreamingCompletion(body: RequestBody): Promise<ReadableStream>;
 	formatMessages(messages: Message[]): any;
 	formatResponse(response: any): any;
+	listModels(): Promise<{ id: string; name: string; provider: string }[]>;
 }
