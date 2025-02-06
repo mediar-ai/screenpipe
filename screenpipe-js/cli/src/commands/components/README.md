@@ -9,19 +9,19 @@ a cli for adding screenpipe components to your project.
 use the `add` command to adds a component to your project and install all required dependencies.
 
 ```bash
-bunx screenpipe-cli add [component]
+bunx --bun @screenpipe/dev@latest components add [component]
 ```
 
 ### Example
 
 ```bash
-bunx screenpipe-cli add use-health
+bunx --bun @screenpipe/dev@latest components use-health
 ```
 
 you can also run the command without any arguments to view a list of all available components:
 
 ```bash
-bunx screenpipe-cli add
+bunx --bun @screenpipe/dev@latest components add
 ```
 
 ### Registry
