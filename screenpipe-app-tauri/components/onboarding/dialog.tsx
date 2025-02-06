@@ -20,7 +20,7 @@ import { slideFlow, SlideKey, trackOnboardingStep } from "./flow";
 
 const Onboarding: React.FC = () => {
   const { toast } = useToast();
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>("intro");
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]); // use case selection (four options)
   const [selectedPersonalization, setSelectedPersonalization] = useState<
     string | null
@@ -158,7 +158,7 @@ const Onboarding: React.FC = () => {
               handleNextSlide={handleNextSlide}
             />
           )}
-          {currentSlide === "status" && (
+          {currentSlide === SlideKey.STATUS && (
             <OnboardingStatus
               className={`transition-opacity duration-300 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -166,7 +166,7 @@ const Onboarding: React.FC = () => {
               handleNextSlide={handleNextSlide}
             />
           )}
-          {currentSlide === "login" && (
+          {currentSlide === SlideKey.LOGIN && (
             <OnboardingLogin
               className={`transition-opacity duration-300 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -174,7 +174,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "selection" && (
+          {currentSlide === SlideKey.SELECTION && (
             <OnboardingSelection
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -184,7 +184,7 @@ const Onboarding: React.FC = () => {
               handleNextSlide={handleNextSlide}
             />
           )}
-          {currentSlide === "personalize" && (
+          {currentSlide === SlideKey.PERSONALIZE && (
             <OnboardingPersonalize
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -194,7 +194,7 @@ const Onboarding: React.FC = () => {
               handleNextSlide={handleNextSlide}
             />
           )}
-          {currentSlide === "apiSetup" && (
+          {currentSlide === SlideKey.API_SETUP && (
             <OnboardingAPISetup
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -202,7 +202,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "pipeStore" && (
+          {currentSlide === SlideKey.PIPE_STORE && (
             <OnboardingPipeStore
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -210,7 +210,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "devOrNonDev" && (
+          {currentSlide === SlideKey.DEV_OR_NON_DEV && (
             <OnboardingDevOrNonDev
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -220,7 +220,7 @@ const Onboarding: React.FC = () => {
               handleNextSlide={handleNextSlide}
             />
           )}
-          {currentSlide === "devConfig" && (
+          {currentSlide === SlideKey.DEV_CONFIG && (
             <OnboardingDevConfig
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -228,7 +228,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "pipes" && (
+          {currentSlide === SlideKey.PIPES && (
             <OnboardingPipes
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
@@ -236,7 +236,7 @@ const Onboarding: React.FC = () => {
               handlePrevSlide={handlePrevSlide}
             />
           )}
-          {currentSlide === "instructions" && (
+          {currentSlide === SlideKey.INSTRUCTIONS && (
             <OnboardingInstructions
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}

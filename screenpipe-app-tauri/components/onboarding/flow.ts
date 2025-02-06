@@ -1,17 +1,20 @@
 import posthog from "posthog-js";
 
-export type SlideKey =
-  | "intro"
-  | "status"
-  | "login"
-  | "selection"
-  | "personalize"
-  | "apiSetup"
-  | "devOrNonDev"
-  | "devConfig"
-  | "pipes"
-  | "pipeStore"
-  | "instructions";
+export const SlideKey = {
+    INTRO: "intro",
+    STATUS: "status",
+    LOGIN: "login",
+    SELECTION: "selection",
+    PERSONALIZE: "personalize",
+    API_SETUP: "apiSetup",   
+    DEV_OR_NON_DEV: "devOrNonDev",
+    DEV_CONFIG: "devConfig",
+    PIPES: "pipes",
+    PIPE_STORE: "pipeStore",
+    INSTRUCTIONS: "instructions",   
+} as const 
+
+export type SlideKey = (typeof SlideKey)[keyof typeof SlideKey];
 
 export const slideFlow: Record<
   SlideKey,
