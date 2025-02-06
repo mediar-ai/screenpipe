@@ -6,7 +6,6 @@ import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { useOnboarding } from "../context";
 
 interface OnboardingPersonalizeProps {
-  handleOptionClick: (option: string) => void;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
   className?: string;
@@ -71,7 +70,6 @@ const CardItem: React.FC<{
 
 const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
   className = "",
-  handleOptionClick,
   handleNextSlide,
   handlePrevSlide,
 }) => {
@@ -97,7 +95,7 @@ const OnboardingPersonalize: React.FC<OnboardingPersonalizeProps> = ({
             key={option.key}
             option={option}
             isSelected={selectedPersonalization === option.key}
-            onClick={() => handleOptionClick(option.key)}
+            onClick={() => setSelectedPersonalization(option.key)}
           />
         ))}
       </div>

@@ -156,7 +156,6 @@ const Onboarding: React.FC = () => {
             <OnboardingPersonalize
               className={`transition-opacity duration-300 ease-in-out 
               ${isVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"}`}
-              handleOptionClick={setSelectedPersonalization}
               handlePrevSlide={handlePrevSlide}
               handleNextSlide={handleNextSlide}
             />
