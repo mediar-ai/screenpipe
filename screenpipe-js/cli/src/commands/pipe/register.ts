@@ -1,10 +1,10 @@
 import fs from "fs";
-import { Credentials } from "../utils/credentials";
-import { API_BASE_URL } from "../constants";
-import { colors, symbols } from "../utils/colors";
+import { Credentials } from "../../utils/credentials";
+import { API_BASE_URL } from "../../constants";
+import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
-import { logger } from "./components/commands/add/utils/logger";
-import { handleError } from "./components/commands/add/utils/handle-error";
+import { logger } from "../components/commands/add/utils/logger";
+import { handleError } from "../components/commands/add/utils/handle-error";
 
 export const registerCommand = new Command()
   .name('register')

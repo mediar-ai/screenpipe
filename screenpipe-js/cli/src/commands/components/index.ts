@@ -4,7 +4,7 @@ import { Command } from "commander";
 
 export const componentsCommands = new Command()
   .name("components")
-  .description("commands to interact with screenpipe's components")
+  .description("easily add screenpipe components to your project")
 
 componentsCommands.addCommand(addComponentCommand)
 

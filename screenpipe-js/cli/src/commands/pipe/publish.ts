@@ -1,11 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { Credentials } from "../utils/credentials";
-import { API_BASE_URL } from "../constants";
+import { Credentials } from "../../utils/credentials";
+import { API_BASE_URL } from "../../constants";
 import archiver from "archiver";
 import crypto from "crypto";
 import ignore from "ignore";
-import { colors, symbols } from "../utils/colors";
+import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
 
 interface ProjectFiles {

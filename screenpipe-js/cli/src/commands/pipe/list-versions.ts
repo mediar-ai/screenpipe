@@ -1,8 +1,8 @@
-import { API_BASE_URL } from "../constants";
-import { Credentials } from "../utils/credentials";
-import { colors, symbols } from "../utils/colors";
+import { API_BASE_URL } from "../../constants";
+import { Credentials } from "../../utils/credentials";
+import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
-import { handleError } from "./components/commands/add/utils/handle-error";
+import { handleError } from "../components/commands/add/utils/handle-error";
 
 export const listVersionsCommand = new Command()
   .name('list-versions')

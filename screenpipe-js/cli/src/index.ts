@@ -3,11 +3,8 @@ import {
   appCommands,
   loginCommand,
   componentsCommands, 
-  registerCommand,
-  publishCommand,
-  listVersionsCommand,
   logoutCommand,
-  createPipeCommand
+  pipeCommands
 } from "./commands";
 
 process.on("SIGINT", () => process.exit(0))
@@ -24,11 +21,8 @@ async function main() {
   program.addCommand(loginCommand)
   program.addCommand(logoutCommand)
   program.addCommand(appCommands)
-  program.addCommand(createPipeCommand)
+  program.addCommand(pipeCommands)
   program.addCommand(componentsCommands)
-  program.addCommand(registerCommand)
-  program.addCommand(publishCommand)
-  program.addCommand(listVersionsCommand)
 
 
   program.parse()
