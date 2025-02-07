@@ -4,23 +4,23 @@ import { registryResolvedComponentsTreeSchema, RegistrySchema, registrySchema } 
 import registry from "./registry.json";
 import deepmerge from "deepmerge";
 
-export async function getRegistry() {
+export function getRegistry() {
     try {
       const parsedRegistry = registrySchema.parse(registry)
       return parsedRegistry
     } catch (error) {
-      logger.error("\n")
+      logger.break()
       handleError(error)
     }
 }
 
-async function resolveRegistryItems(names: string[]) {
+function resolveRegistryItems(names: string[]) {
   let registryDependencies: RegistrySchema = {}
-  const registry = await getRegistry()
+  const registry = getRegistry()
   if(!registry) return
 
   for (const name of names) {
-    const itemRegistryDependencies = await resolveRegistryDependencies(
+    const itemRegistryDependencies = resolveRegistryDependencies(
       name,
       registry
     )
@@ -34,75 +34,66 @@ async function resolveRegistryItems(names: string[]) {
   return registryDependencies
 }
 
-async function resolveRegistryDependencies(
+function resolveRegistryDependencies(
   name: string,
   registry: RegistrySchema
-): Promise<RegistrySchema> {
+): RegistrySchema {
   const components: RegistrySchema = {}
   
   
-  async function resolveDependencies(componentName: string) {
-    try {
+  function resolveDependencies(componentName: string) {
       if (registry[componentName]) {
         components[componentName] = registry[componentName]
       } else {
-        throw Error(componentName)
+        logger.break()
+        handleError(
+          `Component ${componentName} not found.`,
+        )
       }
 
       if (registry[componentName].registryDependencies) {
         for (const dependency of registry[componentName].registryDependencies) {
-          await resolveDependencies(dependency)
+          resolveDependencies(dependency)
         }
       }
-    } catch (error: any) {
-      console.error(
-        `Component ${error.message} not found.`,
-        error
-      )
-    }
   }
 
-  await resolveDependencies(name)
+  resolveDependencies(name)
   return components
 }
 
-export async function registryResolveItemsTree(
+export function registryResolveItemsTree(
   names: RegistrySchema['']["name"][],
 ) {
-  try {
-    let relevantItemsRegistry = await resolveRegistryItems(names)
-    const payload = registrySchema.parse(relevantItemsRegistry)
+  let relevantItemsRegistry = resolveRegistryItems(names)
+  const payload = registrySchema.parse(relevantItemsRegistry)
 
-    if (!payload) {
-      return null
-    }
-
-    const componentArray = Object.values(payload)
-
-    let docs = ""
-    componentArray.forEach((item) => {
-      if (item.docs) {
-        docs += `${item.docs}\n`
-      }
-    })
-
-    return registryResolvedComponentsTreeSchema.parse({
-      dependencies: deepmerge.all(
-        componentArray.map((item) => item.dependencies ?? [])
-      ),
-      devDependencies: deepmerge.all(
-        componentArray.map((item) => item.devDependencies ?? [])
-      ),
-      files: componentArray.map((item) => {
-        return {
-          src: item.src, 
-          target: item.target
-        }
-      }),
-      docs,
-    })
-  } catch (error) {
-    handleError(error)
+  if (!payload) {
     return null
   }
+
+  const componentArray = Object.values(payload)
+
+  let docs = ""
+  componentArray.forEach((item) => {
+    if (item.docs) {
+      docs += `${item.docs}\n`
+    }
+  })
+
+  return registryResolvedComponentsTreeSchema.parse({
+    dependencies: deepmerge.all(
+      componentArray.map((item) => item.dependencies ?? [])
+    ),
+    devDependencies: deepmerge.all(
+      componentArray.map((item) => item.devDependencies ?? [])
+    ),
+    files: componentArray.map((item) => {
+      return {
+        src: item.src, 
+        target: item.target
+      }
+    }),
+    docs,
+  })
 }

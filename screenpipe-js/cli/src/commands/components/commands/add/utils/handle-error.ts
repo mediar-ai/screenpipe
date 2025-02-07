@@ -3,9 +3,9 @@ import { highlighter, logger } from "./logger"
 
 export function handleError(error: unknown) {
   logger.error(
-    `Something went wrong. Please check the error below for more details.`
+    `something went wrong. please check the error below for more details.`
   )
-  logger.error(`If the problem persists, please open an issue on GitHub.`)
+  logger.error(`if the problem persists, please open an issue on github.`)
   logger.error("")
   if (typeof error === "string") {
     logger.error(error)
@@ -14,7 +14,7 @@ export function handleError(error: unknown) {
   }
 
   if (error instanceof z.ZodError) {
-    logger.error("Validation failed:")
+    logger.error("validation failed:")
     for (const [key, value] of Object.entries(error.flatten().fieldErrors)) {
       logger.error(`- ${highlighter.info(key)}: ${value}`)
     }
