@@ -64,6 +64,8 @@ export function useHealthCheck() {
   const [isLoading, setIsLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const healthRef = useRef(health);
+  const previousHealthStatus = useRef<string | null>(null);
+  const unhealthyTransitionsRef = useRef<number>(0);
 
   const fetchHealth = useCallback(async () => {
     if (abortControllerRef.current) {
@@ -97,15 +99,23 @@ export function useHealthCheck() {
 
       if (
         data.status === "unhealthy" &&
-        shouldSendPosthogEvent("health_check_unhealthy")
+        previousHealthStatus.current === "healthy"
       ) {
-        posthog.capture("health_check_unhealthy", {
-          frame_status: data.frame_status,
-          audio_status: data.audio_status,
-          ui_status: data.ui_status,
-          message: data.message,
-        });
+        unhealthyTransitionsRef.current += 1;
+
+        if (shouldSendPosthogEvent("health_check_unhealthy")) {
+          posthog.capture("health_check_unhealthy", {
+            frame_status: data.frame_status,
+            audio_status: data.audio_status,
+            ui_status: data.ui_status,
+            message: data.message,
+            transitions_since_last_event: unhealthyTransitionsRef.current,
+          });
+          unhealthyTransitionsRef.current = 0;
+        }
       }
+
+      previousHealthStatus.current = data.status;
 
       if (isHealthChanged(healthRef.current, data)) {
         setHealth(data);
