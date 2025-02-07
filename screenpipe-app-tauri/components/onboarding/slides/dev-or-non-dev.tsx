@@ -1,16 +1,20 @@
 import React, { useState } from "react";
-import { Wrench, UserRound, Code2, User } from "lucide-react";
+import { Info } from "lucide-react";
+import { Wrench, UserRound } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/slides/navigation";
 import { invoke } from "@tauri-apps/api/core";
+import OnboardingNavigation from "./navigation";
 import { useOnboarding } from "../context";
-import { motion } from 'framer-motion'
 
 interface OnboardingDevOrNonDevProps {
   className?: string;
+  handleNextSlide: () => void;
+  handlePrevSlide: () => void;
+  handleOptionClick: (option: string) => void;
+  selectedPreference?: string | null;
 }
 
 const DEV_OPTIONS = [
@@ -57,25 +61,8 @@ const CardItem: React.FC<{
   );
 };
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-}
-
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
-}
-
-const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
-  className = "",
-}) => {
-  const { selectedPreference, setSelectedPreference, handleNextSlide, handlePrevSlide } = useOnboarding();
+const OnboardingDevOrNonDev = () => {
+  const { handleNextSlide, handlePrevSlide, selectedPreference, setSelectedPreference } = useOnboarding();
   const { toast } = useToast();
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
@@ -83,7 +70,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   const handleNextWithPreference = async (option: string) => {
     try {
       if (option === "devMode") {
-        updateSettings({ devMode: true });
+        await updateSettings({ devMode: true });
         setLocalSettings({ ...localSettings, devMode: true });
         toast({
           title: "success",
@@ -91,7 +78,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           variant: "default",
         });
       } else if (option === "nonDevMode") {
-        updateSettings({ devMode: false });
+        await updateSettings({ devMode: false });
         setLocalSettings({ ...localSettings, devMode: false });
         toast({
           title: "success",
@@ -111,11 +98,8 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
   };
 
   return (
-    <motion.div
-      variants={container}
-      initial="hidden"
-      animate="show"
-      className={`${className} w-full flex justify-around flex-col relative`}
+    <div
+      className={`w-full flex justify-around flex-col relative`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img
@@ -150,7 +134,7 @@ const OnboardingDevOrNonDev: React.FC<OnboardingDevOrNonDevProps> = ({
           handleNextSlide();
         }}
       />
-    </motion.div>
+    </div>
   );
 };
 
