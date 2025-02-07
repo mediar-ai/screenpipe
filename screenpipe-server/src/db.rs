@@ -984,8 +984,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR frames.timestamp <= ?3)
                         AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR COALESCE(ocr_text.text_length or LENGTH(ocr_text.text)) >= ?6)
-                        AND (?7 IS NULL OR COALESCE(ocr_text.text_length or LENGTH(ocr_text.text)) <= ?7)
+                        AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?6)
+                        AND (?7 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?7)
                         AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                     "#,
                     table = if query.is_empty() {
@@ -1001,28 +1001,27 @@ impl DatabaseManager {
                 )
             }
             ContentType::Audio => {
-                let table = if query.is_empty() {
-                    "audio_transcriptions"
-                } else {
-                    "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-                };
-                let match_condition = if query.is_empty() {
-                    "1=1"
-                } else {
-                    "audio_transcriptions_fts MATCH ?1"
-                };
                 format!(
                     r#"
                     SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
-                    FROM {}
-                    WHERE {}
+                    FROM {table}
+                    WHERE {match_condition}
                         AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                         AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
                         AND (?6 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?6)
                         AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
                         AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
                     "#,
-                    table, match_condition
+                    table = if query.is_empty() {
+                        "audio_transcriptions"
+                    } else {
+                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                    },
+                    match_condition = if query.is_empty() {
+                        "1=1"
+                    } else {
+                        "audio_transcriptions_fts MATCH ?1"
+                    }
                 )
             }
             ContentType::UI => {
@@ -1035,8 +1034,8 @@ impl DatabaseManager {
                         AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                         AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                         AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length or LENGTH(ui_monitoring.text_output)) >= ?6)
-                        AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length or LENGTH(ui_monitoring.text_output)) <= ?7)
+                        AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?6)
+                        AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?7)
                     "#,
                     table = if query.is_empty() {
                         "ui_monitoring"
@@ -1063,8 +1062,8 @@ impl DatabaseManager {
                             AND (?3 IS NULL OR frames.timestamp <= ?3)
                             AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
                             AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR ocr_text.text_length >= ?6)
-                            AND (?7 IS NULL OR ocr_text.text_length <= ?7)
+                            AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?6)
+                            AND (?7 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?7)
                             AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
                             AND ocr_text.text != 'No text found'
                         UNION ALL
@@ -1074,8 +1073,8 @@ impl DatabaseManager {
                         WHERE {audio_match}
                             AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                             AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                            AND (?6 IS NULL OR audio_transcriptions.text_length >= ?6)
-                            AND (?7 IS NULL OR audio_transcriptions.text_length <= ?7)
+                            AND (?6 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?6)
+                            AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
                             AND audio_transcriptions.transcription != ''
                             AND (json_array_length(?9) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?9)))
                         UNION ALL
@@ -1087,8 +1086,8 @@ impl DatabaseManager {
                             AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
                             AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
                             AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR ui_monitoring.text_length >= ?6)
-                            AND (?7 IS NULL OR ui_monitoring.text_length <= ?7)
+                            AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?6)
+                            AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?7)
                             AND ui_monitoring.text_output != ''
                     )"#,
                     ocr_table = if query.is_empty() {
