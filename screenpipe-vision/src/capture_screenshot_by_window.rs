@@ -234,7 +234,7 @@ pub async fn capture_all_visible_windows(
                     image,
                     app_name: app_name.to_string(),
                     window_name: window_name.to_string(),
-                    is_focused: is_valid,
+                    is_focused: window.is_focused(),
                 });
             }
             Err(e) => error!(
