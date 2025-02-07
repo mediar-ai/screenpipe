@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::whisper::{token_id, Model};
 use candle::IndexOp;
 use candle::{Result, Tensor, D};
@@ -5,6 +7,7 @@ use candle_transformers::models::whisper::SOT_TOKEN;
 use log::debug;
 use screenpipe_core::Language;
 use tokenizers::Tokenizer;
+use tokio::sync::Mutex;
 
 pub const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
