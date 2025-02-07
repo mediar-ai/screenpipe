@@ -186,7 +186,8 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    match &cli.command {
+    // Determine initial logging state based on command
+    let should_log = match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
                 subcommand,
@@ -236,7 +237,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Store the guard in a variable that lives for the entire main function
-    let _log_guard = Some(setup_logging(&local_data_dir, &cli)?);
+    let _log_guard = if should_log {
+        Some(setup_logging(&local_data_dir, &cli)?)
+    } else {
+        None
+    };
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
