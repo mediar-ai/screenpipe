@@ -12891,7 +12891,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     csibm863: "cp863",
     cp864: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$٪&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~°·∙√▒─│┼┤┬├┴┐┌└┘β∞φ±½¼≈«»ﻷﻸ��ﻻﻼ� ­ﺂ£¤ﺄ��ﺎﺏﺕﺙ،ﺝﺡﺥ٠١٢٣٤٥٦٧٨٩ﻑ؛ﺱﺵﺹ؟¢ﺀﺁﺃﺅﻊﺋﺍﺑﺓﺗﺛﺟﺣﺧﺩﺫﺭﺯﺳﺷﺻﺿﻁﻅﻋﻏ¦¬÷×ﻉـﻓﻗﻛﻟﻣﻧﻫﻭﻯﻳﺽﻌﻎﻍﻡﹽّﻥﻩﻬﻰﻲﻐﻕﻵﻶﻝﻙﻱ■�`
     },
     ibm864: "cp864",
@@ -13030,7 +13030,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     tcvn: {
       type: "_sbcs",
-      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b\t
+      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b	
 \v\f\r\x0E\x0F\x10ỨỰỲỶỸÝỴ\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ÀẢÃÁẠẶẬÈẺẼÉẸỆÌỈĨÍỊÒỎÕÓỌỘỜỞỠỚỢÙỦŨ ĂÂÊÔƠƯĐăâêôơưđẶ̀̀̉̃́àảãáạẲằẳẵắẴẮẦẨẪẤỀặầẩẫấậèỂẻẽéẹềểễếệìỉỄẾỒĩíịòỔỏõóọồổỗốộờởỡớợùỖủũúụừửữứựỳỷỹýỵỐ`
     },
     georgianacademy: {
@@ -13047,17 +13047,17 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     viscii: {
       type: "_sbcs",
-      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b\t
+      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13Ỷ\x15\x16\x17\x18Ỹ\x1A\x1B\x1C\x1DỴ\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ẠẮẰẶẤẦẨẬẼẸẾỀỂỄỆỐỒỔỖỘỢỚỜỞỊỎỌỈỦŨỤỲÕắằặấầẩậẽẹếềểễệốồổỗỠƠộờởịỰỨỪỬơớƯÀÁÂÃẢĂẳẵÈÉÊẺÌÍĨỳĐứÒÓÔạỷừửÙÚỹỵÝỡưàáâãảăữẫèéêẻìíĩỉđựòóôõỏọụùúũủýợỮ`
     },
     iso646cn: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#¥%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     iso646jp: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     hproman8: {
@@ -62301,19 +62301,29 @@ welcome to screenpipe! \uD83D\uDE80
   logger.log("pipes are plugins that interact with captured screen and audio data.");
   logger.log(`build powerful agents, monetize it, etc.
 `);
-  const pipeName = await esm_default5({
-    message: "what is your pipe name?",
-    default: "my-screenpipe",
-    validate: (input) => {
-      if (input.trim().length === 0)
-        return "pipe name is required";
-      return true;
-    }
-  });
-  const directory = await esm_default5({
-    message: "where would you like to create your pipe?",
-    default: pipeName
-  });
+  let pipeName = "";
+  try {
+    pipeName = await esm_default5({
+      message: "what is your pipe name?",
+      default: "my-screenpipe",
+      validate: (input) => {
+        if (input.trim().length === 0)
+          return "pipe name is required";
+        return true;
+      }
+    });
+  } catch (error) {
+    handleError(error);
+  }
+  let directory = "";
+  try {
+    directory = await esm_default5({
+      message: "where would you like to create your pipe?",
+      default: pipeName
+    });
+  } catch (error) {
+    handleError(error);
+  }
   const spinner2 = ora("creating your pipe...").start();
   try {
     await downloadAndExtractSubdir("pipes/obsidian", directory);
@@ -62360,28 +62370,36 @@ var TEMPLATE_REPOS = {
 var createAppCommand = new Command().name("create").description("create a new desktop app project").option("-a, --name <name>", "the name of your app (optional)").option("-t, --appType <type>", "the type of desktop app (electron or tauri)").action(async (options) => {
   let { name, appType } = options;
   if (!appType) {
-    let { appTypePrompt } = await esm_default12.prompt({
-      name: "appTypePrompt",
-      type: "select",
-      message: "what type of desktop app would you like to create?",
-      choices: [
-        { name: "electron", value: "electron" },
-        { name: "tauri", value: "tauri" }
-      ],
-      default: "tauri"
-    });
-    appType = appTypePrompt;
+    try {
+      let { appTypePrompt } = await esm_default12.prompt({
+        name: "appTypePrompt",
+        type: "select",
+        message: "what type of desktop app would you like to create?",
+        choices: [
+          { name: "electron", value: "electron" },
+          { name: "tauri", value: "tauri" }
+        ],
+        default: "tauri"
+      });
+      appType = appTypePrompt;
+    } catch (error) {
+      handleError(error);
+    }
   }
   if (!name || name.length === 0) {
-    name = await esm_default5({
-      message: "What is your project name?",
-      default: "my-desktop-app",
-      validate: (input) => {
-        if (input.trim().length === 0)
-          return "project name is required.";
-        return true;
-      }
-    });
+    try {
+      name = await esm_default5({
+        message: "What is your project name?",
+        default: "my-desktop-app",
+        validate: (input) => {
+          if (input.trim().length === 0)
+            return "project name is required.";
+          return true;
+        }
+      });
+    } catch (error) {
+      handleError(error);
+    }
   }
   const loadingSpinner = spinner("creating your desktop app...");
   try {
@@ -64123,8 +64141,8 @@ var throwOnStrictDeadlockError = (isSubprocess) => {
 This can be fixed by both sending a message and listening to incoming messages at the same time:
 
 const [receivedMessage] = await Promise.all([
-\t${getMethodName("getOneMessage", isSubprocess)},
-\t${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
+	${getMethodName("getOneMessage", isSubprocess)},
+	${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
 ]);`);
 };
 var getStrictResponseError = (error, isSubprocess) => new Error(`${getMethodName("sendMessage", isSubprocess)} failed when sending an acknowledgment response to the ${getOtherProcessName(isSubprocess)}.`, { cause: error });
