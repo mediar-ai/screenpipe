@@ -10,9 +10,11 @@ use std::sync::Mutex;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon};
 use tauri::Emitter;
 use tauri::{
-    menu::{IsMenuItem, MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
+    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     AppHandle, Manager, Wry,
 };
+use tauri_plugin_opener::OpenerExt;
+
 use tracing::{debug, error};
 
 // Track last known state to avoid unnecessary updates
@@ -26,8 +28,8 @@ struct MenuState {
 
 pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> Result<()> {
     if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-        // Initial menu setup
-        let menu = create_tray_menu(app, update_item)?;
+        // Initial menu setup with empty state
+        let menu = create_dynamic_menu(app, &MenuState::default(), update_item)?;
         main_tray.set_menu(Some(menu))?;
 
         // Setup click handlers
@@ -39,49 +41,72 @@ pub fn setup_tray(app: &AppHandle, update_item: &tauri::menu::MenuItem<Wry>) -> 
     Ok(())
 }
 
-fn create_tray_menu(
+fn create_dynamic_menu(
     app: &AppHandle,
+    state: &MenuState,
     update_item: &tauri::menu::MenuItem<Wry>,
 ) -> Result<tauri::menu::Menu<Wry>> {
-    // Static menu items
-    let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
-    let quick_start = MenuItemBuilder::with_id("quick_start", "quick start").build(app)?;
-    let settings = MenuItemBuilder::with_id("settings", "settings").build(app)?;
-    let version =
-        MenuItemBuilder::with_id("version", format!("version {}", app.package_info().version))
-            .enabled(false)
-            .build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
+    let store = get_store(app, None)?;
+    let mut menu_builder = MenuBuilder::new(app);
 
-    // Separators
-    let menu_divider1 = PredefinedMenuItem::separator(app)?;
-    let menu_divider2 = PredefinedMenuItem::separator(app)?;
-    let menu_divider3 = PredefinedMenuItem::separator(app)?;
-    let menu_divider4 = PredefinedMenuItem::separator(app)?;
+    // Get the show shortcut from store
+    let show_shortcut = store
+        .get("showScreenpipeShortcut")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| "Alt+Space".to_string());
 
-    // Recording controls
-    let start_recording =
-        MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
-    let stop_recording = MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
+    // Show item with formatted shortcut in label
+    menu_builder = menu_builder.item(
+        &MenuItemBuilder::with_id(
+            "show",
+            format!("show screenpipe ({})", format_shortcut(&show_shortcut)),
+        )
+        .build(app)?,
+    );
 
-    let menu = MenuBuilder::new(app)
-        .items(&[
-            &show,
-            &menu_divider1,
-            &version,
-            update_item,
-            &menu_divider2,
-            &start_recording,
-            &stop_recording,
-            &menu_divider3,
-            &quick_start,
-            &settings,
-            &menu_divider4,
-            &quit,
-        ])
-        .build()?;
+    // Version and update items
+    menu_builder = menu_builder
+        .item(&PredefinedMenuItem::separator(app)?)
+        .item(
+            &MenuItemBuilder::with_id("version", format!("version {}", app.package_info().version))
+                .enabled(false)
+                .build(app)?,
+        )
+        .item(update_item);
 
-    Ok(menu)
+    // Only show recording controls if not in dev mode
+    let dev_mode = store
+        .get("devMode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !dev_mode {
+        menu_builder = menu_builder
+            .item(&PredefinedMenuItem::separator(app)?)
+            .item(&MenuItemBuilder::with_id("start_recording", "start recording").build(app)?)
+            .item(&MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?);
+    }
+
+    // Add pipe submenu if there are active pipes
+    if !state.pipes.is_empty() {
+        menu_builder = menu_builder.item(&PredefinedMenuItem::separator(app)?);
+
+        // Add pipe menu items
+        for pipe_id in &state.pipes {
+            let shortcut = state.shortcuts.get(pipe_id).cloned();
+            let pipe_item = create_pipe_menu_item(app, pipe_id, shortcut)?;
+            menu_builder = menu_builder.item(&pipe_item);
+        }
+    }
+
+    // Settings and quit
+    menu_builder = menu_builder
+        .item(&PredefinedMenuItem::separator(app)?)
+        .item(&MenuItemBuilder::with_id("quick_start", "quick start").build(app)?)
+        .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
+        .item(&PredefinedMenuItem::separator(app)?)
+        .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
+
+    menu_builder.build().map_err(Into::into)
 }
 
 fn setup_tray_click_handlers(main_tray: &TrayIcon) -> Result<()> {
@@ -123,18 +148,14 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             let _ = app_handle.emit("shortcut-stop-recording", ());
         }
         "quick_start" => {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.emit("show-quick-start", ());
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            let _ = app_handle
+                .opener()
+                .open_url("screenpipe://onboarding", None::<&str>);
         }
         "settings" => {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.emit("show-settings", ());
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            let _ = app_handle
+                .opener()
+                .open_url("screenpipe://settings", None::<&str>);
         }
         "quit" => {
             debug!("Quit requested");
@@ -241,77 +262,43 @@ pub fn setup_tray_menu_updater(app: AppHandle, update_item: &tauri::menu::MenuIt
     });
 }
 
-fn create_dynamic_menu(
-    app: &AppHandle,
-    state: &MenuState,
-    update_item: &tauri::menu::MenuItem<Wry>,
-) -> Result<tauri::menu::Menu<Wry>> {
-    let mut menu_builder = MenuBuilder::new(app);
-
-    // Add static items first
-    let static_items = create_static_menu_items(app, update_item)?;
-    let static_item_refs: Vec<&dyn IsMenuItem<Wry>> = static_items.iter().map(|x| &**x).collect();
-    menu_builder = menu_builder.items(&static_item_refs);
-
-    // Add pipe submenu if there are active pipes
-    if !state.pipes.is_empty() {
-        let pipes_divider = PredefinedMenuItem::separator(app)?;
-        menu_builder = menu_builder.item(&pipes_divider);
-
-        // Add pipe menu items
-        for pipe_id in &state.pipes {
-            let shortcut = state.shortcuts.get(pipe_id).cloned();
-            let pipe_item = create_pipe_menu_item(app, pipe_id, shortcut)?;
-            menu_builder = menu_builder.item(&pipe_item);
-        }
-    }
-
-    menu_builder.build().map_err(Into::into)
-}
-
-fn create_static_menu_items(
-    app: &AppHandle,
-    update_item: &tauri::menu::MenuItem<Wry>,
-) -> Result<Vec<Box<dyn IsMenuItem<Wry>>>> {
-    let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
-
-    // Show item
-    items.push(Box::new(
-        MenuItemBuilder::with_id("show", "show screenpipe").build(app)?,
-    ));
-
-    // Version and update items
-    items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("version", format!("version {}", app.package_info().version))
-            .enabled(false)
-            .build(app)?,
-    ));
-    items.push(Box::new(update_item.clone()));
-
-    // Recording controls
-    items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("start_recording", "start recording").build(app)?,
-    ));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?,
-    ));
-
-    // Settings and quit
-    items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("quick_start", "quick start").build(app)?,
-    ));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("settings", "settings").build(app)?,
-    ));
-    items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(
-        MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?,
-    ));
-
-    Ok(items)
+fn format_shortcut(shortcut: &str) -> String {
+    // Add parentheses inside the formatting to ensure consistent styling
+    shortcut
+        .to_lowercase()
+        .replace(
+            "super",
+            if cfg!(target_os = "macos") {
+                "⌘"
+            } else {
+                "win"
+            },
+        )
+        .replace(
+            "alt",
+            if cfg!(target_os = "macos") {
+                "⌥"
+            } else {
+                "alt"
+            },
+        )
+        .replace(
+            "shift",
+            if cfg!(target_os = "macos") {
+                "⇧"
+            } else {
+                "shift"
+            },
+        )
+        .replace(
+            "ctrl",
+            if cfg!(target_os = "macos") {
+                "⌃"
+            } else {
+                "ctrl"
+            },
+        )
+        .replace("+", " ")
 }
 
 fn create_pipe_menu_item(
@@ -320,25 +307,7 @@ fn create_pipe_menu_item(
     shortcut: Option<String>,
 ) -> Result<tauri::menu::MenuItem<Wry>> {
     let label = if let Some(shortcut) = shortcut {
-        // Format shortcut in a cleaner way:
-        // 1. Convert to lowercase
-        // 2. Replace "super" with "⌘" on macOS, "win" on Windows
-        // 3. Replace "shift" with "⇧"
-        // 4. Replace "+" with spaces
-        let formatted_shortcut = shortcut
-            .to_lowercase()
-            .replace(
-                "super",
-                if cfg!(target_os = "macos") {
-                    "⌘"
-                } else {
-                    "win"
-                },
-            )
-            .replace("shift", "⇧")
-            .replace("+", " ");
-
-        format!("{} ({})", pipe_id, formatted_shortcut)
+        format!("{} ({})", pipe_id, format_shortcut(&shortcut))
     } else {
         pipe_id.to_string()
     };

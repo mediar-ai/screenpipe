@@ -19,7 +19,6 @@ use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
-use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
