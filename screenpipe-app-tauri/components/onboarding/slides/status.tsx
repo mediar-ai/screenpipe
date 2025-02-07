@@ -19,6 +19,7 @@ import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
 import localforage from "localforage";
 import OnboardingNavigation from "./navigation";
+import { useOnboarding } from "../context";
 
 interface OnboardingStatusProps {
   className?: string;
@@ -31,10 +32,6 @@ type PermissionsStatus = {
   screenRecording: string;
   microphone: string;
   accessibility: string;
-};
-
-const setRestartPending = async () => {
-  await localforage.setItem("screenPermissionRestartPending", true);
 };
 
 const PermissionDevice = {
@@ -60,10 +57,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
-  const [isRestartNeeded, setIsRestartNeeded] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
-
+  const { setRestartPending } = useOnboarding();
+  
   useEffect(() => {
     const checkRestartStatus = async () => {
       const restartPending = await localforage.getItem(
@@ -177,7 +174,6 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
       // Only handle macOS screen recording special case after requesting permission
       if (type === PermissionDevice.SCREEN_RECORDING) {
-        setIsRestartNeeded(true);
         await setRestartPending();
         toast({
           title: "restart required",

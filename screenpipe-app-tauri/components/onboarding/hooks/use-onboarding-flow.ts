@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { SlideKey, slideFlow, trackOnboardingStep } from "../flow";
+import localforage from "localforage";
 
 export function useOnboardingFlow(
+  restartPending: boolean,
   selectedOptions: string[],
   selectedPreference: string | null,
   selectedPersonalization: string | null,
 ) {
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>(restartPending ? SlideKey.STATUS : SlideKey.INTRO);
   const [error, setError] = useState<string | null>(null);
 
   const handleNextSlide = () => {
@@ -69,10 +71,15 @@ export function useOnboardingFlow(
     }, 300);
   };
 
+  const setRestartPending = async () => {
+    await localforage.setItem("screenPermissionRestartPending", true);
+  };
+
   return {
     currentSlide,
     error,
     handleNextSlide,
     handlePrevSlide,
+    setRestartPending,
   };
 }

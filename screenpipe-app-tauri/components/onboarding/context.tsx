@@ -21,6 +21,7 @@ interface OnboardingContextType {
   skipOnboarding: () => void;
   completeOnboarding: () => void;
   handleEnd: () => Promise<void>;
+  setRestartPending: () => Promise<void>;
 } 
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(
@@ -45,7 +46,8 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     setShowOnboardingToTrue,
     skipOnboarding,
     completeOnboarding,
-    handleEnd
+    handleEnd,
+    restartPending
   } = useOnboardingVisibility(
     selectedOptions,
     selectedPreference,
@@ -57,7 +59,9 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     error, 
     handleNextSlide, 
     handlePrevSlide,
+    setRestartPending
   } = useOnboardingFlow(
+    restartPending,
     selectedOptions,
     selectedPreference,
     selectedPersonalization,
@@ -80,7 +84,8 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
         handlePrevSlide,
         skipOnboarding,
         completeOnboarding,
-        handleEnd
+        handleEnd,
+        setRestartPending
     }}>
       {children}
     </OnboardingContext.Provider>

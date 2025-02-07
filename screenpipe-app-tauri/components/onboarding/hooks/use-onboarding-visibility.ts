@@ -9,6 +9,9 @@ export function useOnboardingVisibility(
   selectedPersonalization: string | null,
 ) {
     const [showOnboarding, setShowOnboarding] = useState(true);
+
+    // Value comes from localstorage. Persistent setter is in useOnboardingFlow.ts
+    const [restartPending, setRestartPending] = useState(false);
   
     function setShowOnboardingToFalse() {
       setShowOnboarding(false);
@@ -21,34 +24,36 @@ export function useOnboardingVisibility(
     useEffect(() => {
       const checkFirstTimeUser = async () => {
         const showOnboarding = await localforage.getItem("showOnboarding");
+        const screenPermissionRestartPending = await localforage.getItem("screenPermissionRestartPending");
   
         if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
           setShowOnboarding(true);
+          setRestartPending(screenPermissionRestartPending === true);
         }
       };
       checkFirstTimeUser();
     }, []);
 
 
-  function skipOnboarding() {
-    setShowOnboardingToFalse();
-    posthog.capture("onboarding_skipped");
-  }
+    function skipOnboarding() {
+      setShowOnboardingToFalse();
+      posthog.capture("onboarding_skipped");
+    }
 
-  function completeOnboarding() {
-    setShowOnboardingToFalse();
-    posthog.capture("onboarding_completed");
-  }
+    function completeOnboarding() {
+      setShowOnboardingToFalse();
+      posthog.capture("onboarding_completed");
+    }
 
-  async function handleEnd() {
-    trackOnboardingStep("completed", {
-      finalOptions: selectedOptions,
-      finalPreference: selectedPreference,
-      finalPersonalization: selectedPersonalization,
-    });
+    async function handleEnd() {
+      trackOnboardingStep("completed", {
+        finalOptions: selectedOptions,
+        finalPreference: selectedPreference,
+        finalPersonalization: selectedPersonalization,
+      });
 
-    setShowOnboardingToFalse();
-  };
+      setShowOnboardingToFalse();
+    };
   
-    return { showOnboarding, setShowOnboardingToFalse, setShowOnboardingToTrue, skipOnboarding, completeOnboarding, handleEnd };
-  }
+    return { showOnboarding, setShowOnboardingToFalse, setShowOnboardingToTrue, skipOnboarding, completeOnboarding, handleEnd, restartPending };
+}
