@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
@@ -30,8 +30,10 @@ impl fmt::Display for DeviceType {
     }
 }
 
-impl DeviceType {
-    pub fn from_str(s: &str) -> anyhow::Result<Self> {
+impl FromStr for DeviceType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Check if it's a monitor ID (vision device)
         if let Ok(monitor_id) = s.parse::<u32>() {
             return Ok(DeviceType::Vision(monitor_id));
@@ -155,8 +157,8 @@ pub struct DeviceStateChange {
     pub control: DeviceControl,
 }
 
-impl DeviceManager {
-    pub fn default() -> Self {
+impl Default for DeviceManager {
+    fn default() -> Self {
         let (sender, dummy_receiver) = tokio::sync::broadcast::channel(32);
         let (state_sender, state_receiver) = tokio::sync::mpsc::channel(32);
 
@@ -170,7 +172,9 @@ impl DeviceManager {
             state_sender,
         }
     }
+}
 
+impl DeviceManager {
     async fn manage_state(mut receiver: tokio::sync::mpsc::Receiver<DeviceStateRequest>) {
         let mut devices = HashMap::new();
         let mut watchers = Vec::new();
@@ -245,5 +249,14 @@ impl DeviceManager {
             .await?;
         self.sender.send(control)?;
         Ok(())
+    }
+
+    pub async fn shutdown(&self) {
+        for device in self.get_active_devices().await.values_mut() {
+            device.is_running = false;
+            if !self.state_sender.is_closed() {
+                self.update_device(device.clone()).await.unwrap();
+            }
+        }
     }
 }

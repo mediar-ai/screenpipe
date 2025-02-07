@@ -16,6 +16,7 @@ use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::{AudioDevice, DeviceManager, Language};
+// use std::time::Duration;
 use std::{
     path::Path,
     sync::Arc,
@@ -277,6 +278,7 @@ pub async fn create_whisper_channel(
                         }
                     }
                 },
+                // default(Duration::from_millis(100)) => {}
             }
         }
     });
