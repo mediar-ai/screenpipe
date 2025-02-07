@@ -20,8 +20,8 @@ import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { PipeApi } from "@/lib/api";
-import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { ScreenpipeStatusDialog } from "@/components/screenpipe-status/dialog";
 
 export default function Home() {
   const { settings, updateSettings, loadUser } = useSettings();
@@ -221,6 +221,7 @@ export default function Home() {
         <Onboarding />
       ) : (
         <>
+          <ScreenpipeStatusDialog />
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <Header />
