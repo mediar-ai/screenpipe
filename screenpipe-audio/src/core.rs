@@ -185,6 +185,7 @@ async fn run_record_and_transcribe(
     const OVERLAP_SECONDS: usize = 2;
     let mut collected_audio = Vec::new();
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
+    collected_audio.reserve(sample_rate * duration.as_secs() as usize);
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
 
     while is_running.load(Ordering::Relaxed)
@@ -195,7 +196,7 @@ async fn run_record_and_transcribe(
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => {
-                    collected_audio.extend(chunk);
+                    collected_audio.extend_from_slice(&chunk);
                 }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
@@ -206,21 +207,30 @@ async fn run_record_and_transcribe(
         }
 
         if !collected_audio.is_empty() {
+            let current_audio = std::mem::take(&mut collected_audio);
+            let current_audio_arc = Arc::new(current_audio.clone());
             debug!("sending audio segment to audio model");
+
             match whisper_sender.try_send(AudioInput {
-                data: Arc::new(collected_audio.clone()),
+                data: current_audio_arc,
                 device: audio_stream.device.clone(),
                 sample_rate: audio_stream.device_config.sample_rate().0,
                 channels: audio_stream.device_config.channels(),
             }) {
                 Ok(_) => {
                     debug!("sent audio segment to audio model");
-                    if collected_audio.len() > overlap_samples {
-                        collected_audio =
-                            collected_audio.split_off(collected_audio.len() - overlap_samples);
+                    let keep_samples = current_audio.len().saturating_sub(overlap_samples);
+                    if keep_samples > 0 {
+                        collected_audio.extend_from_slice(&current_audio[keep_samples..]);
                     }
                 }
                 Err(e) => {
+                    collected_audio = current_audio;
+                    let max_retain = overlap_samples * 2;
+                    if collected_audio.len() > max_retain {
+                        collected_audio =
+                            collected_audio.split_off(collected_audio.len() - max_retain);
+                    }
                     if e.is_disconnected() {
                         error!("whisper channel disconnected, restarting recording process");
                         return Err(anyhow!("Whisper channel disconnected"));
