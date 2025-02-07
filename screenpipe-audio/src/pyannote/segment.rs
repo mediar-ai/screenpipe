@@ -76,12 +76,20 @@ fn handle_new_segment(
 ) -> Option<SpeechSegment> {
     if let Some(mut prev_segment) = current_segment {
         if prev_segment.speaker == new_segment.speaker {
-            // Merge segments
+            // Store only recent 2 seconds of audio to prevent memory bloat
+            let max_samples = (prev_segment.sample_rate * 2) as usize;
+            prev_segment.samples = prev_segment
+                .samples
+                .into_iter()
+                .chain(new_segment.samples)
+                .rev()
+                .take(max_samples)
+                .collect();
+            prev_segment.samples.reverse();
+
             prev_segment.end = new_segment.end;
-            prev_segment.samples.extend(new_segment.samples);
             Some(prev_segment)
         } else {
-            // Different speaker, push previous and start new
             segments.push(prev_segment);
             Some(new_segment)
         }
@@ -93,7 +101,7 @@ fn handle_new_segment(
 pub struct SegmentIterator {
     samples: Vec<f32>,
     sample_rate: u32,
-    session: ort::Session,
+    session: Arc<ort::Session>,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: EmbeddingManager,
     current_position: usize,
@@ -107,24 +115,26 @@ pub struct SegmentIterator {
 }
 
 impl SegmentIterator {
-    pub fn new<P: AsRef<Path>>(
+    pub fn new(
         samples: Vec<f32>,
         sample_rate: u32,
-        model_path: P,
+        session: Arc<ort::Session>,
         embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
         embedding_manager: EmbeddingManager,
     ) -> Result<Self> {
-        let session = session::create_session(model_path.as_ref())?;
         let window_size = (sample_rate * 10) as usize;
 
+        // Use original samples directly with length checks instead of cloning
         let padded_samples = {
-            let mut padded = samples.clone();
-            padded.extend(vec![0.0; window_size - (samples.len() % window_size)]);
+            let needed_padding = window_size - (samples.len() % window_size);
+            let mut padded = Vec::with_capacity(samples.len() + needed_padding);
+            padded.extend_from_slice(&samples);
+            padded.resize(samples.len() + needed_padding, 0.0);
             padded
         };
 
         Ok(Self {
-            samples,
+            samples, // Original remains untouched
             sample_rate,
             session,
             embedding_extractor,
@@ -136,7 +146,7 @@ impl SegmentIterator {
             offset: 721, // frame_start
             start_offset: 0.0,
             current_segment: None,
-            padded_samples,
+            padded_samples, // Single allocated buffer
         })
     }
 
@@ -244,20 +254,24 @@ impl Iterator for SegmentIterator {
     }
 }
 
-pub fn get_segments<P: AsRef<Path>>(
+pub fn get_segments(
     samples: &[f32],
     sample_rate: u32,
-    model_path: P,
+    session: Arc<ort::Session>,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: EmbeddingManager,
 ) -> Result<SegmentIterator> {
     SegmentIterator::new(
         samples.to_vec(),
         sample_rate,
-        model_path,
+        session,
         embedding_extractor,
         embedding_manager,
     )
+}
+
+pub fn create_shared_session<P: AsRef<Path>>(model_path: P) -> Result<Arc<ort::Session>> {
+    Ok(Arc::new(session::create_session(model_path.as_ref())?))
 }
 
 fn get_speaker_embedding(

@@ -1,7 +1,7 @@
 use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
-use crate::pyannote::segment::SpeechSegment;
+use crate::pyannote::segment::{create_shared_session, SpeechSegment};
 use crate::resample;
 pub use crate::segments::prepare_segments;
 use crate::{
@@ -176,102 +176,147 @@ pub async fn create_whisper_channel(
 
     let embedding_manager = EmbeddingManager::new(25);
 
-    tokio::spawn(async move {
-        loop {
-            crossbeam::select! {
-                recv(input_receiver) -> input_result => {
-                    match input_result {
-                        Ok(mut audio) => {
-                            // Check device state
-                            if let Some(device) = device_manager.get_active_devices().await.get(&audio.device.to_string()) {
-                                if !device.is_running {
-                                    debug!("Skipping audio processing for stopped device: {}", audio.device);
-                                    continue;
-                                }
-                            }
+    // Spawn a task to process audio input
+    let task_handle = tokio::spawn({
+        let input_receiver = input_receiver;
+        let output_sender = output_sender;
+        let device_manager = device_manager.clone();
+        let whisper_model = whisper_model.clone();
+        let vad_engine = vad_engine.clone();
+        let output_path = output_path.clone();
+        let embedding_extractor = embedding_extractor.clone();
+        let embedding_manager = embedding_manager;
+        let segmentation_session = create_shared_session(&segmentation_model_path)?;
 
-                            debug!("Received input from input_receiver");
-                            let timestamp = SystemTime::now()
-                                .duration_since(UNIX_EPOCH)
-                                .expect("Time went backwards")
-                                .as_secs();
+        async move {
+            while let Ok(mut audio) = input_receiver.recv() {
+                // Check device state
+                if let Some(device) = device_manager
+                    .get_active_devices()
+                    .await
+                    .get(&audio.device.to_string())
+                {
+                    if !device.is_running {
+                        debug!(
+                            "Skipping audio processing for stopped device: {}",
+                            audio.device
+                        );
+                        continue;
+                    }
+                }
 
-                            let audio_data = if audio.sample_rate != m::SAMPLE_RATE as u32 {
-                                match resample(
-                                    audio.data.as_ref(),
-                                    audio.sample_rate,
-                                    m::SAMPLE_RATE as u32,
-                                ) {
-                                    Ok(data) => data,
-                                    Err(e) => {
-                                        error!("Error resampling audio: {:?}", e);
-                                        continue;
-                                    }
-                                }
-                            } else {
-                                audio.data.as_ref().to_vec()
-                            };
+                debug!("Received input from input_receiver");
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_secs();
 
-                            audio.data = Arc::new(audio_data.clone());
-                            audio.sample_rate = m::SAMPLE_RATE as u32;
-
-                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
-                                Ok(segments) => segments,
-                                Err(e) => {
-                                    error!("Error preparing segments: {:?}", e);
-                                    continue;
-                                }
-                            };
-
-                            let path = match write_audio_to_file(
-                                &audio.data.to_vec(),
-                                audio.sample_rate,
-                                &output_path,
-                                &audio.device.to_string(),
-                                false,
-                            ) {
-                                Ok(file_path) => file_path,
-                                Err(e) => {
-                                    error!("Error writing audio to file: {:?}", e);
-                                    "".to_string()
-                                }
-                            };
-
-                            while let Some(segment) = segments.recv().await {
-                                let path = path.clone();
-                                let transcription_result = if cfg!(target_os = "macos") {
-                                    #[cfg(target_os = "macos")]
-                                    {
-                                        let timestamp = timestamp + segment.start.round() as u64;
-                                        autoreleasepool(|| {
-                                            run_stt(segment, audio.device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
-                                        })
-                                    }
-                                    #[cfg(not(target_os = "macos"))]
-                                    {
-                                        unreachable!("This code should not be reached on non-macOS platforms")
-                                    }
-                                } else {
-                                    run_stt(segment, audio.device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
-                                };
-
-                                if output_sender.send(transcription_result).is_err() {
-                                    break;
-                                }
-                            }
-                        },
+                let audio_data = if audio.sample_rate != m::SAMPLE_RATE as u32 {
+                    match resample(
+                        audio.data.as_ref(),
+                        audio.sample_rate,
+                        m::SAMPLE_RATE as u32,
+                    ) {
+                        Ok(data) => data,
                         Err(e) => {
-                            error!("Error receiving input: {:?}", e);
-                            break;
+                            error!("Error resampling audio: {:?}", e);
+                            continue;
                         }
                     }
-                },
-                // default(Duration::from_millis(100)) => {}
+                } else {
+                    audio.data.as_ref().to_vec()
+                };
+
+                audio.data = Arc::new(audio_data.clone());
+                audio.sample_rate = m::SAMPLE_RATE as u32;
+
+                let mut segments = match prepare_segments(
+                    &audio_data,
+                    vad_engine.clone(),
+                    segmentation_session.clone(),
+                    embedding_manager.clone(),
+                    embedding_extractor.clone(),
+                    &audio.device.to_string(),
+                )
+                .await
+                {
+                    Ok(segments) => segments,
+                    Err(e) => {
+                        error!("Error preparing segments: {:?}", e);
+                        continue;
+                    }
+                };
+
+                let path = match write_audio_to_file(
+                    &audio.data.to_vec(),
+                    audio.sample_rate,
+                    &output_path,
+                    &audio.device.to_string(),
+                    false,
+                ) {
+                    Ok(file_path) => file_path,
+                    Err(e) => {
+                        error!("Error writing audio to file: {:?}", e);
+                        "".to_string()
+                    }
+                };
+
+                while let Some(segment) = segments.recv().await {
+                    let transcription_result = if cfg!(target_os = "macos") {
+                        #[cfg(target_os = "macos")]
+                        {
+                            let timestamp = timestamp + segment.start.round() as u64;
+                            autoreleasepool(|| {
+                                run_stt(
+                                    segment,
+                                    audio.device.clone(),
+                                    whisper_model.clone(),
+                                    audio_transcription_engine.clone(),
+                                    deepgram_api_key.clone(),
+                                    languages.clone(),
+                                    path.clone(),
+                                    timestamp,
+                                )
+                            })
+                        }
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            unreachable!("This code should not be reached on non-macOS platforms")
+                        }
+                    } else {
+                        run_stt(
+                            segment,
+                            audio.device.clone(),
+                            whisper_model.clone(),
+                            audio_transcription_engine.clone(),
+                            deepgram_api_key.clone(),
+                            languages.clone(),
+                            path.clone(),
+                            timestamp,
+                        )
+                    };
+
+                    if output_sender.send(transcription_result).is_err() {
+                        debug!("Output channel closed, stopping processing");
+                        return;
+                    }
+                }
             }
+            debug!("Input channel closed, stopping processing");
         }
     });
 
+    // Store the task handle in thread-local storage for cleanup
+    TASK_HANDLES.with(|handles| {
+        handles.borrow_mut().push(task_handle);
+    });
+
     Ok((input_sender, output_receiver))
+}
+
+// Thread-local storage for task handles
+thread_local! {
+    static TASK_HANDLES: std::cell::RefCell<Vec<tokio::task::JoinHandle<()>>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[allow(clippy::too_many_arguments)]

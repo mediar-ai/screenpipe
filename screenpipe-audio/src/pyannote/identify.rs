@@ -90,4 +90,8 @@ impl EmbeddingManager {
     pub fn get_all_speakers(&self) -> &LruCache<usize, Array1<f32>> {
         &self.speakers
     }
+
+    pub fn estimated_memory_usage(&self) -> usize {
+        self.speakers.len() * std::mem::size_of::<Array1<f32>>()
+    }
 }

@@ -120,18 +120,31 @@ pub async fn start_deepgram_stream(
 }
 
 fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, RecvError>> {
-    let (mut tx, rx) = mpsc::channel(1);
+    let (mut tx, rx) = mpsc::channel(10);
+    let mut buffer = BytesMut::with_capacity(3200);
 
     tokio::spawn(async move {
         while let Ok(data) = stream.recv().await {
-            let mut bytes = BytesMut::with_capacity(data.len() * 2);
-            for sample in data {
-                bytes.put_i16_le((sample * i16::MAX as f32) as i16);
+            buffer.clear();
+
+            let max_samples = buffer.capacity() / 2;
+            let samples = &data[..data.len().min(max_samples)];
+
+            for sample in samples {
+                buffer.put_i16_le((sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16);
             }
-            if tx.send(Ok(bytes.freeze())).await.is_err() {
-                tx.close_channel();
+
+            let chunk = buffer.split().freeze();
+
+            if tx.send(Ok(chunk)).await.is_err() {
+                break;
+            }
+
+            if buffer.capacity() > 3200 {
+                buffer = BytesMut::with_capacity(3200);
             }
         }
+        tx.close_channel();
     });
 
     rx

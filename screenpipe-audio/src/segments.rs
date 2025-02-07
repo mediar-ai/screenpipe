@@ -10,14 +10,14 @@ use crate::{
 };
 use anyhow::Result;
 use log::{error, info};
-use std::{path::PathBuf, sync::Arc, sync::Mutex as StdMutex};
+use std::{sync::Arc, sync::Mutex as StdMutex};
 use tokio::sync::Mutex;
 use vad_rs::VadStatus;
 
 pub async fn prepare_segments(
     audio_data: &[f32],
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
-    segmentation_model_path: &PathBuf,
+    segmentation_session: Arc<ort::Session>,
     embedding_manager: EmbeddingManager,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
@@ -68,7 +68,7 @@ pub async fn prepare_segments(
         let segments = get_segments(
             &audio_data,
             16000,
-            segmentation_model_path,
+            segmentation_session,
             embedding_extractor,
             embedding_manager,
         )?;
