@@ -98,6 +98,23 @@ export interface BrowserPipe {
   streamEvents(
     includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+    getPipeInfo: (pipeId: string) => Promise<any>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<any>;
+    delete: ( pipeId: string,) => Promise<boolean>;
+  };
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -263,6 +280,176 @@ class BrowserPipeImpl implements BrowserPipe {
       sendInputControl({ type: "MouseMove", data: { x, y } }),
     click: (button: "left" | "right" | "middle") =>
       sendInputControl({ type: "MouseClick", data: button }),
+  };
+
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+    getPipeInfo: (pipeId: string) => Promise<any>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<any>;
+    delete: ( pipeId: string,) => Promise<boolean>;
+  } = {
+    list: async (): Promise<string[]> => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/list", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        const data = await response.json();
+        return data.data;
+      } catch (error) {
+        console.error("failed to list pipes:", error);
+        return [];
+      }
+    },
+    download: async (url: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/download`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to download pipe:", error);
+        return false;
+      }
+    },
+    enable: async (pipeId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/enable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to enable pipe:", error);
+        return false;
+      }
+    },
+
+    disable: async (pipeId: string) => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/disable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("pipe not found");
+        }
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error("failed to disable pipe:", error);
+        return null;
+      }
+    },
+
+    update: async (pipeId: string, config: { [key: string]: string }) => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+            config,
+          }),
+        }); 
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to update pipe:", error);
+        return false;
+      }
+    },
+
+    getPipeInfo: async (pipeId: string): Promise<any> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/info/${pipeId}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.data;
+      } catch (error) {
+        console.error("failed to get pipe info:", error);
+        return null;
+      }
+    },
+
+    downloadPrivate: async (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ): Promise<any> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/download-private`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            pipe_name: pipeName,
+            pipe_id: pipeId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.data;
+      } catch (error) {
+        console.error("failed to download private pipe:", error);
+        return false;
+      }
+    },
+
+    delete: async (pipeId: string): Promise<boolean> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to delete pipe:", error);
+        return false;
+      }
+    }
   };
 
   async *streamTranscriptions(): AsyncGenerator<
