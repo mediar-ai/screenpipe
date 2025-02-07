@@ -174,7 +174,7 @@ pub async fn create_whisper_channel(
             .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?));
 
-    let embedding_manager = EmbeddingManager::new(usize::MAX);
+    let embedding_manager = EmbeddingManager::new(25);
 
     tokio::spawn(async move {
         loop {

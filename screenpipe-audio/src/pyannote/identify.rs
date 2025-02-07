@@ -1,11 +1,12 @@
 use anyhow::{bail, Result};
+use lru::LruCache;
 use ndarray::Array1;
-use std::collections::HashMap;
+use std::num::NonZeroUsize;
 
 #[derive(Debug, Clone)]
 pub struct EmbeddingManager {
     max_speakers: usize,
-    speakers: HashMap<usize, Array1<f32>>,
+    speakers: LruCache<usize, Array1<f32>>,
     next_speaker_id: usize,
 }
 
@@ -13,7 +14,7 @@ impl EmbeddingManager {
     pub fn new(max_speakers: usize) -> Self {
         Self {
             max_speakers,
-            speakers: HashMap::new(),
+            speakers: LruCache::new(NonZeroUsize::new(max_speakers).unwrap()),
             next_speaker_id: 1,
         }
     }
@@ -68,13 +69,25 @@ impl EmbeddingManager {
 
     fn add_speaker(&mut self, embedding: Array1<f32>) -> usize {
         let speaker_id = self.next_speaker_id;
-        self.speakers.insert(speaker_id, embedding);
+        self.speakers.put(speaker_id, embedding);
         self.next_speaker_id += 1;
         speaker_id
     }
 
+    pub fn add_embedding(&mut self, speaker_id: usize, embedding: Array1<f32>) {
+        self.speakers.put(speaker_id, embedding);
+    }
+
+    pub fn get_embedding(&mut self, speaker_id: usize) -> Option<&Array1<f32>> {
+        self.speakers.get(&speaker_id)
+    }
+
+    pub fn prune(&mut self) {
+        self.speakers.pop_lru();
+    }
+
     #[allow(unused)]
-    pub fn get_all_speakers(&self) -> &HashMap<usize, Array1<f32>> {
+    pub fn get_all_speakers(&self) -> &LruCache<usize, Array1<f32>> {
         &self.speakers
     }
 }
