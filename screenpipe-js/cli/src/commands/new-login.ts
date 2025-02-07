@@ -13,7 +13,7 @@ import { handleError } from "./components/commands/add/utils/handle-error";
 import os from 'os';
 import path from "node:path";
 
-const FILENAME = ".unkey";
+const FILENAME = ".apikey";
 
 class UserCancellationError extends Error {
   constructor(message: string) {
@@ -37,7 +37,7 @@ const nanoid = customAlphabet("123456789QAZWSXEDCRFVTGBYHNUJMIKOLP", 8);
 export const loginCommand = new Command()
 .name("login")
 .description("authenticate with screenpipe")
-.action(async (...args) => {
+.action(async () => {
     // create localhost server for our page to call back to
     const server = http.createServer();
     const { port } = await listen(server, 0, "127.0.0.1");
