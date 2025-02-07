@@ -12,6 +12,7 @@ import type {
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
+import { PipesManager } from "./PipesManager";
 import { EventSource } from "eventsource";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 
@@ -32,6 +33,7 @@ class NodePipe {
 
   public settings = new SettingsManager();
   public inbox = new InboxManager();
+  public pipes = new PipesManager();
 
   public async sendDesktopNotification(
     options: NotificationOptions
