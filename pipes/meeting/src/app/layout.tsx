@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster"
 import PostHogProvider from "@/components/providers/posthog-provider"
 import { Analytics } from "@vercel/analytics/react"
 import { ChatButton } from "@/components/chat-button"
+import { SettingsProvider } from "@/lib/hooks/use-settings"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,12 +34,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}
       >
         <PostHogProvider>
-          <main className="h-full p-4 overflow-hidden">
-            {children}
-          </main>
-          <Toaster />
-          <ChatButton />
-          <Analytics mode={process.env.NODE_ENV === 'development' ? 'development' : 'production'} />
+          <SettingsProvider>
+            <main className="h-full p-4 overflow-hidden">
+              {children}
+            </main>
+            <Toaster />
+            <ChatButton />
+            <Analytics mode={process.env.NODE_ENV === "development" ? "development" : "production"} />
+          </SettingsProvider>
         </PostHogProvider>
       </body>
     </html>
