@@ -13,6 +13,7 @@ import { ChangelogDialog } from "@/components/changelog-dialog";
 import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 
 import { platform } from "@tauri-apps/plugin-os";
 import { PipeStore } from "@/components/pipe-store";
@@ -32,6 +33,7 @@ export default function Home() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { open: openStatusDialog } = useStatusDialog();
+  const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
 
   useEffect(() => {
@@ -59,24 +61,20 @@ export default function Home() {
             }
           }
 
-          console.log("parsedUrl", parsedUrl);
+          if (url.includes("settings")) {
+            setSettingsOpen(true);
+          }
 
-          const path = parsedUrl.hostname;
+          if (url.includes("changelog")) {
+            setShowChangelogDialog(true);
+          }
 
-          // Handle UI navigation
-          switch (path) {
-            case "/settings":
-              document.getElementById("settings-trigger")?.click();
-              break;
-            case "/changelog":
-              setShowChangelogDialog(true);
-              break;
-            case "/onboarding":
-              setShowOnboarding(true);
-              break;
-            case "/status":
-              openStatusDialog();
-              break;
+          if (url.includes("onboarding")) {
+            setShowOnboarding(true);
+          }
+
+          if (url.includes("status")) {
+            openStatusDialog();
           }
         }
       });
@@ -197,7 +195,7 @@ export default function Home() {
       });
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
-  }, []);
+  }, [setSettingsOpen]);
 
   useEffect(() => {
     if (settings.userId) {
