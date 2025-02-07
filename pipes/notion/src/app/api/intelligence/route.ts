@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
-import { pipe } from "@screenpipe/js";
 import { Client } from "@notionhq/client";
 import { NotionClient } from "@/lib/notion/client";
 import { getNotionSettings } from "@/lib/actions/namespace-settings";
@@ -148,7 +147,10 @@ export async function GET() {
 		);
 
 		if (!recentLogs) {
-			return NextResponse.json({ message: "no logs found for analysis" });
+			return NextResponse.json(
+				{ message: "no logs found for analysis" },
+				{ status: 404 },
+			);
 		}
 
 		const intelligence = await analyzeRelationships(
