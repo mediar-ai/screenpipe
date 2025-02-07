@@ -12,7 +12,7 @@ import type {
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
-import { PipesManager } from "./PipesManager";
+import { PipesManager } from "../../common/PipesManager";
 import { EventSource } from "eventsource";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 

@@ -1,7 +1,7 @@
 export class PipesManager {
   async list(): Promise<string[]> {
     try {
-      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const apiUrl = "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/list`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -17,7 +17,7 @@ export class PipesManager {
 
   async download(url: string): Promise<boolean> {
     try {
-      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const apiUrl = "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,7 +35,7 @@ export class PipesManager {
 
   async enable(pipeId: string): Promise<boolean> {
     try {
-      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const apiUrl = "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/enable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -53,7 +53,7 @@ export class PipesManager {
 
   async disable(pipeId: string): Promise<boolean> {
     try {
-      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const apiUrl = "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/disable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,10 +71,10 @@ export class PipesManager {
 
   async update(
     pipeId: string,
-    config: { [key: string]: string },
+    config: { [key: string]: string }
   ): Promise<boolean> {
     try {
-      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const apiUrl = "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

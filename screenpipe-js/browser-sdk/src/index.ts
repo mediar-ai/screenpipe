@@ -12,6 +12,7 @@ import type {
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+import { PipesManager } from "../../common/PipesManager";
 
 const WS_URL = "ws://localhost:3030/ws/events";
 
@@ -21,7 +22,7 @@ let wsWithoutImages: WebSocket | null = null;
 
 // Update the wsEvents generator to accept includeImages parameter and manage connections
 async function* wsEvents(
-  includeImages: boolean = false,
+  includeImages: boolean = false
 ): AsyncGenerator<EventStreamResponse, void, unknown> {
   // Reuse existing connection or create new one
   let ws = includeImages ? wsWithImages : wsWithoutImages;
@@ -71,7 +72,7 @@ async function sendInputControl(action: InputAction): Promise<boolean> {
 export interface BrowserPipe {
   sendDesktopNotification(options: NotificationOptions): Promise<boolean>;
   queryScreenpipe(
-    params: ScreenpipeQueryParams,
+    params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null>;
   input: {
     type: (text: string) => Promise<boolean>;
@@ -86,7 +87,7 @@ export interface BrowserPipe {
     disable: (pipeId: string) => Promise<boolean>;
     update: (
       pipeId: string,
-      config: { [key: string]: string },
+      config: { [key: string]: string }
     ) => Promise<boolean>;
   };
   streamTranscriptions(): AsyncGenerator<
@@ -95,18 +96,18 @@ export interface BrowserPipe {
     unknown
   >;
   streamVision(
-    includeImages?: boolean,
+    includeImages?: boolean
   ): AsyncGenerator<VisionStreamResponse, void, unknown>;
   captureEvent: (
     event: string,
-    properties?: Record<string, any>,
+    properties?: Record<string, any>
   ) => Promise<void>;
   captureMainFeatureEvent: (
     name: string,
-    properties?: Record<string, any>,
+    properties?: Record<string, any>
   ) => Promise<void>;
   streamEvents(
-    includeImages: boolean,
+    includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
@@ -119,7 +120,7 @@ class BrowserPipeImpl implements BrowserPipe {
     try {
       // Connect to settings SSE stream
       const settingsStream = new EventSource(
-        "http://localhost:11435/sse/settings",
+        "http://localhost:11435/sse/settings"
       );
 
       // Get initial settings
@@ -165,7 +166,7 @@ class BrowserPipeImpl implements BrowserPipe {
     } catch (error) {
       console.error(
         "failed to fetch settings, defaulting to analytics enabled:",
-        error,
+        error
       );
       return {
         analyticsEnabled: false,
@@ -175,7 +176,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async sendDesktopNotification(
-    options: NotificationOptions,
+    options: NotificationOptions
   ): Promise<boolean> {
     const { userId, email } = await this.initAnalyticsIfNeeded();
     const notificationApiUrl = "http://localhost:11435";
@@ -203,7 +204,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async queryScreenpipe(
-    params: ScreenpipeQueryParams,
+    params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {
     console.log("queryScreenpipe:", params);
     const { userId, email } = await this.initAnalyticsIfNeeded();
@@ -282,7 +283,7 @@ class BrowserPipeImpl implements BrowserPipe {
     disable: (pipeId: string) => Promise<boolean>;
     update: (
       pipeId: string,
-      config: { [key: string]: string },
+      config: { [key: string]: string }
     ) => Promise<boolean>;
   } = {
     list: async () => {
@@ -403,7 +404,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async *streamVision(
-    includeImages: boolean = false,
+    includeImages: boolean = false
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
     try {
       for await (const event of wsEvents(includeImages)) {
@@ -422,7 +423,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
   public async captureEvent(
     eventName: string,
-    properties?: Record<string, any>,
+    properties?: Record<string, any>
   ) {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
@@ -431,7 +432,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
   public async captureMainFeatureEvent(
     featureName: string,
-    properties?: Record<string, any>,
+    properties?: Record<string, any>
   ) {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
@@ -439,7 +440,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   public async *streamEvents(
-    includeImages: boolean = false,
+    includeImages: boolean = false
   ): AsyncGenerator<EventStreamResponse, void, unknown> {
     for await (const event of wsEvents(includeImages)) {
       yield event;
@@ -448,7 +449,9 @@ class BrowserPipeImpl implements BrowserPipe {
 }
 
 const pipeImpl = new BrowserPipeImpl();
+const pipeManager = new PipesManager();
 export const pipe = pipeImpl;
+pipeImpl.pipes = pipeManager;
 
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";
