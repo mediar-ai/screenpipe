@@ -59,8 +59,12 @@ export default function Home() {
             }
           }
 
+          console.log("parsedUrl", parsedUrl);
+
+          const path = parsedUrl.hostname;
+
           // Handle UI navigation
-          switch (parsedUrl.pathname) {
+          switch (path) {
             case "/settings":
               document.getElementById("settings-trigger")?.click();
               break;
