@@ -41,7 +41,6 @@ import {
   VadSensitivity,
 } from "@/lib/hooks/use-settings";
 import { useToast } from "@/components/ui/use-toast";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
 import { Badge } from "./ui/badge";
 import {
@@ -67,6 +66,7 @@ import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import * as Sentry from "@sentry/react";
 import { defaultOptions } from "tauri-plugin-sentry-api";
+import { useScreenpipeStatus } from "./screenpipe-status/context";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -134,7 +134,7 @@ export function RecordingSettings() {
   >([]);
   const { toast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
-  const { health } = useHealthCheck();
+  const { health } = useScreenpipeStatus();
   const isDisabled = health?.status_code === 500;
   const [isMacOS, setIsMacOS] = useState(false);
   const [isSetupRunning, setIsSetupRunning] = useState(false);

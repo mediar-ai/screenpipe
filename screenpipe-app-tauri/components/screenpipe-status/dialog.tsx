@@ -1,4 +1,3 @@
-import { useOnboarding } from "../onboarding/context";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { LogFileButton } from "../log-file-button";
 import { Button } from "../ui/button";
@@ -6,7 +5,6 @@ import { Check, Folder, Lock, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useScreenpipeStatus } from "./context";
 import { useState } from "react";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { PermissionDevices } from "./types";
 import { Separator } from "../ui/separator";
@@ -16,8 +14,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 export function ScreenpipeStatusDialog() {
     const { isOpen, close } = useStatusDialog();
-    const { health } = useHealthCheck();
-    const { permissions, isMacOS, handlePermissionButton } = useScreenpipeStatus();
+    const { permissions, isMacOS, handlePermissionButton, health } = useScreenpipeStatus();
     const { settings, getDataDir } = useSettings();
     const [ localDataDir, setLocalDataDir ] = useState("");
 

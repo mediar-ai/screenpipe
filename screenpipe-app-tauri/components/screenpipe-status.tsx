@@ -12,7 +12,6 @@ import { toast } from "./ui/use-toast";
 
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Lock, Folder, Activity, Power } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
@@ -23,15 +22,10 @@ import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { platform } from "@tauri-apps/plugin-os";
-
-type PermissionsStatus = {
-  screenRecording: string;
-  microphone: string;
-  accessibility: string;
-};
+import { useScreenpipeStatus } from "./screenpipe-status/context";
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health } = useHealthCheck();
+  const { health } = useScreenpipeStatus();
   const { open } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");

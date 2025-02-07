@@ -1,17 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
-import { platform } from "@tauri-apps/plugin-os";
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { toast } from "@/components/ui/use-toast";
 import { usePermissions } from "./use-permissions";
 import { PermissionDevices, PermissionsStatesPerDevice } from "./types";
 import { useOnboarding } from "../onboarding/context";
-import { Dialog, DialogContent } from "../ui/dialog";
+import { HealthCheckResponse, useHealthCheck } from "@/lib/hooks/use-health-check";
 
 type ScreenpipeStatusContextType = {
   permissions: PermissionsStatesPerDevice | null;
   isMacOS: boolean;
   checkPermissions: () => Promise<PermissionsStatesPerDevice | undefined>;
   handlePermissionButton: (type: PermissionDevices) => Promise<void>;
+  health: HealthCheckResponse | null;
 }
 
 const ScreenpipeStatusContext = createContext<ScreenpipeStatusContextType | undefined>(
@@ -21,9 +19,10 @@ const ScreenpipeStatusContext = createContext<ScreenpipeStatusContextType | unde
 export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+    const { health, isServerDown, isLoading, fetchHealth, debouncedFetchHealth } = useHealthCheck();
     const { showOnboarding } = useOnboarding();
     const { permissions, checkPermissions, isMacOS, handlePermissionButton } = usePermissions();
-    
+
     useEffect(() => {
         checkPermissions();
     }, []);
@@ -34,6 +33,7 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
           isMacOS,
           checkPermissions,
           handlePermissionButton,
+          health,
       }}>
           {children}
       </ScreenpipeStatusContext.Provider>

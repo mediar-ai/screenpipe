@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Power, Search, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { Command } from "@tauri-apps/plugin-shell";
 import {
   PipeApi,
@@ -30,11 +29,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useScreenpipeStatus } from "./screenpipe-status/context";
 
 const corePipes: string[] = ["data-table", "search"];
 
 export const PipeStore: React.FC = () => {
-  const { health } = useHealthCheck();
+  const { health } = useScreenpipeStatus();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
   const { settings, loadUser } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
