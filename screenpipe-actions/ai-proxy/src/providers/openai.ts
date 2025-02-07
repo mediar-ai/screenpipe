@@ -3,7 +3,6 @@ import { Message, RequestBody, ResponseFormat } from '../types';
 import OpenAI from 'openai';
 import type { ChatCompletionMessage, ChatCompletionCreateParams } from 'openai/resources/chat';
 import type { ResponseFormatJSONSchema } from 'openai/resources';
-import { JSONSchema } from 'openai/lib/jsonschema';
 
 export class OpenAIProvider implements AIProvider {
 	supportsTools = true;
@@ -15,7 +14,7 @@ export class OpenAIProvider implements AIProvider {
 		this.client = new OpenAI({ apiKey });
 	}
 
-	private createJSONSchemaFormat(schema: JSONSchema, name: string, description?: string): ResponseFormatJSONSchema {
+	private createJSONSchemaFormat(schema: Record<string, unknown>, name: string, description?: string): ResponseFormatJSONSchema {
 		return {
 			type: 'json_schema',
 			json_schema: {
@@ -37,7 +36,6 @@ export class OpenAIProvider implements AIProvider {
 				if (!format.schema || !format.name) {
 					throw new Error('Schema and name are required for json_schema response format');
 				}
-				// The schema is now properly typed with JSONSchema
 				return this.createJSONSchemaFormat(format.schema, format.name, format.description);
 			default:
 				return undefined;

@@ -81,13 +81,6 @@ export interface ResponseFormat {
 	description?: string;
 }
 
-// export interface JSONSchemaFormat {
-// 	schema: Record<string, unknown>;
-// 	name: string;
-// 	description?: string;
-// 	strict?: boolean;
-//   }
-
 export interface ImageContent {
 	type: 'image';
 	image_url: {
