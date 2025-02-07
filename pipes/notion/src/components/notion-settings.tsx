@@ -45,7 +45,7 @@ export function NotionSettings() {
   const [testingLog, setTestingLog] = useState(false);
   const [testingIntelligence, setTestingIntelligence] = useState(false);
   const [localSettings, setLocalSettings] = useState<Partial<Settings> | null>(
-    {},
+    {}
   );
 
   useEffect(() => {
@@ -285,7 +285,16 @@ export function NotionSettings() {
                 }
               />
               <p className="text-xs text-muted-foreground">
-                this is required when you are connecting automatically
+                this is required when you are connecting automatically. you can
+                find your workspace name{" "}
+                <a
+                  href="https://www.notion.so/settings/workspace-settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 underline"
+                >
+                  here
+                </a>
               </p>
             </div>
             <div className="space-y-2">
