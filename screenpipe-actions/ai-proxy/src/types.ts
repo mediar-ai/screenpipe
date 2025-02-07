@@ -76,9 +76,17 @@ export interface RequestBody {
 
 export interface ResponseFormat {
 	type: 'text' | 'json_object' | 'json_schema';
-	schema?: Record<string, any>;
+	schema?: Record<string, unknown>;
 	name?: string;
+	description?: string;
 }
+
+// export interface JSONSchemaFormat {
+// 	schema: Record<string, unknown>;
+// 	name: string;
+// 	description?: string;
+// 	strict?: boolean;
+//   }
 
 export interface ImageContent {
 	type: 'image';
