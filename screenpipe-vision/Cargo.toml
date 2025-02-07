@@ -100,7 +100,6 @@ xcap = "0.3.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-xcap-macos = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
 xcap = "0.3.1"
 cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
 
