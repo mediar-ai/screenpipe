@@ -3,6 +3,7 @@ export interface Note {
     text: string;
     timestamp: Date;
     editedAt?: Date;
+    isAiGenerated?: boolean;
   }
   export interface TranscriptionChunk {
     timestamp: string

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle } from 'lucide-react'
+import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, ChevronDown } from 'lucide-react'
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from '../meeting-history/types'
@@ -43,6 +43,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const { settings } = useSettings()
   const { toast } = useToast()
   const router = useRouter()
+  const [showNav, setShowNav] = useState(false)
 
   const sortedNotes = useMemo(() => {
     return [...notes].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
@@ -226,6 +227,16 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
       const newAnalysis = await generateMeetingNotes(meeting, settings)
       await setAnalysis(newAnalysis)
       
+      // Add just the summary as a new note
+      const summaryNote: Note = {
+        id: crypto.randomUUID(),
+        text: "\n## AI Meeting Summary\n" + newAnalysis.summary.map(line => `• ${line}`).join('\n'),
+        timestamp: new Date(),
+        isAiGenerated: true
+      }
+
+      await setNotes([...notes, summaryNote])
+      
       toast({
         title: "notes generated",
         description: "ai notes analysis completed",
@@ -306,236 +317,271 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
 
   const handleNewMeeting = async () => {
     console.log('starting new meeting from notes editor')
-    await clearLiveMeetingData()
-    onNewMeeting()
+    try {
+        // Save current state for logging
+        const currentTitle = title
+        const notesCount = notes.length
+        
+        console.log('current meeting state:', {
+            title: currentTitle,
+            notes_count: notesCount,
+            has_analysis: !!analysis
+        })
+        
+        // Clear storage first
+        await clearLiveMeetingData()
+        
+        // Wait a bit to ensure storage is cleared
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        console.log('storage cleared, forcing navigation')
+        // Force a full navigation instead of client-side
+        window.location.href = '/meetings/live'
+        
+    } catch (error) {
+        console.error('failed to start new meeting:', error)
+        toast({
+            title: "error",
+            description: "failed to start new meeting. please try again",
+            variant: "destructive",
+        })
+    }
   }
 
   return (
     <div className="h-full flex flex-col bg-card relative">
-      <div className="flex items-center justify-between">
-        <div className="p-1 flex-1 flex items-center">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="meeting title"
-            className="w-full text-2xl font-bold bg-transparent focus:outline-none"
-          />
+      <div 
+        className="absolute top-2 right-2 z-20 group"
+        onMouseEnter={() => setShowNav(true)}
+        onMouseLeave={() => setShowNav(false)}
+      >
+        <div className={`
+          absolute top-0 right-0 transition-all duration-200 min-w-[200px]
+          ${showNav ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none'}
+        `}>
+          <div className="flex flex-col gap-1 bg-gray-100/80 backdrop-blur p-1 rounded-lg shadow-sm">
           <button
-            onClick={handleGenerateTitle}
-            disabled={isGeneratingTitle}
-            className="p-0 hover:bg-gray-100 rounded transition-colors"
-            title="generate ai title"
-          >
-            <Wand2 className={`h-4 w-4 ${isGeneratingTitle ? "animate-spin" : ""}`} />
-          </button>
-        </div>
-        <div className="flex -space-x-px">
-          <button
-            onClick={handleGenerateNotes}
-            disabled={isGeneratingNotes}
-            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
-            title="generate ai notes"
-          >
-            <Sparkles className={`h-4 w-4 ${isGeneratingNotes ? "animate-spin" : ""}`} />
-          </button>
-          <button
-            onClick={onBack}
-            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
-            title="back to meetings"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onNewMeeting}
-            className="p-1 text-sm transition-colors rounded-none hover:bg-gray-50"
-            title="start new meeting"
-          >
-            <PlusCircle className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode('timeline')}
-            className={`p-1 text-sm transition-colors rounded-none ${
-              viewMode === 'timeline' 
-                ? 'bg-gray-200' 
-                : 'hover:bg-gray-50'
-            }`}
-            title="timeline view"
-          >
-            <List className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode('text')}
-            className={`p-1 text-sm transition-colors rounded-none ${
-              viewMode === 'text' 
-                ? 'bg-gray-200' 
-                : 'hover:bg-gray-50'
-            }`}
-            title="document view"
-          >
-            <FileText className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      
-      {showInvalidTime && (
-        <div className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
-          invalid time format
-        </div>
-      )}
-
-      {viewMode === 'timeline' ? (
-        <div 
-          ref={scrollRef}
-          onScroll={onScroll}
-          className="flex-1 overflow-y-auto p-3 space-y-3"
-        >
-          {sortedNotes.map(note => (
-            <div 
-              key={note.id} 
-              onClick={() => !editingId && onTimeClick(note.timestamp)}
-              className="text-sm mb-2 hover:bg-gray-100 active:bg-gray-200 transition-colors select-text cursor-pointer group"
+              onClick={onBack}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  {editingTime === note.id ? (
-                    <div className="relative">
-                      <input
-                        ref={editTimeRef}
-                        type="text"
-                        id={`time-edit-${note.id}`}
-                        name={`time-edit-${note.id}`}
-                        value={editTimeText}
-                        onChange={(e) => setEditTimeText(e.target.value)}
-                        className="w-24 bg-white border rounded px-1 py-0.5 focus:outline-none text-xs text-gray-500"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            updateTime(note.id)
-                          }
-                          if (e.key === 'Escape') {
-                            setEditingTime(null)
-                          }
-                        }}
-                      />
-                      <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
-                        format: HH:MM:SS
+              <ArrowLeft className="h-4 w-4" />
+              <span>back to meetings menu</span>
+            </button>
+            <button
+              onClick={handleNewMeeting}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
+            >
+              <PlusCircle className="h-4 w-4" />
+              <span>save & start new meeting</span>
+            </button>
+            <button
+              onClick={handleGenerateTitle}
+              disabled={isGeneratingTitle}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
+            >
+              <Wand2 className={`h-4 w-4 ${isGeneratingTitle ? "animate-spin" : ""}`} />
+              <span>re-generate title with AI</span>
+            </button>
+            <button
+              onClick={handleGenerateNotes}
+              disabled={isGeneratingNotes}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
+            >
+              <Sparkles className={`h-4 w-4 ${isGeneratingNotes ? "animate-spin" : ""}`} />
+              <span>append AI summary</span>
+            </button>
+
+            
+            <div className="mt-1 pt-1 border-t border-gray-200">
+              <div className="px-3 py-1 text-xs text-gray-500">view type</div>
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded transition-colors w-full text-left
+                  ${viewMode === 'timeline' ? 'bg-gray-200/80' : 'hover:bg-gray-200/80'}`}
+              >
+                <List className="h-4 w-4" />
+                <span>timeline</span>
+              </button>
+              <button
+                onClick={() => setViewMode('text')}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs rounded transition-colors w-full text-left
+                  ${viewMode === 'text' ? 'bg-gray-200/80' : 'hover:bg-gray-200/80'}`}
+              >
+                <FileText className="h-4 w-4" />
+                <span>document</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 hover:text-gray-600 
+          ${showNav ? 'rotate-180' : ''}`} />
+      </div>
+
+      <div className="flex-1">
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="meeting title"
+          className="w-full text-2xl font-bold bg-transparent focus:outline-none px-3 py-2"
+        />
+        {showInvalidTime && (
+          <div className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
+            invalid time format
+          </div>
+        )}
+
+        {viewMode === 'timeline' ? (
+          <div 
+            ref={scrollRef}
+            onScroll={onScroll}
+            className="flex-1 overflow-y-auto p-3 space-y-3"
+          >
+            {sortedNotes.map(note => (
+              <div 
+                key={note.id} 
+                onClick={() => !editingId && onTimeClick(note.timestamp)}
+                className="text-sm mb-2 hover:bg-gray-100 active:bg-gray-200 transition-colors select-text cursor-pointer group"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    {editingTime === note.id ? (
+                      <div className="relative">
+                        <input
+                          ref={editTimeRef}
+                          type="text"
+                          id={`time-edit-${note.id}`}
+                          name={`time-edit-${note.id}`}
+                          value={editTimeText}
+                          onChange={(e) => setEditTimeText(e.target.value)}
+                          className="w-24 bg-white border rounded px-1 py-0.5 focus:outline-none text-xs text-gray-500"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              updateTime(note.id)
+                            }
+                            if (e.key === 'Escape') {
+                              setEditingTime(null)
+                            }
+                          }}
+                        />
+                        <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
+                          format: HH:MM:SS
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <span className="text-gray-500 text-xs hover:underline">
-                      {note.timestamp.toLocaleTimeString()}
-                    </span>
-                  )}
-                  {!editingTime && (
+                    ) : (
+                      <span className="text-gray-500 text-xs hover:underline">
+                        {note.timestamp.toLocaleTimeString()}
+                      </span>
+                    )}
+                    {!editingTime && (
+                      <button
+                        onClick={(e) => startEditingTime(note, e)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-1"
+                      >
+                        edit
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {note.editedAt && (
+                      <span className="text-gray-400 text-xs">
+                        edited {note.editedAt.toLocaleTimeString()}
+                      </span>
+                    )}
                     <button
-                      onClick={(e) => startEditingTime(note, e)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-1"
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        await handleImprove(note)
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-2 py-0.5"
                     >
-                      edit
+                      improve
                     </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {note.editedAt && (
-                    <span className="text-gray-400 text-xs">
-                      edited {note.editedAt.toLocaleTimeString()}
-                    </span>
-                  )}
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      await handleImprove(note)
-                    }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-2 py-0.5"
-                  >
-                    improve
-                  </button>
-                </div>
-              </div>
-              {editingId === note.id ? (
-                <div 
-                  ref={editRef}
-                  className="mt-1"
-                >
-                  <input
-                    type="text"
-                    id={`note-edit-${note.id}`}
-                    name={`note-edit-${note.id}`}
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    className="w-full bg-gray-50 border rounded px-2 py-1 focus:outline-none font-mono text-sm"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        updateNote()
-                      }
-                      if (e.key === 'Escape') {
-                        setEditingId(null)
-                      }
-                    }}
-                  />
-                  <div className="mt-1 text-xs text-gray-500">
-                    press Enter to save • Esc to discard
                   </div>
                 </div>
-              ) : (
-                <div 
-                  className="mt-1 cursor-text hover:bg-gray-50 transition-colors rounded"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    startEditing(note, e)
-                  }}
-                >
-                  {note.text}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <TextEditor 
-          notes={sortedNotes}
-          setNotes={(newNotes: Note[]) => setNotes(newNotes)}
-          scrollRef={scrollRef}
-          onScroll={onScroll}
-          isEditing={true}
-          analysis={analysis?.summary ? {
-            summary: analysis.summary,
-            facts: [],
-            events: [],
-            flow: [],
-            decisions: []
-          } : null}
-        />
-      )}
-
-      {!isScrolledToBottom && (
-        <button
-          onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })}
-          className="absolute bottom-20 right-4 p-2 bg-black text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors"
-        >
-          <ArrowDown className="h-4 w-4" />
-        </button>
-      )}
-
-      {viewMode === 'timeline' && (
-        <form onSubmit={sendMessage} className="p-2 bg-gray-100">
-          <input
-            type="text"
-            id="new-note"
-            name="new-note"
-            value={currentMessage}
-            onChange={(e) => setCurrentMessage(e.target.value)}
-            className="flex-1 px-2 py-1.5 bg-transparent focus:outline-none text-sm"
-            placeholder="type a note..."
+                {editingId === note.id ? (
+                  <div 
+                    ref={editRef}
+                    className="mt-1"
+                  >
+                    <input
+                      type="text"
+                      id={`note-edit-${note.id}`}
+                      name={`note-edit-${note.id}`}
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      className="w-full bg-gray-50 border rounded px-2 py-1 focus:outline-none font-mono text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          updateNote()
+                        }
+                        if (e.key === 'Escape') {
+                          setEditingId(null)
+                        }
+                      }}
+                    />
+                    <div className="mt-1 text-xs text-gray-500">
+                      press Enter to save • Esc to discard
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="mt-1 cursor-text hover:bg-gray-50 transition-colors rounded"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEditing(note, e)
+                    }}
+                  >
+                    {note.text}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <TextEditor 
+            notes={sortedNotes}
+            setNotes={(newNotes: Note[]) => setNotes(newNotes)}
+            scrollRef={scrollRef}
+            onScroll={onScroll}
+            isEditing={true}
+            analysis={analysis?.summary ? {
+              summary: analysis.summary,
+              facts: [],
+              events: [],
+              flow: [],
+              decisions: []
+            } : null}
           />
-        </form>
-      )}
+        )}
 
+        {!isScrolledToBottom && (
+          <button
+            onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })}
+            className="absolute bottom-20 right-4 p-2 bg-black text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
+        )}
 
+        {viewMode === 'timeline' && (
+          <form onSubmit={sendMessage} className="p-2 bg-gray-100">
+            <input
+              type="text"
+              id="new-note"
+              name="new-note"
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              className="flex-1 px-2 py-1.5 bg-transparent focus:outline-none text-sm"
+              placeholder="type a note..."
+            />
+          </form>
+        )}
+      </div>
     </div>
   )
 } 

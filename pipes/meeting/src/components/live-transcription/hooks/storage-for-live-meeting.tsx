@@ -9,6 +9,9 @@ export const liveStore = localforage.createInstance({
     storeName: "transcriptions"
 })
 
+// Export the key
+export const LIVE_MEETING_KEY = 'current-live-meeting'
+
 export interface LiveMeetingData {
     chunks: TranscriptionChunk[]
     editedChunks: Record<number, string>
@@ -38,8 +41,6 @@ interface MeetingContextType {
     updateStore: (newData: LiveMeetingData) => Promise<void>
 }
 
-const LIVE_MEETING_KEY = 'current-live-meeting'
-
 // Context creation
 const MeetingContext = createContext<MeetingContextType | undefined>(undefined)
 
@@ -50,7 +51,19 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const loadData = async () => {
             try {
+                console.log('MeetingProvider: loading data')
                 const stored = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+                console.log('MeetingProvider: loaded data:', {
+                    exists: !!stored,
+                    chunks: stored?.chunks?.length,
+                    title: stored?.title,
+                    notes: stored?.notes?.length
+                })
+                
+                if (!stored) {
+                    console.log('MeetingProvider: no stored data, initializing new')
+                }
+                
                 setData(stored || {
                     chunks: [],
                     editedChunks: {},
@@ -64,7 +77,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                     selectedDevices: new Set()
                 })
             } catch (error) {
-                console.error('failed to load meeting data:', error)
+                console.error('MeetingProvider: failed to load meeting data:', error)
             } finally {
                 setIsLoading(false)
             }
@@ -180,18 +193,50 @@ export async function storeLiveChunks(chunks: TranscriptionChunk[]): Promise<voi
 
 export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
     try {
-        console.log('loading live meeting data')
-        return await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+        console.log('getLiveMeetingData: loading')
+        const data = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+        console.log('getLiveMeetingData: result:', {
+            exists: !!data,
+            chunks: data?.chunks?.length,
+            title: data?.title,
+            notes: data?.notes?.length
+        })
+        return data
     } catch (error) {
-        console.error('failed to load live meeting data:', error)
+        console.error('getLiveMeetingData: failed:', error)
         return null
     }
 }
 
 export async function clearLiveMeetingData(): Promise<void> {
     try {
-        console.log('clearing live meeting data')
+        const currentData = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+        console.log('clearing live meeting data:', {
+            had_title: !!currentData?.title,
+            notes_count: currentData?.notes.length,
+            chunks_count: currentData?.chunks.length,
+            analysis: !!currentData?.analysis,
+            start_time: currentData?.startTime,
+        })
+        
+        // Create empty state
+        const emptyState: LiveMeetingData = {
+            chunks: [],
+            editedChunks: {},
+            speakerMappings: {},
+            lastProcessedIndex: -1,
+            startTime: new Date().toISOString(),
+            title: null,
+            notes: [],
+            analysis: null,
+            deviceNames: new Set(),
+            selectedDevices: new Set()
+        }
+        
+        // Set empty state first, then remove
+        await liveStore.setItem(LIVE_MEETING_KEY, emptyState)
         await liveStore.removeItem(LIVE_MEETING_KEY)
+        console.log('live meeting data cleared successfully')
     } catch (error) {
         console.error('failed to clear live meeting data:', error)
         throw error
