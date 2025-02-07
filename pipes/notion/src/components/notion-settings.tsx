@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { validateCredentials } from "@/lib/notion/notion";
 import { toast } from "@/hooks/use-toast";
 import { useNotionSettings } from "@/lib/hooks/use-notion-settings";
-import { ToastAction } from "./ui/toast";
 import { Loader2 } from "lucide-react";
 import { NotionCredentials } from "@/lib/types";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
@@ -39,7 +38,6 @@ export function NotionSettings() {
 			databaseId: settings?.notion?.databaseId || "",
 			intelligenceDbId: settings?.notion?.intelligenceDbId || "",
 		});
-		console.log(settings);
 	}, [settings]);
 
 	const handleValidate = async () => {
@@ -49,8 +47,6 @@ export function NotionSettings() {
 			if (!isValid) {
 				throw new Error("Invalid credentials");
 			}
-
-			console.log(isValid, "done");
 
 			await updateSettings({
 				...settings!,
@@ -82,7 +78,6 @@ export function NotionSettings() {
 
 			if (!response.ok) throw new Error(credentials.error);
 
-			console.log(credentials);
 			const notionCreds = {
 				accessToken: credentials.accessToken,
 				databaseId: credentials.databaseId,
@@ -190,13 +185,14 @@ export function NotionSettings() {
 
 						<div>
 							<Label>Custom Prompt</Label>
-							<Textarea
+							<textarea
 								placeholder="Enter custom prompt for log generation..."
 								value={settings?.prompt || ""}
 								onChange={(e) =>
 									updateSettings({ ...settings!, prompt: e.target.value })
 								}
-								className="min-h-[100px]"
+								className="w-full min-h-[100px] p-2 rounded-md border bg-background"
+								rows={10}
 								disabled={loading}
 							/>
 							<div className="space-y-2">

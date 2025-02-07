@@ -1,5 +1,6 @@
 import { chromium, Page } from "playwright";
 import { NotionCredentials } from "@/lib/types";
+import path from "node:path";
 
 // Integration Name
 const INTEGRATION_NAME = "Screenpipe Logger";
@@ -102,9 +103,17 @@ async function getAccessToken(page: Page) {
 async function switchWorkspace(page: Page, workspace: string) {
 	await page.goto("https://www.notion.so");
 
-	await page.locator("div.notion-sidebar-switcher").click();
+	const sidebar = page.locator("div.notion-sidebar-switcher");
+	await sidebar.click();
 
-	await page.click(`text=${workspace}`, { delay: 1000 });
+	console.log(workspace, "workspace");
+
+	const workspaceItem = page.locator(`div[role="menuitem"]`, {
+		has: page.getByText(workspace),
+	});
+
+	await workspaceItem.click({ delay: 1000 });
+	// await page.click(`text=${workspace}`, { delay: 1000 });
 }
 
 // const STORAGE_PATH = path.join(process.cwd(), ".notion-storage");

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { Settings } from "@/lib/types";
 import {
-  getNotionSettings,
-  updateNotionSettings,
+	getNotionSettings,
+	updateNotionSettings,
 } from "../actions/namespace-settings";
 
 const DEFAULT_SETTINGS: Partial<Settings> = {
-  prompt: `yo, you're my personal data detective! 🕵
+	prompt: `yo, you're my personal data detective! 🕵
 
 rules for the investigation:
 - extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
@@ -30,36 +30,35 @@ remember: you're analyzing screen ocr text & audio, etc. from my computer, so fo
 };
 
 export function useNotionSettings() {
-  const [settings, setSettings] = useState<Partial<Settings> | null>(null);
-  const [loading, setLoading] = useState(true);
+	const [settings, setSettings] = useState<Partial<Settings> | null>(null);
+	const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
+	useEffect(() => {
+		loadSettings();
+	}, []);
 
-  const loadSettings = async () => {
-    try {
-      const data = await getNotionSettings();
-      setSettings(data ? { ...DEFAULT_SETTINGS, ...data } : null);
-      console.log(data);
-    } catch (error) {
-      console.error("Failed to load settings:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+	const loadSettings = async () => {
+		try {
+			const data = await getNotionSettings();
+			setSettings(data ? { ...DEFAULT_SETTINGS, ...data } : null);
+		} catch (error) {
+			console.error("Failed to load settings:", error);
+		} finally {
+			setLoading(false);
+		}
+	};
 
-  const updateSettings = async (newSettings: Partial<Settings>) => {
-    try {
-      const mergedSettings = { ...DEFAULT_SETTINGS, ...newSettings };
-      await updateNotionSettings(mergedSettings);
-      setSettings(mergedSettings);
-      return true;
-    } catch (error) {
-      console.error("Failed to update settings:", error);
-      return false;
-    }
-  };
+	const updateSettings = async (newSettings: Partial<Settings>) => {
+		try {
+			const mergedSettings = { ...DEFAULT_SETTINGS, ...newSettings };
+			await updateNotionSettings(mergedSettings);
+			setSettings(mergedSettings);
+			return true;
+		} catch (error) {
+			console.error("Failed to update settings:", error);
+			return false;
+		}
+	};
 
-  return { settings, updateSettings, loading };
+	return { settings, updateSettings, loading };
 }
