@@ -32,55 +32,9 @@ type PermissionsStatus = {
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
-  const { isOpen, open, close } = useStatusDialog();
+  const { open } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null
-  );
-  const [isMacOS, setIsMacOS] = useState(false);
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-
-        setPermissions({
-          screenRecording: perms.screenRecording,
-          microphone: perms.microphone,
-          accessibility: perms.accessibility,
-        });
-      } catch (error) {
-        console.error("Failed to check permissions:", error);
-      }
-    };
-    checkPermissions();
-  }, []);
-
-  useEffect(() => {
-    const checkPlatform = () => {
-      const currentPlatform = platform();
-      setIsMacOS(currentPlatform === "macos");
-    };
-    checkPlatform();
-  }, []);
-
-  const handleOpenDataDir = async () => {
-    try {
-      const dataDir = await getDataDir();
-      await openUrl(dataDir);
-    } catch (error) {
-      console.error("failed to open data directory:", error);
-      toast({
-        title: "error",
-        description: "failed to open data directory.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
 
   const getStatusColor = (
     status: string,
@@ -99,47 +53,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
     return isVisionOk && isAudioOk && isUiOk ? "bg-green-500" : "bg-red-500";
   };
 
-  const getStatusMessage = (
-    status: string,
-    frameStatus: string,
-    audioStatus: string,
-    uiStatus: string,
-    audioDisabled: boolean,
-    uiMonitoringEnabled: boolean
-  ) => {
-    if (status === "loading")
-      return "screenpipe is starting up. this may take a few minutes...";
-
-    let issues = [];
-    if (frameStatus !== "ok" && frameStatus !== "disabled")
-      issues.push("screen recording");
-    if (!audioDisabled && audioStatus !== "ok" && audioStatus !== "disabled")
-      issues.push("audio recording");
-    if (uiMonitoringEnabled && uiStatus !== "ok" && uiStatus !== "disabled")
-      issues.push("ui monitoring");
-
-    if (issues.length === 0) return "screenpipe is running smoothly";
-    return `there might be an issue with ${issues.join(" and ")}`;
-  };
-
-  const formatTimestamp = (timestamp: string | null) => {
-    return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
-  };
-
   const statusColor = getStatusColor(
     health?.status ?? "",
     health?.frame_status ?? "",
     health?.audio_status ?? "",
     health?.ui_status ?? "",
     settings.disableAudio,
-    settings.enableUiMonitoring
-  );
-  const statusMessage = getStatusMessage(
-    health?.status ?? "",
-    health?.frame_status ?? "",
-    health?.audio_status ?? "",
-    health?.ui_status ?? "",
-    settings.disableAudio ?? "",
     settings.enableUiMonitoring
   );
 
@@ -153,64 +72,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
       toast({
         title: "error",
         description: "failed to open status dialog. please try again.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
-
-  const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility"
-  ) => {
-    const toastId = toast({
-      title: `checking ${type} permissions`,
-      description: "please wait...",
-      duration: Infinity,
-    });
-
-    try {
-      const permissionType =
-        type === "screen"
-          ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
-
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
-
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
-
-      setPermissions({
-        screenRecording: perms.screenRecording,
-        microphone: perms.microphone,
-        accessibility: perms.accessibility,
-      });
-
-      const granted =
-        type === "screen"
-          ? perms.screenRecording === "Granted"
-          : type === "audio"
-          ? perms.microphone === "Granted"
-          : perms.accessibility === "Granted";
-
-      toastId.update({
-        id: toastId.id,
-        title: granted ? "permission granted" : "permission check complete",
-        description: granted
-          ? `${type} permission was successfully granted`
-          : `please try granting ${type} permission again if needed`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error(`failed to handle ${type} permission:`, error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: `failed to handle ${type} permission`,
         variant: "destructive",
         duration: 3000,
       });
@@ -234,168 +95,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
           }`}
         />
       </Badge>
-      <Dialog open={isOpen} onOpenChange={close}>
-        <DialogContent
-          className="max-w-4xl max-h-[90vh] flex flex-col p-8"
-          aria-describedby="status-dialog-description"
-        >
-          <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle>screenpipe status</DialogTitle>
-            <div className="flex space-x-2">
-              <LogFileButton size="10" />
-
-              <Button
-                variant="outline"
-                onClick={handleOpenDataDir}
-                className="flex-shrink-0"
-              >
-                <Folder className="h-4 w-4 mr-2" />
-                view saved data
-              </Button>
-            </div>
-          </DialogHeader>
-          <div className="flex-grow overflow-auto">
-            <p className="text-sm mb-4 font-semibold">{statusMessage}</p>
-            <div className="space-y-2 text-sm">
-              {/* Screen Recording Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      health?.frame_status === "ok"
-                        ? "bg-green-500"
-                        : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-sm">screen recording</span>
-                  <span className="text-sm text-muted-foreground">
-                    status: {health ? health.frame_status : "error"}, last
-                    update:{" "}
-                    {formatTimestamp(health?.last_frame_timestamp ?? null)}
-                  </span>
-                </div>
-                {isMacOS && (
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.screenRecording.toLowerCase() === "granted" ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("screen")}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant screen permission
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Audio Recording Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      settings.disableAudio
-                        ? "bg-gray-400"
-                        : health?.audio_status === "ok"
-                        ? "bg-green-500"
-                        : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-sm">audio recording</span>
-                  <span className="text-sm text-muted-foreground">
-                    status:{" "}
-                    {settings.disableAudio
-                      ? "turned off"
-                      : health
-                      ? health.audio_status
-                      : "error"}
-                    , last update:{" "}
-                    {settings.disableAudio
-                      ? "n/a"
-                      : formatTimestamp(health?.last_audio_timestamp ?? null)}
-                  </span>
-                </div>
-                {isMacOS && (
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.microphone.toLowerCase() === "granted" ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("audio")}
-                      disabled={settings.disableAudio}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant audio permission
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* UI Monitoring Status */}
-              {settings.enableUiMonitoring && (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        health?.ui_status === "ok"
-                          ? "bg-green-500"
-                          : "bg-red-500"
-                      }`}
-                    />
-                    <span className="text-sm">ui monitoring</span>
-                    <span className="text-sm text-muted-foreground">
-                      status: {health?.ui_status}, last update:{" "}
-                      {formatTimestamp(
-                        health ? health.last_ui_timestamp : "error"
-                      )}
-                    </span>
-                  </div>
-                  {isMacOS && (
-                    <div className="flex items-center gap-2">
-                      {permissions && (
-                        <span>
-                          {permissions.accessibility.toLowerCase() === "granted" ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <X className="h-4 w-4 text-red-500" />
-                          )}
-                        </span>
-                      )}
-                      <Button
-                        variant="outline"
-                        className="w-[260px] text-sm justify-start"
-                        onClick={() => handlePermissionButton("accessibility")}
-                      >
-                        <Lock className="h-4 w-4 mr-2" />
-                        grant accessibility permission
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <Separator className="my-12" />
-            <DevModeSettings localDataDir={localDataDir} />
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 };
