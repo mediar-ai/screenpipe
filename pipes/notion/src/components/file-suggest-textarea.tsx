@@ -28,11 +28,9 @@ function highlightMatch(text: string, search: string) {
   );
 }
 
-function getDisplayName(fullPath: string): { dir: string; file: string } {
-  const parts = fullPath.split("/");
-  const file = parts.pop() || "";
-  const dir = parts.join("/");
-  return { dir, file };
+interface NotionPage {
+  id: number;
+  title: string;
 }
 
 export function FileSuggestTextarea({
@@ -45,7 +43,7 @@ export function FileSuggestTextarea({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cursorCoords, setCursorCoords] = useState({ x: 0, y: 0 });
-  const [files, setFiles] = useState<string[]>([]);
+  const [files, setFiles] = useState<NotionPage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
   const cursorPosRef = useRef<number | null>(null);
@@ -64,10 +62,10 @@ export function FileSuggestTextarea({
     searchTimeout.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/files?search=${encodeURIComponent(search)}`
+          `/api/notion/pages?q=${encodeURIComponent(search)}`,
         );
         const data = await res.json();
-        setFiles(data.files);
+        setFiles(data.pages);
       } catch (err) {
         console.error("failed to fetch files:", err);
         setFiles([]);
@@ -133,7 +131,7 @@ export function FileSuggestTextarea({
     }
   };
 
-  const handleSuggestionSelect = (file: string) => {
+  const handleSuggestionSelect = (file: NotionPage) => {
     if (!textareaRef.current) return;
 
     const cursorPos = textareaRef.current.selectionStart;
@@ -141,7 +139,7 @@ export function FileSuggestTextarea({
     const textAfterCursor = value.slice(cursorPos);
     const lastAtPos = textBeforeCursor.lastIndexOf("@");
 
-    const insertText = `@[[${file}]] `;
+    const insertText = `@[[${file.id}]] `;
     const newValue =
       textBeforeCursor.slice(0, lastAtPos) + insertText + textAfterCursor;
 
@@ -184,9 +182,8 @@ export function FileSuggestTextarea({
         ref={textareaRef}
         value={value}
         onChange={handleTextareaChange}
-        className={`w-full min-h-[100px] p-2 rounded-md border bg-background ${
-          disabled ? "opacity-50 cursor-not-allowed" : ""
-        } ${className}`}
+        className={`w-full min-h-[100px] p-2 rounded-md border bg-background ${disabled ? "opacity-50 cursor-not-allowed" : ""
+          } ${className}`}
         placeholder={placeholder}
         rows={10}
         disabled={disabled}
@@ -203,21 +200,15 @@ export function FileSuggestTextarea({
           <Command>
             <Command.List>
               {files.map((file) => {
-                const { dir, file: fileName } = getDisplayName(file);
                 return (
                   <Command.Item
-                    key={file}
+                    key={file.id}
                     onSelect={() => handleSuggestionSelect(file)}
                     className="px-2 py-1 hover:bg-accent cursor-pointer flex flex-col gap-0.5"
                   >
                     <span className="text-sm text-blue-500 font-medium">
-                      {highlightMatch(fileName, searchTerm)}
+                      {highlightMatch(file.title, searchTerm)}
                     </span>
-                    {dir && (
-                      <span className="text-xs text-muted-foreground opacity-60">
-                        {dir}
-                      </span>
-                    )}
                   </Command.Item>
                 );
               })}

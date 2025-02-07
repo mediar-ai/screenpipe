@@ -3,12 +3,51 @@ import { WorkLog } from "./types";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
+import { getNotionSettings } from "./actions/namespace-settings";
+import { Client } from "@notionhq/client";
+import { NotionToMarkdown } from "notion-to-md";
 
 export const workLog = z.object({
   title: z.string(),
   description: z.string(),
   tags: z.array(z.string()),
 });
+
+async function extractLinkedContent(prompt: string): Promise<string> {
+  try {
+    // Match @[[file]] or @[[folder/file]] patterns
+    const linkRegex = /@\[\[(.*?)\]\]/g;
+    const matches = [...prompt.matchAll(linkRegex)];
+    const settings = await getNotionSettings();
+    let enrichedPrompt = prompt;
+
+    const notion = new Client({ auth: settings?.notion?.accessToken });
+
+    const n2m = new NotionToMarkdown({ notionClient: notion });
+    for (const match of matches) {
+      const pageId = match[1];
+
+      try {
+        const mdblocks = await n2m.pageToMarkdown(pageId);
+        const mdString = n2m.toMarkdownString(mdblocks);
+
+        console.log(mdString);
+
+        enrichedPrompt = enrichedPrompt.replace(
+          match[0],
+          `\n--- Content of ${pageId} ---\n${mdString.parent}\n---\n`,
+        );
+      } catch (error) {
+        console.error(error, `of ${pageId}`);
+        return enrichedPrompt;
+      }
+    }
+    return enrichedPrompt;
+  } catch (e) {
+    console.error("not able to connect to notion", e);
+    return prompt;
+  }
+}
 
 export async function generateWorkLog(
   screenData: ContentItem[],
@@ -17,7 +56,11 @@ export async function generateWorkLog(
   endTime: Date,
   customPrompt?: string,
 ): Promise<WorkLog> {
-  const enrichedPrompt = customPrompt || "";
+  let enrichedPrompt = customPrompt || "";
+
+  if (customPrompt) {
+    enrichedPrompt = await extractLinkedContent(customPrompt);
+  }
 
   const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
     Rules:

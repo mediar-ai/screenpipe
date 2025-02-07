@@ -12,14 +12,25 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { OllamaModelsList } from "./ollama-models-list";
-import { Textarea } from "@/components/ui/textarea";
 import { validateCredentials } from "@/lib/notion/notion";
 import { toast } from "@/hooks/use-toast";
 import { useNotionSettings } from "@/lib/hooks/use-notion-settings";
-import { Loader2 } from "lucide-react";
-import { NotionCredentials } from "@/lib/types";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { NotionCredentials, Settings } from "@/lib/types";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
-import { parseInt } from "lodash";
+import { FileSuggestTextarea } from "./file-suggest-textarea";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "./ui/tooltip";
 
 export function NotionSettings() {
 	const { settings, updateSettings, loading } = useNotionSettings();
@@ -31,12 +42,19 @@ export function NotionSettings() {
 	});
 	const [testingLog, setTestingLog] = useState(false);
 	const [testingIntelligence, setTestingIntelligence] = useState(false);
+	const [localSettings, setLocalSettings] = useState<Partial<Settings> | null>(
+		{},
+	);
 
 	useEffect(() => {
 		setCredentials({
 			accessToken: settings?.notion?.accessToken || "",
 			databaseId: settings?.notion?.databaseId || "",
 			intelligenceDbId: settings?.notion?.intelligenceDbId || "",
+		});
+
+		setLocalSettings({
+			...settings,
 		});
 	}, [settings]);
 
@@ -52,8 +70,6 @@ export function NotionSettings() {
 				...settings!,
 				notion: credentials,
 			});
-
-			await updatePipeConfig(settings?.interval || 5);
 
 			toast({
 				title: "Success",
@@ -161,6 +177,33 @@ export function NotionSettings() {
 		}
 	};
 
+	const handleSaveSettings = async () => {
+		try {
+			await updateSettings({
+				...settings!,
+				aiModel: localSettings?.aiModel || settings?.aiModel,
+				prompt: localSettings?.prompt || settings?.prompt,
+				interval: localSettings?.interval || settings?.interval,
+				pageSize: localSettings?.pageSize || settings?.pageSize,
+			});
+
+			if (localSettings?.interval !== settings?.interval) {
+				await updatePipeConfig(localSettings?.interval || 5);
+			}
+
+			toast({
+				title: "Success",
+				description: "Settings saved successfully",
+			});
+		} catch (error) {
+			toast({
+				title: "Error",
+				description: "Failed to save settings",
+				variant: "destructive",
+			});
+		}
+	};
+
 	return (
 		<Card className="w-full max-w-4xl ">
 			<CardHeader>
@@ -177,62 +220,71 @@ export function NotionSettings() {
 							<OllamaModelsList
 								defaultValue={settings?.aiModel || ""}
 								onChange={(model) => {
-									updateSettings({ ...settings!, aiModel: model });
+									setLocalSettings({ ...localSettings!, aiModel: model });
 								}}
 								disabled={loading}
 							/>
 						</div>
 
-						<div>
+						<div className="space-y-2">
 							<Label>Custom Prompt</Label>
-							<textarea
-								placeholder="Enter custom prompt for log generation..."
-								value={settings?.prompt || ""}
-								onChange={(e) =>
-									updateSettings({ ...settings!, prompt: e.target.value })
-								}
-								className="w-full min-h-[100px] p-2 rounded-md border bg-background"
-								rows={10}
+							<FileSuggestTextarea
+								value={localSettings?.prompt || settings?.prompt || ""}
+								setValue={(value) => {
+									setLocalSettings({ ...localSettings!, prompt: value });
+								}}
 								disabled={loading}
 							/>
-							<div className="space-y-2">
-								<Label htmlFor="interval">sync interval (minutes)</Label>
-								<Input
-									id="interval"
-									name="interval"
-									type="number"
-									min="1"
-									step="1"
-									max="60"
-									defaultValue={settings?.interval ? settings?.interval : 5}
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label>Workspace Name</Label>
-								<Input
-									type="text"
-									placeholder="Required"
-									value={settings?.workspace || ""}
-									onChange={(e) =>
-										updateSettings({ ...settings!, workspace: e.target.value })
-									}
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor="pageSize">Page size</Label>
-								<Input
-									id="pageSize"
-									name="pageSize"
-									type="number"
-									defaultValue={settings?.pageSize || 50}
-									onChange={(e) =>
-										updateSettings({
-											...settings!,
-											pageSize: parseInt(e.target.value),
-										})
-									}
-								/>
-							</div>
+							<p className="text-xs text-muted-foreground">
+								make sure to keep the prompt within llm context window size.
+								<br />
+								protip: use the @mention feature to link to files in your vault
+								as context.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="interval">sync interval (minutes)</Label>
+							<Input
+								id="interval"
+								name="interval"
+								type="number"
+								min="1"
+								step="1"
+								max="60"
+								defaultValue={settings?.interval ? settings?.interval : 5}
+								onChange={(e) => {
+									setLocalSettings({
+										...localSettings!,
+										interval: parseInt(e.target.value),
+									});
+								}}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label>Workspace Name</Label>
+							<Input
+								type="text"
+								placeholder="Required"
+								value={settings?.workspace || ""}
+								onChange={(e) =>
+									updateSettings({ ...settings!, workspace: e.target.value })
+								}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label htmlFor="pageSize">Page size</Label>
+							<Input
+								id="pageSize"
+								name="pageSize"
+								type="number"
+								defaultValue={settings?.pageSize || 50}
+								onChange={(e) =>
+									setLocalSettings({
+										...localSettings!,
+										pageSize: parseInt(e.target.value),
+									})
+								}
+							/>
 						</div>
 
 						<div className="space-y-2">
@@ -270,22 +322,20 @@ export function NotionSettings() {
 								}
 							/>
 							<div className="flex justify-between items-center">
-								<Button
-									onClick={handleSetup}
-									disabled={isSettingUp || !settings?.workspace}
-								>
-									{isSettingUp ? "Connecting..." : "Connect Notion"}
-								</Button>
-								<Button
-									onClick={handleValidate}
-									disabled={
-										isSettingUp ||
-										!credentials.accessToken ||
-										!credentials.accessToken
-									}
-								>
-									{isSettingUp ? "Validating..." : "Validate Cred Notion"}
-								</Button>
+								<div className="flex gap-5 items-center">
+									<NotionConnectButton
+										isAutoDisabled={isSettingUp || !settings?.workspace}
+										isManualDisabled={
+											isSettingUp ||
+											!credentials.accessToken ||
+											!credentials.databaseId ||
+											!credentials.intelligenceDbId
+										}
+										handleAuto={handleSetup}
+										handleManual={handleValidate}
+										isLoading={isSettingUp}
+									/>
+								</div>
 								{settings?.notion && (
 									<div className="flex gap-2 mt-4">
 										<Button
@@ -319,6 +369,26 @@ export function NotionSettings() {
 										</Button>
 									</div>
 								)}
+
+								<TooltipProvider>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												onClick={handleSaveSettings}
+												disabled={loading}
+												variant="outline"
+											>
+												Save Settings
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent>
+											<p>
+												Saves AI model, prompt, interval, and page size settings
+												only
+											</p>
+										</TooltipContent>
+									</Tooltip>
+								</TooltipProvider>
 							</div>
 						</div>
 					</div>
@@ -327,3 +397,36 @@ export function NotionSettings() {
 		</Card>
 	);
 }
+
+const NotionConnectButton = ({
+	isAutoDisabled,
+	isManualDisabled,
+	isLoading,
+	handleAuto,
+	handleManual,
+}: {
+	isAutoDisabled: boolean;
+	isManualDisabled: boolean;
+	handleAuto: () => void;
+	handleManual: () => void;
+	isLoading: boolean;
+}) => {
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger asChild>
+				<Button disabled={isLoading} className="group">
+					{isLoading ? "Connecting..." : "Connect Notion"}
+					<ChevronDown className="group-aria-expanded:rotate-180 transition duration-200" />
+				</Button>
+			</DropdownMenuTrigger>
+			<DropdownMenuContent>
+				<DropdownMenuItem onClick={handleAuto} disabled={isAutoDisabled}>
+					Automatic
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={handleManual} disabled={isManualDisabled}>
+					Manual
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+};

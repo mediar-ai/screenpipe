@@ -173,10 +173,11 @@ export async function automateNotionSetup(
 
 		try {
 			await setupPage.locator(`text=${INTEGRATION_NAME}`).first().waitFor();
+
 			isIntegrationPresent = await setupPage
 				.locator(`text=${INTEGRATION_NAME}`)
 				.first()
-				.isVisible({ timeout: 3000 });
+				.isVisible({ timeout: 1000 });
 		} catch (_error) {
 			isIntegrationPresent = false;
 		}
