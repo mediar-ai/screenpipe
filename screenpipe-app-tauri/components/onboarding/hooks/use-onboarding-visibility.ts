@@ -8,33 +8,23 @@ export function useOnboardingVisibility(
   selectedPreference: string | null,
   selectedPersonalization: string | null,
 ) {
-    const [showOnboarding, setShowOnboarding] = useState(true);
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
-    // Value comes from localstorage. Persistent setter is in useOnboardingFlow.ts
-    const [restartPending, setRestartPending] = useState(false);
+    useEffect(() => {
+      const checkFirstTimeUser = async () => {
+        const showOnboarding = await localforage.getItem("showOnboarding");
+  
+        if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
+          setShowOnboarding(true);
+        }
+      };
+      checkFirstTimeUser();
+    }, []);
   
     function setShowOnboardingToFalse() {
       setShowOnboarding(false);
     }
   
-    function setShowOnboardingToTrue() {
-      setShowOnboarding(true);
-    }
-  
-    useEffect(() => {
-      const checkFirstTimeUser = async () => {
-        const showOnboarding = await localforage.getItem("showOnboarding");
-        const screenPermissionRestartPending = await localforage.getItem("screenPermissionRestartPending");
-  
-        if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
-          setShowOnboarding(true);
-          setRestartPending(screenPermissionRestartPending === true);
-        }
-      };
-      checkFirstTimeUser();
-    }, []);
-
-
     function skipOnboarding() {
       setShowOnboardingToFalse();
       posthog.capture("onboarding_skipped");
@@ -55,5 +45,5 @@ export function useOnboardingVisibility(
       setShowOnboardingToFalse();
     };
   
-    return { showOnboarding, setShowOnboardingToFalse, setShowOnboardingToTrue, skipOnboarding, completeOnboarding, handleEnd, restartPending };
+    return { showOnboarding, skipOnboarding, completeOnboarding, handleEnd };
 }

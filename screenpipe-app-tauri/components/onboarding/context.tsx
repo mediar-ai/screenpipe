@@ -12,8 +12,6 @@ interface OnboardingContextType {
   setSelectedOptions: Dispatch<SetStateAction<string[]>>;
   setSelectedPersonalization: Dispatch<SetStateAction<string | null>>;
   setSelectedPreference: Dispatch<SetStateAction<string | null>>;
-  setShowOnboardingToFalse: () => void,
-  setShowOnboardingToTrue: () => void,
   currentSlide: SlideKey;
   error: string | null;
   handleNextSlide: () => void;
@@ -42,12 +40,9 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const { 
     showOnboarding, 
-    setShowOnboardingToFalse, 
-    setShowOnboardingToTrue,
     skipOnboarding,
     completeOnboarding,
     handleEnd,
-    restartPending
   } = useOnboardingVisibility(
     selectedOptions,
     selectedPreference,
@@ -61,7 +56,6 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
     handlePrevSlide,
     setRestartPending
   } = useOnboardingFlow(
-    restartPending,
     selectedOptions,
     selectedPreference,
     selectedPersonalization,
@@ -76,8 +70,6 @@ export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
         setSelectedOptions,
         setSelectedPersonalization,
         setSelectedPreference,
-        setShowOnboardingToFalse,
-        setShowOnboardingToTrue,
         currentSlide,
         error,
         handleNextSlide,

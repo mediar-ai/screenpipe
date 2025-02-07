@@ -1,14 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SlideKey, slideFlow, trackOnboardingStep } from "../flow";
 import localforage from "localforage";
 
 export function useOnboardingFlow(
-  restartPending: boolean,
   selectedOptions: string[],
   selectedPreference: string | null,
   selectedPersonalization: string | null,
 ) {
-  const [currentSlide, setCurrentSlide] = useState<SlideKey>(restartPending ? SlideKey.STATUS : SlideKey.INTRO);
+  const [currentSlide, setCurrentSlide] = useState<SlideKey>(SlideKey.INTRO);
+
+  useEffect(() => {
+    const checkScreenPermissionRestartPending = async () => {
+      const screenPermissionRestartPending = await localforage.getItem("screenPermissionRestartPending");
+
+      if (screenPermissionRestartPending === true) {
+        setCurrentSlide(SlideKey.STATUS);
+      }
+    };
+    checkScreenPermissionRestartPending();
+  }, []);
+
   const [error, setError] = useState<string | null>(null);
 
   const handleNextSlide = () => {
