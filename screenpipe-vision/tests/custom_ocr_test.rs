@@ -61,6 +61,7 @@ rm -rf venv app.py
 */
 
 #[cfg(test)]
+#[ignore] // need to run server
 mod tests {
     use image::GenericImageView;
     use screenpipe_core::Language;
