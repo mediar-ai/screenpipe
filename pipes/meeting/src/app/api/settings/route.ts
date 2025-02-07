@@ -8,17 +8,24 @@ export const runtime = "nodejs"; // Add this line
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  console.log("getting settings...");
   const defaultSettings = getDefaultSettings();
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
+      console.error("settingsManager is undefined");
       throw new Error("settingsManager not found");
     }
     const rawSettings = await settingsManager.getAll();
+    // console.log("got settings:", rawSettings);
     return NextResponse.json(rawSettings);
   } catch (error) {
     console.error("failed to get settings:", error);
-    return NextResponse.json(defaultSettings);
+    // Return error status to help debug
+    return NextResponse.json(
+      { error: "failed to get settings", details: String(error) },
+      { status: 500 }
+    );
   }
 }
 
