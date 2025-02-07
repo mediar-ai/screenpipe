@@ -21,12 +21,6 @@ import localforage from "localforage";
 import OnboardingNavigation from "./navigation";
 import { useOnboarding } from "../context";
 
-interface OnboardingStatusProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
 // Add PermissionsStatus type
 type PermissionsStatus = {
   screenRecording: string;
@@ -47,11 +41,7 @@ type Stats = {
   audioSeconds: number;
 }
 
-const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingStatus = () => {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
@@ -59,7 +49,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
-  const { setRestartPending } = useOnboarding();
+  const { setRestartPending, handleNextSlide, handlePrevSlide } = useOnboarding();
   
   useEffect(() => {
     const checkRestartStatus = async () => {
@@ -266,7 +256,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   return (
     <div
-      className={`${className} w-full flex justify-between flex-col items-center`}
+      className={`w-full flex justify-between flex-col items-center`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img className="w-24 h-24 " src="/128x128.png" alt="screenpipe-logo" />
