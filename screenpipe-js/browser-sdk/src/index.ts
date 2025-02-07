@@ -21,7 +21,7 @@ let wsWithoutImages: WebSocket | null = null;
 
 // Update the wsEvents generator to accept includeImages parameter and manage connections
 async function* wsEvents(
-  includeImages: boolean = false
+  includeImages: boolean = false,
 ): AsyncGenerator<EventStreamResponse, void, unknown> {
   // Reuse existing connection or create new one
   let ws = includeImages ? wsWithImages : wsWithoutImages;
@@ -71,7 +71,7 @@ async function sendInputControl(action: InputAction): Promise<boolean> {
 export interface BrowserPipe {
   sendDesktopNotification(options: NotificationOptions): Promise<boolean>;
   queryScreenpipe(
-    params: ScreenpipeQueryParams
+    params: ScreenpipeQueryParams,
   ): Promise<ScreenpipeResponse | null>;
   input: {
     type: (text: string) => Promise<boolean>;
@@ -79,24 +79,34 @@ export interface BrowserPipe {
     moveMouse: (x: number, y: number) => Promise<boolean>;
     click: (button: "left" | "right" | "middle") => Promise<boolean>;
   };
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+  };
   streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
     void,
     unknown
   >;
   streamVision(
-    includeImages?: boolean
+    includeImages?: boolean,
   ): AsyncGenerator<VisionStreamResponse, void, unknown>;
   captureEvent: (
     event: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
   ) => Promise<void>;
   captureMainFeatureEvent: (
     name: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
   ) => Promise<void>;
   streamEvents(
-    includeImages: boolean
+    includeImages: boolean,
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
 }
 
@@ -109,7 +119,7 @@ class BrowserPipeImpl implements BrowserPipe {
     try {
       // Connect to settings SSE stream
       const settingsStream = new EventSource(
-        "http://localhost:11435/sse/settings"
+        "http://localhost:11435/sse/settings",
       );
 
       // Get initial settings
@@ -155,7 +165,7 @@ class BrowserPipeImpl implements BrowserPipe {
     } catch (error) {
       console.error(
         "failed to fetch settings, defaulting to analytics enabled:",
-        error
+        error,
       );
       return {
         analyticsEnabled: false,
@@ -165,7 +175,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async sendDesktopNotification(
-    options: NotificationOptions
+    options: NotificationOptions,
   ): Promise<boolean> {
     const { userId, email } = await this.initAnalyticsIfNeeded();
     const notificationApiUrl = "http://localhost:11435";
@@ -193,7 +203,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async queryScreenpipe(
-    params: ScreenpipeQueryParams
+    params: ScreenpipeQueryParams,
   ): Promise<ScreenpipeResponse | null> {
     console.log("queryScreenpipe:", params);
     const { userId, email } = await this.initAnalyticsIfNeeded();
@@ -265,6 +275,97 @@ class BrowserPipeImpl implements BrowserPipe {
       sendInputControl({ type: "MouseClick", data: button }),
   };
 
+  pipes: {
+    list: () => Promise<string[]>;
+    download: (url: string) => Promise<boolean>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+  } = {
+    list: async () => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/list", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        const data = await response.json();
+        return data.data;
+      } catch (error) {
+        console.error("failed to list pipes:", error);
+        return [];
+      }
+    },
+    download: async (url: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to download pipe:", error);
+        return false;
+      }
+    },
+    enable: async (pipeId: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/enable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to enable pipe:", error);
+        return false;
+      }
+    },
+    disable: async (pipeId: string) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/disable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to disable pipe:", error);
+        return false;
+      }
+    },
+    update: async (pipeId: string, config: { [key: string]: string }) => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+            config,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to update pipe:", error);
+        return false;
+      }
+    },
+  };
+
   async *streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
     void,
@@ -302,7 +403,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   async *streamVision(
-    includeImages: boolean = false
+    includeImages: boolean = false,
   ): AsyncGenerator<VisionStreamResponse, void, unknown> {
     try {
       for await (const event of wsEvents(includeImages)) {
@@ -321,7 +422,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
   public async captureEvent(
     eventName: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
   ) {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
@@ -330,7 +431,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
   public async captureMainFeatureEvent(
     featureName: string,
-    properties?: Record<string, any>
+    properties?: Record<string, any>,
   ) {
     const { analyticsEnabled } = await this.initAnalyticsIfNeeded();
     if (!analyticsEnabled) return;
@@ -338,7 +439,7 @@ class BrowserPipeImpl implements BrowserPipe {
   }
 
   public async *streamEvents(
-    includeImages: boolean = false
+    includeImages: boolean = false,
   ): AsyncGenerator<EventStreamResponse, void, unknown> {
     for await (const event of wsEvents(includeImages)) {
       yield event;
