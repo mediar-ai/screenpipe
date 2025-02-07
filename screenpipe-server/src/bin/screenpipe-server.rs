@@ -675,6 +675,7 @@ async fn main() -> anyhow::Result<()> {
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let dm_clone = device_manager.clone();
     let device_manager_clone = device_manager.clone();
+    let device_manager_clone_2 = device_manager.clone();
 
     let (whisper_sender, whisper_receiver) = if cli.disable_audio {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -1347,9 +1348,11 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    device_manager_clone_2.shutdown().await;
+
     tokio::task::block_in_place(|| {
-        vision_runtime.shutdown_timeout(Duration::from_secs(10));
-        audio_runtime.shutdown_timeout(Duration::from_secs(10));
+        drop(vision_runtime);
+        drop(audio_runtime);
     });
 
     info!("shutdown complete");

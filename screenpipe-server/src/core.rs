@@ -14,6 +14,7 @@ use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::{CaptureResult, OcrEngine};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Weak;
