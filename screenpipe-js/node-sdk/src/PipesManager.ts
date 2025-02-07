@@ -14,7 +14,7 @@ export class PipesManager {
     }
   }
 
-  async download(url: string): Promise<void> {
+  async download(url: string): Promise<boolean> {
     try {
       const response = await fetch("http://localhost:3030/pipes/download", {
         method: "POST",
@@ -31,7 +31,7 @@ export class PipesManager {
     }
   }
 
-  async enable(pipeId: string): Promise<void> {
+  async enable(pipeId: string): Promise<boolean> {
     try {
       const response = await fetch("http://localhost:3030/pipes/enable", {
         method: "POST",
@@ -48,7 +48,7 @@ export class PipesManager {
     }
   }
 
-  async disable(pipeId: string): Promise<void> {
+  async disable(pipeId: string): Promise<boolean> {
     try {
       const response = await fetch("http://localhost:3030/pipes/disable", {
         method: "POST",
@@ -68,7 +68,7 @@ export class PipesManager {
   async update(
     pipeId: string,
     config: { [key: string]: string },
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       const response = await fetch("http://localhost:3030/pipes/update", {
         method: "POST",
