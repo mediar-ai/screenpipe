@@ -14,6 +14,7 @@ use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::{CaptureResult, OcrEngine};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Weak;
@@ -161,6 +162,7 @@ pub async fn start_continuous_recording(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_vision(
     device_manager: Arc<DeviceManager>,
     ocr_engine: Arc<OcrEngine>,
@@ -407,6 +409,7 @@ async fn process_ocr_frame(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn record_audio(
     device_manager: Arc<DeviceManager>,
     db: Arc<DatabaseManager>,

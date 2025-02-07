@@ -11,9 +11,11 @@ import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialog } from "@/components/changelog-dialog";
 import { BreakingChangesInstructionsDialog } from "@/components/breaking-changes-instructions-dialog";
+import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 
 import { platform } from "@tauri-apps/plugin-os";
-import {PipeStore} from "@/components/pipe-store";
+import { PipeStore } from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useProfiles } from "@/lib/hooks/use-profiles";
@@ -28,6 +30,8 @@ export default function Home() {
   const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const { setShowChangelogDialog } = useChangelogDialog();
+  const { open: openStatusDialog } = useStatusDialog();
   const isProcessingRef = React.useRef(false);
 
   useEffect(() => {
@@ -41,8 +45,11 @@ export default function Home() {
       const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
         console.log("received deep link urls:", urls);
         for (const url of urls) {
+          const parsedUrl = new URL(url);
+
+          // Handle API key auth
           if (url.includes("api_key=")) {
-            const apiKey = new URL(url).searchParams.get("api_key");
+            const apiKey = parsedUrl.searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
               toast({
@@ -50,6 +57,22 @@ export default function Home() {
                 description: "your api key has been set",
               });
             }
+          }
+
+          // Handle UI navigation
+          switch (parsedUrl.pathname) {
+            case "/settings":
+              document.getElementById("settings-trigger")?.click();
+              break;
+            case "/changelog":
+              setShowChangelogDialog(true);
+              break;
+            case "/onboarding":
+              setShowOnboarding(true);
+              break;
+            case "/status":
+              openStatusDialog();
+              break;
           }
         }
       });

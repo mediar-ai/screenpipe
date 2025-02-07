@@ -26,30 +26,37 @@ export const createAppCommand = new Command()
     let { name, appType } = options;
 
     if (!appType) {
-      let { appTypePrompt } = await inquirer.prompt({
-        name: "appTypePrompt",
-        type: "select",
-        message: "what type of desktop app would you like to create?",
-        choices: [
-          { name: "electron", value: "electron"},
-          { name: "tauri", value: "tauri"}
-        ],
-        default: "tauri"
-      });
-
-      appType = appTypePrompt
+      try {
+        let { appTypePrompt } = await inquirer.prompt({
+            name: "appTypePrompt",
+            type: "select",
+            message: "what type of desktop app would you like to create?",
+            choices: [
+            { name: "electron", value: "electron"},
+            { name: "tauri", value: "tauri"}
+          ],
+          default: "tauri"
+        });
+        appType = appTypePrompt
+      } catch (error) {
+        handleError(error);
+      }
     }
 
 
     if (!name || name.length === 0) {
-      name = await input({
-        message: "What is your project name?",
-        default: "my-desktop-app",
-        validate: (input) => {
-          if (input.trim().length === 0) return "project name is required.";
-          return true;
-        },
-      });
+      try {
+        name = await input({
+          message: "What is your project name?",
+          default: "my-desktop-app",
+          validate: (input) => {
+            if (input.trim().length === 0) return "project name is required.";
+            return true;
+          },
+        });
+      } catch (error) {
+        handleError(error);
+      }
     }
 
     const loadingSpinner = spinner("creating your desktop app...");

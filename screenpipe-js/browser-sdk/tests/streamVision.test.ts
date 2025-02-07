@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pipe } from "../src/index";
+import { pipe } from "../../node-sdk/src/index";
 
 describe("streamVision", () => {
   test(

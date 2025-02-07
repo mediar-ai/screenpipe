@@ -68,10 +68,7 @@ pub async fn start_deepgram_stream(
         }
     });
 
-    info!(
-        "Starting deepgram stream with api key: {:?} and url: {:?}",
-        api_key, DEEPGRAM_WEBSOCKET_URL.as_str()
-    );
+    info!("Starting deepgram stream for device: {}", device);
 
     let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
         true => deepgram::Deepgram::new(api_key)?,
@@ -101,6 +98,7 @@ pub async fn start_deepgram_stream(
     loop {
         tokio::select! {
             _ = &mut shutdown_rx => {
+                info!("Shutting down deepgram stream for device: {}", device);
                 break;
             }
             result = results.try_next() => {
@@ -130,7 +128,9 @@ fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, R
             for sample in data {
                 bytes.put_i16_le((sample * i16::MAX as f32) as i16);
             }
-            tx.send(Ok(bytes.freeze())).await.unwrap();
+            if tx.send(Ok(bytes.freeze())).await.is_err() {
+                tx.close_channel();
+            }
         }
     });
 

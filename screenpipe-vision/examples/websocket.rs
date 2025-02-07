@@ -8,7 +8,7 @@ use screenpipe_vision::{
     continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
 use serde::Serialize;
-use std::collections::HashMap;
+use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
@@ -24,11 +24,10 @@ struct SimplifiedResult {
 
 #[derive(Clone, Serialize)]
 pub struct SimplifiedWindowResult {
-    // pub image: String,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
-    pub text_json: Vec<HashMap<String, String>>, // Change this line
+    pub text_json: Vec<serde_json::Value>,
     pub focused: bool,
     pub confidence: f64,
 }
@@ -148,11 +147,10 @@ async fn run_websocket_server(
                         let _base64_image = general_purpose::STANDARD.encode(buffer);
 
                         SimplifiedWindowResult {
-                            // image: base64_image,
                             window_name: window.window_name,
                             app_name: window.app_name,
                             text: window.text,
-                            text_json: window.text_json, // Add this line
+                            text_json: window.text_json,
                             focused: window.focused,
                             confidence: window.confidence,
                         }

@@ -41,19 +41,29 @@ export const createPipeCommand = new Command()
     ); 
     logger.log("build powerful agents, monetize it, etc.\n");
 
-    const pipeName = await input({
-      message: "what is your pipe name?",
-      default: "my-screenpipe",
-      validate: (input) => {
-        if (input.trim().length === 0) return "pipe name is required";
-        return true;
-      },
-    });
+    let pipeName = "";
+    try {
+      pipeName = await input({
+        message: "what is your pipe name?",
+        default: "my-screenpipe",
+        validate: (input) => {
+          if (input.trim().length === 0) return "pipe name is required";
+          return true;
+        },
+      });
+    } catch (error) {
+      handleError(error);
+    }
 
-    const directory = await input({
-      message: "where would you like to create your pipe?",
-      default: pipeName,
-    });
+    let directory = "";
+    try {
+      directory = await input({
+        message: "where would you like to create your pipe?",
+        default: pipeName,
+      });
+    } catch (error) {
+      handleError(error);
+    }
 
     const spinner = ora("creating your pipe...").start();
 
