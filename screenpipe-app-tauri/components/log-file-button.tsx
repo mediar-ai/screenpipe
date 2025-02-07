@@ -236,16 +236,24 @@ export const LogFileButton = ({
   }, []);
 
   const sendLogs = async () => {
-    if (!logContent) return;
+    if (!logFiles.length) return;
 
     setIsSending(true);
     try {
-      // const BASE_URL =
-      //   (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
-      //   "https://screenpi.pe";
       const BASE_URL = "https://screenpi.pe";
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
+
+      // Get all log contents
+      const logContents = await Promise.all(
+        logFiles.map(async (file) => ({
+          name: file.name,
+          content: await readTextFile(file.path),
+        }))
+      );
+
+      // Also get console logs from browser
+      const consoleLog = localStorage.getItem("console_logs") || ""; // You'll need to implement console log capturing
 
       // Get signed URL
       const signedRes = await fetch(`${BASE_URL}/api/logs`, {
@@ -258,16 +266,24 @@ export const LogFileButton = ({
         data: { signedUrl, path },
       } = await signedRes.json();
 
-      // Upload log content
+      // Combine all logs with clear separators
+      const combinedLogs =
+        logContents
+          .map((log) => `\n=== ${log.name} ===\n${log.content}`)
+          .join("\n\n") +
+        "\n\n=== Browser Console Logs ===\n" +
+        consoleLog;
+
+      // Upload combined log content
       await fetch(signedUrl, {
         method: "PUT",
-        body: logContent,
+        body: combinedLogs,
         headers: { "Content-Type": "text/plain" },
       });
 
       const os = osPlatform();
       const os_version = osVersion();
-      const app_version = await getVersion();
+      const app_version = getVersion();
 
       // Confirm upload
       const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
