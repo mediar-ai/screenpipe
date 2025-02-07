@@ -189,11 +189,6 @@ impl ResourceMonitor {
             }
         }
 
-        // Send metrics to PostHog
-        let total_memory_gb = total_memory_gb;
-        let system_total_memory = system_total_memory;
-        let total_cpu = total_cpu;
-
         if self.posthog_enabled {
             tokio::select! {
                 _ = self.send_to_posthog(total_memory_gb, system_total_memory, total_cpu) => {},

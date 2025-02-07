@@ -47,6 +47,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
 
 // Add this struct to handle the server response structure
@@ -92,50 +93,67 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let env_filter = EnvFilter::from_default_env()
-        .add_directive("tokio=debug".parse().unwrap()) // Add this
-        .add_directive("runtime=debug".parse().unwrap()) // Add this
-        .add_directive("info".parse().unwrap())
-        .add_directive("tokenizers=error".parse().unwrap())
-        .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap());
+    let make_env_filter = || {
+        let filter = EnvFilter::from_default_env()
+            .add_directive("tokio=debug".parse().unwrap())
+            .add_directive("runtime=debug".parse().unwrap())
+            .add_directive("info".parse().unwrap())
+            .add_directive("tokenizers=error".parse().unwrap())
+            .add_directive("rusty_tesseract=error".parse().unwrap())
+            .add_directive("symphonia=error".parse().unwrap())
+            .add_directive("hf_hub=error".parse().unwrap());
 
-    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
-    // which is noise
-    #[cfg(target_os = "windows")]
-    let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
+        // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
+        // which is noise
+        #[cfg(target_os = "windows")]
+        let filter = filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
-    let env_filter = env::var("SCREENPIPE_LOG")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .fold(
-            env_filter,
-            |filter, module_directive| match module_directive.parse() {
-                Ok(directive) => filter.add_directive(directive),
-                Err(e) => {
-                    eprintln!(
-                        "warning: invalid log directive '{}': {}",
-                        module_directive, e
-                    );
-                    filter
+        let filter = env::var("SCREENPIPE_LOG")
+            .unwrap_or_default()
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .fold(filter, |filter, module_directive| {
+                match module_directive.parse() {
+                    Ok(directive) => filter.add_directive(directive),
+                    Err(e) => {
+                        eprintln!(
+                            "warning: invalid log directive '{}': {}",
+                            module_directive, e
+                        );
+                        filter
+                    }
                 }
-            },
-        );
+            });
 
-    let env_filter = if cli.debug {
-        env_filter.add_directive("screenpipe=debug".parse().unwrap())
-    } else {
-        env_filter
+        if cli.debug {
+            filter.add_directive("screenpipe=debug".parse().unwrap())
+        } else {
+            filter
+        }
     };
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking))
-        .init();
+    let tracing_registry = tracing_subscriber::registry()
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_filter(make_env_filter()),
+        )
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_filter(make_env_filter()),
+        );
 
+    #[cfg(feature = "debug-console")]
+    let tracing_registry = tracing_registry.with(
+        console_subscriber::spawn().with_filter(
+            EnvFilter::from_default_env()
+                .add_directive("tokio=trace".parse().unwrap())
+                .add_directive("runtime=trace".parse().unwrap()),
+        ),
+    );
+
+    tracing_registry.init();
     Ok(guard)
 }
 
@@ -168,8 +186,7 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    // Determine initial logging state based on command
-    let should_log = match &cli.command {
+    match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
                 subcommand,
@@ -218,21 +235,8 @@ async fn main() -> anyhow::Result<()> {
         _ => true,
     };
 
-    // Override logging state if debug console is enabled
-    #[cfg(feature = "debug-console")]
-    let should_log = if cfg!(all(debug_assertions, feature = "debug-console")) {
-        console_subscriber::init();
-        false
-    } else {
-        should_log
-    };
-
     // Store the guard in a variable that lives for the entire main function
-    let _log_guard = if should_log {
-        Some(setup_logging(&local_data_dir, &cli)?)
-    } else {
-        None
-    };
+    let _log_guard = Some(setup_logging(&local_data_dir, &cli)?);
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
