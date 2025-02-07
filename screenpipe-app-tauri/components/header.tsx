@@ -35,11 +35,7 @@ import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -146,8 +142,9 @@ export default function Header() {
               <Dialog modal={true}>
                 <DialogTrigger asChild>
                   <DropdownMenuItem
+                    id="settings-trigger"
                     onSelect={(e) => e.preventDefault()}
-                    className="cursor-pointer  p-1.5"
+                    className="cursor-pointer p-1.5"
                   >
                     <Settings2 className="mr-2 h-4 w-4" />
                     <span>settings</span>
