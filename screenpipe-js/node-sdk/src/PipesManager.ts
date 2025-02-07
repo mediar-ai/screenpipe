@@ -1,7 +1,8 @@
 export class PipesManager {
   async list(): Promise<string[]> {
     try {
-      const response = await fetch("http://localhost:3030/pipes/list", {
+      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const response = await fetch(`${apiUrl}/pipes/list`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
@@ -16,7 +17,8 @@ export class PipesManager {
 
   async download(url: string): Promise<boolean> {
     try {
-      const response = await fetch("http://localhost:3030/pipes/download", {
+      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const response = await fetch(`${apiUrl}/pipes/download`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -33,7 +35,8 @@ export class PipesManager {
 
   async enable(pipeId: string): Promise<boolean> {
     try {
-      const response = await fetch("http://localhost:3030/pipes/enable", {
+      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const response = await fetch(`${apiUrl}/pipes/enable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -50,7 +53,8 @@ export class PipesManager {
 
   async disable(pipeId: string): Promise<boolean> {
     try {
-      const response = await fetch("http://localhost:3030/pipes/disable", {
+      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const response = await fetch(`${apiUrl}/pipes/disable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -70,7 +74,8 @@ export class PipesManager {
     config: { [key: string]: string },
   ): Promise<boolean> {
     try {
-      const response = await fetch("http://localhost:3030/pipes/update", {
+      const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+      const response = await fetch(`${apiUrl}/pipes/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
