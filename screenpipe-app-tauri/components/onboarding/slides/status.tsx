@@ -18,8 +18,8 @@ import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
 import OnboardingNavigation from "./navigation";
 import { useOnboarding } from "../context";
-import { useInputDevices } from "@/components/input-devices/context";
-import { PermissionDevices } from "@/components/input-devices/types";
+import { useScreenpipeStatus } from "@/components/screenpipe-status/context";
+import { PermissionDevices } from "@/components/screenpipe-status/types";
 
 type Stats = {
   screenshots: number;
@@ -34,7 +34,7 @@ const OnboardingStatus = () => {
   const { updateSettings } = useSettings();
   
   // permissions
-  const { permissions, isMacOS, handlePermissionButton } = useInputDevices();
+  const { permissions, isMacOS, handlePermissionButton } = useScreenpipeStatus();
   const [stats, setStats] = useState<Stats | null>(null);
 
   // onboarding
