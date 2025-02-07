@@ -38,6 +38,7 @@ pub struct Decoder<'a> {
     no_speech_token: u32,
     no_timestamps_token: u32,
     language_token: Option<u32>,
+    tokens_buffer: Vec<u32>,
 }
 
 impl<'a> Decoder<'a> {
@@ -88,24 +89,27 @@ impl<'a> Decoder<'a> {
             no_speech_token,
             language_token,
             no_timestamps_token,
+            tokens_buffer: Vec::new(),
         })
     }
 
-    fn decode(&mut self, mel: &Tensor, t: f64) -> Result<DecodingResult> {
+    pub fn decode(&mut self, mel: &Tensor, t: f64) -> Result<DecodingResult> {
         let audio_features = self.model.encoder_forward(mel, true)?;
         if self.verbose {
             info!("audio features: {:?}", audio_features.dims());
         }
         let sample_len = self.model.config().max_target_positions / 2;
         let mut no_speech_prob = f64::NAN;
-        let mut tokens = vec![self.sot_token];
+        self.tokens_buffer.clear();
+        self.tokens_buffer.reserve(128); // Typical max tokens
+        self.tokens_buffer.push(self.sot_token);
         if let Some(language_token) = self.language_token {
-            tokens.push(language_token);
+            self.tokens_buffer.push(language_token);
         }
-        tokens.push(self.transcribe_token);
+        self.tokens_buffer.push(self.transcribe_token);
 
         if !self.timestamps {
-            tokens.push(self.no_timestamps_token);
+            self.tokens_buffer.push(self.no_timestamps_token);
         }
 
         let mut sum_logprob = 0f64;
@@ -114,7 +118,7 @@ impl<'a> Decoder<'a> {
         let mut token_history = Vec::new(); // Track recent tokens
 
         for i in 0..sample_len {
-            let tokens_t = Tensor::new(tokens.as_slice(), mel.device())?;
+            let tokens_t = Tensor::new(self.tokens_buffer.as_slice(), mel.device())?;
             let tokens_t = tokens_t.unsqueeze(0)?;
             let ys = self
                 .model
@@ -164,7 +168,7 @@ impl<'a> Decoder<'a> {
                     .unwrap()
             };
 
-            tokens.push(next_token);
+            self.tokens_buffer.push(next_token);
             token_history.push(next_token); // Add to history
 
             let prob = softmax(&logits, candle::D::Minus1)?
@@ -174,7 +178,7 @@ impl<'a> Decoder<'a> {
             sum_logprob += prob.ln();
 
             if next_token == self.eot_token
-                || tokens.len() > self.model.config().max_target_positions
+                || self.tokens_buffer.len() > self.model.config().max_target_positions
             {
                 break;
             }
@@ -182,11 +186,14 @@ impl<'a> Decoder<'a> {
             last_token_was_timestamp = next_token > self.no_timestamps_token;
         }
 
-        let text = self.tokenizer.decode(&tokens, true).map_err(E::msg)?;
-        let avg_logprob = sum_logprob / tokens.len() as f64;
+        let text = self
+            .tokenizer
+            .decode(&self.tokens_buffer, true)
+            .map_err(E::msg)?;
+        let avg_logprob = sum_logprob / self.tokens_buffer.len() as f64;
 
         Ok(DecodingResult {
-            tokens,
+            tokens: std::mem::take(&mut self.tokens_buffer),
             text,
             avg_logprob,
             no_speech_prob,
