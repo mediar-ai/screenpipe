@@ -5,21 +5,23 @@ import { toast } from "@/components/ui/use-toast";
 import { usePermissions } from "./use-permissions";
 import { PermissionDevices, PermissionsStatesPerDevice } from "./types";
 import { useOnboarding } from "../onboarding/context";
+import { Dialog, DialogContent } from "../ui/dialog";
 
-type InputDevicesContextType = {
+type ScreenpipeStatusContextType = {
   permissions: PermissionsStatesPerDevice | null;
   isMacOS: boolean;
   checkPermissions: () => Promise<PermissionsStatesPerDevice | undefined>;
   handlePermissionButton: (type: PermissionDevices) => Promise<void>;
 }
 
-const InputDevicesContext = createContext<InputDevicesContextType | undefined>(
+const ScreenpipeStatusContext = createContext<ScreenpipeStatusContextType | undefined>(
   undefined
 );
 
-export const InputDevicesProvider: React.FC<{ children: React.ReactNode }> = ({
+export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+    const { showOnboarding } = useOnboarding();
     const { permissions, checkPermissions, isMacOS, handlePermissionButton } = usePermissions();
     
     useEffect(() => {
@@ -27,21 +29,21 @@ export const InputDevicesProvider: React.FC<{ children: React.ReactNode }> = ({
     }, []);
 
     return (
-      <InputDevicesContext.Provider value={{ 
+      <ScreenpipeStatusContext.Provider value={{ 
           permissions,
           isMacOS,
           checkPermissions,
           handlePermissionButton,
       }}>
           {children}
-      </InputDevicesContext.Provider>
+      </ScreenpipeStatusContext.Provider>
     );
 };
 
-export const useInputDevices = () => {
-  const context = useContext(InputDevicesContext);
+export const useScreenpipeStatus = () => {
+  const context = useContext(ScreenpipeStatusContext);
   if (context === undefined) {
-    throw new Error("useInputDevices must be used within an InputDevicesProvider");
+    throw new Error("useScreenpipeStatus must be used within an ScreenpipeStatusProvider");
   }
   return context;
 };
