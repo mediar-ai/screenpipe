@@ -8,7 +8,7 @@ use tokenizers::Tokenizer;
 
 pub struct WhisperModel {
     pub model: Model,
-    pub tokenizer: Tokenizer,
+    pub tokenizer: Box<Tokenizer>,
     pub device: Device,
     pub mel_filters: Vec<f32>,
 }
@@ -53,7 +53,7 @@ impl WhisperModel {
 
         debug!("Parsing config and tokenizer");
         let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
-        let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
+        let tokenizer = Box::new(Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?);
         // tokenizer.with_pre_tokenizer(PreT)
         debug!("Loading model weights");
         let vb =

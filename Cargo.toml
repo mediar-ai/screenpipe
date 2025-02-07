@@ -54,8 +54,10 @@ git = "https://github.com/microsoft/vcpkg"
 rev = "2023.04.15"
 dynamic = true
 
+# [profile.release]
+# codegen-units = 1
+# lto = true
+# opt-level = "s"
+# strip = true
 [profile.release]
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true
+debug = true
