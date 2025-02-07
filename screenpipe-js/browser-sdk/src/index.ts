@@ -13,6 +13,8 @@ import type {
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 
+type Result<T> = { success: true; data: T } | { success: false; error: any };
+
 const WS_URL = "ws://localhost:3030/ws/events";
 
 // At the top of the file, add WebSocket instances
@@ -99,21 +101,21 @@ export interface BrowserPipe {
     includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
   pipes: {
-    list: () => Promise<string[]>;
-    download: (url: string) => Promise<boolean>;
+    list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
     update: (
       pipeId: string,
       config: { [key: string]: string },
     ) => Promise<boolean>;
-    getPipeInfo: (pipeId: string) => Promise<any>;
     downloadPrivate: (
       url: string,
       pipeName: string,
       pipeId: string
-    ) => Promise<any>;
-    delete: ( pipeId: string,) => Promise<boolean>;
+    ) => Promise<Result<Record<string, any>>>;
   };
 }
 
@@ -283,37 +285,41 @@ class BrowserPipeImpl implements BrowserPipe {
   };
 
   pipes: {
-    list: () => Promise<string[]>;
-    download: (url: string) => Promise<boolean>;
+    list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
     update: (
       pipeId: string,
       config: { [key: string]: string },
     ) => Promise<boolean>;
-    getPipeInfo: (pipeId: string) => Promise<any>;
     downloadPrivate: (
       url: string,
       pipeName: string,
       pipeId: string
-    ) => Promise<any>;
-    delete: ( pipeId: string,) => Promise<boolean>;
+    ) => Promise<Result<Record<string, any>>>;
   } = {
-    list: async (): Promise<string[]> => {
+    list: async (): Promise<Result<string[]>> => {
       try {
         const response = await fetch("http://localhost:3030/pipes/list", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
         });
 
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
         const data = await response.json();
-        return data.data;
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to list pipes:", error);
-        return [];
+        return { success: false, error: error };
       }
     },
-    download: async (url: string): Promise<boolean> => {
+    download: async (url: string): Promise<Result<Record<string, any>>> => {
       try {
         const response = await fetch(`http://localhost:3030/pipes/download`, {
           method: "POST",
@@ -323,10 +329,15 @@ class BrowserPipeImpl implements BrowserPipe {
           }),
         });
 
-        return response.ok;
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to download pipe:", error);
-        return false;
+        return { success: false, error: error };
       }
     },
     enable: async (pipeId: string): Promise<boolean> => {
@@ -345,8 +356,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-
-    disable: async (pipeId: string) => {
+    disable: async (pipeId: string): Promise<boolean> => {
       try {
         const response = await fetch(`http://localhost:3030/pipes/disable`, {
           method: "POST",
@@ -356,18 +366,16 @@ class BrowserPipeImpl implements BrowserPipe {
           }),
         });
 
-        if (!response.ok) {
-          throw new Error("pipe not found");
-        }
-        const data = await response.json();
-        return data;
+        return response.ok;
       } catch (error) {
         console.error("failed to disable pipe:", error);
-        return null;
+        return false;
       }
     },
-
-    update: async (pipeId: string, config: { [key: string]: string }) => {
+    update: async (
+      pipeId: string,
+      config: { [key: string]: string 
+      }): Promise<boolean> => {
       try {
         const response = await fetch(`http://localhost:3030/pipes/update`, {
           method: "POST",
@@ -384,8 +392,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-
-    getPipeInfo: async (pipeId: string): Promise<any> => {
+    info: async (pipeId: string): Promise<Result<Record<string, any>>> => {
       try {
         const response = await fetch(`http://localhost:3030/pipes/info/${pipeId}`, {
           method: "GET",
@@ -396,19 +403,18 @@ class BrowserPipeImpl implements BrowserPipe {
           throw new Error(`http error! status: ${response.status}`);
         }
 
-        const data = await response.json();
-        return data.data;
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to get pipe info:", error);
-        return null;
+        return { success: false, error: error };
       }
     },
-
     downloadPrivate: async (
       url: string,
       pipeName: string,
       pipeId: string
-    ): Promise<any> => {
+    ): Promise<Result<Record<string, any>>> => {
       try {
         const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
         const response = await fetch(`${apiUrl}/pipes/download-private`, {
@@ -425,14 +431,13 @@ class BrowserPipeImpl implements BrowserPipe {
           throw new Error(`http error! status: ${response.status}`);
         }
 
-        const data = await response.json();
-        return data.data;
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to download private pipe:", error);
-        return false;
+        return { success: false, error: error };
       }
     },
-
     delete: async (pipeId: string): Promise<boolean> => {
       try {
         const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";

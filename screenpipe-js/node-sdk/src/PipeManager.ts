@@ -1,5 +1,7 @@
+type Result<T> = { success: true; data: T } | { success: false; error: any };
+
 export class PipesManager {
-  async list(): Promise<string[]> {
+  async list(): Promise<Result<string[]>> {
     try {
       const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/list`, {
@@ -7,15 +9,19 @@ export class PipesManager {
         headers: { "Content-Type": "application/json" },
       });
 
+      if (!response.ok) {
+        throw new Error(`http error! status: ${response.status}`);
+      }   
+
       const data = await response.json();
-      return data.data;
+      return { success: true, data: data.data };
     } catch (error) {
       console.error("failed to list pipes:", error);
-      return [];
+      return { success: false, error: error };
     }
   }
 
-  async download(url: string): Promise<boolean> {
+  async download(url: string): Promise<Result<Record<string, any>>> {
     try {
       const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/download`, {
@@ -26,10 +32,15 @@ export class PipesManager {
         }),
       });
 
-      return response.ok;
+      if (!response.ok) {
+        throw new Error(`http error! status: ${response.status}`);
+      }   
+
+      const data: Record<string, any> = await response.json();
+      return { success: true, data: data.data };
     } catch (error) {
       console.error("failed to download pipe:", error);
-      return false;
+      return { success: false, error: error };
     }
   }
 
@@ -51,7 +62,7 @@ export class PipesManager {
     }
   }
 
-  async disable(pipeId: string): Promise<any> {
+  async disable(pipeId: string): Promise<boolean> {
     try {
       const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/disable`, {
@@ -62,14 +73,10 @@ export class PipesManager {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("pipe not found");
-      }
-      const data = await response.json();
-      return data;
+      return response.ok;
     } catch (error) {
       console.error("failed to disable pipe:", error);
-      return null;
+      return false;
     }
   }
 
@@ -95,7 +102,7 @@ export class PipesManager {
     }
   }
 
-  async getPipeInfo(pipeId: string): Promise<any> {
+  async info(pipeId: string): Promise<Result<Record<string, any>>> {
     try {
       const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/info/${pipeId}`, {
@@ -107,11 +114,11 @@ export class PipesManager {
         throw new Error(`http error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      return data.data;
+      const data: Record<string, any> = await response.json();
+      return { success: true, data: data.data };
     } catch (error) {
       console.error("failed to get pipe info:", error);
-      return null;
+      return { success: false, error: error };
     }
   }
 
@@ -119,7 +126,7 @@ export class PipesManager {
     url: string,
     pipeName: string,
     pipeId: string
-  ): Promise<any> {
+  ): Promise<Result<Record<string, any>>> {
     try {
       const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
       const response = await fetch(`${apiUrl}/pipes/download-private`, {
@@ -136,11 +143,11 @@ export class PipesManager {
         throw new Error(`http error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      return data.data;
+      const data: Record<string, any> = await response.json();
+      return { success: true, data: data.data };
     } catch (error) {
       console.error("failed to download private pipe:", error);
-      return false;
+      return { success: false, error: error };
     }
   }
 
