@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
-use tracing::{debug, error, warn};
 use screenpipe_core::{AudioDevice, AudioDeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
@@ -14,6 +13,7 @@ use sqlx::TypeInfo;
 use sqlx::ValueRef;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::{debug, error, warn};
 
 use std::collections::BTreeMap;
 use tokio::time::{timeout, Duration as TokioDuration};
@@ -783,7 +783,7 @@ impl DatabaseManager {
             .bind(frame_name)
             .bind(limit)
             .bind(offset)
-            .fetch_all(&self.pool)            
+            .fetch_all(&self.pool)
             .await?;
 
         Ok(raw_results
@@ -1001,11 +1001,20 @@ impl DatabaseManager {
                 )
             }
             ContentType::Audio => {
+                let table = if query.is_empty() {
+                    "audio_transcriptions"
+                } else {
+                    "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                };
+                let match_condition = if query.is_empty() {
+                    "1=1"
+                } else {
+                    "audio_transcriptions_fts MATCH ?1"
+                };
                 format!(
                     r#"
                     SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
-                    FROM audio_transcriptions_fts
-                    JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id          
+                    FROM {}
                     WHERE {}
                         AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                         AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
@@ -1013,16 +1022,7 @@ impl DatabaseManager {
                         AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
                         AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
                     "#,
-                    table = if query.is_empty() {
-                        "audio_transcriptions"
-                    } else {
-                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-                    },
-                    match_condition = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "audio_transcriptions_fts MATCH ?1"
-                    }
+                    table, match_condition
                 )
             }
             ContentType::UI => {
@@ -1091,7 +1091,7 @@ impl DatabaseManager {
                             AND (?7 IS NULL OR ui_monitoring.text_length <= ?7)
                             AND ui_monitoring.text_output != ''
                     )"#,
-                    if query.is_empty() {
+                    ocr_table = if query.is_empty() {
                         "ocr_text"
                     } else {
                         "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
