@@ -283,7 +283,7 @@ export const LogFileButton = ({
 
       const os = osPlatform();
       const os_version = osVersion();
-      const app_version = getVersion();
+      const app_version = await getVersion();
 
       // Confirm upload
       const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
