@@ -11,30 +11,15 @@ import {
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "@/components/ui/label";
-import { platform } from "@tauri-apps/plugin-os";
 import { LogFileButton } from "@/components/log-file-button";
 import { Separator } from "@/components/ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
-import localforage from "localforage";
 import OnboardingNavigation from "./navigation";
 import { useOnboarding } from "../context";
-
-// Add PermissionsStatus type
-type PermissionsStatus = {
-  screenRecording: string;
-  microphone: string;
-  accessibility: string;
-};
-
-const PermissionDevice = {
-  SCREEN_RECORDING: "screenRecording",
-  MICROPHONE: "microphone",
-  ACCESSIBILITY: "accessibility",
-} as const;
-
-type PermissionDevice = (typeof PermissionDevice)[keyof typeof PermissionDevice];
+import { useInputDevices } from "@/components/input-devices/context";
+import { PermissionDevices } from "@/components/input-devices/types";
 
 type Stats = {
   screenshots: number;
@@ -42,47 +27,19 @@ type Stats = {
 }
 
 const OnboardingStatus = () => {
+  // screenpipe sidecar controls
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [isMacOS, setIsMacOS] = useState(false);
-  const { setRestartPending, handleNextSlide, handlePrevSlide } = useOnboarding();
   
-  useEffect(() => {
-    const checkRestartStatus = async () => {
-      const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
-      );
-      if (restartPending) {
-        // Clear the flag
-        await localforage.removeItem("screenPermissionRestartPending");
-        // Recheck permissions
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-        setPermissions(perms);
-      }
-    };
-    checkRestartStatus();
-  }, []);
+  // permissions
+  const { permissions, isMacOS, handlePermissionButton } = useInputDevices();
+  const [stats, setStats] = useState<Stats | null>(null);
 
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-        setPermissions(perms);
-      } catch (error) {
-        console.error("Failed to check permissions:", error);
-      }
-    };
-    checkPermissions();
-  }, []);
-
+  // onboarding
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
+  
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -135,72 +92,6 @@ const OnboardingStatus = () => {
     // cleanup interval on unmount
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    const checkPlatform = () => {
-      const currentPlatform = platform();
-      setIsMacOS(currentPlatform === "macos");
-    };
-    checkPlatform();
-  }, []);
-
-  const handlePermissionButton = async (
-    type: PermissionDevice
-  ) => {
-    const toastId = toast({
-      title: `checking ${type} permissions`,
-      description: "please wait...",
-      duration: Infinity,
-    });
-
-    try {
-      const os = platform();
-
-      if (os !== "macos") return
-
-      await invoke("request_permission", {
-        permission: type,
-      });
-
-      // Only handle macOS screen recording special case after requesting permission
-      if (type === PermissionDevice.SCREEN_RECORDING) {
-        await setRestartPending();
-        toast({
-          title: "restart required",
-          description:
-            "please restart the app after enabling screen recording permission",
-          duration: 10000,
-        });
-        return;
-      }
-
-      // Immediately check permissions after granting
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
-      setPermissions(perms);
-
-      const granted = perms[type].toLowerCase() === "granted"
-
-      toastId.update({
-        id: toastId.id,
-        title: granted ? "permission granted" : "permission check complete",
-        description: granted
-          ? `${type} permission was successfully granted`
-          : `please try granting ${type} permission again if needed`,
-        duration: 3000,
-      });
-
-    } catch (error) {
-      console.error(`failed to handle ${type} permission:`, error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: `failed to handle ${type} permission`,
-        duration: 3000,
-      });
-    }
-  };
 
   const handleStartScreenpipe = async () => {
     posthog.capture("screenpipe_setup_start");
@@ -283,7 +174,7 @@ const OnboardingStatus = () => {
             <Button
               variant="outline"
               className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton(PermissionDevice.MICROPHONE)}
+              onClick={() => handlePermissionButton(PermissionDevices.MICROPHONE)}
             >
               <Lock className="h-4 w-4 mr-2" />
               grant audio permission
@@ -306,7 +197,7 @@ const OnboardingStatus = () => {
             <Button
               variant="outline"
               className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton(PermissionDevice.ACCESSIBILITY)}
+              onClick={() => handlePermissionButton(PermissionDevices.ACCESSIBILITY)}
             >
               <Lock className="h-4 w-4 mr-2" />
               grant accessibility permission
@@ -329,7 +220,7 @@ const OnboardingStatus = () => {
             <Button
               variant="outline"
               className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton(PermissionDevice.SCREEN_RECORDING)}
+              onClick={() => handlePermissionButton(PermissionDevices.SCREEN_RECORDING)}
             >
               <Lock className="h-4 w-4 mr-2" />
               grant screen permission
