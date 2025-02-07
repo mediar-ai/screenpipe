@@ -1,9 +1,8 @@
 import { chromium, Page } from "playwright";
 import { NotionCredentials } from "@/lib/types";
-import path from "node:path";
+import { INTEGRATION_NAME } from "../utils";
 
 // Integration Name
-const INTEGRATION_NAME = "Screenpipe Logger";
 
 // Button Click
 async function buttonClick(page: Page, selector: string) {

@@ -31,15 +31,12 @@ async function extractLinkedContent(prompt: string): Promise<string> {
         const mdblocks = await n2m.pageToMarkdown(pageId);
         const mdString = n2m.toMarkdownString(mdblocks);
 
-        console.log(mdString);
-
         enrichedPrompt = enrichedPrompt.replace(
           match[0],
           `\n--- Content of ${pageId} ---\n${mdString.parent}\n---\n`,
         );
       } catch (error) {
         console.error(error, `of ${pageId}`);
-        return enrichedPrompt;
       }
     }
     return enrichedPrompt;

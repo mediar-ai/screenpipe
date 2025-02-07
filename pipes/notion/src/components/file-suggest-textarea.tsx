@@ -65,7 +65,7 @@ export function FileSuggestTextarea({
           `/api/notion/pages?q=${encodeURIComponent(search)}`,
         );
         const data = await res.json();
-        setFiles(data.pages);
+        setFiles(data.pages ?? []);
       } catch (err) {
         console.error("failed to fetch files:", err);
         setFiles([]);
