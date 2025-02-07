@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from "react";
 import { Check, HelpCircle, Lock, Video, X } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/navigation";
-import { Button } from "../ui/button";
-import { Switch } from "../ui/switch";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from "../ui/tooltip";
+} from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Label } from "../ui/label";
+import { Label } from "@/components/ui/label";
 import { platform } from "@tauri-apps/plugin-os";
-import { LogFileButton } from "../log-file-button";
-import { Separator } from "../ui/separator";
+import { LogFileButton } from "@/components/log-file-button";
+import { Separator } from "@/components/ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
 import localforage from "localforage";
+import OnboardingNavigation from "./navigation";
 
 interface OnboardingStatusProps {
   className?: string;
