@@ -1185,6 +1185,28 @@ export function SearchChat() {
     // Add any other reset logic you need
   };
 
+  // Add this effect near other useEffect hooks
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Cmd+Shift (macOS) or Ctrl+Shift (Windows/Linux)
+      if (
+        e.shiftKey &&
+        ((currentPlatform === "macos" && e.metaKey) ||
+          (currentPlatform !== "macos" && e.ctrlKey)) &&
+        !e.altKey && // ensure alt/option isn't pressed
+        !e.key.match(/^[a-zA-Z0-9]$/) // prevent triggering on letter/number keys
+      ) {
+        e.preventDefault();
+        if (floatingInputRef.current && results.length > 0) {
+          handleFloatingInputSubmit(new Event("submit") as any);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentPlatform, results.length, floatingInput, isStreaming]);
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
       <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
@@ -1203,17 +1225,18 @@ export function SearchChat() {
         {/* Add the new SearchFilterGenerator component */}
         <SearchFilterGenerator
           onApplyFilters={(filters) => {
-            // Update all the relevant state variables
-            if (filters.query !== undefined) setQuery(filters.query);
-            if (filters.contentType !== undefined)
-              handleContentTypeFromFilter(filters.contentType);
-            if (filters.appName !== undefined) setAppName(filters.appName);
-            if (filters.windowName !== undefined)
-              setWindowName(filters.windowName);
-            if (filters.startDate !== undefined)
-              setStartDate(filters.startDate);
-            if (filters.endDate !== undefined) setEndDate(filters.endDate);
-            if (filters.limit !== undefined) setLimit(filters.limit);
+            // Always use empty string instead of undefined for text inputs
+            setQuery(filters.query ?? "");
+            setAppName(filters.appName ?? "");
+            setWindowName(filters.windowName ?? "");
+
+            // Use default values for other types
+            handleContentTypeFromFilter(filters.contentType ?? "all");
+            setStartDate(
+              filters.startDate ?? new Date(Date.now() - 24 * 3600000)
+            );
+            setEndDate(filters.endDate ?? new Date());
+            setLimit(filters.limit ?? 30);
 
             // Automatically perform search with new filters
             handleSearch(0);
@@ -1889,7 +1912,7 @@ export function SearchChat() {
                   <Tooltip>
                     <TooltipTrigger>
                       <div className="text-muted-foreground">
-                        <Bot className="h-4 w-4" />
+                        <Bot className="h-4 w-4 mr-2" />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -1930,28 +1953,26 @@ export function SearchChat() {
                     )
                   }
                 >
-                  <SelectTrigger className="w-[170px] h-12">
+                  <SelectTrigger
+                    className="w-[170px] h-12"
+                    title={selectedAgent.description}
+                  >
                     <SelectValue placeholder="select agent" />
                   </SelectTrigger>
                   <SelectContent>
                     {AGENTS.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id}>
+                      <SelectItem
+                        key={agent.id}
+                        value={agent.id}
+                        title={
+                          AGENTS.find((a) => a.id === agent.id)?.description
+                        }
+                      >
                         <span className="font-mono text-sm">{agent.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-gray-400" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{selectedAgent.description}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
 
                 <Button
                   type="submit"
@@ -1963,13 +1984,18 @@ export function SearchChat() {
                   title={
                     isAiDisabled
                       ? "Please sign in to use AI features"
-                      : undefined
+                      : `${currentPlatform === "macos" ? "⌘" : "ctrl"}+shift`
                   }
                 >
                   {isStreaming ? (
                     <Square className="h-4 w-4" />
                   ) : (
-                    <Send className="h-4 w-4" />
+                    <div className="flex items-center">
+                      <Send className="h-4 w-4" />
+                      <span className="sr-only">
+                        {currentPlatform === "macos" ? "⌘" : "ctrl"}+shift
+                      </span>
+                    </div>
                   )}
                 </Button>
 
@@ -1984,29 +2010,15 @@ export function SearchChat() {
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>
+                      <p className="text-sm">
                         {calculateSelectedContentLength() > MAX_CONTENT_LENGTH
                           ? `selected content exceeds maximum allowed: ${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters. unselect some items to use AI.`
                           : `${calculateSelectedContentLength()} / ${MAX_CONTENT_LENGTH} characters used for AI message`}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-4 w-4 text-muted-foreground ml-1 cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-sm">
-                        ai models can only process a limited amount of text at
-                        once.
                         <br />
-                        this circle shows how much of that limit you arere
-                        using.
-                        <br />! the exclamation mark indicates when you exceed
-                        the limit.
+                        <span className="text-muted-foreground mt-1 block">
+                          ai models can only process a limited amount of text at
+                          once. the circle indicates your current usage.
+                        </span>
                       </p>
                     </TooltipContent>
                   </Tooltip>

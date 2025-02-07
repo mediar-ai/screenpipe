@@ -21,7 +21,19 @@ export class OpenAIProvider implements AIProvider {
 			messages,
 			temperature: body.temperature,
 			stream: false,
-			response_format: body.response_format?.type === 'json_object' ? { type: 'json_object' } : undefined,
+			response_format:
+				body.response_format?.type === 'json_object'
+					? { type: 'json_object' }
+					: body.response_format?.type === 'json_schema'
+					? {
+							type: 'json_schema',
+							json_schema: {
+								schema: body.response_format.schema!,
+								name: body.response_format.name || 'default',
+								strict: true,
+							},
+					  }
+					: undefined,
 			tools: body.tools as ChatCompletionCreateParams['tools'],
 			tool_choice: body.tool_choice as ChatCompletionCreateParams['tool_choice'],
 		};
@@ -38,7 +50,19 @@ export class OpenAIProvider implements AIProvider {
 			messages: this.formatMessages(body.messages),
 			temperature: body.temperature,
 			stream: true,
-			response_format: body.response_format?.type === 'json_object' ? { type: 'json_object' } : undefined,
+			response_format:
+				body.response_format?.type === 'json_object'
+					? { type: 'json_object' }
+					: body.response_format?.type === 'json_schema'
+					? {
+							type: 'json_schema',
+							json_schema: {
+								schema: body.response_format.schema!,
+								name: body.response_format.name || 'default',
+								strict: true,
+							},
+					  }
+					: undefined,
 			tools: body.tools as ChatCompletionCreateParams['tools'],
 		});
 
