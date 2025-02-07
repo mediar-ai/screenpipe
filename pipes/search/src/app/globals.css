@@ -70,3 +70,14 @@ body {
     @apply bg-background text-foreground !pointer-events-auto;
   }
 }
+
+[role="dialog"] {
+  max-width: 696px !important;
+  max-height: 60vh !important;
+  width: 70vw !important;
+  height: 65vh !important;
+  margin: 0 auto;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
