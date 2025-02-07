@@ -285,7 +285,7 @@ class BrowserPipeImpl implements BrowserPipe {
       config: { [key: string]: string },
     ) => Promise<boolean>;
   } = {
-    list: () => {
+    list: async () => {
       try {
         const response = await fetch("http://localhost:3030/pipes/list", {
           method: "GET",
@@ -299,7 +299,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return [];
       }
     },
-    download: (url: string) => {
+    download: async (url: string) => {
       try {
         const response = await fetch("http://localhost:3030/pipes/download", {
           method: "POST",
@@ -315,7 +315,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-    enable: (pipeId: string) => {
+    enable: async (pipeId: string) => {
       try {
         const response = await fetch("http://localhost:3030/pipes/enable", {
           method: "POST",
@@ -331,7 +331,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-    disable: (pipeId: string) => {
+    disable: async (pipeId: string) => {
       try {
         const response = await fetch("http://localhost:3030/pipes/disable", {
           method: "POST",
@@ -347,7 +347,7 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-    update: (pipeId: string, config: { [key: string]: string }) => {
+    update: async (pipeId: string, config: { [key: string]: string }) => {
       try {
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
