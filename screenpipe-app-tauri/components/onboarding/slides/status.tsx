@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from "react";
 import { Check, HelpCircle, Lock, Video, X } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import OnboardingNavigation from "@/components/onboarding/slides/navigation";
-import { Button } from "../../ui/button";
-import { Switch } from "../../ui/switch";
+import OnboardingNavigation from "@/components/onboarding/navigation";
+import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import {
   TooltipProvider,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from "../../ui/tooltip";
+} from "../ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { Label } from "../../ui/label";
+import { Label } from "../ui/label";
 import { platform } from "@tauri-apps/plugin-os";
-import { LogFileButton } from "../../log-file-button";
-import { Separator } from "../../ui/separator";
+import { LogFileButton } from "../log-file-button";
+import { Separator } from "../ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
 import localforage from "localforage";
-import { useOnboarding } from "../context";
+
+interface OnboardingStatusProps {
+  className?: string;
+  handlePrevSlide: () => void;
+  handleNextSlide: () => void;
+}
 
 // Add PermissionsStatus type
 type PermissionsStatus = {
@@ -32,20 +37,31 @@ const setRestartPending = async () => {
   await localforage.setItem("screenPermissionRestartPending", true);
 };
 
-const OnboardingStatus = () => {
-  const { handleNextSlide, handlePrevSlide, currentSlide } = useOnboarding();
+const PermissionDevice = {
+  SCREEN_RECORDING: "screenRecording",
+  MICROPHONE: "microphone",
+  ACCESSIBILITY: "accessibility",
+} as const;
+
+type PermissionDevice = (typeof PermissionDevice)[keyof typeof PermissionDevice];
+
+type Stats = {
+  screenshots: number;
+  audioSeconds: number;
+}
+
+const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
+  className = "",
+  handlePrevSlide,
+  handleNextSlide,
+}) => {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null
-  );
+  const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const [isRestartNeeded, setIsRestartNeeded] = useState(false);
-  const [stats, setStats] = useState<{
-    screenshots: number;
-    audioSeconds: number;
-  } | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [isMacOS, setIsMacOS] = useState(false);
 
   useEffect(() => {
@@ -142,7 +158,7 @@ const OnboardingStatus = () => {
   }, []);
 
   const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility"
+    type: PermissionDevice
   ) => {
     const toastId = toast({
       title: `checking ${type} permissions`,
@@ -152,19 +168,15 @@ const OnboardingStatus = () => {
 
     try {
       const os = platform();
-      const permissionType =
-        type === "screen"
-          ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
+
+      if (os !== "macos") return
 
       await invoke("request_permission", {
-        permission: permissionType,
+        permission: type,
       });
 
       // Only handle macOS screen recording special case after requesting permission
-      if (os === "macos" && type === "screen") {
+      if (type === PermissionDevice.SCREEN_RECORDING) {
         setIsRestartNeeded(true);
         await setRestartPending();
         toast({
@@ -182,12 +194,7 @@ const OnboardingStatus = () => {
       });
       setPermissions(perms);
 
-      const granted =
-        type === "screen"
-          ? perms.screenRecording.toLowerCase() === "granted"
-          : type === "audio"
-          ? perms.microphone.toLowerCase() === "granted"
-          : perms.accessibility.toLowerCase() === "granted";
+      const granted = perms[type].toLowerCase() === "granted"
 
       toastId.update({
         id: toastId.id,
@@ -197,13 +204,13 @@ const OnboardingStatus = () => {
           : `please try granting ${type} permission again if needed`,
         duration: 3000,
       });
+
     } catch (error) {
       console.error(`failed to handle ${type} permission:`, error);
       toastId.update({
         id: toastId.id,
         title: "error",
         description: `failed to handle ${type} permission`,
-        variant: "destructive",
         duration: 3000,
       });
     }
@@ -263,7 +270,7 @@ const OnboardingStatus = () => {
 
   return (
     <div
-      className={`w-full flex justify-between flex-col items-center`}
+      className={`${className} w-full flex justify-between flex-col items-center`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
         <img className="w-24 h-24 " src="/128x128.png" alt="screenpipe-logo" />
@@ -274,29 +281,6 @@ const OnboardingStatus = () => {
 
       {isMacOS && (
         <div className="w-3/4 space-y-4 mt-4 flex flex-col items-center">
-          <div className="flex items-center justify-between mx-auto w-full">
-            <div className="flex items-right gap-2">
-              {permissions && (
-                <span>
-                  {permissions.screenRecording.toLowerCase() === "granted" ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <X className="h-4 w-4 text-red-500" />
-                  )}
-                </span>
-              )}
-              <span className="text-sm">screen recording permission</span>
-            </div>
-            <Button
-              variant="outline"
-              className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("screen")}
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              grant screen permission
-            </Button>
-          </div>
-
           <div className="flex items-center justify-between mx-auto w-full">
             <div className="flex items-center gap-2">
               {permissions && (
@@ -313,7 +297,7 @@ const OnboardingStatus = () => {
             <Button
               variant="outline"
               className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("audio")}
+              onClick={() => handlePermissionButton(PermissionDevice.MICROPHONE)}
             >
               <Lock className="h-4 w-4 mr-2" />
               grant audio permission
@@ -336,10 +320,33 @@ const OnboardingStatus = () => {
             <Button
               variant="outline"
               className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("accessibility")}
+              onClick={() => handlePermissionButton(PermissionDevice.ACCESSIBILITY)}
             >
               <Lock className="h-4 w-4 mr-2" />
               grant accessibility permission
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between mx-auto w-full">
+            <div className="flex items-right gap-2">
+              {permissions && (
+                <span>
+                  {permissions.screenRecording.toLowerCase() === "granted" ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <X className="h-4 w-4 text-red-500" />
+                  )}
+                </span>
+              )}
+              <span className="text-sm">screen recording permission</span>
+            </div>
+            <Button
+              variant="outline"
+              className="w-[260px] text-sm justify-start"
+              onClick={() => handlePermissionButton(PermissionDevice.SCREEN_RECORDING)}
+            >
+              <Lock className="h-4 w-4 mr-2" />
+              grant screen permission
             </Button>
           </div>
         </div>
