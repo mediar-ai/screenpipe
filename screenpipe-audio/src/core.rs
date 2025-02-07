@@ -227,9 +227,8 @@ async fn run_record_and_transcribe(
                 Err(e) => {
                     collected_audio = current_audio;
                     let max_retain = overlap_samples * 2;
-                    if collected_audio.len() > max_retain {
-                        collected_audio =
-                            collected_audio.split_off(collected_audio.len() - max_retain);
+                    if collected_audio.len() >= max_retain {
+                        collected_audio.truncate(max_retain);
                     }
                     if e.is_disconnected() {
                         error!("whisper channel disconnected, restarting recording process");

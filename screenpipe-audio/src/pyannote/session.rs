@@ -8,6 +8,8 @@ pub fn create_session<P: AsRef<Path>>(path: P) -> Result<Session> {
         .with_optimization_level(GraphOptimizationLevel::Level3)?
         .with_intra_threads(1)?
         .with_inter_threads(1)?
+        .with_memory_pattern(true)?
+        .with_device_allocator_for_initializers()?
         .commit_from_file(path.as_ref())?;
     Ok(session)
 }
