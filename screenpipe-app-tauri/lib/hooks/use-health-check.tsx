@@ -164,11 +164,17 @@ export function useHealthCheck() {
     };
   }, []);
 
-  const debouncedFetchHealth = useCallback(debounce(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      fetchHealth();
-    }
-  }, 1000), [fetchHealth]);
+  const debouncedFetchHealth = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      debounce(() => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          fetchHealth().then(resolve);
+        } else {
+          resolve();
+        }
+      }, 1000)();
+    });
+  }, [fetchHealth]);
 
   useEffect(() => {
     fetchHealth();
