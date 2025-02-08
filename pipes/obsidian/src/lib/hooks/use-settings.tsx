@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { getDefaultSettings, type Settings } from "@screenpipe/browser";
 
+const SETTINGS_KEY = "screenpipe_settings";
+
 export function useSettings() {
   const defaultSettings = getDefaultSettings();
 
@@ -37,41 +39,18 @@ if you do your job well, i'll give you a 🍺 and $1m`,
     },
   };
 
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!loading) setLoading(true);
-      try {
-        const response = await fetch("/api/settings");
-        const data = await response.json();
-        console.log("useSettings data", data?.customSettings?.obsidian);
-        setSettings({ ...defaultSettings, ...data });
-      } catch (err) {
-        console.error("failed to load settings:", err);
-        setSettings(defaultSettings);
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Initial load
-    loadSettings();
-
-    // Refresh on window focus
-    const onFocus = () => loadSettings();
-    window.addEventListener("focus", onFocus);
-
-    // Optional: periodic refresh every 30s
-    const interval = setInterval(loadSettings, 2000);
-
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      clearInterval(interval);
-    };
+    setLoading(false);
   }, []);
 
   const updateSetting = async <T extends keyof Settings>(
@@ -81,74 +60,30 @@ if you do your job well, i'll give you a 🍺 and $1m`,
   ) => {
     if (!settings) return;
     try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({ key, value, namespace }),
-      });
-
-      if (namespace) {
-        setSettings((prev) => {
-          if (!prev) return defaultSettings;
-          return {
-            ...prev,
-            customSettings: {
-              ...prev.customSettings,
-              [namespace]: {
-                ...(prev.customSettings?.[namespace] || {}),
-                [key]: value,
-              },
-            },
-          };
-        });
-      } else {
-        setSettings((prev) => {
-          if (!prev) return defaultSettings;
-          return { ...prev, [key]: value };
-        });
-      }
+      const updatedSettings = {
+        ...settings,
+        customSettings: {
+          ...settings.customSettings,
+          [namespace || "default"]: {
+            ...(settings.customSettings?.[namespace || "default"] || {}),
+            [key]: value,
+          },
+        },
+      };
+      setSettings(updatedSettings);
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(updatedSettings));
     } catch (err) {
       setError(err as Error);
     }
   };
 
-  const updateSettings = async (
-    newSettings: Partial<Settings>,
-    namespace?: string
-  ) => {
-    if (!settings) return;
-    try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({
-          value: newSettings,
-          isPartialUpdate: true,
-          namespace,
-        }),
-      });
-
-      if (namespace) {
-        setSettings((prev) => {
-          if (!prev) return defaultSettings;
-          return {
-            ...prev,
-            customSettings: {
-              ...prev.customSettings,
-              [namespace]: {
-                ...(prev.customSettings?.[namespace] || {}),
-                ...newSettings,
-              },
-            },
-          };
-        });
-      } else {
-        setSettings((prev) => {
-          if (!prev) return defaultSettings;
-          return { ...prev, ...newSettings };
-        });
-      }
-    } catch (err) {
-      setError(err as Error);
-    }
+  const updateSettings = async (newSettings: any) => {
+    const updatedSettings = {
+      ...settings,
+      ...newSettings,
+    };
+    setSettings(updatedSettings);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(updatedSettings));
   };
 
   const resetSettings = async (
@@ -157,48 +92,18 @@ if you do your job well, i'll give you a 🍺 and $1m`,
   ) => {
     if (!settings) return;
     try {
-      await fetch("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({ reset: true, key: settingKey, namespace }),
-      });
-
-      if (namespace) {
-        setSettings((prev) => {
-          if (!prev) return defaultSettings;
-          if (settingKey) {
-            return {
-              ...prev,
-              customSettings: {
-                ...prev.customSettings,
-                [namespace]: {
-                  ...(prev.customSettings?.[namespace] || {}),
-                  [settingKey]: undefined,
-                },
-              },
-            };
-          } else {
-            return {
-              ...prev,
-              customSettings: {
-                ...prev.customSettings,
-                [namespace]: {},
-              },
-            };
-          }
-        });
-      } else {
-        if (settingKey) {
-          setSettings((prev) => {
-            if (!prev) return defaultSettings;
-            return {
-              ...prev,
-              [settingKey]: defaultSettings[settingKey],
-            };
-          });
-        } else {
-          setSettings(defaultSettings);
-        }
-      }
+      const updatedSettings = {
+        ...settings,
+        customSettings: {
+          ...settings.customSettings,
+          [namespace || ("default" as string)]: {
+            ...(settings.customSettings?.[namespace || "default"] || {}),
+            [settingKey as string]: undefined,
+          },
+        },
+      };
+      setSettings(updatedSettings);
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(updatedSettings));
     } catch (err) {
       setError(err as Error);
     }

@@ -128,7 +128,6 @@ export function ObsidianSettings() {
         description: "your obsidian settings have been updated",
       });
     } catch (err) {
-      // dismiss loading toast and show error
       loadingToast.update({
         id: loadingToast.id,
         title: "error",
@@ -198,17 +197,14 @@ export function ObsidianSettings() {
         input.value = path;
       }
 
-      await updateSettings(
-        {
-          customSettings: {
-            obsidian: {
-              ...settings.customSettings?.obsidian,
-              path,
-            },
+      await updateSettings({
+        customSettings: {
+          obsidian: {
+            ...settings.customSettings?.obsidian,
+            path,
           },
         },
-        "obsidian"
-      );
+      });
 
       toast({
         title: "path updated",

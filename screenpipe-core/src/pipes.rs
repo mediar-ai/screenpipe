@@ -181,7 +181,9 @@ done
 
         tokio::fs::write(&script_path, script_content).await?;
 
-        if !cfg!(windows) {
+        // Set executable permissions on Unix systems only
+        #[cfg(unix)]
+        {
             use std::os::unix::fs::PermissionsExt;
             let mut perms = tokio::fs::metadata(&script_path).await?.permissions();
             perms.set_mode(0o755);
