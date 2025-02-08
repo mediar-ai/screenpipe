@@ -42,7 +42,7 @@ pub async fn process_with_whisper(
             model.config().num_mel_bins,
             mel_len / model.config().num_mel_bins,
         ),
-        &device,
+        device,
     )?;
 
     debug!("detecting language");

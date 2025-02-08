@@ -174,7 +174,7 @@ pub async fn create_whisper_channel(
             .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?));
 
-    let embedding_manager = EmbeddingManager::new(usize::MAX);
+    let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(usize::MAX)));
 
     tokio::spawn(async move {
         loop {
@@ -212,10 +212,10 @@ pub async fn create_whisper_channel(
                                 audio.data.as_ref().to_vec()
                             };
 
-                            audio.data = Arc::new(audio_data.clone());
+                            audio.data = Arc::new(audio_data);
                             audio.sample_rate = m::SAMPLE_RATE as u32;
 
-                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
+                            let mut segments = match prepare_segments(audio.data.clone(), vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
                                 Ok(segments) => segments,
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
@@ -224,7 +224,7 @@ pub async fn create_whisper_channel(
                             };
 
                             let path = match write_audio_to_file(
-                                &audio.data.to_vec(),
+                                audio.data.as_ref(),
                                 audio.sample_rate,
                                 &output_path,
                                 &audio.device.to_string(),

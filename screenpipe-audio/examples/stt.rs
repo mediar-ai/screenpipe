@@ -8,6 +8,7 @@ use screenpipe_audio::{AudioInput, AudioTranscriptionEngine};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -90,10 +91,10 @@ async fn main() {
             };
 
             let mut segments = prepare_segments(
-                &audio_input.data,
+                audio_input.data,
                 vad_engine.clone(),
                 &segmentation_model_path,
-                embedding_manager,
+                Arc::new(StdMutex::new(embedding_manager)),
                 embedding_extractor,
                 &audio_input.device.to_string(),
             )
