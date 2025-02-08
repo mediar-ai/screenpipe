@@ -29,6 +29,7 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
@@ -46,7 +47,16 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
+
+// Add this struct to handle the server response structure
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct ApiResponse<T> {
+    data: T,
+    success: bool,
+}
 
 const DISPLAY: &str = r"
                                             _          
@@ -83,48 +93,67 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let env_filter = EnvFilter::from_default_env()
-        .add_directive("info".parse().unwrap())
-        .add_directive("tokenizers=error".parse().unwrap())
-        .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap());
+    let make_env_filter = || {
+        let filter = EnvFilter::from_default_env()
+            .add_directive("tokio=debug".parse().unwrap())
+            .add_directive("runtime=debug".parse().unwrap())
+            .add_directive("info".parse().unwrap())
+            .add_directive("tokenizers=error".parse().unwrap())
+            .add_directive("rusty_tesseract=error".parse().unwrap())
+            .add_directive("symphonia=error".parse().unwrap())
+            .add_directive("hf_hub=error".parse().unwrap());
 
-    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
-    // which is noise
-    #[cfg(target_os = "windows")]
-    let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
+        // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
+        // which is noise
+        #[cfg(target_os = "windows")]
+        let filter = filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
-    let env_filter = env::var("SCREENPIPE_LOG")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .fold(
-            env_filter,
-            |filter, module_directive| match module_directive.parse() {
-                Ok(directive) => filter.add_directive(directive),
-                Err(e) => {
-                    eprintln!(
-                        "warning: invalid log directive '{}': {}",
-                        module_directive, e
-                    );
-                    filter
+        let filter = env::var("SCREENPIPE_LOG")
+            .unwrap_or_default()
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .fold(filter, |filter, module_directive| {
+                match module_directive.parse() {
+                    Ok(directive) => filter.add_directive(directive),
+                    Err(e) => {
+                        eprintln!(
+                            "warning: invalid log directive '{}': {}",
+                            module_directive, e
+                        );
+                        filter
+                    }
                 }
-            },
-        );
+            });
 
-    let env_filter = if cli.debug {
-        env_filter.add_directive("screenpipe=debug".parse().unwrap())
-    } else {
-        env_filter
+        if cli.debug {
+            filter.add_directive("screenpipe=debug".parse().unwrap())
+        } else {
+            filter
+        }
     };
 
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking))
-        .init();
+    let tracing_registry = tracing_subscriber::registry()
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_filter(make_env_filter()),
+        )
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_filter(make_env_filter()),
+        );
 
+    #[cfg(feature = "debug-console")]
+    let tracing_registry = tracing_registry.with(
+        console_subscriber::spawn().with_filter(
+            EnvFilter::from_default_env()
+                .add_directive("tokio=trace".parse().unwrap())
+                .add_directive("runtime=trace".parse().unwrap()),
+        ),
+    );
+
+    tracing_registry.init();
     Ok(guard)
 }
 
@@ -157,8 +186,7 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    // Only set up logging if we're not running a pipe command with JSON output
-    let should_log = match &cli.command {
+    match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
                 subcommand,
@@ -208,11 +236,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Store the guard in a variable that lives for the entire main function
-    let _log_guard = if should_log {
-        Some(setup_logging(&local_data_dir, &cli)?)
-    } else {
-        None
-    };
+    let _log_guard = Some(setup_logging(&local_data_dir, &cli)?);
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
@@ -651,6 +675,7 @@ async fn main() -> anyhow::Result<()> {
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let dm_clone = device_manager.clone();
     let device_manager_clone = device_manager.clone();
+    let device_manager_clone_2 = device_manager.clone();
 
     let (whisper_sender, whisper_receiver) = if cli.disable_audio {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -1323,6 +1348,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    device_manager_clone_2.shutdown().await;
+
     tokio::task::block_in_place(|| {
         drop(vision_runtime);
         drop(audio_runtime);
@@ -1439,24 +1466,24 @@ async fn handle_pipe_command(
         }
 
         PipeCommand::Info { id, output, port } => {
-            let info = match client
+            let info: ApiResponse<PipeInfo> = match client
                 .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
                 .send()
                 .await
             {
                 Ok(response) if response.status().is_success() => response.json().await?,
-                _ => {
-                    println!("note: server not running, showing pipe configuration");
-                    pipe_manager
+                _ => ApiResponse {
+                    data: pipe_manager
                         .get_pipe_info(&id)
                         .await
-                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
-                }
+                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?,
+                    success: true,
+                },
             };
 
             match output {
-                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info)?),
-                OutputFormat::Text => println!("pipe info: {:?}", info),
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info.data)?),
+                OutputFormat::Text => println!("pipe info: {:?}", info.data),
             }
         }
         PipeCommand::Enable { id, port } => {

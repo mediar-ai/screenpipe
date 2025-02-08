@@ -394,7 +394,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     // args.push("--debug");
 
-
     if cfg!(windows) {
         let mut c = app.shell().sidecar("screenpipe").unwrap();
         if use_chinese_mirror {
@@ -402,7 +401,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         }
 
         // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-        if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
+        if user.cloud_subscribed.is_some()
+            && (deepgram_api_key == "default" || deepgram_api_key == "")
+        {
             c = c.env(
                 "DEEPGRAM_API_URL",
                 "https://ai-proxy.i-f9f.workers.dev/v1/listen",
@@ -437,7 +438,8 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     }
 
     // if a user with credits is provided, add the AI proxy env var api url for deepgram as env var https://ai-proxy.i-f9f.workers.dev/v1/listen
-    if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "") {
+    if user.cloud_subscribed.is_some() && (deepgram_api_key == "default" || deepgram_api_key == "")
+    {
         info!(
             "Adding AI proxy env vars for deepgram: {:?}",
             user.id.as_ref().unwrap()

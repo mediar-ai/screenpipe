@@ -10,6 +10,7 @@ import {
   IconUser,
   IconOllama,
   IconClaude,
+  IconGemini,
 } from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -48,6 +49,8 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
           <IconOpenAI />
         ) : settings.aiModel.includes("claude") ? (
           <IconClaude />
+        ) : settings.aiModel.includes("gemini") ? (
+          <IconGemini />
         ) : (
           <>🦙</>
         )}

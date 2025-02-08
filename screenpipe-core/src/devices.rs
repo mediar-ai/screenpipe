@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tokio_stream::{wrappers::UnboundedReceiverStream, Stream};
+use tokio_stream::Stream;
 use tracing::debug;
 
 #[derive(Clone, Debug)]
@@ -30,8 +30,10 @@ impl fmt::Display for DeviceType {
     }
 }
 
-impl DeviceType {
-    pub fn from_str(s: &str) -> anyhow::Result<Self> {
+impl FromStr for DeviceType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Check if it's a monitor ID (vision device)
         if let Ok(monitor_id) = s.parse::<u32>() {
             return Ok(DeviceType::Vision(monitor_id));
@@ -125,7 +127,7 @@ pub struct DeviceManager {
     sender: tokio::sync::broadcast::Sender<DeviceControl>,
     #[allow(dead_code)]
     _dummy: tokio::sync::broadcast::Receiver<DeviceControl>,
-    state_sender: tokio::sync::mpsc::UnboundedSender<DeviceStateRequest>,
+    state_sender: tokio::sync::mpsc::Sender<DeviceStateRequest>,
 }
 
 impl Clone for DeviceManager {
@@ -145,7 +147,7 @@ enum DeviceStateRequest {
     },
     Update(DeviceControl),
     Watch {
-        respond_to: tokio::sync::mpsc::UnboundedSender<DeviceStateChange>,
+        respond_to: tokio::sync::mpsc::Sender<DeviceStateChange>,
     },
 }
 
@@ -155,10 +157,10 @@ pub struct DeviceStateChange {
     pub control: DeviceControl,
 }
 
-impl DeviceManager {
-    pub fn default() -> Self {
+impl Default for DeviceManager {
+    fn default() -> Self {
         let (sender, dummy_receiver) = tokio::sync::broadcast::channel(32);
-        let (state_sender, state_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (state_sender, state_receiver) = tokio::sync::mpsc::channel(32);
 
         tokio::spawn(async move {
             Self::manage_state(state_receiver).await;
@@ -166,13 +168,14 @@ impl DeviceManager {
 
         Self {
             sender,
-            // this ensures that even if devices go to 0 it still stays open
             _dummy: dummy_receiver,
             state_sender,
         }
     }
+}
 
-    async fn manage_state(mut receiver: tokio::sync::mpsc::UnboundedReceiver<DeviceStateRequest>) {
+impl DeviceManager {
+    async fn manage_state(mut receiver: tokio::sync::mpsc::Receiver<DeviceStateRequest>) {
         let mut devices = HashMap::new();
         let mut watchers = Vec::new();
 
@@ -199,9 +202,9 @@ impl DeviceManager {
 
                         // Notify watchers of the change
                         watchers.retain(
-                            |watcher: &tokio::sync::mpsc::UnboundedSender<DeviceStateChange>| {
+                            |watcher: &tokio::sync::mpsc::Sender<DeviceStateChange>| {
                                 watcher
-                                    .send(DeviceStateChange {
+                                    .try_send(DeviceStateChange {
                                         device: device_id.clone(),
                                         control: control.clone(),
                                     })
@@ -220,9 +223,10 @@ impl DeviceManager {
 
     pub async fn get_active_devices(&self) -> HashMap<String, DeviceControl> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Get { respond_to: tx });
+        self.state_sender
+            .send(DeviceStateRequest::Get { respond_to: tx })
+            .await
+            .expect("state manager task has terminated");
         rx.await
             .unwrap_or_default()
             .into_iter()
@@ -231,19 +235,28 @@ impl DeviceManager {
     }
 
     pub async fn watch_devices(&self) -> impl Stream<Item = DeviceStateChange> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Watch { respond_to: tx });
-        UnboundedReceiverStream::new(rx)
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        self.state_sender
+            .send(DeviceStateRequest::Watch { respond_to: tx })
+            .await
+            .expect("state manager task has terminated");
+        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
 
     pub async fn update_device(&self, control: DeviceControl) -> anyhow::Result<()> {
-        // Update state and broadcast change
-        let _ = self
-            .state_sender
-            .send(DeviceStateRequest::Update(control.clone()));
+        self.state_sender
+            .send(DeviceStateRequest::Update(control.clone()))
+            .await?;
         self.sender.send(control)?;
         Ok(())
+    }
+
+    pub async fn shutdown(&self) {
+        for device in self.get_active_devices().await.values_mut() {
+            device.is_running = false;
+            if !self.state_sender.is_closed() {
+                self.update_device(device.clone()).await.unwrap();
+            }
+        }
     }
 }

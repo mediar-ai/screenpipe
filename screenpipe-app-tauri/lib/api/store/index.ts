@@ -45,9 +45,10 @@ export interface PurchaseHistoryItem {
 
 interface PurchaseUrlResponse {
   data: {
-    checkout_url: string;
-    // when user had credits from previous app purchase
+    checkout_url?: string;
     used_credits?: boolean;
+    payment_successful?: boolean;
+    already_purchased?: boolean;
   };
 }
 

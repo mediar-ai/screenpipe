@@ -31,6 +31,7 @@
     "@radix-ui/react-tooltip": "^1.1.5",
     "@screenpipe/browser": "0.1.24",
     "@screenpipe/js": "1.0.7",
+    "@tauri-apps/api": "^2.2.0",
     "@tiptap/extension-color": "^2.2.4",
     "@tiptap/extension-list-item": "^2.2.4",
     "@tiptap/extension-text-style": "^2.2.4",

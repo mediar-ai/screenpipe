@@ -34,7 +34,7 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use log::{debug, error, info};
+use tracing::{debug, error, info};
 use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
 
 use screenpipe_vision::monitor::list_monitors;

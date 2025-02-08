@@ -21,7 +21,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
   handlePrevSlide,
   handleNextSlide,
 }) => {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loadUser } = useSettings();
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -32,6 +32,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
+              loadUser(apiKey);
               toast({
                 title: "logged in!",
                 description: "your api key has been set",
@@ -55,76 +56,76 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
   }, [settings.user?.token, updateSettings, handleNextSlide]);
 
   return (
-    <div className={`${className} w-full flex justify-center flex-col px-6`}>
-      <div className="flex flex-col items-center mb-8">
-        <img className="w-24 h-24" src="/128x128.png" alt="screenpipe-logo" />
-        <h1 className="text-2xl font-bold mt-4">welcome to screenpipe</h1>
-      </div>
-
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Coins className="w-4 h-4 text-muted-foreground" />
-          <h4 className="text-sm font-medium">credits & usage</h4>
-          <Badge variant="secondary" className="rounded-full px-2.5 py-0.5">
-            {settings.user?.credits?.amount || 0} available
-          </Badge>
+    <div className="w-full h-full flex flex-col items-center justify-center space-y-6 py-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center space-y-2 mb-8">
+          <h1 className="text-3xl font-bold">login to screenpipe</h1>
+          <p className="text-sm text-muted-foreground">
+            connect your account to unlock all features
+          </p>
         </div>
 
-        <div className="space-y-3">
-          <Label className="text-sm font-medium text-muted-foreground">
-            screenpipe api key
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              value={settings.user?.token || ""}
-              onChange={(e) => {
-                updateSettings({
-                  user: { token: e.target.value },
-                });
-              }}
-              placeholder="enter your api key"
-              className="font-mono text-sm bg-secondary/30"
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={async () => {
-                toast({ title: "key verified" });
-                handleNextSlide();
-              }}
-            >
-              verify
-            </Button>
+        <div className="p-6 border border-border/50 rounded-lg bg-background/50">
+          <div className="space-y-4">
+            {settings.user?.email ? (
+              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
+                logged in as {settings.user.email}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-yellow-500" />
+                not logged in - some features will be limited
+              </p>
+            )}
+
+            <div className="flex flex-col gap-2">
+              {settings.user?.token ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => open("https://accounts.screenpi.pe/user")}
+                    className="w-full hover:bg-secondary/80"
+                  >
+                    manage account <UserCog className="w-4 h-4 ml-2" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      updateSettings({ user: { token: undefined } });
+                      toast({
+                        title: "logged out",
+                        description: "you have been logged out",
+                      });
+                    }}
+                    className="w-full hover:bg-secondary/80"
+                  >
+                    logout <ExternalLinkIcon className="w-4 h-4 ml-2" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => open("https://screenpi.pe/login")}
+                  className="w-full hover:bg-secondary/80"
+                >
+                  login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex gap-2 justify-center mt-6">
-          {settings.user?.token && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => open("https://accounts.screenpi.pe/user")}
-              className="hover:bg-secondary/80"
-            >
-              manage account <UserCog className="w-4 h-4 ml-2" />
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => open("https://screenpi.pe/login")}
-            className="hover:bg-secondary/80"
-          >
-            login <ExternalLinkIcon className="w-4 h-4 ml-2" />
-          </Button>
-          <OnboardingNavigation
-            className="mt-6"
-            handlePrevSlide={handlePrevSlide}
-            handleNextSlide={handleNextSlide}
-            prevBtnText="previous"
-            nextBtnText="next"
-          />
-        </div>
+        <OnboardingNavigation
+          className="mt-6"
+          handlePrevSlide={handlePrevSlide}
+          handleNextSlide={handleNextSlide}
+          prevBtnText="previous"
+          nextBtnText="next"
+        />
       </div>
     </div>
   );

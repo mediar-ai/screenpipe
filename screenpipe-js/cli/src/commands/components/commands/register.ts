@@ -1,10 +1,10 @@
-import { command, string } from "@drizzle-team/brocli";
 import { logger } from "./add/utils/logger";
 import { handleError } from "./add/utils/handle-error";
-import prompts from "prompts";
 import { ComponentSchema, RegistrySchema } from "./add/registry/schema";
 import { getRegistry } from "./add/registry/api";
 import fs from 'fs-extra';
+import { Command } from "commander";
+import inquirer from "inquirer";
 
 async function writeJsonToFile(filePath: string, data: RegistrySchema) {
   try {
@@ -25,98 +25,103 @@ async function writeJsonToFile(filePath: string, data: RegistrySchema) {
   }
 }
 
-export const registerComponentCommand = command({
-    name: "register",
-    desc: "register a new component in screenpipe's component registry",
-    options: {
-      name: string().desc("name of the component"),
-      src: string().desc("github url for the component."),
-      target: string().desc("path where file should be created."),
-    },
-    handler: async (opts) => {
-      try {
-        if (!opts.name) {
-          const { name } = await prompts({
-            type: "text",
+export const registerComponentCommand = new Command()
+  .name("register")
+  .description("register a new component in screenpipe's component registry")
+  .option("-n, --name <name>", "name of the component")
+  .option("-s, --src", "github url for the component")
+  .option("-t, --target", "path where file should be created")
+  .action(async (opts) => {
+    try {
+      if (!opts.name) {
+        const { name } = await inquirer.prompt([
+          {
+            type: "input",
             name: "name",
             message: "what's your component's name?",
-            instructions: false,
-          })
+          },
+        ]);
+        opts.name = name;
+      }
 
-          opts.name = name
-        }
-
-        if (!opts.src) {
-          const { src } = await prompts({
-            type: "text",
+      if (!opts.src) {
+        const { src } = await inquirer.prompt([
+          {
+            type: "input",
             name: "src",
-            message: "where should we download the component from?",
-            hint: "url with the following pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. see README for more info.",
-          })
+            message: "where should we download the component from? (URL pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path})",
+            validate: input => input.startsWith("https://api.github.com/repos/") ? true : "URL must follow the pattern: https://api.github.com/repos/{owner}/{repo}/contents/{path}. \n \n \nvisit: https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/cli/src/commands/components/README.md for more details.",
+          },
+        ]);
+        opts.src = src;
+      }
 
-          opts.src = src
-        }
-
-        if (!opts.target) {
-          const { target } = await prompts({
-            type: "text",
+      if (!opts.target) {
+        const { target } = await inquirer.prompt([
+          {
+            type: "input",
             name: "target",
             message: "where should the component be created?",
-          })
+          },
+        ]);
+        opts.target = target;
+      }
 
-          opts.target = target
-        }
+      if (!opts.name?.length || !opts.src?.length || !opts.target?.length) {
+        logger.break();
+        handleError("invalid component");
+        process.exit(1);
+      }
 
-        if (!opts.name?.length || !opts.src?.length || !opts.target?.length) {
-          logger.break()
-          handleError('invalid component')
-          process.exit(1)
-        }
-
-        const { deps } = await prompts({
-          type: "list",
+      const { deps } = await inquirer.prompt([
+        {
+          type: "input",
           name: "deps",
           message: "type all of the component's runtime dependencies by name, separated by a comma",
-          separator: ',',
-        })
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-        const { devDeps } = await prompts({
-          type: "list",
+      const { devDeps } = await inquirer.prompt([
+        {
+          type: "input",
           name: "devDeps",
           message: "type all of the component's dev dependencies by name, separated by a comma",
-          separator: ',',
-        })
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-        const { registryDeps } = await prompts({
-          type: "list",
+      const { registryDeps } = await inquirer.prompt([
+        {
+          type: "input",
           name: "registryDeps",
           message: "type all of the component's registry dependencies by name, separated by a comma",
-          separator: ',',
-        })
+          filter: (input: string) => input.split(',').map(item => item.trim()).filter(item => item !== ""),
+        },
+      ]);
 
-        const componentObject:  ComponentSchema = {
-          name: opts.name as string,
-          src: opts.src as string,
-          target: opts.target as string,
-          dependencies: (deps as string[]).filter(item => item !== ""),
-          devDependencies: (devDeps as string[]).filter(item => item !== ""),
-          registryDependencies: (registryDeps as string[]).filter(item => item !== "")
-        }
-        
-        const currentRegistry = await getRegistry()
-        if (!currentRegistry) {
-          logger.break()
-          handleError('critical: build is missing registry file.')
-          process.exit(1)
-        }
+      const componentObject: ComponentSchema = {
+        name: opts.name,
+        src: opts.src,
+        target: opts.target,
+        dependencies: deps,
+        devDependencies: devDeps,
+        registryDependencies: registryDeps,
+      };
 
-        currentRegistry[opts.name as string] = componentObject
-
-        await writeJsonToFile('./src/commands/components/commands/add/registry/registry.json', currentRegistry)
-        logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.")
-      } catch (error) {
-        logger.break()
-        handleError(error)
+      const currentRegistry = getRegistry();
+      if (!currentRegistry) {
+        logger.break();
+        handleError("critical: build is missing registry file.");
+        process.exit(1);
       }
-    },
+
+      currentRegistry[opts.name] = componentObject;
+
+      await writeJsonToFile("./src/commands/components/commands/add/registry/registry.json", currentRegistry);
+      logger.log("run `bun run build` and open a PR at https://github.com/mediar-ai/screenpipe to update registry.");
+    } catch (error) {
+      logger.break();
+      handleError(error);
+    }
   })

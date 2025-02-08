@@ -9,6 +9,9 @@
    </a>
 </p>
 
+<p align="center">
+   <a href="https://trendshift.io/repositories/11785" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11785" alt="mediar-ai%2Fscreenpipe | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
 
 
 <!-- ScreenPipe Title and Subtitle -->
@@ -120,7 +123,7 @@ make sure to allow permissions on macos (screen, mic)
 ## create plugins
 
 ```bash
-bunx @screenpipe/dev@latest create
+bunx --bun @screenpipe/dev@latest pipe create
 ```
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
@@ -128,9 +131,9 @@ screenpipe has a plugin system called "pipe" which lets you create desktop app i
 you can then publish these to our store and make money:
 
 ```bash
-bunx @screenpipe/dev@latest register --name foo [--paid --price 50] # subscription
+bunx --bun @screenpipe/dev@latest pipe register --name foo [--paid --price 50] # subscription
 bun run build
-bunx @screenpipe/dev@latest publish --name foo
+bunx --bun @screenpipe/dev@latest pipe publish --name foo
 ```
 
 ## community 

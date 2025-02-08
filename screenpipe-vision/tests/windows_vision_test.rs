@@ -7,7 +7,9 @@ mod tests {
     use std::{path::PathBuf, time::Instant};
     use tokio::sync::mpsc;
 
+    use screenpipe_vision::core::CapturedWindow;
     use screenpipe_vision::{continuous_capture, CaptureResult};
+    use std::sync::Arc;
     use std::time::Duration;
     use tokio::time::timeout;
 
@@ -21,18 +23,18 @@ mod tests {
         println!("Path to testing_OCR.png: {:?}", path);
         let image = image::open(&path).expect("Failed to open image");
 
-        let image_arc = image.clone();
+        let image_arc = Arc::new(image.clone());
         let frame_number = 1;
         let timestamp = Instant::now();
         let (tx, _rx) = mpsc::channel(1);
-        let ocr_engine = OcrEngine::WindowsNative;
+        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
 
-        let window_images = vec![(
-            image.clone(),
-            "test_app".to_string(),
-            "test_window".to_string(),
-            true,
-        )];
+        let window_images = vec![CapturedWindow {
+            image: image.clone(),
+            app_name: "test_app".to_string(),
+            window_name: "test_window".to_string(),
+            is_foreground: true,
+        }];
 
         let result = process_ocr_task(
             OcrTaskData {
@@ -42,8 +44,8 @@ mod tests {
                 timestamp,
                 result_tx: tx,
             },
-            &ocr_engine,
-            vec![],
+            ocr_engine,
+            Arc::new(vec![]),
         )
         .await;
 
@@ -63,7 +65,7 @@ mod tests {
         // Set up test parameters
         let interval = Duration::from_millis(1000);
         let save_text_files_flag = false;
-        let ocr_engine = OcrEngine::WindowsNative;
+        let ocr_engine = Arc::new(OcrEngine::WindowsNative);
         let window_filters = Arc::new(WindowFilters::new(&[], &[]));
 
         // Spawn the continuous_capture function

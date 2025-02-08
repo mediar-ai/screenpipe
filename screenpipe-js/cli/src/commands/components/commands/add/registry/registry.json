@@ -71,7 +71,7 @@
     "dependencies": [
       "@screenpipe/browser"
     ],
-    "devDependencies": [],
-    "registryDependencies": []
+    "registryDependencies": [],
+    "devDependencies": []
   }
 }

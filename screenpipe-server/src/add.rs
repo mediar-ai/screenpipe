@@ -140,7 +140,7 @@ pub async fn handle_index_command(
             )
             .await?;
 
-        let mut previous_image: Option<DynamicImage> = None;
+        let mut previous_image: Option<Arc<DynamicImage>> = None;
         let mut frame_counter: i64 = 0;
 
         for (idx, frame) in frames.iter().enumerate() {
@@ -162,7 +162,7 @@ pub async fn handle_index_command(
                 continue;
             }
 
-            previous_image = Some(frame.clone());
+            previous_image = Some(Arc::new(frame.clone()));
 
             // Use specified OCR engine or fall back to platform default
             let engine = match ocr_engine {
@@ -188,8 +188,10 @@ pub async fn handle_index_command(
                 OcrEngine::WindowsNative => perform_ocr_windows(&frame).await.unwrap(),
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-                    return perform_ocr_tesseract(&frame, Arc::new([].to_vec()));
-
+                    {
+                        perform_ocr_tesseract(&frame, Arc::new(vec![]))
+                    }
+                    #[cfg(any(target_os = "macos", target_os = "windows"))]
                     panic!("unsupported ocr engine");
                 }
             };

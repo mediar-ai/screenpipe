@@ -3,7 +3,7 @@ use ndarray::{Array2, Axis};
 use rust_stemmers::{Algorithm, Stemmer};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use log::debug;
+use tracing::debug;
 
 fn keep_least_similar(chunks: &[String], percentage: f64) -> Vec<usize> {
     if chunks.is_empty() {

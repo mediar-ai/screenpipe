@@ -70,3 +70,13 @@ body {
     @apply bg-background text-foreground !pointer-events-auto;
   }
 }
+
+
+
+[role="dialog"] {
+  max-width: 896px !important;
+  width: 90vw !important;
+  margin: 0 auto;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}

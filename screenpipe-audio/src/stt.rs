@@ -16,6 +16,7 @@ use log::{debug, error};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::{AudioDevice, DeviceManager, Language};
+// use std::time::Duration;
 use std::{
     path::Path,
     sync::Arc,
@@ -124,7 +125,7 @@ pub struct TranscriptionResult {
 
 impl TranscriptionResult {
     // TODO --optimize
-    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
+    pub fn cleanup_overlap(&mut self, previous_transcript: &String) -> Option<(String, String)> {
         if let Some(transcription) = &self.transcription {
             let transcription = transcription.to_string();
             if let Some((prev_idx, cur_idx)) =
@@ -277,6 +278,7 @@ pub async fn create_whisper_channel(
                         }
                     }
                 },
+                // default(Duration::from_millis(100)) => {}
             }
         }
     });
