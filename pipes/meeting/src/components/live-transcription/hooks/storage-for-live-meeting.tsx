@@ -91,6 +91,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const updateStore = async (newData: LiveMeetingData) => {
+        // Debug: log current and new notes details
         console.log('updateStore: checking changes', {
             currentNotes: data?.notes?.length,
             newNotes: newData.notes?.length,
@@ -104,40 +105,52 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                 timestamp: n.timestamp,
                 id: n.id
             })),
-            stack: new Error().stack?.split('\n').slice(1,3)
-        })
+            stack: new Error().stack?.split('\n').slice(1, 3)
+        });
+
+        // Debug: log title differences for clarity
+        console.log('updateStore: checking title change', {
+            currentTitle: data?.title,
+            newTitle: newData.title,
+            titleChanged: data?.title !== newData.title
+        });
 
         // If no previous data, always update
         if (!data) {
-            console.log('updateStore: no previous data, saving')
-            await liveStore.setItem(LIVE_MEETING_KEY, newData)
-            setData(newData)
-            return
+            console.log('updateStore: no previous data, saving');
+            await liveStore.setItem(LIVE_MEETING_KEY, newData);
+            setData(newData);
+            return;
         }
 
-        // Check if notes actually changed
-        const notesChanged = 
+        // Determine if notes have changed
+        const notesChanged =
             data.notes.length !== newData.notes.length ||
-            JSON.stringify(data.notes) !== JSON.stringify(newData.notes)
+            JSON.stringify(data.notes) !== JSON.stringify(newData.notes);
 
-        if (!notesChanged) {
-            console.log('updateStore: no changes detected')
-            return
+        // Determine if title has changed
+        const titleChanged = data.title !== newData.title;
+
+        // If neither notes nor title changed, skip saving
+        if (!notesChanged && !titleChanged) {
+            console.log('updateStore: no changes detected', { notesChanged, titleChanged });
+            return;
         }
 
         console.log('updateStore: saving changes', {
             currentNotes: data.notes.length,
             newNotes: newData.notes.length,
-            notesChanged
-        })
+            notesChanged,
+            titleChanged
+        });
 
         try {
-            await liveStore.setItem(LIVE_MEETING_KEY, newData)
-            setData(newData)
+            await liveStore.setItem(LIVE_MEETING_KEY, newData);
+            setData(newData);
         } catch (error) {
-            console.error('updateStore: failed:', error)
+            console.error('updateStore: failed:', error);
         }
-    }
+    };
 
     const setTitle = async (title: string) => {
         if (!data) {
