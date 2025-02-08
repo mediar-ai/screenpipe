@@ -1,7 +1,6 @@
 use crate::commands::{open_pipe_window, show_main_window};
-use crate::sidecar::kill_all_sreenpipes;
+use crate::get_pipe_port;
 use crate::store::get_store;
-use crate::{get_pipe_port, SidecarState};
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use serde_json::Value;
@@ -103,6 +102,8 @@ fn create_dynamic_menu(
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quick_start", "quick start").build(app)?)
         .item(&MenuItemBuilder::with_id("settings", "settings").build(app)?)
+        .item(&MenuItemBuilder::with_id("changelog", "changelog").build(app)?)
+        .item(&MenuItemBuilder::with_id("status", "status").build(app)?)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?);
 
@@ -148,28 +149,33 @@ fn handle_menu_event(app_handle: &AppHandle, event: tauri::menu::MenuEvent) {
             let _ = app_handle.emit("shortcut-stop-recording", ());
         }
         "quick_start" => {
+            // focus on the main window
+            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
             let _ = app_handle
                 .opener()
                 .open_url("screenpipe://onboarding", None::<&str>);
         }
         "settings" => {
+            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
             let _ = app_handle
                 .opener()
                 .open_url("screenpipe://settings", None::<&str>);
         }
+        "changelog" => {
+            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
+            let _ = app_handle
+                .opener()
+                .open_url("screenpipe://changelog", None::<&str>);
+        }
+        "status" => {
+            let _ = app_handle.get_webview_window("main").unwrap().set_focus();
+            let _ = app_handle
+                .opener()
+                .open_url("screenpipe://status", None::<&str>);
+        }
         "quit" => {
             debug!("Quit requested");
-            let app_handle_clone = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = kill_all_sreenpipes(
-                    app_handle_clone.state::<SidecarState>(),
-                    app_handle_clone.clone(),
-                )
-                .await
-                {
-                    error!("Error stopping recordings during quit: {}", e);
-                }
-            });
+
             app_handle.exit(0);
         }
         id if id.starts_with("pipe_") => {

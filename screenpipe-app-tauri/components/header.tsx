@@ -21,7 +21,6 @@ import {
   Folder,
   Book,
   User,
-  Fingerprint,
   Settings2,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
@@ -35,7 +34,7 @@ import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -104,6 +103,7 @@ export default function Header() {
 
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
+  const { setIsOpen: setSettingsOpen } = useSettingsDialog();
 
   return (
     <div>
@@ -114,6 +114,7 @@ export default function Header() {
       </div>
       <div className="flex space-x-4 absolute top-4 right-4">
         <HealthStatus className="mt-3 cursor-pointer" />
+        <Settings />
 
         <Button
           variant="ghost"
@@ -139,25 +140,16 @@ export default function Header() {
             <DropdownMenuLabel>account</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <Dialog modal={true}>
-                <DialogTrigger asChild>
-                  <DropdownMenuItem
-                    id="settings-trigger"
-                    onSelect={(e) => e.preventDefault()}
-                    className="cursor-pointer p-1.5"
-                  >
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    <span>settings</span>
-                  </DropdownMenuItem>
-                </DialogTrigger>
-
-                <DialogContent
-                  className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0 [&>button]:hidden"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Settings />
-                </DialogContent>
-              </Dialog>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setSettingsOpen(true);
+                }}
+                className="cursor-pointer p-1.5"
+              >
+                <Settings2 className="mr-2 h-4 w-4" />
+                <span>settings</span>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
