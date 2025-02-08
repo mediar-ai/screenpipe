@@ -4,6 +4,8 @@ export interface Note {
     timestamp: Date;
     editedAt?: Date;
     isAiGenerated?: boolean;
+    isInput?: boolean;
+    device?: string;
   }
   export interface TranscriptionChunk {
     timestamp: string
