@@ -13,8 +13,9 @@ export const liveStore = localforage.createInstance({
 export const LIVE_MEETING_KEY = 'current-live-meeting'
 
 export interface LiveMeetingData {
-    chunks: TranscriptionChunk[]
-    editedChunks: Record<number, string>
+    chunks: TranscriptionChunk[]  // Keep raw chunks
+    mergedChunks: TranscriptionChunk[]  // Add merged chunks
+    editedMergedChunks: Record<number, string>  // Rename to be explicit
     speakerMappings: Record<string, string>
     lastProcessedIndex: number
     startTime: string
@@ -69,9 +70,15 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                     console.log('MeetingProvider: no stored data, initializing new')
                 }
                 
+                console.log('loading stored data:', {
+                    editedMergedChunksCount: Object.keys(stored?.editedMergedChunks || {}).length,
+                    editedMergedChunks: stored?.editedMergedChunks
+                })
+                
                 setData(stored || {
                     chunks: [],
-                    editedChunks: {},
+                    mergedChunks: [],
+                    editedMergedChunks: {},
                     speakerMappings: {},
                     lastProcessedIndex: -1,
                     startTime: new Date().toISOString(),
@@ -208,7 +215,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         setNotes,
         segments: (data?.chunks || []).map(chunk => ({
             timestamp: chunk.timestamp,
-            transcription: data?.editedChunks[chunk.id] || chunk.text,
+            transcription: data?.editedMergedChunks[chunk.id] || chunk.text,
             deviceName: chunk.deviceName || '',
             speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
@@ -243,12 +250,13 @@ export const clearCurrentKey = () => {
     console.log('cleared live meeting data')
 }
 
-export async function storeLiveChunks(chunks: TranscriptionChunk[]): Promise<void> {
+export async function storeLiveChunks(chunks: TranscriptionChunk[] = [], mergedChunks: TranscriptionChunk[] = []): Promise<void> {
     try {
         const existing = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
         const data: LiveMeetingData = {
             chunks,
-            editedChunks: existing?.editedChunks ?? {},
+            mergedChunks,
+            editedMergedChunks: existing?.editedMergedChunks ?? {},
             speakerMappings: existing?.speakerMappings ?? {},
             lastProcessedIndex: existing?.lastProcessedIndex ?? -1,
             startTime: existing?.startTime ?? new Date().toISOString(),
@@ -258,7 +266,10 @@ export async function storeLiveChunks(chunks: TranscriptionChunk[]): Promise<voi
             deviceNames: existing?.deviceNames ?? new Set(),
             selectedDevices: existing?.selectedDevices ?? new Set()
         }
-        console.log('storing live meeting data')
+        console.log('storing live meeting data:', {
+            rawChunks: chunks.length,
+            mergedChunks: mergedChunks.length
+        })
         await liveStore.setItem(LIVE_MEETING_KEY, data)
     } catch (error) {
         console.error('failed to store live meeting:', error)
@@ -307,7 +318,8 @@ export async function clearLiveMeetingData(): Promise<void> {
         // Create empty state
         const emptyState: LiveMeetingData = {
             chunks: [],
-            editedChunks: {},
+            mergedChunks: [],
+            editedMergedChunks: {},
             speakerMappings: {},
             lastProcessedIndex: -1,
             startTime: new Date().toISOString(),
