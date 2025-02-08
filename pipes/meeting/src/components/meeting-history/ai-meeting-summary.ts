@@ -1,6 +1,6 @@
 import { Meeting } from "./types";
 import type { Settings } from "@screenpipe/browser"
-import { createAiClient } from "./use-meeting-ai";
+import { createAiClient } from "./ai-meeting-title";
 
 export async function generateMeetingSummary(
   meeting: Meeting,
