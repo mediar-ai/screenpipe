@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react'
 import { TranscriptionChunk, Note, MeetingSegment } from "../../meeting-history/types"
 import { MeetingAnalysis } from "./ai-create-all-notes"
 import localforage from "localforage"
@@ -57,7 +57,12 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                     exists: !!stored,
                     chunks: stored?.chunks?.length,
                     title: stored?.title,
-                    notes: stored?.notes?.length
+                    notes: stored?.notes?.length,
+                    notesData: stored?.notes?.map(n => ({
+                        id: n.id,
+                        text: n.text?.slice(0, 50),
+                        timestamp: n.timestamp
+                    }))
                 })
                 
                 if (!stored) {
@@ -86,23 +91,79 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     }, [])
 
     const updateStore = async (newData: LiveMeetingData) => {
+        console.log('updateStore: checking changes', {
+            currentNotes: data?.notes?.length,
+            newNotes: newData.notes?.length,
+            currentNotesData: data?.notes?.map(n => ({
+                text: n.text?.slice(0, 50),
+                timestamp: n.timestamp,
+                id: n.id
+            })),
+            newNotesData: newData.notes?.map(n => ({
+                text: n.text?.slice(0, 50),
+                timestamp: n.timestamp,
+                id: n.id
+            })),
+            stack: new Error().stack?.split('\n').slice(1,3)
+        })
+
+        // If no previous data, always update
+        if (!data) {
+            console.log('updateStore: no previous data, saving')
+            await liveStore.setItem(LIVE_MEETING_KEY, newData)
+            setData(newData)
+            return
+        }
+
+        // Check if notes actually changed
+        const notesChanged = 
+            data.notes.length !== newData.notes.length ||
+            JSON.stringify(data.notes) !== JSON.stringify(newData.notes)
+
+        if (!notesChanged) {
+            console.log('updateStore: no changes detected')
+            return
+        }
+
+        console.log('updateStore: saving changes', {
+            currentNotes: data.notes.length,
+            newNotes: newData.notes.length,
+            notesChanged
+        })
+
         try {
             await liveStore.setItem(LIVE_MEETING_KEY, newData)
             setData(newData)
         } catch (error) {
-            console.error('failed to update meeting data:', error)
+            console.error('updateStore: failed:', error)
         }
     }
 
     const setTitle = async (title: string) => {
-        if (!data) return
-        console.log('setting title:', title)
+        if (!data) {
+            console.log('setTitle: no data available')
+            return
+        }
+        console.log('setTitle: starting update', {
+            oldTitle: data.title,
+            newTitle: title,
+            dataState: !!data
+        })
         await updateStore({ ...data, title })
+        console.log('setTitle: completed update')
     }
 
     const setNotes = async (notes: Note[]) => {
         if (!data) return
-        console.log('setting notes:', notes.length)
+        console.log('setting notes:', {
+            count: notes.length,
+            notes: notes.map(n => ({
+                text: n.text?.slice(0, 50),
+                timestamp: n.timestamp,
+                id: n.id
+            })),
+            stack: new Error().stack?.split('\n').slice(1,3)
+        })
         await updateStore({ ...data, notes })
     }
 
@@ -127,7 +188,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         await updateStore({ ...data, analysis })
     }
 
-    const value = {
+    const value = useMemo(() => ({
         title: data?.title || '',
         setTitle,
         notes: data?.notes || [],
@@ -138,13 +199,12 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             deviceName: chunk.deviceName || '',
             speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
-        setSegments,
         analysis: data?.analysis || null,
         setAnalysis,
         isLoading,
         data,
         updateStore
-    }
+    }), [data, isLoading])
 
     return (
         <MeetingContext.Provider value={value}>
@@ -195,11 +255,22 @@ export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
     try {
         console.log('getLiveMeetingData: loading')
         const data = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+        
+        // Ensure dates are properly restored
+        if (data?.notes) {
+            data.notes = data.notes.map(note => ({
+                ...note,
+                timestamp: new Date(note.timestamp),
+                editedAt: note.editedAt ? new Date(note.editedAt) : undefined
+            }))
+        }
+        
         console.log('getLiveMeetingData: result:', {
             exists: !!data,
             chunks: data?.chunks?.length,
             title: data?.title,
-            notes: data?.notes?.length
+            notes: data?.notes?.length,
+            firstNote: data?.notes?.[0]?.text?.slice(0, 50)
         })
         return data
     } catch (error) {
