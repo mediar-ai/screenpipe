@@ -199,6 +199,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             deviceName: chunk.deviceName || '',
             speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
+        setSegments,
         analysis: data?.analysis || null,
         setAnalysis,
         isLoading,
