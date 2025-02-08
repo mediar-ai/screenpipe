@@ -61,11 +61,11 @@ export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
   const healthRef = useRef(health);
   const wsRef = useRef<WebSocket | null>(null);
   const previousHealthStatus = useRef<string | null>(null);
   const unhealthyTransitionsRef = useRef<number>(0);
+  const retryIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchHealth = useCallback(async () => {
     if (wsRef.current) {
@@ -77,6 +77,10 @@ export function useHealthCheck() {
 
     ws.onopen = () => {
       setIsLoading(false);
+      if (retryIntervalRef.current) {
+        clearInterval(retryIntervalRef.current);
+        retryIntervalRef.current = null;
+      }
     };
 
     ws.onmessage = (event) => {
@@ -135,9 +139,8 @@ export function useHealthCheck() {
       });
       setIsServerDown(true);
       setIsLoading(false);
-      if (!intervalId) {
-        const id = setInterval(fetchHealth, 1000);
-        setIntervalId(id);
+      if (!retryIntervalRef.current) {
+        retryIntervalRef.current = setInterval(fetchHealth, 2000);
       }
     };
 
@@ -155,17 +158,17 @@ export function useHealthCheck() {
       };
       setHealth(errorHealth);
       setIsServerDown(true);
-
-      if (!intervalId) {
-        const id = setInterval(fetchHealth, 1000);
-        setIntervalId(id);
+      if (!retryIntervalRef.current) {
+        retryIntervalRef.current = setInterval(fetchHealth, 2000)
       }
     };
   }, []);
 
-  const debouncedFetchHealth = useCallback(debounce(fetchHealth, 1000), [
-    fetchHealth,
-  ]);
+  const debouncedFetchHealth = useCallback(debounce(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      fetchHealth();
+    }
+  }, 1000), [fetchHealth]);
 
   useEffect(() => {
     fetchHealth();
@@ -173,11 +176,11 @@ export function useHealthCheck() {
       if (wsRef.current) {
         wsRef.current.close();
       }
-      if (intervalId) {
-        clearInterval(intervalId);
+      if (retryIntervalRef.current) {
+        clearInterval(retryIntervalRef.current);
       }
     };
-  }, [fetchHealth, intervalId]);
+  }, [fetchHealth]);
 
   return {
     health,
