@@ -48,7 +48,7 @@ export function TranscriptionView({
     const [targetSpeaker, setTargetSpeaker] = useState<string | null>(null)
     const [customSpeaker, setCustomSpeaker] = useState<string>('')
     const [speakerMappings, setSpeakerMappings] = useState<Record<string, string>>({})
-    const [editedChunks, setEditedChunks] = useState<Record<number, string>>({})
+    const [editedMergedChunks, setEditedMergedChunks] = useState<Record<number, string>>(data?.editedMergedChunks || {})
     const [selectedText, setSelectedText] = useState('')
     const [selectionPosition, setSelectionPosition] = useState<{ x: number; y: number } | null>(null)
     const [vocabDialogOpen, setVocabDialogOpen] = useState(false)
@@ -85,6 +85,13 @@ export function TranscriptionView({
             isLoading
         })
     }, [chunks])
+
+    // Update when data changes
+    useEffect(() => {
+        if (data?.editedMergedChunks) {
+            setEditedMergedChunks(data.editedMergedChunks)
+        }
+    }, [data])
 
     // Helper functions
     const getDisplaySpeaker = (speaker: string) => {
@@ -159,7 +166,7 @@ export function TranscriptionView({
             
             if (data) {
                 console.log('loaded stored meeting data:', data)
-                setEditedChunks(data.editedChunks)
+                setEditedMergedChunks(data.editedMergedChunks)
                 setSpeakerMappings(data.speakerMappings)
                 lastProcessedChunkRef.current = data.lastProcessedIndex
                 setShowLoadButton(false)
@@ -185,13 +192,16 @@ export function TranscriptionView({
         console.log('text edited for chunk', index, ':', newText)
         if (!data) return
 
-        const newEditedChunks = {
-            ...editedChunks,
+        const newEditedMergedChunks = {
+            ...data.editedMergedChunks,
             [index]: newText
         }
-        setEditedChunks(newEditedChunks)
-        await updateStore({ ...data, editedChunks: newEditedChunks })
-    }, [data, editedChunks, updateStore])
+        
+        await updateStore({ 
+            ...data, 
+            editedMergedChunks: newEditedMergedChunks 
+        })
+    }, [data, updateStore])
 
     const mergeSpeakers = async (newSpeaker: string) => {
         if (!selectedSpeaker) return
@@ -322,14 +332,13 @@ export function TranscriptionView({
 
     // Update segments when mergeChunks changes
     useEffect(() => {
-        console.log('updating segments in transcription view', {
-            mergedChunksCount: mergeChunks.length,
-            editedChunksCount: Object.keys(editedChunks).length,
-            speakerMappingsCount: Object.keys(speakerMappings).length
+        console.log('storing chunks in transcription view', {
+            rawChunks: chunks.length,
+            mergedChunks: mergeChunks.length,
+            editedMergedChunks: Object.keys(editedMergedChunks).length,
         })
-        // Don't call setNotes here as it overwrites meeting notes
-        // Instead, update segments separately
-    }, [mergeChunks, editedChunks, speakerMappings])
+        storeLiveChunks(chunks, mergeChunks)
+    }, [chunks, mergeChunks])
 
     const handleGenerateNote = async (index: number) => {
         try {
@@ -439,7 +448,7 @@ export function TranscriptionView({
                                                         recentlyImproved[i] && "animate-glow"
                                                     )}
                                                 >
-                                                    {editedChunks[i] ?? chunk.text}
+                                                    {data?.editedMergedChunks[i] ?? chunk.text}
                                                 </div>
                                             </div>
                                         </>
@@ -465,7 +474,7 @@ export function TranscriptionView({
                                                 onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
                                                 className="outline-none focus:ring-1 focus:ring-gray-200 rounded flex-1"
                                             >
-                                                {editedChunks[i] ?? chunk.text}
+                                                {data?.editedMergedChunks[i] ?? chunk.text}
                                             </div>
                                         </div>
                                     ) : (
@@ -489,7 +498,7 @@ export function TranscriptionView({
                                                 onBlur={(e) => handleTextEdit(i, e.currentTarget.textContent || '')}
                                                 className="outline-none focus:ring-1 focus:ring-gray-200 rounded flex-1"
                                             >
-                                                {editedChunks[i] ?? chunk.text}
+                                                {data?.editedMergedChunks[i] ?? chunk.text}
                                             </div>
                                         </div>
                                     )}
