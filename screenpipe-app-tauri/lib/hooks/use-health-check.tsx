@@ -61,6 +61,7 @@ export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [isServerDown, setIsServerDown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
   const healthRef = useRef(health);
   const wsRef = useRef<WebSocket | null>(null);
   const previousHealthStatus = useRef<string | null>(null);
@@ -134,6 +135,10 @@ export function useHealthCheck() {
       });
       setIsServerDown(true);
       setIsLoading(false);
+      if (!intervalId) {
+        const id = setInterval(fetchHealth, 1000);
+        setIntervalId(id);
+      }
     };
 
     ws.onclose = () => {
@@ -150,6 +155,11 @@ export function useHealthCheck() {
       };
       setHealth(errorHealth);
       setIsServerDown(true);
+
+      if (!intervalId) {
+        const id = setInterval(fetchHealth, 1000);
+        setIntervalId(id);
+      }
     };
   }, []);
 
@@ -159,14 +169,15 @@ export function useHealthCheck() {
 
   useEffect(() => {
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000);
     return () => {
-      clearInterval(interval);
       if (wsRef.current) {
         wsRef.current.close();
       }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
-  }, [fetchHealth]);
+  }, [fetchHealth, intervalId]);
 
   return {
     health,

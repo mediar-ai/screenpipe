@@ -1939,6 +1939,7 @@ async fn ws_health_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppStat
 
 async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
     let mut interval = tokio::time::interval(Duration::from_secs(5));
+    let mut is_open = true;
 
     loop {
         tokio::select! {
@@ -1947,27 +1948,32 @@ async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
             let health_status = serde_json::to_string(&health_response.0).unwrap_or_default();
             if let Err(e) = socket.send(Message::Text(health_status)).await {
                 error!("Failed to send health status: {}", e);
+                is_open = false;
                 break;
             }
         }
             result = socket.recv() => {
                 if result.is_none() {
+                    is_open = false;
                     break;
                 }
             }
         }
     }
     
-    let close_reason = "Disconnected due to server down";
-    let close_frame = CloseFrame {
-        code: axum::extract::ws::close_code::NORMAL,
-        reason: close_reason.into(),
-    };
-    if let Err(e) = socket.send(Message::Close(Some(close_frame))).await {
-        error!("Failed to send close frame: {}", e);
+    if is_open {
+        let close_reason = "Disconnected due to server down";
+        let close_frame = CloseFrame {
+            code: axum::extract::ws::close_code::NORMAL,
+            reason: close_reason.into(),
+        };
+        if let Err(e) = socket.send(Message::Close(Some(close_frame))).await {
+            error!("Failed to send close frame: {}", e);
+        }
+        debug!("Websocket connection closed with reason: {}", close_reason);
+    } else {
+        debug!("Websocket connection already closed.");
     }
-
-    debug!("WebSocket connection closed with reason: {}", close_reason);
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
