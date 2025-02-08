@@ -27,6 +27,12 @@ export function MeetingHistory() {
     
     console.log('resume: attempting navigation to live meeting')
     try {
+      const liveData = await getLiveMeetingData()
+      console.log('resume: current live meeting state:', {
+        hasTitle: !!liveData?.title,
+        notesCount: liveData?.notes?.length,
+        firstNote: liveData?.notes?.[0]?.text?.slice(0, 50)
+      })
       await router.push('/meetings/live')
       console.log('resume: navigation completed')
     } catch (e) {
