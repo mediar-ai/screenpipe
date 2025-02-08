@@ -46,7 +46,7 @@ pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::stop_screenpipe;
 pub use sidecar::spawn_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
@@ -613,7 +613,7 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes,
+            stop_screenpipe,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,

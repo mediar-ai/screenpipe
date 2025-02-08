@@ -1,4 +1,4 @@
-use crate::kill_all_sreenpipes;
+use crate::stop_screenpipe;
 use crate::SidecarState;
 use anyhow::Error;
 use log::{error, info};
@@ -107,7 +107,7 @@ impl UpdatesManager {
                             .set_text("downloading latest version of screenpipe")?;
 
                         if let Err(err) =
-                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
+                            stop_screenpipe(self.app.state::<SidecarState>(), self.app.clone())
                                 .await
                         {
                             error!("Failed to kill sidecar: {}", err);
@@ -131,7 +131,7 @@ impl UpdatesManager {
                     #[cfg(not(target_os = "windows"))]
                     {
                         if let Err(err) =
-                            kill_all_sreenpipes(self.app.state::<SidecarState>(), self.app.clone())
+                            stop_screenpipe(self.app.state::<SidecarState>(), self.app.clone())
                                 .await
                         {
                             error!("Failed to kill sidecar: {}", err);

@@ -98,7 +98,7 @@ export default function Home() {
       }),
 
       listen("shortcut-stop-recording", async () => {
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
 
         toast({
           title: "recording stopped",
@@ -115,7 +115,7 @@ export default function Home() {
           description: `switched to ${profile} profile, restarting screenpipe now`,
         });
 
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
