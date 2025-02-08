@@ -4,12 +4,15 @@ import path from "path";
 
 export async function updatePipeConfig(intervalMinutes: number) {
   try {
-    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const screenpipeDir =
+      process.env.SCREENPIPE_DIR ||
+      (process.env.HOME && path.join(process.env.HOME, ".screenpipe")) ||
+      process.cwd();
     const pipeConfigPath = path.join(
       screenpipeDir,
       "pipes",
       "notion",
-      "pipe.json",
+      "pipe.json"
     );
 
     console.log(`updating cron schedule at: ${pipeConfigPath}`);
@@ -22,7 +25,7 @@ export async function updatePipeConfig(intervalMinutes: number) {
       config = JSON.parse(content);
     } catch (err) {
       console.log(
-        `no existing config found, creating new one at ${pipeConfigPath}`,
+        `no existing config found, creating new one at ${pipeConfigPath}`
       );
       config = { crons: [] };
     }
@@ -43,7 +46,7 @@ export async function updatePipeConfig(intervalMinutes: number) {
 
     await fs.writeFile(pipeConfigPath, JSON.stringify(config, null, 2));
     console.log(
-      `updated cron schedule to run every ${intervalMinutes} minutes`,
+      `updated cron schedule to run every ${intervalMinutes} minutes`
     );
   } catch (err) {
     console.error("failed to update cron schedule:", err);

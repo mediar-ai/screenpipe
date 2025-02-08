@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Settings } from "@/lib/types";
 import {
-  getNotionSettings,
-  updateNotionSettings,
-} from "../actions/namespace-settings";
+  getScreenpipeAppSettings,
+  updateScreenpipeAppSettings,
+} from "../actions/get-screenpipe-app-settings";
 
 const DEFAULT_SETTINGS: Partial<Settings> = {
   prompt: `yo, you're my personal data detective! 🕵
@@ -29,6 +29,8 @@ style rules:
 remember: you're analyzing screen ocr text & audio, etc. from my computer, so focus on actual interactions and content!`,
 };
 
+const STORAGE_KEY = "notion-settings";
+
 export function useNotionSettings() {
   const [settings, setSettings] = useState<Partial<Settings> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,13 +41,20 @@ export function useNotionSettings() {
 
   const loadSettings = async () => {
     try {
-      const data = await getNotionSettings();
-      console.log(data);
-      setSettings(
-        data ? { ...DEFAULT_SETTINGS, ...data } : { ...DEFAULT_SETTINGS },
-      );
+      // Load notion settings from localStorage
+      const storedSettings = localStorage.getItem(STORAGE_KEY);
+      const notionSettings = storedSettings ? JSON.parse(storedSettings) : {};
+
+      // Load screenpipe app settings
+      const screenpipeSettings = await getScreenpipeAppSettings();
+      // Merge everything together
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...notionSettings,
+        screenpipeAppSettings: screenpipeSettings,
+      });
     } catch (error) {
-      console.error("Failed to load settings:", error);
+      console.error("failed to load settings:", error);
     } finally {
       setLoading(false);
     }
@@ -53,12 +62,37 @@ export function useNotionSettings() {
 
   const updateSettings = async (newSettings: Partial<Settings>) => {
     try {
-      const mergedSettings = { ...DEFAULT_SETTINGS, ...newSettings };
-      await updateNotionSettings(mergedSettings);
-      setSettings(mergedSettings);
+      // Split settings
+      const { screenpipeAppSettings, ...notionSettings } = newSettings;
+
+      // Update notion settings in localStorage
+      const mergedNotionSettings = {
+        ...DEFAULT_SETTINGS,
+        ...notionSettings,
+      };
+
+      // Update screenpipe settings if provided
+      if (screenpipeAppSettings) {
+        await updateScreenpipeAppSettings({
+          ...screenpipeAppSettings,
+          customSettings: {
+            ...screenpipeAppSettings.customSettings,
+            notion: mergedNotionSettings,
+          },
+        });
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNotionSettings));
+
+      // Update state with everything
+      setSettings({
+        ...mergedNotionSettings,
+        screenpipeAppSettings:
+          screenpipeAppSettings || settings?.screenpipeAppSettings,
+      });
       return true;
     } catch (error) {
-      console.error("Failed to update settings:", error);
+      console.error("failed to update settings:", error);
       return false;
     }
   };

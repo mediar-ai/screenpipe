@@ -1,6 +1,6 @@
 {
   "name": "obsidian",
-  "version": "0.1.13",
+  "version": "0.1.15",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

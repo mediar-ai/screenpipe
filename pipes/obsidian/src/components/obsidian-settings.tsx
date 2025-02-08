@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,18 +25,11 @@ import { FileSuggestTextarea } from "./file-suggest-textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { debounce } from "lodash";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
-
-// This interface represents the shape of obsidian settings
-interface ObsidianSettings {
-  path: string;
-  interval: number;
-  pageSize: number;
-  aiModel: string;
-  prompt: string | null;
-}
+import { Settings } from "@/lib/types";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 
 export function ObsidianSettings() {
-  const { settings, updateSettings, loading } = useSettings();
+  const { settings, updateSettings, loading } = usePipeSettings();
   const [lastLog, setLastLog] = useState<any>(null);
   const { toast } = useToast();
   const [intelligence, setIntelligence] = useState<any>(null);
@@ -62,10 +54,10 @@ export function ObsidianSettings() {
   const [suggestedPaths, setSuggestedPaths] = useState<string[]>([]);
 
   useEffect(() => {
-    if (settings?.customSettings?.obsidian?.prompt) {
-      setCustomPrompt(settings.customSettings.obsidian.prompt);
+    if (settings) {
+      setCustomPrompt(settings.prompt || "");
     }
-  }, [settings?.customSettings?.obsidian?.prompt]);
+  }, [settings]);
 
   useEffect(() => {
     const fetchPaths = async () => {
@@ -107,20 +99,17 @@ export function ObsidianSettings() {
     });
 
     try {
-      const obsidianSettings: ObsidianSettings = {
-        path: formData.get("path") as string,
-        interval: parseInt(formData.get("interval") as string) * 60000,
+      const interval = parseInt(formData.get("interval") as string) * 60000;
+      const obsidianSettings = {
+        vaultPath: formData.get("path") as string,
+        interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
-        prompt: customPrompt,
+        prompt: customPrompt || "",
       };
 
-      await updateSettings({
-        customSettings: {
-          obsidian: obsidianSettings,
-        },
-      });
-      await updatePipeConfig(obsidianSettings.interval / 60000);
+      await updateSettings(obsidianSettings);
+      await updatePipeConfig(interval / 60000);
 
       loadingToast.update({
         id: loadingToast.id,
@@ -142,20 +131,17 @@ export function ObsidianSettings() {
       const formData = new FormData(
         document.querySelector("form") as HTMLFormElement
       );
-      const obsidianSettings: ObsidianSettings = {
-        path: formData.get("path") as string,
-        interval: parseInt(formData.get("interval") as string) * 60000,
+      const interval = parseInt(formData.get("interval") as string) * 60000;
+      const obsidianSettings = {
+        vaultPath: formData.get("path") as string,
+        interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
-        prompt: customPrompt,
+        prompt: customPrompt || "",
       };
 
-      await updateSettings({
-        customSettings: {
-          obsidian: obsidianSettings,
-        },
-      });
-      await updatePipeConfig(obsidianSettings.interval / 60000);
+      await updateSettings(obsidianSettings);
+      await updatePipeConfig(interval / 60000);
 
       // Then test log generation
       const res = await fetch("/api/log");
@@ -198,12 +184,7 @@ export function ObsidianSettings() {
       }
 
       await updateSettings({
-        customSettings: {
-          obsidian: {
-            ...settings.customSettings?.obsidian,
-            path,
-          },
-        },
+        vaultPath: path,
       });
 
       toast({
@@ -255,11 +236,11 @@ export function ObsidianSettings() {
   };
 
   const openObsidianVault = async () => {
-    if (!settings.customSettings?.obsidian?.path) return;
+    if (!settings?.vaultPath) return;
 
     try {
       // Start from the current path and walk up until we find .obsidian folder
-      let currentPath = settings.customSettings.obsidian.path;
+      let currentPath = settings.vaultPath;
       let vaultPath = null;
 
       while (currentPath !== "/") {
@@ -290,7 +271,7 @@ export function ObsidianSettings() {
 
       const vaultName = path.basename(vaultPath);
       // Get relative path from vault root to AI folder
-      const relativePath = settings.customSettings.obsidian.path
+      const relativePath = settings.vaultPath
         .replace(vaultPath, "")
         .replace(/^\//, "");
       const searchQuery = `path:"${relativePath}"`;
@@ -308,11 +289,6 @@ export function ObsidianSettings() {
         description: "failed to open vault in obsidian",
       });
     }
-  };
-
-  // Helper function to check if vault path is set
-  const isVaultPathSet = () => {
-    return Boolean(settings.customSettings?.obsidian?.path?.trim());
   };
 
   const validatePath = useCallback(
@@ -402,10 +378,10 @@ export function ObsidianSettings() {
 
   // Add this new useEffect for initial path validation
   useEffect(() => {
-    if (settings?.customSettings?.obsidian?.path) {
-      validatePath(settings.customSettings.obsidian.path);
+    if (settings?.vaultPath) {
+      validatePath(settings.vaultPath);
     }
-  }, [settings?.customSettings?.obsidian?.path, validatePath]);
+  }, [settings?.vaultPath, validatePath]);
 
   if (loading) {
     return (
@@ -470,7 +446,7 @@ export function ObsidianSettings() {
                   <Input
                     id="path"
                     name="path"
-                    defaultValue={settings.customSettings?.obsidian?.path}
+                    defaultValue={settings?.vaultPath}
                     placeholder="/path/to/vault"
                     className={`${
                       pathValidation.isValid
@@ -548,9 +524,7 @@ export function ObsidianSettings() {
                 step="1"
                 max="60"
                 defaultValue={
-                  settings.customSettings?.obsidian?.interval
-                    ? settings.customSettings?.obsidian?.interval / 60000
-                    : 5
+                  settings?.interval ? settings?.interval / 60000 : 5
                 }
               />
             </div>
@@ -562,9 +536,7 @@ export function ObsidianSettings() {
                 id="pageSize"
                 name="pageSize"
                 type="number"
-                defaultValue={
-                  settings.customSettings?.obsidian?.pageSize || 100
-                }
+                defaultValue={settings?.pageSize || 100}
               />
             </div>
 
@@ -575,18 +547,11 @@ export function ObsidianSettings() {
               <OllamaModelsList
                 disabled={!pathValidation.isValid}
                 defaultValue={
-                  settings.customSettings?.obsidian?.aiModel ||
-                  "llama3.2:3b-instruct-q4_K_M"
+                  settings?.aiModel || "llama3.2:3b-instruct-q4_K_M"
                 }
                 onChange={(value) => {
                   updateSettings({
-                    customSettings: {
-                      ...settings.customSettings,
-                      obsidian: {
-                        ...settings.customSettings?.obsidian,
-                        aiModel: value,
-                      },
-                    },
+                    aiModel: value,
                   });
                 }}
               />

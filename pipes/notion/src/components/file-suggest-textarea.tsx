@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Command } from "cmdk";
 import React from "react";
+import { useNotionSettings } from "@/lib/hooks/use-pipe-settings";
 
 interface FileSuggestTextareaProps {
   value: string;
@@ -40,6 +41,7 @@ export function FileSuggestTextarea({
   placeholder,
   disabled = false,
 }: FileSuggestTextareaProps) {
+  const { settings } = useNotionSettings();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [cursorCoords, setCursorCoords] = useState({ x: 0, y: 0 });
@@ -62,7 +64,9 @@ export function FileSuggestTextarea({
     searchTimeout.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/notion/pages?q=${encodeURIComponent(search)}`,
+          `/api/notion/pages?q=${encodeURIComponent(search)}&accessToken=${
+            settings?.notion?.accessToken
+          }`
         );
         const data = await res.json();
         setFiles(data.pages ?? []);
@@ -182,8 +186,9 @@ export function FileSuggestTextarea({
         ref={textareaRef}
         value={value}
         onChange={handleTextareaChange}
-        className={`w-full min-h-[100px] p-2 rounded-md border bg-background ${disabled ? "opacity-50 cursor-not-allowed" : ""
-          } ${className}`}
+        className={`w-full min-h-[100px] p-2 rounded-md border bg-background ${
+          disabled ? "opacity-50 cursor-not-allowed" : ""
+        } ${className}`}
         placeholder={placeholder}
         rows={10}
         disabled={disabled}
