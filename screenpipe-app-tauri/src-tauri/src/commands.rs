@@ -280,6 +280,18 @@ pub async fn open_pipe_window(
         }
     };
 
+    // event listener for the window close event
+    let window_clone = window.clone();
+    let app_handle_clone = app_handle.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = window_clone.hide();
+            let _ = window_clone.destroy();
+            let _ = app_handle_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+        }
+    });
+
     // Only try to manipulate window if creation succeeded
     if let Err(e) = window.set_focus() {
         error!("failed to set window focus: {}", e);
