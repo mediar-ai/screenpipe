@@ -1,17 +1,15 @@
-import { Command } from "commander";
 import http from "http";
 import { spawn } from "child_process";
 import { writeFileSync } from "fs";
 import { ParsedUrlQuery } from "node:querystring";
 import url from "url";
 import { listen } from "async-listen";
-import "dotenv/config";
 import { customAlphabet } from "nanoid";
-import { logger, spinner } from "./components/commands/add/utils/logger";
-import { colors } from "../utils/colors";
-import { handleError } from "./components/commands/add/utils/handle-error";
 import os from 'os';
 import path from "node:path";
+import { logger, spinner } from "../../components/commands/add/utils/logger";
+import { colors } from "../../../utils/colors";
+import { handleError } from "../../components/commands/add/utils/handle-error";
 
 const FILENAME = ".apikey";
 
@@ -32,12 +30,10 @@ async function writeToConfigFile(data: ParsedUrlQuery) {
     }
 }
 
-const nanoid = customAlphabet("123456789QAZWSXEDCRFVTGBYHNUJMIKOLP", 8);
+const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
-export const loginCommand = new Command()
-.name("login")
-.description("authenticate with screenpipe")
-.action(async () => {
+
+export async function cliLogin() {
     // create localhost server for our page to call back to
     const server = http.createServer();
     const { port } = await listen(server, 0, "127.0.0.1");
@@ -47,7 +43,6 @@ export const loginCommand = new Command()
     // set up HTTP server that waits for a request containing an API key
     const authPromise = new Promise<ParsedUrlQuery>((resolve, reject) => {
         server.on("request", (req, res) => {
-        logger.info(`Received ${req.method} request to ${req.url}`);
         
         // Set CORS headers for all responses
         res.setHeader("Access-Control-Allow-Origin", "*");
@@ -60,7 +55,6 @@ export const loginCommand = new Command()
         } else if (req.method === "GET") {
             const parsedUrl = url.parse(req.url as string, true);
             const queryParams = parsedUrl.query;
-            logger.info('Received query params:', queryParams);
             
             if (queryParams.cancelled) {
                 res.writeHead(200);
@@ -81,7 +75,7 @@ export const loginCommand = new Command()
     const redirect = `http://127.0.0.1:${port}`;
 
     const code = nanoid();
-    const confirmationUrl = new URL(`${process.env.CLIENT_URL}/auth/devices`);
+    const confirmationUrl = new URL(`https://screenpi.pe/login`);
     confirmationUrl.searchParams.append("code", code);
     confirmationUrl.searchParams.append("redirect", redirect);
     logger.log(`confirmation code: ${colors.bold(code)}\n`);
@@ -90,6 +84,7 @@ export const loginCommand = new Command()
             colors.bold(confirmationUrl.toString())
         }\n`,
     );
+
     spawn("open", [confirmationUrl.toString()]);
 
     const loadingSpinner = spinner("waiting for authentication...");
@@ -99,15 +94,14 @@ export const loginCommand = new Command()
         const authData = await authPromise;
         loadingSpinner.succeed("authentication successful");
         writeToConfigFile(authData);
-        logger.log(
-            `authentication successful: wrote key to config file. To view it, type 'cat ~/${FILENAME}'.\n`,
-        );
         server.close();
         process.exit(0);
     } catch (error) {
         if (error instanceof UserCancellationError) {
             server.close();
-            handleError("authentication cancelled.\n");
+            logger.log("\n")
+            logger.error("authentication cancelled.\n");
+            process.exit(0);
         } else {
             server.close();
             handleError(`authentication failed: + ${error}`);
@@ -116,6 +110,4 @@ export const loginCommand = new Command()
         server.close();
         process.exit(0);
     }
-});
-
-
+}
