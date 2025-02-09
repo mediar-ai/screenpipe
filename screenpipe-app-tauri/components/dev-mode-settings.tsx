@@ -152,7 +152,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
       duration: Infinity,
     });
     try {
-      await invoke("kill_all_sreenpipes");
+      await invoke("stop_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 2000));
       toastId.update({
         id: toastId.id,

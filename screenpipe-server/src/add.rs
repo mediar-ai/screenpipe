@@ -189,14 +189,10 @@ pub async fn handle_index_command(
                 _ => {
                     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                     {
-                        let (text, _, confidence) =
-                            perform_ocr_tesseract(&frame, Arc::new([].to_vec()));
-                        (text, String::new(), confidence)
+                        perform_ocr_tesseract(&frame, Arc::new(vec![]))
                     }
                     #[cfg(any(target_os = "macos", target_os = "windows"))]
-                    {
-                        panic!("unsupported ocr engine");
-                    }
+                    panic!("unsupported ocr engine");
                 }
             };
 

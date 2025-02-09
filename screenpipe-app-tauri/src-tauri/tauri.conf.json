@@ -69,6 +69,30 @@
           "pathPrefix": [
             "/purchase-successful"
           ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/settings"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/changelog"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/onboarding"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/status"
+          ]
         }
       ]
     }

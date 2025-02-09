@@ -82,10 +82,10 @@ pub async fn get_app_icon(
     app_name: &str,
     app_path: Option<String>,
 ) -> Result<Option<AppIcon>, String> {
-    use windows_icons::get_icon_by_path;
-    use std::io::Cursor;
-    use image::{ImageEncoder, ExtendedColorType};
     use image::codecs::png::PngEncoder;
+    use image::{ExtendedColorType, ImageEncoder};
+    use std::io::Cursor;
+    use windows_icons::get_icon_by_path;
 
     async fn find_exe_path(app_name: &str) -> Option<String> {
         if let Some(path) = get_exe_by_reg_key(app_name) {
@@ -107,20 +107,22 @@ pub async fn get_app_icon(
             .ok_or_else(|| "app_path is None and could not find executable path".to_string())?,
     };
 
-    let image_buffer = async {
-        get_icon_by_path(&path)
-    }.await.map_err(|e| e.to_string())?;
+    let image_buffer = async { get_icon_by_path(&path) }
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut data = Vec::new();
     {
         let mut cursor = Cursor::new(&mut data);
         let encoder = PngEncoder::new(&mut cursor);
-        encoder.write_image(
-            &image_buffer, 
-            image_buffer.width(),
-            image_buffer.height(),
-            ExtendedColorType::Rgba8,
-        ).map_err(|e| e.to_string())?;
+        encoder
+            .write_image(
+                &image_buffer,
+                image_buffer.width(),
+                image_buffer.height(),
+                ExtendedColorType::Rgba8,
+            )
+            .map_err(|e| e.to_string())?;
     }
     Ok(Some(AppIcon {
         data,

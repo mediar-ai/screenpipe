@@ -6,11 +6,11 @@ use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::debug;
 use tokenizers::Tokenizer;
 
-#[derive(Clone)]
 pub struct WhisperModel {
     pub model: Model,
-    pub tokenizer: Tokenizer,
+    pub tokenizer: Box<Tokenizer>,
     pub device: Device,
+    pub mel_filters: Vec<f32>,
 }
 
 impl WhisperModel {
@@ -53,7 +53,7 @@ impl WhisperModel {
 
         debug!("Parsing config and tokenizer");
         let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
-        let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
+        let tokenizer = Box::new(Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?);
         // tokenizer.with_pre_tokenizer(PreT)
         debug!("Loading model weights");
         let vb =
@@ -62,11 +62,24 @@ impl WhisperModel {
 
         let model = Model::Normal(whisper);
 
+        debug!("Loading mel filters");
+        let mel_bytes = match config.num_mel_bins {
+            80 => include_bytes!("../../models/whisper/melfilters.bytes").as_slice(),
+            128 => include_bytes!("../../models/whisper/melfilters128.bytes").as_slice(),
+            nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+        };
+        let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+        <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(
+            mel_bytes,
+            &mut mel_filters,
+        );
+
         debug!("WhisperModel initialization complete");
         Ok(Self {
             model,
             tokenizer,
             device,
+            mel_filters,
         })
     }
 }
