@@ -97,6 +97,19 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
         if !overlay {
             let _ = window.set_focus();
         }
+
+        // event listener for the window close event
+        let window_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window_clone.is_fullscreen().unwrap_or(false) {
+                    let _ = window_clone.destroy().unwrap();
+                } else {
+                    let _ = window_clone.hide().unwrap();
+                    api.prevent_close();
+                }
+            }
+        });
     } else {
         let _ = tauri::WebviewWindowBuilder::new(
             app_handle,
@@ -282,13 +295,14 @@ pub async fn open_pipe_window(
 
     // event listener for the window close event
     let window_clone = window.clone();
-    let app_handle_clone = app_handle.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = window_clone.hide();
-            let _ = window_clone.destroy();
-            let _ = app_handle_clone.set_activation_policy(tauri::ActivationPolicy::Regular);
+            if window_clone.is_fullscreen().unwrap_or(false) {
+                let _ = window_clone.destroy().unwrap();
+            } else {
+                api.prevent_close();
+                let _ = window_clone.hide().unwrap();
+            }
         }
     });
 
