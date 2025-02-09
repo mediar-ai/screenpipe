@@ -429,8 +429,12 @@ async fn record_audio(
 
     // Create a weak reference to device_manager
     let device_manager_weak = Arc::downgrade(&device_manager);
-
+    let mut prev_handles_len = 0;
     loop {
+        if handles.len() != prev_handles_len {
+            prev_handles_len = handles.len();
+            info!("handles length: {}", prev_handles_len);
+        }
         tokio::select! {
             Some(state_change) = device_states.next() => {
                 // Handle cleanup of finished handles
