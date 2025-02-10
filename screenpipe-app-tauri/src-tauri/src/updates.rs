@@ -5,7 +5,7 @@ use log::{error, info};
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::menu::{MenuItem, MenuItemBuilder};
-use tauri::{Manager, Wry};
+use tauri::{Emitter, Manager, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::MessageDialogButtons;
 use tauri_plugin_updater::UpdaterExt;
@@ -44,6 +44,11 @@ impl UpdatesManager {
                 return Result::Ok(false);
             }
         }
+
+        if let Err(err) = self.app.emit("update-all-pipes", ()) {
+            error!("Failed to update all pipes: {}", err);
+        }
+
         if let Some(update) = self.app.updater()?.check().await? {
             *self.update_available.lock().await = true;
 

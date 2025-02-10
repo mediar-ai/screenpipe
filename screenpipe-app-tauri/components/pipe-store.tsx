@@ -12,6 +12,7 @@ import {
   PurchaseHistoryItem,
 } from "@/lib/api/store";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { listen } from "@tauri-apps/api/event";
 import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
@@ -73,7 +74,12 @@ export const PipeStore: React.FC = () => {
     }, 1000); // Debounce for 1 second
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, filteredPipes.length]);
+  }, [searchQuery, filteredPipes.length])
+
+  listen("update-all-pipes", async () => {    
+    if (!checkLogin(settings.user, false)) return;
+    await handleUpdateAllPipes(true)
+  });
 
   const fetchStorePlugins = async () => {
     try {
@@ -457,22 +463,25 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleUpdateAllPipes = async () => {
+  const handleUpdateAllPipes = async (delayToast: boolean = false) => {
     try {
       if (!checkLogin(settings.user)) return;
 
       posthog.capture("update_all_pipes", {});
 
-      const t = toast({
-        title: "checking for updates",
-        description: (
-          <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">checking installed pipes...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
+      let t
+      if (!delayToast) {
+        t = toast({
+          title: "checking for updates",
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">checking installed pipes...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }
 
       // Filter installed pipes that have updates available
       const pipesToUpdate = pipes.filter(
@@ -480,27 +489,42 @@ export const PipeStore: React.FC = () => {
       );
 
       if (pipesToUpdate.length === 0) {
-        t.update({
-          id: t.id,
-          title: "no updates available",
-          description: "all pipes are up to date",
-          duration: 2000,
-        });
+        if (t) {
+          t.update({
+            id: t.id,
+            title: "no updates available",
+            description: "all pipes are up to date",
+            duration: 2000,
+          });
+        }
         return;
       }
 
       // Update progress message
-      t.update({
-        id: t.id,
-        title: `updating ${pipesToUpdate.length} pipes`,
-        description: (
-          <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">starting updates...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
+      if (t) {
+        t.update({
+          id: t.id,
+          title: `updating ${pipesToUpdate.length} pipes`,
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">starting updates...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      } else {
+        t = toast({
+          title: `updating ${pipesToUpdate.length} pipes`,
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">starting updates...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }
 
       // Update each pipe sequentially
       for (let i = 0; i < pipesToUpdate.length; i++) {
@@ -1003,7 +1027,7 @@ export const PipeStore: React.FC = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={handleUpdateAllPipes}
+                      onClick={() => handleUpdateAllPipes()}
                       className="flex items-center gap-2"
                       disabled={
                         !pipes.some(
