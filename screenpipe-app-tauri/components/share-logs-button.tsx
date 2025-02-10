@@ -180,8 +180,7 @@ export const ShareLogsButton = ({
 
     setIsSending(true);
     try {
-      //   const BASE_URL = 'https://screenpi.pe'
-      const BASE_URL = "https://sc-test.huzef.com";
+      const BASE_URL = 'https://screenpi.pe'
       const identifier = settings.user?.id || machineId;
       const type = settings.user?.id ? "user" : "machine";
 
