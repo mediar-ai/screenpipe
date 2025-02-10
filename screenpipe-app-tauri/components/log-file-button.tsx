@@ -31,6 +31,7 @@ import {
   platform as osPlatform,
 } from "@tauri-apps/plugin-os";
 import { ShareLogsButton } from './share-logs-button'
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 const LogContent = ({
   content,
@@ -195,7 +196,17 @@ export const LogFileButton = ({
                 </DialogDescription>
               </div>
               <div className="flex mr-8">
-                <ShareLogsButton />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button>
+                      <Upload className="h-3.5 w-3.5 mr-2" />
+                      send logs
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-100 rounded-2xl">
+                    <ShareLogsButton />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </DialogHeader>
