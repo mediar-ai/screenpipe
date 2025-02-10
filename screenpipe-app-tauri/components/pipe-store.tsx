@@ -78,8 +78,43 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     const unsubscribePromise = listen("update-all-pipes", async () => {
+      // not sure this is a good idea ... basically pipes will break in the hand of users when update will happen
       if (!checkLogin(settings.user, false)) return;
-      await handleUpdateAllPipes(true);
+      console.log("updating all pipes");
+
+      for (const pipe of pipes) {
+        const currentVersion = pipe.installed_config?.version!;
+        const storeApi = await PipeApi.create(settings.user!.token!);
+        const update = await storeApi.checkUpdate(pipe.id, currentVersion);
+        if (!update.has_update) {
+          continue;
+        }
+
+        // First delete the pipe
+        await handleDeletePipe(pipe);
+
+        // Then download the new version
+        if (pipe.installed_config?.source) {
+          await handleInstallPipe(pipe);
+
+          // Enable the pipe after installation
+          const response = await fetch(`http://localhost:3030/pipes/enable`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ pipe_id: pipe.name }),
+          });
+
+          const data = await response.json();
+          if (!data.success) {
+            console.warn("failed to enable pipe:", data.error);
+          }
+        }
+      }
+
+      // Refresh the pipe list
+      await fetchInstalledPipes();
     });
 
     return () => {
@@ -473,10 +508,10 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      posthog.capture("update_all_pipes", {});
-
       let t;
       if (!delayToast) {
+        posthog.capture("update_all_pipes", {});
+
         t = toast({
           title: "checking for updates",
           description: (

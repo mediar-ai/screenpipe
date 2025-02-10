@@ -85,7 +85,6 @@ impl AnalyticsManager {
                     "disk_media_audios_size": disk_usage.media.audios_size,
                     "disk_total_pipes_size": disk_usage.pipes.total_pipes_size,
                 });
-                warn!("disk data to add: {:?}", disk_data);
                 payload_props.extend(disk_data.as_object().unwrap().clone());
             }
         } else {
