@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade, CloseFrame},
+        ws::{Message, WebSocket, WebSocketUpgrade},
         Json, Path, Query, State,
     },
     http::StatusCode,
@@ -34,8 +34,8 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use tracing::{debug, error, info};
 use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
+use tracing::{debug, error, info};
 
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
@@ -1957,7 +1957,7 @@ async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
             }
         }
     }
-    
+
     debug!("WebSocket connection closed gracefully");
 }
 

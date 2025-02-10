@@ -177,30 +177,41 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
 
   return (
     <>
-      <div className="w-full my-4">
-        <div className="flex justify-around">
+      <div className="w-full my-4 flex justify-center">
+        <div className="flex-col justify-around space-y-4 w-[40vw]">
           <Card className="p-8 relative">
             <CardContent>
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="dev-mode">enable dev mode</Label>
-                    <Switch
-                      id="dev-mode"
-                      checked={settings.devMode}
-                      onCheckedChange={handleDevModeToggle}
-                    />
+              <div className="flex flex-col ">
+                <div className="flex items-center justify-center">
+                  <div className="flex items-center justify-center ">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center space-x-2">
+                            <Label htmlFor="dev-mode">enable dev mode</Label>
+                            <Switch
+                              id="dev-mode"
+                              checked={settings.devMode}
+                              onCheckedChange={handleDevModeToggle}
+                            />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>
+                            on = use CLI for more control
+                            <br />
+                            in dev mode, backend won&apos;t
+                            <br />
+                            auto start when starting the app
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   <div className="absolute top-2 right-2">
                     <CliCommandDialog settings={settings} />
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  on = use CLI for more control
-                  <br />
-                  in dev mode, backend won&apos;t <br />
-                  auto start when starting the app
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -251,7 +262,7 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
               </CardContent>
               <CardFooter className="flex flex-col items-center">
                 <p className="text-sm text-muted-foreground">
-                  start or stop screenpipe recording
+                  manually start or stop screenpipe recording
                 </p>
                 <p className="text-xs text-muted-foreground">
                   (auto started when dev mode is off)
@@ -261,54 +272,6 @@ export const DevModeSettings = ({ localDataDir }: { localDataDir: string }) => {
           </div>
         </div>
       </div>
-      {/* vertical separator */}
-      <Separator orientation="vertical" />
-      {settings.devMode === true && (
-        <>
-          <p className="font-bold my-2">
-            did you run screenpipe backend? either click start on the right, or
-            thru CLI 👇
-          </p>
-          <CodeBlock
-            language="bash"
-            value={getDebuggingCommands(platform(), localDataDir)}
-          />
-
-          <div className="mt-4 text-sm text-gray-500">
-            <p>or, for more advanced queries:</p>
-            <ol className="list-decimal list-inside mt-2">
-              <li>
-                <a
-                  href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/db.rs"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                >
-                  go to the database schema
-                </a>
-              </li>
-              <li>Copy the entire page (Cmd+A, Cmd+C)</li>
-              <li>Paste into ChatGPT (Cmd+V)</li>
-              <li>
-                ask: &quot;give me 10 sqlite query CLI to look up my data. My db
-                is in {localDataDir}/db.sqlite&quot;
-              </li>
-            </ol>
-            <p className="mt-2">
-              or if you prefer using curl, follow the same steps with the{" "}
-              <a
-                href="https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-500 hover:underline"
-              >
-                server.rs file
-              </a>{" "}
-              and ask ChatGPT for curl commands to interact with the API.
-            </p>
-          </div>
-        </>
-      )}
     </>
   );
 };
