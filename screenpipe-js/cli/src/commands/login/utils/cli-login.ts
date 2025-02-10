@@ -10,6 +10,7 @@ import path from "node:path";
 import { logger, spinner } from "../../components/commands/add/utils/logger";
 import { colors } from "../../../utils/colors";
 import { handleError } from "../../components/commands/add/utils/handle-error";
+import fs from 'fs';
 
 const FILENAME = ".apikey";
 
@@ -24,7 +25,18 @@ async function writeToConfigFile(data: ParsedUrlQuery) {
     try {
       const homeDir = os.homedir();
       const filePath = path.join(homeDir, FILENAME);
-      writeFileSync(filePath, JSON.stringify(data));
+      let config = {};
+      try {
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        config = JSON.parse(fileContent);
+      } catch (err) {
+        // File doesn't exist or is invalid JSON, use empty object
+      }
+      const updatedConfig = {
+        ...config,
+        user: data
+      };
+      writeFileSync(filePath, JSON.stringify(updatedConfig, null, 2));
     } catch (error) {
       handleError(`error writing to local config file ${error}`);
     }
@@ -32,6 +44,52 @@ async function writeToConfigFile(data: ParsedUrlQuery) {
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
+const getUser = async (token: string) => { 
+    try {
+      const response = await fetch(process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3001/api/user' 
+        : 'https://screenpi.pe/api/user', 
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("failed to verify token");
+      }
+
+      const data = await response.json();
+      const userData = {
+        ...data.user,
+      }
+
+      return userData;
+
+      // if user was not logged in, send posthog event app_login with email
+    //   if (!settings.user?.id) {
+    //     posthog.capture("app_login", {
+    //       email: userData.email,
+    //     });
+    //   }
+    } catch (err) {
+      console.error("failed to load user:", err);
+    }
+};
+
+const getTauriStore = async () => {
+  const tauriStore = await fetch(`http://localhost:3030/app-info`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  const tauriStoreData = await tauriStore.json();
+  console.log("tauriStoreData", tauriStoreData);
+}
 
 export async function cliLogin() {
     // create localhost server for our page to call back to
@@ -75,7 +133,11 @@ export async function cliLogin() {
     const redirect = `http://127.0.0.1:${port}`;
 
     const code = nanoid();
-    const confirmationUrl = new URL(`https://screenpi.pe/login`);
+    const confirmationUrl = new URL(
+        process.env.NODE_ENV === "development" 
+            ? "http://localhost:3001/login"
+            : "http://screenpi.pe/login"
+    );
     confirmationUrl.searchParams.append("code", code);
     confirmationUrl.searchParams.append("redirect", redirect);
     logger.log(`confirmation code: ${colors.bold(code)}\n`);
@@ -93,9 +155,10 @@ export async function cliLogin() {
         loadingSpinner.start();
         const authData = await authPromise;
         loadingSpinner.succeed("authentication successful");
+        const userData = await getUser(authData.apiKey as string);
+        const tauriStoreData = await getTauriStore();
         writeToConfigFile(authData);
         server.close();
-        process.exit(0);
     } catch (error) {
         if (error instanceof UserCancellationError) {
             server.close();
