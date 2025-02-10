@@ -293,15 +293,24 @@ pub async fn open_pipe_window(
         }
     };
 
+    // flag to prevent infinite loop
+    let is_closing = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let is_closing_clone = std::sync::Arc::clone(&is_closing);
+
     // event listener for the window close event
     let window_clone = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            let mut is_closing = is_closing_clone.lock().unwrap();
+            if *is_closing {
+                return;
+            }
+            *is_closing = true;
             if window_clone.is_fullscreen().unwrap_or(false) {
                 let _ = window_clone.destroy().unwrap();
             } else {
                 api.prevent_close();
-                let _ = window_clone.hide().unwrap();
+                let _ = window_clone.close().unwrap();
             }
         }
     });
