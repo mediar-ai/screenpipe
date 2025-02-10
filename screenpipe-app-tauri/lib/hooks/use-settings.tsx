@@ -265,7 +265,7 @@ const tauriStorage: PersistStorage = {
     const tauriStore = await getStore();
     const allKeys = await tauriStore.keys();
     const values: Record<string, any> = {};
-
+    
     for (const k of allKeys) {
       values[k] = await tauriStore.get(k);
     }
@@ -365,7 +365,7 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
-  const loadUser = async (token: string) => {
+  const loadUser = async (token: string) => { 
     try {
       const BASE_URL =
         (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
@@ -404,10 +404,25 @@ export function useSettings() {
     }
   };
 
+  const reloadStore = async () => {
+    const store = await getStore();
+    await store.reload();
+
+    const allKeys = await store.keys();
+    const values: Record<string, any> = {};
+
+    for (const k of allKeys) {
+      values[k] = await store.get(k);
+    }
+
+    setSettings(unflattenObject(values));
+  };
+
   return {
     settings,
     updateSettings: setSettings,
     resetSettings,
+    reloadStore,
     loadUser,
     resetSetting,
     getDataDir,
