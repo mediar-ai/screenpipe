@@ -5,14 +5,10 @@ import { ParsedUrlQuery } from "node:querystring";
 import url from "url";
 import { listen } from "async-listen";
 import { customAlphabet } from "nanoid";
-import os from 'os';
-import path from "node:path";
 import { logger, spinner } from "../../components/commands/add/utils/logger";
 import { colors } from "../../../utils/colors";
 import { handleError } from "../../components/commands/add/utils/handle-error";
 import fs from 'fs';
-
-const FILENAME = ".apikey";
 
 class UserCancellationError extends Error {
   constructor(message: string) {
@@ -21,22 +17,34 @@ class UserCancellationError extends Error {
   }
 }
 
-async function writeToConfigFile(data: ParsedUrlQuery) {
+type User = {
+  id: string;
+  email: string;
+  clerk_id: string;
+  token: string;
+  credits: { amount: number };
+  stripe_connected: boolean;
+  stripe_account_status: string;
+  api_key: string;
+  cloud_subscribed: boolean;
+  github_username: string;
+  website: string;
+  contact: string;
+  bio: string;
+}
+
+async function writeToConfigFile(userData: User, tauriStorePath: string) {
     try {
-      const homeDir = os.homedir();
-      const filePath = path.join(homeDir, FILENAME);
       let config = {};
-      try {
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        config = JSON.parse(fileContent);
-      } catch (err) {
-        // File doesn't exist or is invalid JSON, use empty object
-      }
+
+      const fileContent = fs.readFileSync(tauriStorePath, 'utf8');
+      config = JSON.parse(fileContent);
+
       const updatedConfig = {
         ...config,
-        user: data
+        user: userData,
       };
-      writeFileSync(filePath, JSON.stringify(updatedConfig, null, 2));
+      writeFileSync(tauriStorePath, JSON.stringify(updatedConfig, null, 2));
     } catch (error) {
       handleError(`error writing to local config file ${error}`);
     }
@@ -44,7 +52,7 @@ async function writeToConfigFile(data: ParsedUrlQuery) {
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
-const getUser = async (token: string) => { 
+const getUser = async (token: string): Promise<User> => { 
     try {
       const response = await fetch(process.env.NODE_ENV === 'development' 
         ? 'http://localhost:3001/api/user' 
@@ -64,18 +72,16 @@ const getUser = async (token: string) => {
       const data = await response.json();
       const userData = {
         ...data.user,
+      } as User;
+
+      if (!userData) {
+        throw new Error("failed to load user");
       }
 
       return userData;
-
-      // if user was not logged in, send posthog event app_login with email
-    //   if (!settings.user?.id) {
-    //     posthog.capture("app_login", {
-    //       email: userData.email,
-    //     });
-    //   }
     } catch (err) {
-      console.error("failed to load user:", err);
+      handleError(`failed to load user: ${err}`);
+      process.exit(1);
     }
 };
 
@@ -88,7 +94,7 @@ const getTauriStore = async () => {
   });
 
   const tauriStoreData = await tauriStore.json();
-  console.log("tauriStoreData", tauriStoreData);
+  return tauriStoreData.store_path;
 }
 
 export async function cliLogin() {
@@ -154,10 +160,11 @@ export async function cliLogin() {
     try {
         loadingSpinner.start();
         const authData = await authPromise;
-        loadingSpinner.succeed("authentication successful");
         const userData = await getUser(authData.apiKey as string);
         const tauriStoreData = await getTauriStore();
-        writeToConfigFile(authData);
+        writeToConfigFile(userData, tauriStoreData);
+
+        loadingSpinner.succeed("authentication successful");
         server.close();
     } catch (error) {
         if (error instanceof UserCancellationError) {
