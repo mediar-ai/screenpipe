@@ -22,6 +22,8 @@ import {
   Book,
   User,
   Settings2,
+  Upload,
+  Mail,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -35,6 +37,8 @@ import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { ShareLogsButton } from "./share-logs-button";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -42,9 +46,8 @@ export default function Header() {
 
   useEffect(() => {
     const loadMessages = async () => {
-      const savedMessages = await localforage.getItem<Message[]>(
-        "inboxMessages"
-      );
+      const savedMessages =
+        await localforage.getItem<Message[]>("inboxMessages");
       if (savedMessages) {
         setMessages(savedMessages);
       }
@@ -104,6 +107,7 @@ export default function Header() {
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   return (
     <div>
@@ -113,6 +117,17 @@ export default function Header() {
         </div>
       </div>
       <div className="flex space-x-4 absolute top-4 right-4">
+        <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline">
+              <Mail className="h-3.5 w-3.5 mr-2" />
+              feedback
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-100 rounded-2xl" >
+            <ShareLogsButton showShareLink={false} onComplete={() => setIsFeedbackOpen(false)} />
+          </PopoverContent>
+        </Popover>
         <HealthStatus className="mt-3 cursor-pointer" />
         <Settings />
 
@@ -159,17 +174,6 @@ export default function Header() {
               >
                 <Book className="mr-2 h-4 w-4" />
                 <span>check docs</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={() =>
-                  open(
-                    "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
-                  )
-                }
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                <span>send feedback</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"

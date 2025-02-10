@@ -446,6 +446,37 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
+#[tauri::command]
+async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
+    // Read file contents
+    let file_contents = match tokio::fs::read(file_path).await {
+        Ok(contents) => contents,
+        Err(e) => return Err(e.to_string())
+    };
+
+    // Create client and send PUT request
+    let client = reqwest::Client::new();
+    let response = match client
+        .put(signed_url)
+        .body(file_contents)
+        .send()
+        .await {
+            Ok(r) => r,
+            Err(e) => return Err(e.to_string())
+        };
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to upload file: {}",
+            response.status()
+        ));
+    }
+
+    Ok(true)
+}
+
+
+
 // Helper function to parse shortcut string
 fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
@@ -630,8 +661,9 @@ async fn main() {
             commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
+            upload_file_to_s3,
             update_global_shortcuts,
-            get_env
+            get_env,
         ])
         .setup(|app| {
             //deep link register_all
