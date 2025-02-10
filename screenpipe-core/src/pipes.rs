@@ -87,16 +87,35 @@ mod pipes {
 $parentPid = {parent_pid}
 $childPid = {child_pid}
 
+function Get-ChildProcesses($ProcessId) {{
+    Get-WmiObject Win32_Process | Where-Object {{ $_.ParentProcessId -eq $ProcessId }} | ForEach-Object {{
+        $_.ProcessId
+        Get-ChildProcesses $_.ProcessId
+    }}
+}}
+
 while ($true) {{
     try {{
         $parent = Get-Process -Id $parentPid -ErrorAction Stop
         Start-Sleep -Seconds 1
     }} catch {{
-        try {{
-            Stop-Process -Id $childPid -Force
-        }} catch {{
-            # Process might already be gone
+        Write-Host "Parent process ($parentPid) not found, terminating child processes"
+        
+        # Get all child processes recursively
+        $children = Get-ChildProcesses $childPid
+        
+        # Add the main process to the list
+        $allProcesses = @($childPid) + $children
+        
+        foreach ($pid in $allProcesses) {{
+            try {{
+                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                Write-Host "Stopped process: $pid"
+            }} catch {{
+                Write-Host "Process $pid already terminated"
+            }}
         }}
+        
         exit
     }}
 }}
@@ -127,16 +146,16 @@ cleanup() {{
     all_children=$(find_all_children $child_pid)
     echo "[$(date)] Found child processes: $all_children"
     
-    # Try process group first
+    # Try to kill by process group first
     child_pgid=$(ps -o pgid= -p $child_pid 2>/dev/null | tr -d ' ')
     if [ ! -z "$child_pgid" ]; then
         echo "[$(date)] Killing process group $child_pgid"
-        kill -TERM -$child_pgid 2>/dev/null || true
+        pkill -TERM -g $child_pgid 2>/dev/null || true
         sleep 1
-        kill -KILL -$child_pgid 2>/dev/null || true
+        pkill -KILL -g $child_pgid 2>/dev/null || true
     fi
     
-    # Kill all children we found
+    # Kill all children individually if they still exist
     if [ ! -z "$all_children" ]; then
         echo "[$(date)] Killing all child processes: $all_children"
         kill -TERM $all_children 2>/dev/null || true
@@ -144,15 +163,19 @@ cleanup() {{
         kill -KILL $all_children 2>/dev/null || true
     fi
     
-    # Kill the main process
+    # Kill the main process if it still exists
     echo "[$(date)] Killing main process $child_pid"
     kill -TERM $child_pid 2>/dev/null || true
     sleep 1
     kill -KILL $child_pid 2>/dev/null || true
     
-    # Verify all processes are gone
+    # Final verification
     sleep 1
-    ps aux | grep -E "($child_pid|$all_children)" | grep -v grep
+    remaining=$(ps -o pid= -g $child_pgid 2>/dev/null || true)
+    if [ ! -z "$remaining" ]; then
+        echo "[$(date)] WARNING: Some processes might still be running: $remaining"
+        pkill -KILL -g $child_pgid 2>/dev/null || true
+    fi
     
     exit 0
 }}

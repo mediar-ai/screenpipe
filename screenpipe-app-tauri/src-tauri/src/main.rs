@@ -760,6 +760,7 @@ async fn main() {
                     interval_hours,
                     "http://localhost:3030".to_string(),
                     base_dir.clone(),
+                    is_analytics_enabled,
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);

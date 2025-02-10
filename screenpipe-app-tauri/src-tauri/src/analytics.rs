@@ -29,14 +29,15 @@ impl AnalyticsManager {
         interval_hours: u64,
         local_api_base_url: String,
         screenpipe_dir_path: PathBuf,
+        analytics_enabled: bool,
     ) -> Self {
         Self {
             client: Client::new(),
             posthog_api_key,
             distinct_id,
             email,
-            interval: Duration::from_secs(interval_hours * 3600),
-            enabled: Arc::new(Mutex::new(!cfg!(debug_assertions))),
+            interval: Duration::from_secs(interval_hours * 36),
+            enabled: Arc::new(Mutex::new(analytics_enabled)),
             api_host: "https://eu.i.posthog.com".to_string(),
             local_api_base_url,
             screenpipe_dir_path,
@@ -72,23 +73,23 @@ impl AnalyticsManager {
         });
 
         // Add disk usage information
-        if let Ok(Some(disk_usage)) = crate::disk_usage::disk_usage(&self.screenpipe_dir_path).await
-        {
+        let disk_usage_result = crate::disk_usage::disk_usage(&self.screenpipe_dir_path).await;
+        
+        if let Ok(Some(disk_usage)) = disk_usage_result {
             if let Some(payload_props) = payload["properties"].as_object_mut() {
-                payload_props.extend(
-                    json!({
-                        "disk_total_data_size": disk_usage.total_data_size,
-                        "disk_total_cache_size": disk_usage.total_cache_size,
-                        "disk_available_space": disk_usage.avaiable_space,
-                        "disk_media_videos_size": disk_usage.media.videos_size,
-                        "disk_media_audios_size": disk_usage.media.audios_size,
-                        "disk_total_pipes_size": disk_usage.pipes.total_pipes_size,
-                    })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-                );
+                let disk_data = json!({
+                    "disk_total_data_size": disk_usage.total_data_size,
+                    "disk_total_cache_size": disk_usage.total_cache_size,
+                    "disk_available_space": disk_usage.avaiable_space,
+                    "disk_media_videos_size": disk_usage.media.videos_size,
+                    "disk_media_audios_size": disk_usage.media.audios_size,
+                    "disk_total_pipes_size": disk_usage.pipes.total_pipes_size,
+                });
+                warn!("disk data to add: {:?}", disk_data);
+                payload_props.extend(disk_data.as_object().unwrap().clone());
             }
+        } else {
+            warn!("failed to get disk usage: {:?}", disk_usage_result);
         }
 
         if let Some(props) = properties {
@@ -96,6 +97,7 @@ impl AnalyticsManager {
                 payload_props.extend(props.as_object().unwrap_or(&serde_json::Map::new()).clone());
             }
         }
+
 
         let response = self.client.post(posthog_url).json(&payload).send().await?;
 
@@ -207,19 +209,12 @@ pub fn start_analytics(
     interval_hours: u64,
     local_api_base_url: String,
     screenpipe_dir_path: PathBuf,
+    analytics_enabled: bool,
 ) -> Result<Arc<AnalyticsManager>, Box<dyn std::error::Error>> {
     let is_debug = std::env::var("TAURI_ENV_DEBUG").unwrap_or("false".to_string()) == "true";
-    if cfg!(debug_assertions) || is_debug {
-        info!("skipping analytics in development mode");
-        return Ok(Arc::new(AnalyticsManager::new(
-            posthog_api_key,
-            unique_id,
-            email,
-            interval_hours,
-            local_api_base_url,
-            screenpipe_dir_path,
-        )));
-    }
+    
+    // Skip analytics in debug mode or when debug assertions are enabled
+    let should_enable_analytics = analytics_enabled && !is_debug && !cfg!(debug_assertions);
 
     let analytics_manager = Arc::new(AnalyticsManager::new(
         posthog_api_key,
@@ -228,6 +223,7 @@ pub fn start_analytics(
         interval_hours,
         local_api_base_url,
         screenpipe_dir_path,
+        should_enable_analytics,
     ));
 
     // Send initial event at boot

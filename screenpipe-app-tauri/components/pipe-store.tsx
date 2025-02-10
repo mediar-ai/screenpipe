@@ -74,12 +74,18 @@ export const PipeStore: React.FC = () => {
     }, 1000); // Debounce for 1 second
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, filteredPipes.length])
+  }, [searchQuery, filteredPipes.length]);
 
-  listen("update-all-pipes", async () => {    
-    if (!checkLogin(settings.user, false)) return;
-    await handleUpdateAllPipes(true)
-  });
+  useEffect(() => {
+    const unsubscribePromise = listen("update-all-pipes", async () => {
+      if (!checkLogin(settings.user, false)) return;
+      await handleUpdateAllPipes(true);
+    });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
+  }, []);
 
   const fetchStorePlugins = async () => {
     try {
@@ -469,7 +475,7 @@ export const PipeStore: React.FC = () => {
 
       posthog.capture("update_all_pipes", {});
 
-      let t
+      let t;
       if (!delayToast) {
         t = toast({
           title: "checking for updates",

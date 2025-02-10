@@ -70,11 +70,27 @@ pub fn readable(size: u64) -> String {
 }
 
 pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, String> {
+    // Create base directories if they don't exist
+    fs::create_dir_all(screenpipe_dir).map_err(|e| e.to_string())?;
+    
+    let pipes_dir = screenpipe_dir.join("pipes");
+    let data_dir = screenpipe_dir.join("data");
+    
+    // Create required subdirectories
+    fs::create_dir_all(&pipes_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    
     let cache_dir = match get_cache_dir()? {
         Some(dir) => dir,
         None => return Err("Cache directory not found".to_string()),
     };
-    let cache_file = cache_dir.join("screenpipe").join("disk_usage.json");
+    fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+    
+    // Create screenpipe subdirectory in cache
+    let screenpipe_cache_dir = cache_dir.join("screenpipe");
+    fs::create_dir_all(&screenpipe_cache_dir).map_err(|e| e.to_string())?;
+    
+    let cache_file = screenpipe_cache_dir.join("disk_usage.json");
 
     // Check if cache exists and is recent
     if let Ok(content) = fs::read_to_string(&cache_file) {
@@ -96,13 +112,6 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     let mut total_video_size = 0;
     let mut total_audio_size = 0;
 
-    let pipes_dir = screenpipe_dir.join("pipes");
-    let data_dir = screenpipe_dir.join("data");
-    let cache_dir = match get_cache_dir()? {
-        Some(dir) => dir,
-        None => return Err("Cache directory not found".to_string()),
-    };
-
     for entry in fs::read_dir(&pipes_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
@@ -118,7 +127,7 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
     let total_data_size = directory_size(screenpipe_dir).map_err(|e| e.to_string())?;
     let total_media_size = directory_size(&data_dir).map_err(|e| e.to_string())?;
     let total_pipes_size = directory_size(&pipes_dir).map_err(|e| e.to_string())?;
-    let total_cache_size = directory_size(&cache_dir).map_err(|e| e.to_string())?;
+    let total_cache_size = directory_size(&screenpipe_cache_dir).map_err(|e| e.to_string())?;
 
     for entry in fs::read_dir(&data_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
@@ -166,11 +175,10 @@ pub async fn disk_usage(screenpipe_dir: &PathBuf) -> Result<Option<DiskUsage>, S
         usage: disk_usage.clone(),
     };
 
-    if let Err(e) = fs::create_dir_all(&cache_dir) {
-        info!("Failed to create cache directory: {}", e);
-    } else if let Err(e) = fs::write(&cache_file, serde_json::to_string_pretty(&cached).unwrap()) {
+    if let Err(e) = fs::write(&cache_file, serde_json::to_string_pretty(&cached).unwrap()) {
         info!("Failed to write cache file: {}", e);
     }
+
 
     Ok(Some(disk_usage))
 }

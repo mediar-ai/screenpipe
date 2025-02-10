@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { debounce } from "lodash";
-import posthog from "posthog-js";
 
 interface HealthCheckResponse {
   status: string;
@@ -38,23 +37,6 @@ interface HealthCheckHook {
   isLoading: boolean;
   fetchHealth: () => Promise<void>;
   debouncedFetchHealth: () => Promise<void>;
-}
-
-const POSTHOG_RATE_LIMIT_HOURS = 1; // adjust this value as needed
-
-function shouldSendPosthogEvent(eventName: string): boolean {
-  const lastSentKey = `last_posthog_${eventName}`;
-  const lastSent = localStorage.getItem(lastSentKey);
-  const now = Date.now();
-
-  if (
-    !lastSent ||
-    now - parseInt(lastSent) > POSTHOG_RATE_LIMIT_HOURS * 60 * 60 * 1000
-  ) {
-    localStorage.setItem(lastSentKey, now.toString());
-    return true;
-  }
-  return false;
 }
 
 export function useHealthCheck() {
@@ -95,29 +77,9 @@ export function useHealthCheck() {
         previousHealthStatus.current === "healthy"
       ) {
         unhealthyTransitionsRef.current += 1;
-
-        if (shouldSendPosthogEvent("health_check_unhealthy")) {
-          posthog.capture("health_check_unhealthy", {
-            frame_status: data.frame_status,
-            audio_status: data.audio_status,
-            ui_status: data.ui_status,
-            message: data.message,
-            transitions_since_last_event: unhealthyTransitionsRef.current,
-          });
-          unhealthyTransitionsRef.current = 0;
-        }
       }
 
       previousHealthStatus.current = data.status;
-
-      if (data.status === "unhealthy") {
-        posthog.capture("health_check_unhealthy", {
-          frame_status: data.frame_status,
-          audio_status: data.audio_status,
-          ui_status: data.ui_status,
-          message: data.message,
-        });
-      }
     };
 
     ws.onerror = (event) => {
@@ -134,9 +96,6 @@ export function useHealthCheck() {
         message: error.message,
       };
       setHealth(errorHealth);
-      posthog.capture("health_check_error", {
-        error: error.message,
-      });
       setIsServerDown(true);
       setIsLoading(false);
       if (!retryIntervalRef.current) {
@@ -159,7 +118,7 @@ export function useHealthCheck() {
       setHealth(errorHealth);
       setIsServerDown(true);
       if (!retryIntervalRef.current) {
-        retryIntervalRef.current = setInterval(fetchHealth, 2000)
+        retryIntervalRef.current = setInterval(fetchHealth, 2000);
       }
     };
   }, []);
@@ -196,4 +155,3 @@ export function useHealthCheck() {
     debouncedFetchHealth,
   } as HealthCheckHook;
 }
-
