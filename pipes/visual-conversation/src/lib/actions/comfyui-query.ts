@@ -16,14 +16,14 @@ export async function queuePrompt(prompt: string) {
           positive: ["6", 0],
           sampler_name: "euler",
           scheduler: "normal",
-          seed: Math.floor(Math.random() * 1000000),
+          seed: 8566257,
           steps: 20,
         },
       },
       "4": {
         class_type: "CheckpointLoaderSimple",
         inputs: {
-          ckpt_name: "v1-5-pruned-emaonly.safetensors",
+          ckpt_name: "v1-5-pruned-emaonly-fp16.safetensors",
         },
       },
       "5": {
@@ -45,7 +45,7 @@ export async function queuePrompt(prompt: string) {
         class_type: "CLIPTextEncode",
         inputs: {
           clip: ["4", 1],
-          text: "bad hands",
+          text: "pixelated, cyberspace, cyberpunk, tech-optimistic, techbro, utopia",
         },
       },
       "8": {
@@ -73,7 +73,9 @@ export async function queuePrompt(prompt: string) {
     body: JSON.stringify(workflowPrompt),
   });
 
-  return response.json();
+  const data = await response.json();
+  console.log("data", data);
+  return data;
 }
 
 export async function getImageFromHistory(promptId: string) {
