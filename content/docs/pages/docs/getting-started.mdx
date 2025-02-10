@@ -6,24 +6,21 @@ import { Tabs, Tab } from 'nextra/components'
 ### install now
 
 <MotionDiv>
+screenpipe offers multiple installation methods. for most users, we recommend:
 
-screenpipe offers multiple installation methods depending on user needs and technical proficiency. whether you are a developer looking to use the cli or a user who wants a more plug-and-play desktop app, screenpipe provides flexible options to get started quickly.
-
-for non technical users or those who want to get started quickly, we recommend getting the [desktop app here](https://screenpi.pe).
+1. downloading the [desktop app](https://screenpi.pe)
+2. or using our quick install CLI:
 
 <Tabs items={['macos & linux', 'windows']}>
   <Tab>
     ```bash copy
     curl -fsSL get.screenpi.pe/cli | sh
     screenpipe
-    # make sure to allow permissions on macos (screen, mic)
     ```
   </Tab>
   <Tab>
     ```powershell copy
-    # run as administrator
     iwr get.screenpi.pe/cli.ps1 | iex
-    # in a new terminal
     screenpipe.exe
     ```
   </Tab>
@@ -53,238 +50,12 @@ now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to a
 
 </MotionDiv>
 
+### for developers
 
-<MotionDiv delay={0.7}>
+if you're interested in building from source or contributing to screenpipe, please check our [contributing guide](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md).
 
-### build from source
+### for businesses
 
-for users preferring full control or customization, building the app manually from the repository is an option. this method requires rust and other necessary dependencies. follow the provided build guide to compile the app.
-
-</MotionDiv>
-
----
-
-#### macos 
-
-
-1. start by installing rust and all necessary dependencies:
-```bash copy
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-brew install pkg-config ffmpeg jq cmake wget
-```
-
-2. install bun cli (required for building):
-```bash copy
-curl -fsSL https://bun.sh/install | bash
-```
-
-3. clone the screenpipe repository:
-```bash copy
-git clone https://github.com/mediar-ai/screenpipe
-cd screenpipe
-```
-
-4. build the project with:
-```bash copy
-cargo build --release --features metal
-```
-
-5. finally, run screenpipe:
-```bash copy
-./target/release/screenpipe
-```
-
-6. to build the desktop app:
-
-```bash copy
-cd screenpipe-app-tauri
-bun install
-bun scripts/pre_build.js # <- this is important to copy the CLI into the app
-bun tauri build
-# MAKE SURE TO RUN THE CLI BUILD FIRST IN THE ROOT
-```
-
-[need help? open an issue on github.](https://github.com/mediar-ai/screenpipe/issues/new)
-
-
-
----
-
-#### windows 
-
-
-if this does not work for you, please [open an issue](https://github.com/mediar-ai/screenpipe/issues/new?assignees=&labels=dislike&template=dislike.yml&title=windows+install+screenpipe+didnt+work) or get the pre-built [desktop app](https://screenpi.pe)
-
-1. install required tools:
-```powershell copy
-# install visual studio build tools
-winget install -e --id Microsoft.VisualStudio.2022.BuildTools
-
-# install rust
-winget install -e --id Rustlang.Rustup
-
-# install llvm
-winget install -e --id LLVM.LLVM
-
-# install cmake
-winget install -e --id Kitware.CMake
-
-# install unzip utility
-winget install -e --id GnuWin32.UnZip
-
-# install git
-winget install -e --id Git.Git
-
-# install bun (using npm)
-irm https://bun.sh/install.ps1 | iex
-
-# install pkg-config (download from https://sourceforge.net/projects/pkgconfiglite/files/)
-# download and extract to a folder in your PATH
-
-# clone and setup vcpkg
-cd C:\dev # or your preferred location
-$env:DEV_DIR = $(pwd)
-git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg
-./bootstrap-vcpkg.bat -disableMetrics
-./vcpkg.exe integrate install --disable-metrics
-
-# install required libraries
-./vcpkg.exe install ffmpeg:x64-windows
-```
-
-2. environment variables
-
-add these to your system environment variables (windows settings -> system -> about -> advanced system settings -> environment variables):
-```powershell copy
-[System.Environment]::SetEnvironmentVariable('PKG_CONFIG_PATH', "$env:DEV_DIR\vcpkg\packages\ffmpeg_x64-windows\lib\pkgconfig", 'User')
-[System.Environment]::SetEnvironmentVariable('VCPKG_ROOT', "$env:DEV_DIR\vcpkg", 'User')
-[System.Environment]::SetEnvironmentVariable('LIBCLANG_PATH', 'C:\Program Files\LLVM\bin', 'User')
-[System.Environment]::SetEnvironmentVariable('PATH', "$([System.Environment]::GetEnvironmentVariable('PATH', 'User'));C:\Program Files (x86)\GnuWin32\bin", 'User')
-```
-
-3. clone and build:
-```powershell copy
-# clone the repo
-git clone https://github.com/mediar-ai/screenpipe
-cd screenpipe
-
-# build the cli
-cargo build --release
-
-# build the desktop app
-cd screenpipe-app-tauri
-bun install
-bun scripts/pre_build.js
-bun tauri build
-```
-
-
-
-
----
-
-#### linux 
-
-1. install dependencies with the following commands:
-```bash copy
-sudo apt-get update
-sudo apt-get install -y g++ ffmpeg tesseract-ocr cmake pkg-config \
-    libavformat-dev libavfilter-dev libavdevice-dev libavcodec-dev libavutil-dev libswscale-dev \
-    libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev \
-    libxtst-dev build-essential libasound2-dev libdbus-1-dev \
-    libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-    libx11-dev libxi-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
-    clang llvm-dev
-
-# set libclang path (for ubuntu/debian with llvm-14)
-export LIBCLANG_PATH=/usr/lib/llvm-14/lib
-
-# install rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-2. install bun cli (required for pipes & building desktop app):
-```bash copy
-curl -fsSL https://bun.sh/install | bash
-```
-
-3. clone the repository and build the application:
-```bash copy
-git clone https://github.com/mediar-ai/screenpipe
-cd screenpipe
-cargo build --release
-# add --features cuda for gpu support (experimental)
-# add --features mkl for intel accelerated cpu support (experimental)
-```
-
-4. to run the application, use:
-```bash copy
-./target/release/screenpipe
-```
-
-5. to build the desktop app:
-
-```bash copy
-cd screenpipe-app-tauri
-bun install
-bun scripts/pre_build.js # <- this is important to copy the CLI into the app
-bun tauri build
-```
-
-
-#### linux docker
-
-[check out the docker setup here](https://github.com/sabrehagen/desktop-environment/blob/730a3134362927f8965589f6322b4554e0a5e388/docker/Dockerfile#L403)
-
-#### gpu acceleration options
-
-##### cuda support (nvidia gpus)
-to enable cuda support, add the `--features cuda` flag when building:
-```bash copy
-cargo build --release --features cuda
-```
-##### intel mkl support
-for intel cpu optimization, add the `--features mkl` flag:
-```bash copy
-cargo build --release --features mkl
-```
-
-### troubleshooting
-
-- facing any key signing issues? you need to [sign the build for the updater then](https://v2.tauri.app/plugin/updater/#signing-updates)
-
-### important note for developers
-
-if you encounter key-related errors when building from source, especially for the desktop app, you may need to sign your updates. this is particularly important for our production builds and ensuring secure update processes.
-
-for detailed instructions on signing updates, please refer to the [tauri updater documentation](https://v2.tauri.app/plugin/updater/#signing-updates).
-
-you can probably remove the updater config in your fork if you don't need it.
-
-
-### other options 
-
-- check this [docker setup](https://github.com/sabrehagen/desktop-environment/blob/d273442143260b414c581d7a53be0618ca822bc0/docker/Dockerfile#L409-L421)
-- use 
-```bash copy
-export CARGO_PROFILE_RELEASE_LTO=true
-export CARGO_PROFILE_RELEASE_OPT_LEVEL=z
-export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
-``` 
-to build a faster and smaller release but takes longer to build
-
-### for businesses 
-
-you can use screenpipe in your business either by:
-- running the CLI on your customer's computer
-- running the app on your customer's computer
-- embedding the library or CLI in your own software:
-  - [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
-  - [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
-- running the CLI in the cloud and forward the video/audio through SSH
-- using our Microsoft Remote Desktop integration 
-
-[book a demo with our team](https://cal.com/louis030195/screenpipe-for-businesses)
+[details about business usage...]
 
 
