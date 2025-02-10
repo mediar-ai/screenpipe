@@ -60,6 +60,7 @@ export function TranscriptionView({
     const [showLoadButton, setShowLoadButton] = useState(false)
     const [loadingHistory, setLoadingHistory] = useState(false)
     const { fetchRecentChunks } = useRecentChunks()
+    const initialDataLoadRef = useRef(true)
 
     // Add logging for component mount/unmount
     useEffect(() => {
@@ -89,7 +90,11 @@ export function TranscriptionView({
     // Update when data changes
     useEffect(() => {
         if (data?.editedMergedChunks) {
+            console.log('loading initial data from storage')
             setEditedMergedChunks(data.editedMergedChunks)
+            // Set last processed index to latest chunk to prevent reprocessing
+            lastProcessedChunkRef.current = chunks.length - 1
+            initialDataLoadRef.current = false
         }
     }, [data])
 
@@ -281,6 +286,12 @@ export function TranscriptionView({
     useEffect(() => {
         const currentChunkIndex = mergeChunks.length - 1
         const previousChunkIndex = currentChunkIndex - 1
+
+        // Skip processing if this is initial data load
+        if (initialDataLoadRef.current) {
+            console.log('skipping chunk processing during initial data load')
+            return
+        }
 
         // Only process if we have a previous chunk and haven't processed it yet
         if (previousChunkIndex >= 0 && 
