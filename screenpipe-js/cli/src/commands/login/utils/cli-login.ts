@@ -34,55 +34,46 @@ type User = {
 }
 
 async function writeToConfigFile(userData: User, tauriStorePath: string) {
-    try {
-      let config = {};
+  let config = {};
 
-      const fileContent = fs.readFileSync(tauriStorePath, 'utf8');
-      config = JSON.parse(fileContent);
+  const fileContent = fs.readFileSync(tauriStorePath, 'utf8');
+  config = JSON.parse(fileContent);
 
-      const updatedConfig = {
-        ...config,
-        user: userData,
-      };
-      writeFileSync(tauriStorePath, JSON.stringify(updatedConfig, null, 2));
-    } catch (error) {
-      handleError(`error writing to local config file ${error}`);
-    }
+  const updatedConfig = {
+    ...config,
+    user: userData,
+  };
+  writeFileSync(tauriStorePath, JSON.stringify(updatedConfig, null, 2));
 }
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
 const getUser = async (token: string): Promise<User> => { 
-    try {
-      const response = await fetch(process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3001/api/user' 
-        : 'https://screenpi.pe/api/user', 
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ token }),
-      });
+  const response = await fetch(process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3001/api/user' 
+    : 'https://screenpi.pe/api/user', 
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token }),
+  });
 
-      if (!response.ok) {
-        throw new Error("failed to verify token");
-      }
+  if (!response.ok) {
+    throw new Error("failed to verify token");
+  }
 
-      const data = await response.json();
-      const userData = {
-        ...data.user,
-      } as User;
+  const data = await response.json();
+  const userData = {
+    ...data.user,
+  } as User;
 
-      if (!userData) {
-        throw new Error("failed to load user");
-      }
+  if (!userData) {
+    throw new Error("failed to load user");
+  }
 
-      return userData;
-    } catch (err) {
-      handleError(`failed to load user: ${err}`);
-      process.exit(1);
-    }
+  return userData;
 };
 
 const getTauriStore = async () => {
