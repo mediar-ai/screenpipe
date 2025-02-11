@@ -1,34 +1,17 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import React from "react";
 import { Badge } from "./ui/badge";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
-
-import { Button } from "./ui/button";
-import { Separator } from "./ui/separator";
-import { Lock, Folder, Activity, Power } from "lucide-react";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
-
-import { LogFileButton } from "./log-file-button";
-import { DevModeSettings } from "./dev-mode-settings";
+import { Power } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
-import { platform } from "@tauri-apps/plugin-os";
 import { useScreenpipeStatus } from "./screenpipe-status/context";
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useScreenpipeStatus();
   const { open } = useStatusDialog();
-  const { settings, getDataDir } = useSettings();
-  const [localDataDir, setLocalDataDir] = useState("");
+  const { settings } = useSettings();
 
   const getStatusColor = (
     status: string,
@@ -57,19 +40,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
   );
 
   const handleOpenStatusDialog = async () => {
-    try {
-      const dir = await getDataDir();
-      setLocalDataDir(dir);
-      open();
-    } catch (error) {
-      console.error("failed to open status dialog:", error);
-      toast({
-        title: "error",
-        description: "failed to open status dialog. please try again.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
+    open();
   };
 
   return (
@@ -77,7 +48,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
       <Badge
         variant="default"
         className={cn(
-          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground"
+          "cursor-pointer bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
+          className
         )}
         onClick={handleOpenStatusDialog}
       >
