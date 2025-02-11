@@ -32,6 +32,32 @@ export interface LiveMeetingData {
     analysis: MeetingAnalysis | null
     deviceNames: Set<string>
     selectedDevices: Set<string>
+    // New fields
+    agenda?: string
+    participants_invited?: string[]
+    recurrence?: string
+    participants?: string[] | null
+    guestCount?: number
+    confirmedCount?: number
+    organizer?: string
+    aiPrep?: {
+        previousContext: {
+            lastInteraction: string
+            personContext: Record<string, {
+                personality: string
+                communicationStyle: string
+                pastDecisions: string[]
+                strengths: string[]
+                challenges: string[]
+            }>
+            agreedNextSteps: string[]
+        }
+        suggestedPrep: {
+            reviewPoints: string[]
+            discussionTopics: string[]
+            meetingTips: string[]
+        }
+    }
 }
 
 // Context type
@@ -311,14 +337,16 @@ export async function clearLiveMeetingData(): Promise<void> {
             start_time: currentData?.startTime,
         })
         
-        // Create empty state
+        // Create empty state with new timestamp for id
+        const startTime = new Date().toISOString()
         const emptyState: LiveMeetingData = {
+            id: `live-meeting-${startTime}`,  // Add id field
             chunks: [],
             mergedChunks: [],
             editedMergedChunks: {},
             speakerMappings: {},
             lastProcessedIndex: -1,
-            startTime: new Date().toISOString(),
+            startTime,
             title: null,
             notes: [],
             analysis: null,
@@ -337,14 +365,11 @@ export async function clearLiveMeetingData(): Promise<void> {
 }
 
 // Add function to archive current live meeting
-export async function archiveLiveMeeting(meeting?: LiveMeetingData) {
+export async function archiveLiveMeeting(): Promise<boolean> {
     try {
-        // If no meeting passed, try to get from live store
+        const meeting = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
         if (!meeting) {
-            meeting = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-            if (!meeting) {
-                throw new Error('no meeting data found to archive')
-            }
+            throw new Error('no meeting data found to archive')
         }
 
         // Ensure we have required fields
