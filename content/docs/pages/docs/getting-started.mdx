@@ -27,25 +27,40 @@ screenpipe offers multiple installation methods. for most users, we recommend:
   </Tab>
 </Tabs>
 
-then stream the OCR data (requires `jq`):
+then query the data using our JavaScript SDK:
 
-<Tabs items={['macos', 'linux', 'windows']}>
-  <Tab>
-    ```bash copy
-    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
-    ```
-  </Tab>
-  <Tab>
-    ```bash copy
-    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
-    ```
-  </Tab>
-  <Tab>
-    ```powershell copy
-    Remove-item alias:curl; curl -N "http://localhost:3030/sse/vision" | ForEach-Object { $_ -replace '^data: ', '' | jq }
-    ```
-  </Tab>
-</Tabs>
+```typescript copy
+import { pipe } from "@screenpipe/js";
+
+async function queryScreenpipe() {
+  // get content from last 5 minutes
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+  const results = await pipe.queryScreenpipe({
+    startTime: fiveMinutesAgo,
+    limit: 10,
+    contentType: "all", // can be "ocr", "audio", or "all"
+  });
+
+  if (!results) {
+    console.log("no results found or error occurred");
+    return;
+  }
+
+  console.log(`found ${results.pagination.total} items`);
+
+  // process each result
+  for (const item of results.data) {
+    if (item.type === "OCR") {
+      console.log(`OCR: ${JSON.stringify(item.content)}`);
+    } else if (item.type === "Audio") {
+      console.log(`transcript: ${JSON.stringify(item.content)}`);
+    } 
+  }
+}
+
+queryScreenpipe().catch(console.error);
+```
 
 now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
 
