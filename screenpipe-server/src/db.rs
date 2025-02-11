@@ -21,8 +21,9 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
-    OCRResultRaw, Speaker, TagContentType,
+    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, FrameRow, OCREntry,
+    OCRResult, OCRResultRaw, OcrTextBlock, Order, SearchMatch, Speaker, TagContentType, TextBounds,
+    TextPosition,
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
@@ -1979,6 +1980,7 @@ impl DatabaseManager {
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
+                frames.name as frame_name,
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
@@ -2133,4 +2135,172 @@ impl DatabaseManager {
             }
         }
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_with_text_positions(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        include_context: bool,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        fuzzy_match: bool,
+        order: Order,
+    ) -> Result<Vec<SearchMatch>, sqlx::Error> {
+        if let (Some(start), Some(end)) = (start_time, end_time) {
+            if start > end {
+                return Err(sqlx::Error::Protocol(
+                    "start_time cannot be greater than end_time".into(),
+                ));
+            }
+        }
+
+        let mut conditions = Vec::new();
+        let keywords: Vec<&str> = query.split_whitespace().collect();
+
+        if start_time.is_some() {
+            conditions.push("f.timestamp >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("f.timestamp <= ?");
+        }
+
+        // Add conditions for each keyword
+        if fuzzy_match {
+            conditions.extend(keywords.iter().map(|_| "o.text LIKE '%' || ? || '%'"));
+        } else {
+            conditions.extend(keywords.iter().map(|_| "o.text_json LIKE '%' || ? || '%'"));
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "1=1".to_string()
+        } else {
+            conditions.join(" AND ")
+        };
+
+        let order_direction = match order {
+            Order::Ascending => "ASC",
+            Order::Descending => "DESC",
+        };
+
+        let sql = format!(
+            r#"
+        SELECT
+            f.id,
+            f.timestamp,
+            o.app_name,
+            o.window_name,
+            o.text as ocr_text,
+            o.text_json
+        FROM frames f
+        JOIN ocr_text o ON f.id = o.frame_id
+        WHERE {}
+        ORDER BY f.timestamp {}
+        LIMIT ? OFFSET ?
+        "#,
+            where_clause, order_direction
+        );
+
+        let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);
+
+        // Bind timestamp parameters
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+
+        // Bind each keyword
+        for keyword in &keywords {
+            query_builder = query_builder.bind(keyword);
+        }
+
+        query_builder = query_builder.bind(limit);
+        query_builder = query_builder.bind(offset);
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        let matches = rows
+            .iter()
+            .filter_map(|row| {
+                let ocr_blocks: Vec<OcrTextBlock> = serde_json::from_str(&row.text_json).ok()?;
+
+                // Check if all keywords match
+                let mut all_positions = Vec::new();
+                for keyword in &keywords {
+                    let positions = find_matching_positions(&ocr_blocks, keyword);
+                    if positions.is_empty() {
+                        return None;
+                    }
+                    all_positions.extend(positions);
+                }
+
+                let mut match_result = SearchMatch {
+                    frame_id: row.id,
+                    timestamp: row.timestamp,
+                    text_positions: all_positions.clone(),
+                    app_name: row.app_name.clone(),
+                    window_name: row.window_name.clone(),
+                    confidence: calculate_confidence(&all_positions),
+                    context: None,
+                    text: row.ocr_text.clone(),
+                };
+
+                if include_context {
+                    match_result.context = Some(extract_context(&row.ocr_text, query));
+                }
+
+                Some(match_result)
+            })
+            .collect();
+
+        Ok(matches)
+    }
+}
+
+fn extract_context(text: &str, query: &str) -> String {
+    const CONTEXT_CHARS: usize = 50;
+
+    if let Some(pos) = text.to_lowercase().find(&query.to_lowercase()) {
+        let start = pos.saturating_sub(CONTEXT_CHARS);
+        let end = (pos + query.len() + CONTEXT_CHARS).min(text.len());
+        text[start..end].to_string()
+    } else {
+        String::new()
+    }
+}
+
+pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<TextPosition> {
+    let query_lower = query.to_lowercase();
+
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let text_lower = block.text.to_lowercase();
+            if text_lower.contains(&query_lower) {
+                Some(TextPosition {
+                    text: block.text.clone(),
+                    confidence: block.conf.parse::<f32>().unwrap_or(0.0),
+                    bounds: TextBounds {
+                        left: block.left.parse::<f32>().unwrap_or(0.0),
+                        top: block.top.parse::<f32>().unwrap_or(0.0),
+                        width: block.width.parse::<f32>().unwrap_or(0.0),
+                        height: block.height.parse::<f32>().unwrap_or(0.0),
+                    },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn calculate_confidence(positions: &[TextPosition]) -> f32 {
+    if positions.is_empty() {
+        return 0.0;
+    }
+
+    positions.iter().map(|pos| pos.confidence).sum::<f32>() / positions.len() as f32
 }

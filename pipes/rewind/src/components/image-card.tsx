@@ -1,0 +1,319 @@
+import { format } from "date-fns";
+import { useEffect, useRef, useMemo, useState } from "react";
+import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
+import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
+import { cn, queryParser } from "@/lib/utils";
+import { throttle } from "lodash";
+import { useQueryStates } from "nuqs";
+import { Loader2 } from "lucide-react";
+
+export const ImageGrid = ({
+	searchResult,
+}: {
+	searchResult: SearchMatch[];
+}) => {
+	const containerRef = useRef<HTMLDivElement>(null);
+	const {
+		setCurrentResultIndex,
+		currentResultIndex,
+		searchKeywords,
+		searchQuery,
+	} = useKeywordSearchStore();
+	const [{ start_time, end_time, query }] = useQueryStates(queryParser);
+	const { searchResults, isSearching } = useKeywordSearchStore();
+
+	// Add a function to check scroll position and fetch more results
+	const checkScrollAndFetch = useMemo(
+		() =>
+			throttle(() => {
+				const container = containerRef.current;
+				if (!container) return;
+
+				const scrollPosition = container.scrollLeft;
+				const scrollWidth = container.scrollWidth;
+				const clientWidth = container.clientWidth;
+
+				// Calculate scroll percentage (0 to 1)
+				const scrollPercentage = (scrollPosition + clientWidth) / scrollWidth;
+
+				// If we've scrolled past 60%, fetch more results
+				if (scrollPercentage > 0.6) {
+					console.log("should start fetching");
+					searchKeywords(searchQuery, {
+						offset: searchResult.length,
+						limit: 20,
+						...(start_time && { start_time }),
+						...(end_time && { end_time }),
+					});
+				}
+			}, 500),
+		[searchResult.length, searchKeywords, searchQuery],
+	);
+
+	// Add scroll event listener
+	useEffect(() => {
+		const container = containerRef.current;
+		if (container) {
+			container.addEventListener("scroll", checkScrollAndFetch);
+		}
+
+		return () => {
+			if (container) {
+				container.removeEventListener("scroll", checkScrollAndFetch);
+			}
+		};
+	}, [checkScrollAndFetch]);
+
+	const handleScroll = useMemo(
+		() =>
+			throttle(
+				(e: WheelEvent) => {
+					const isWithinAiPanel =
+						e.target instanceof Node &&
+						document.getElementById("ai-response")?.contains(e.target);
+
+					if (isWithinAiPanel) {
+						return;
+					}
+
+					e.preventDefault();
+					e.stopPropagation();
+
+					const scrollIntensity = Math.abs(e.deltaY);
+					const direction = -Math.sign(e.deltaY);
+					const limitIndexChange = 5;
+
+					const indexChange =
+						direction *
+						Math.min(
+							limitIndexChange,
+							Math.ceil(Math.pow(scrollIntensity / 50, 1.5)),
+						);
+
+					requestAnimationFrame(() => {
+						const newIndex = Math.min(
+							Math.max(0, Math.floor(currentResultIndex + indexChange)),
+							searchResult.length - 1,
+						);
+						setCurrentResultIndex(newIndex);
+					});
+				},
+				16,
+				{ leading: true, trailing: false },
+			),
+		[searchResult.length, currentResultIndex],
+	);
+	useEffect(() => {
+		const preventScroll = (e: WheelEvent) => {
+			e.preventDefault();
+		};
+
+		document.addEventListener("wheel", preventScroll, { passive: false });
+		return () => document.removeEventListener("wheel", preventScroll);
+	}, []);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (container) {
+			document.addEventListener("wheel", handleScroll, { passive: false });
+		}
+
+		return () => {
+			if (container) {
+				document.removeEventListener("wheel", handleScroll);
+			}
+		};
+	}, [handleScroll]);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container || !searchResult[currentResultIndex]) return;
+
+		const currentTimestamp = searchResult[currentResultIndex].timestamp;
+		const currentElement = container.querySelector(
+			`[data-timestamp="${currentTimestamp}"]`,
+		);
+
+		if (!currentElement) return;
+
+		currentElement.scrollIntoView({
+			behavior: "smooth",
+			block: "nearest",
+			inline: "center",
+		});
+	}, [currentResultIndex, searchResult.length]);
+
+	return (
+		<div
+			ref={containerRef}
+			className={cn(
+				"flex gap-4 w-full h-60 p-8 overflow-x-auto overflow-y-hidden select-none scrollbar-hide",
+				{
+					"px-[calc(100%/2)]": searchResults.length,
+				},
+			)}
+		>
+			{searchResult.map((result, index) => (
+				<div
+					key={result.frame_id}
+					data-timestamp={result.timestamp}
+					className={cn(
+						"group flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 hover:shadow-md snap-center cursor-pointer",
+						currentResultIndex === index && "ring-2 ring-blue-500",
+					)}
+					onClick={() => setCurrentResultIndex(index)}
+				>
+					<div className="aspect-video overflow-hidden flex-1">
+						<img
+							src={`http://localhost:3030/frames/${result.frame_id}`}
+							alt={`${result.app_name} - ${result.window_name}`}
+							className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+							loading="lazy"
+							draggable={false}
+						/>
+					</div>
+					<div className="p-3 space-y-1">
+						<p className="text-sm font-medium text-neutral-900 truncate">
+							{result.app_name}
+						</p>
+						<p className="text-xs text-neutral-500 truncate">
+							{result.window_name}
+						</p>
+						<p className="text-xs text-neutral-400">
+							{format(new Date(result.timestamp), "PPp")}
+						</p>
+					</div>
+				</div>
+			))}
+			{isSearching ? (
+				<div className="h-64 w-96 mx-auto flex items-center justify-center">
+					<div className="flex flex-col items-center gap-2">
+						<Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+						<p className="text-sm text-gray-500">
+							Searching through your history...
+						</p>
+					</div>
+				</div>
+			) : searchResults.length === 0 && query ? (
+				<div className="h-64 w-96 flex mx-auto items-center justify-center">
+					<p className="text-sm text-gray-500">
+						No results found for "{query}"
+					</p>
+				</div>
+			) : (
+				<></>
+			)}
+		</div>
+	);
+};
+
+interface TextBounds {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+interface TextPosition {
+	text: string;
+	confidence: number;
+	bounds: TextBounds;
+}
+
+export const MainImage = () => {
+	const { searchResults, currentResultIndex } = useKeywordSearchStore();
+	const imageRef = useRef<HTMLImageElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const [imageRect, setImageRect] = useState<DOMRect | null>(null);
+
+	const currentFrame = searchResults[currentResultIndex];
+
+	useEffect(() => {
+		const updateImageRect = () => {
+			if (imageRef.current) {
+				const rect = imageRef.current.getBoundingClientRect();
+				setImageRect(rect);
+			}
+		};
+
+		updateImageRect();
+		const resizeObserver = new ResizeObserver(updateImageRect);
+		if (containerRef.current) {
+			resizeObserver.observe(containerRef.current);
+		}
+
+		window.addEventListener("resize", updateImageRect);
+		return () => {
+			window.removeEventListener("resize", updateImageRect);
+			resizeObserver.disconnect();
+		};
+	}, [currentFrame]);
+
+	const convertVisionCoordinates = (
+		bounds: TextBounds,
+		imageHeight: number,
+	) => {
+		if (!imageRect) return null;
+
+		return null;
+
+		//	return {
+		//		left: bounds.left * imageRect.width,
+		//		top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
+		//		width: bounds.width * imageRect.width,
+		//		height: bounds.height * imageHeight,
+		//	};
+	};
+
+	if (!currentFrame) {
+		return (
+			<div className="relative col-span-3 aspect-video w-full h-full overflow-hidden rounded-lg bg-neutral-100">
+				<div className="animate-pulse absolute inset-0 bg-neutral-200" />
+				<div className="h-full w-full object-cover opacity-0 transition-opacity duration-300" />
+			</div>
+		);
+	}
+
+	return (
+		<div
+			ref={containerRef}
+			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
+		>
+			<div className="bg-neutral-200" />
+			<img
+				ref={imageRef}
+				src={`http://localhost:3030/frames/${currentFrame.frame_id}`}
+				alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
+				className="h-full w-full object-contain max-h-[50vh]"
+				draggable={false}
+			/>
+			{imageRect && (
+				<div className="absolute inset-0 pointer-events-none">
+					{currentFrame.text_positions?.map(
+						(position: TextPosition, index: number) => {
+							const coords = convertVisionCoordinates(
+								position.bounds,
+								imageRect.height,
+							);
+							if (!coords) return null;
+
+							return (
+								<div
+									key={index}
+									className="absolute bg-yellow-300/40 border border-yellow-500/50"
+									//style={{
+									//	left: `${coords.left}px`,
+									//	top: `${coords.top}px`,
+									//	width: `${coords.width}px`,
+									//	height: `${coords.height}px`,
+									//}}
+									title={position.text}
+								/>
+							);
+						},
+					)}
+				</div>
+			)}
+		</div>
+	);
+};

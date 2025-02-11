@@ -515,7 +515,7 @@ impl VideoMetadataOverride {
 pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    let offset_seconds = offset_index as f64 / 1000.0;
+    let offset_seconds = offset_index as f64 * 1.5;
     let offset_str = format!("{:.3}", offset_seconds);
 
     // Create a temporary directory for frames if it doesn't exist

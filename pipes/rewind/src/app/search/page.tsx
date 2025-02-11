@@ -1,0 +1,121 @@
+"use client";
+
+import { DatePickerWithRange } from "@/components/date-range-picker";
+import { ImageGrid, MainImage } from "@/components/image-card";
+import { SearchBar } from "@/components/search-bar";
+import { Button } from "@/components/ui/button";
+import { useDebounce } from "@/lib/hooks/use-debounce";
+import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
+import { endOfDay, startOfDay } from "date-fns";
+import { useQueryStates } from "nuqs";
+import { queryParser } from "@/lib/utils";
+import { useCallback, useEffect } from "react";
+import { parser } from "@/lib/keyword-parser";
+import { Loader2 } from "lucide-react";
+import { CurrentFrame } from "@/components/current-frame";
+
+export default function Page() {
+	const [querys, setQuerys] = useQueryStates(queryParser);
+	const debounceQuerys = useDebounce(querys, 300);
+	const {
+		searchKeywords,
+		isSearching,
+		searchResults,
+		currentResultIndex,
+		setCurrentResultIndex,
+	} = useKeywordSearchStore();
+
+	const handleSearch = useCallback(
+		async (query: string, start: Date | undefined, end: Date | undefined) => {
+			await searchKeywords(query, {
+				start_time: start,
+				end_time: end,
+			});
+		},
+		[searchResults],
+	);
+
+	useEffect(() => {
+		if (isSearching) return;
+
+		if (!debounceQuerys.query || debounceQuerys.query.length === 0) {
+			setCurrentResultIndex(-1);
+			return;
+		}
+
+		const keywords = parser.parse(debounceQuerys.query);
+		if (keywords.keywords.length === 0) return;
+
+		handleSearch(
+			keywords.keywords.join(" "),
+			debounceQuerys.start_time ?? undefined,
+			debounceQuerys.end_time ?? undefined,
+		);
+	}, [debounceQuerys]);
+
+	useEffect(() => {
+		console.log(currentResultIndex);
+	}, [currentResultIndex]);
+
+	return (
+		<div className="min-h-screen w-full bg-neutral-50">
+			<div className="mx-auto flex flex-col justify-between space-y-4 animate-fade-in p-4 min-h-screen overflow-hidden">
+				<div className="space-y-4">
+					<div className="flex items-center gap-4 justify-center">
+						<Button variant={"link"} asChild>
+							<a href={"/"}>Timeline</a>
+						</Button>
+						<SearchBar
+							search={querys.query}
+							onSearchChange={(query) => {
+								setQuerys((prev) => ({
+									...prev,
+									query,
+								}));
+							}}
+						/>
+						<DatePickerWithRange
+							start_time={querys.start_time}
+							end_time={querys.end_time}
+							setDateRange={(dates) => {
+								setQuerys((prev) => ({
+									...prev,
+									start_time: dates?.from ? startOfDay(dates?.from) : null,
+									end_time: dates?.to ? endOfDay(dates?.to) : null,
+								}));
+							}}
+						/>
+						<Button
+							disabled={(!querys.start_time && !querys.end_time) || isSearching}
+							onClick={() => {
+								setQuerys((prev) => ({
+									...prev,
+									start_time: null,
+									end_time: null,
+								}));
+							}}
+						>
+							Clear Dates
+						</Button>
+					</div>
+					<CurrentFrame />
+				</div>
+				{!querys.query && (
+					<div className="h-64 w-96 flex mx-auto items-center justify-center">
+						<p className="text-sm text-gray-500">
+							Please provide query for searching
+						</p>
+					</div>
+				)}
+
+				{querys.query ? (
+					<div className="h-64 flex items-end">
+						<ImageGrid searchResult={searchResults} />
+					</div>
+				) : (
+					<div></div>
+				)}
+			</div>
+		</div>
+	);
+}

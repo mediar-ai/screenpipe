@@ -2,6 +2,7 @@ import { ContentItem } from "@screenpipe/js";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import levenshtein from "js-levenshtein";
+import { parseAsIsoDateTime, parseAsString } from "nuqs";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -58,3 +59,9 @@ export function stringToColor(str: string): string {
 	}
 	return color;
 }
+
+export const queryParser = {
+	query: parseAsString,
+	start_time: parseAsIsoDateTime,
+	end_time: parseAsIsoDateTime,
+};
