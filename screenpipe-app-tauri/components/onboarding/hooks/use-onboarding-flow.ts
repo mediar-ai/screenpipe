@@ -16,6 +16,8 @@ export function useOnboardingFlow(
       if (screenPermissionRestartPending === true) {
         setCurrentSlide(SlideKey.STATUS);
       }
+
+      await localforage.removeItem("screenPermissionRestartPending");
     };
     checkScreenPermissionRestartPending();
   }, []);
