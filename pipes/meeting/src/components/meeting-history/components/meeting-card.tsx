@@ -12,6 +12,7 @@ import { generateMeetingName } from "../ai-meeting-title"
 import { generateMeetingSummary } from "../ai-meeting-summary"
 import { MeetingAnalysis } from "../../live-transcription/hooks/ai-create-all-notes"
 import type { MeetingPrep } from "../types"
+import { useRouter } from "next/navigation"
 
 interface MeetingCardProps {
   meeting: LiveMeetingData
@@ -23,9 +24,11 @@ interface MeetingCardProps {
   }) => void
   settings: Settings
   onDelete?: () => void
+  isLive?: boolean
 }
 
-export function MeetingCard({ meeting, onUpdate, settings, onDelete }: MeetingCardProps) {
+export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive }: MeetingCardProps) {
+  const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const { toast } = useToast()
@@ -143,8 +146,23 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete }: MeetingCa
 
   const durationMinutes = getDurationMinutes(meeting.startTime, meeting.endTime)
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if clicking buttons
+    if ((e.target as HTMLElement).closest('button')) {
+      return
+    }
+    
+    if (isLive) {
+      console.log('navigating to live meeting')
+      router.push('/meetings/live')
+    }
+  }
+
   return (
-    <Card className="w-full mb-1 border-0 -mx-2">
+    <Card 
+      className={`w-full mb-1 border-0 -mx-2 ${isLive ? 'cursor-pointer hover:bg-accent/50' : ''}`}
+      onClick={isLive ? handleCardClick : undefined}
+    >
       <CardContent className="p-3 relative">
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted-foreground/10 origin-bottom transition-transform duration-500"
           style={{ 
