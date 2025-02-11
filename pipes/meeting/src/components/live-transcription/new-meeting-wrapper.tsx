@@ -8,11 +8,13 @@ import { NotesEditor } from '@/components/live-transcription/notes-editor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Split from 'react-split'
 import { TranscriptionView } from '@/components/live-transcription/transcription-view'
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Mic, MicOff, Square, Play } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
 import { clearLiveMeetingData } from './hooks/storage-for-live-meeting'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface Props {
   onBack: () => void
@@ -22,6 +24,8 @@ export function LiveTranscription({ onBack }: Props) {
     const {
         chunks,
         isLoadingRecent: isLoading,
+        isRecording,
+        toggleRecording
     } = useTranscriptionService()
 
     const { scrollRef, onScroll, isScrolledToBottom } = useAutoScroll(chunks)
@@ -79,9 +83,37 @@ export function LiveTranscription({ onBack }: Props) {
     return (
         <div className="h-full flex flex-col">
             <div
-                className="w-full"
+                className="w-full relative"
                 style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
             >
+                {/* Update recording toggle button with tooltip */}
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={toggleRecording}
+                                className="absolute right-7 z-20 hover:bg-gray-100/80 transition-colors"
+                                title={isRecording ? "stop recording" : "start recording"}
+                            >
+                                {isRecording ? (
+                                    <Square className="h-4 w-4 text-red-500 fill-red-500" />
+                                ) : (
+                                    <Play className="h-4 w-4 text-green-500 fill-green-500" />
+                                )}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                            {isRecording ? (
+                                <span>stop recording transcription</span>
+                            ) : (
+                                <span>start recording transcription</span>
+                            )}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+
                 <Split
                     className="flex gap-0 h-full [&_.gutter]:bg-gray-100 [&_.gutter]:bg-dotted [&_.gutter]:w-[3px] [&_.gutter]:mx-1 [&_.gutter]:cursor-col-resize"
                     sizes={sizes}
