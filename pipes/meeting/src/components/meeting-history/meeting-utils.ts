@@ -3,55 +3,53 @@ import { archiveLiveMeeting, clearLiveMeetingData } from "@/components/live-tran
 import type { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 export async function handleStartNewMeeting(currentData?: LiveMeetingData | null) {
-  console.log('starting new meeting')
-  try {
-    if (currentData) {
-      // Take a snapshot of current data to prevent race conditions
-      const meetingSnapshot = {
-        ...currentData,
-        startTime: currentData.startTime || new Date().toISOString(),
-        endTime: new Date().toISOString()
-      }
-
-      console.log('current meeting state:', {
-        title: currentData.title,
-        notes_count: currentData.notes?.length,
-        has_analysis: !!currentData.analysis,
-        data_state: {
-          start_time: meetingSnapshot.startTime,
-          end_time: meetingSnapshot.endTime
-        }
-      })
-
-      // Archive current meeting state
-      const archived = await archiveLiveMeeting()
-      if (!archived) {
-        throw new Error("failed to archive meeting")
-      }
-      
-      // Clear storage
-      await clearLiveMeetingData()
-      
-      // Wait to ensure storage is cleared
-      await new Promise(resolve => setTimeout(resolve, 1000))
-    }
-    
-    // Try window.location first, fallback to router
-    try {
-      window.location.href = '/meetings/live'
-      return true
-    } catch (error) {
-      console.error('failed to navigate with window.location:', error)
-      return false // caller should use router.push as fallback
-    }
-    
-  } catch (error) {
-    console.error('failed to start new meeting:', error)
-    toast({
-      title: "error",
-      description: "failed to start new meeting. please try again",
-      variant: "destructive",
+    console.log('handleStartNewMeeting: starting', {
+        hasCurrentData: !!currentData,
+        currentTitle: currentData?.title,
+        isArchived: currentData?.isArchived
     })
-    return false
-  }
+
+    try {
+        if (currentData && !currentData.isArchived) {
+            // Take a snapshot of current data
+            const meetingSnapshot = {
+                ...currentData,
+                startTime: currentData.startTime || new Date().toISOString(),
+                endTime: new Date().toISOString(),
+                isArchived: true // Ensure it's marked as archived
+            }
+
+            console.log('archiving current meeting:', {
+                title: meetingSnapshot.title,
+                notes: meetingSnapshot.notes?.length,
+                chunks: meetingSnapshot.chunks?.length,
+                startTime: meetingSnapshot.startTime,
+                endTime: meetingSnapshot.endTime
+            })
+
+            // Archive current meeting state
+            const archived = await archiveLiveMeeting()
+            if (!archived) {
+                throw new Error("failed to archive meeting")
+            }
+        }
+
+        // Clear storage regardless of archiving result
+        await clearLiveMeetingData()
+        
+        console.log('cleared meeting data, redirecting to /meetings/live')
+        
+        // Force reload to ensure clean state
+        window.location.href = '/meetings/live'
+        return true
+
+    } catch (error) {
+        console.error('handleStartNewMeeting failed:', error)
+        toast({
+            title: "error starting new meeting",
+            description: "please try again or refresh the page",
+            variant: "destructive",
+        })
+        return false
+    }
 } 
