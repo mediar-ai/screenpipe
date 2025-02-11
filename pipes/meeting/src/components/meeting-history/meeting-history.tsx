@@ -1,28 +1,35 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Meeting } from "./types"
-import { useMeetings } from "./hooks/use-meetings"
+import { useState, useEffect } from "react"
 import { MeetingCard } from "./components/meeting-card"
 import { Button } from "@/components/ui/button"
 import { Loader2, PlusCircle, Settings as SettingsIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingSettings } from "./components/meeting-settings"
-import { UpcomingMeetings } from "./components/mockup-upcoming-meetings"
-import { getLiveMeetingData, clearLiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
+import { 
+  getLiveMeetingData, 
+  clearLiveMeetingData,
+  getArchivedLiveMeetings,
+  LiveMeetingData,
+  deleteArchivedMeeting,
+  updateArchivedMeeting
+} from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import { useSettings } from "@/lib/hooks/use-settings"
+import { MeetingAnalysis } from "@/components/live-transcription/hooks/ai-create-all-notes"
 
 export function MeetingHistory() {
   const [mounted, setMounted] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [windowHeight, setWindowHeight] = useState(0)
   const [hasLiveMeeting, setHasLiveMeeting] = useState(false)
+  const [archivedMeetings, setArchivedMeetings] = useState<LiveMeetingData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  const { meetings, loading, error, updateMeetings } = useMeetings()
   const { settings } = useSettings()
   const router = useRouter()
 
-  const handleResume = useCallback(async () => {
+  const handleResume = async () => {
     if (!hasLiveMeeting) return
     
     console.log('resume: attempting navigation to live meeting')
@@ -38,9 +45,9 @@ export function MeetingHistory() {
     } catch (e) {
       console.error('resume: navigation failed:', e)
     }
-  }, [hasLiveMeeting, router])
+  }
 
-  const handleNewMeeting = useCallback(async () => {
+  const handleNewMeeting = async () => {
     if (hasLiveMeeting) {
       console.log('existing meeting detected, prompting user')
       const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
@@ -59,52 +66,99 @@ export function MeetingHistory() {
     } catch (e) {
       console.error('navigation failed:', e)
     }
-  }, [hasLiveMeeting, router, handleResume])
+  }
+
+  const handleDelete = async (meeting: LiveMeetingData) => {
+    try {
+      const confirmed = window.confirm('Are you sure you want to delete this meeting?')
+      if (!confirmed) {
+        console.log('meeting deletion cancelled by user')
+        return
+      }
+
+      console.log('deleting meeting:', {
+        title: meeting.title,
+        startTime: meeting.startTime
+      })
+      await deleteArchivedMeeting(meeting.startTime)
+      
+      // Refresh the meetings list
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('failed to delete meeting:', error)
+    }
+  }
+
+  const handleUpdate = async (id: string, update: { 
+    aiName?: string; 
+    aiSummary?: string;
+    analysis?: MeetingAnalysis | null;
+  }) => {
+    try {
+      console.log('updating meeting:', {
+        id,
+        update,
+        currentMeetings: archivedMeetings.length
+      })
+
+      // Create updates object
+      const updates: Partial<LiveMeetingData> = {
+        title: update.aiName,
+        analysis: update.analysis
+      }
+
+      // Use the ID directly, no need to add prefix
+      await updateArchivedMeeting(id, updates)
+      
+      // Refresh the meetings list
+      const updated = await getArchivedLiveMeetings()
+      setArchivedMeetings(updated)
+
+    } catch (error) {
+      console.error('failed to update meeting:', error)
+    }
+  }
 
   useEffect(() => {
-    updateHeight()
-    window.addEventListener('resize', updateHeight)
-    return () => window.removeEventListener('resize', updateHeight)
-  }, [])
+    const loadMeetings = async () => {
+      setLoading(true)
+      try {
+        const archived = await getArchivedLiveMeetings()
+        console.log('loaded archived meetings:', {
+          count: archived.length,
+          latest: archived[0]?.title
+        })
+        setArchivedMeetings(archived)
+      } catch (error) {
+        console.error('failed to load archived meetings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadMeetings()
+  }, [refreshTrigger])
 
   useEffect(() => {
     const checkLiveMeeting = async () => {
       const liveData = await getLiveMeetingData()
-      console.log('checking for live meeting:', {
-        exists: !!liveData,
-        title: liveData?.title,
-        notesCount: liveData?.notes?.length,
-        hasAnalysis: !!liveData?.analysis
-      })
       setHasLiveMeeting(!!liveData)
     }
     checkLiveMeeting()
   }, [])
 
   useEffect(() => {
+    const updateHeight = () => {
+      const vh = window.innerHeight
+      const headerOffset = 32
+      setWindowHeight(vh - headerOffset)
+    }
+    
+    updateHeight()
+    window.addEventListener('resize', updateHeight)
     setMounted(true)
-    console.log('meeting-history mounted')
+    
+    return () => window.removeEventListener('resize', updateHeight)
   }, [])
-
-  const updateHeight = () => {
-    const vh = window.innerHeight
-    const headerOffset = 32
-    console.log('meeting list height:', vh, 'header offset:', headerOffset)
-    setWindowHeight(vh - headerOffset)
-  }
-
-  const handleMeetingUpdate = (id: string, update: { aiName?: string; aiSummary?: string }) => {
-    console.log('handling meeting update:', {
-      meetingId: id,
-      update,
-      currentMeetingsCount: meetings.length
-    })
-    const updatedMeetings = meetings.map(meeting => {
-      return meeting.id === id ? { ...meeting, ...update } : meeting
-    })
-    console.log('updated meetings count:', updatedMeetings.length)
-    updateMeetings(updatedMeetings)
-  }
 
   if (!mounted) return null
   
@@ -125,7 +179,7 @@ export function MeetingHistory() {
       <div className="h-4" />
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-base font-bold text-muted-foreground uppercase tracking-wider">
-          meeting and conversation history
+          meeting history
         </h2>
         <div className="flex gap-2">
           <Button
@@ -160,42 +214,30 @@ export function MeetingHistory() {
         className="w-full overflow-auto"
         style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
       >
-        {error ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <p className="text-destructive">failed to load meetings</p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* <div className="bg-accent/50 rounded-lg">
-              <h3 className="text-xl font-semibold mb-6 text-muted-foreground pl-4">upcoming</h3>
-              <UpcomingMeetings />
-            </div> */}
-            
-            <div>
-              {Object.entries(groupMeetingsByDate(meetings)).map(([date, dateMeetings]) => (
-                <div key={date}>
-                  <h3 className="text-xl font-semibold mb-3 text-muted-foreground">{date}</h3>
-                  {dateMeetings.map((meeting) => (
-                    <MeetingCard
-                      key={meeting.id}
-                      meeting={meeting}
-                      settings={settings}
-                      onUpdate={handleMeetingUpdate}
-                    />
-                  ))}
-                </div>
+        <div className="space-y-6">
+          {Object.entries(groupMeetingsByDate(archivedMeetings)).map(([date, meetings]) => (
+            <div key={date}>
+              <h3 className="text-xl font-semibold mb-3 text-muted-foreground">{date}</h3>
+              {meetings.map((meeting) => (
+                <MeetingCard
+                  key={`${meeting.startTime}-${meeting.title || 'untitled'}-${Math.random()}`}
+                  meeting={meeting}
+                  settings={settings}
+                  onDelete={() => handleDelete(meeting)}
+                  onUpdate={handleUpdate}
+                />
               ))}
             </div>
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function groupMeetingsByDate(meetings: Meeting[]): Record<string, Meeting[]> {
+function groupMeetingsByDate(meetings: LiveMeetingData[]): Record<string, LiveMeetingData[]> {
   return meetings.reduce((groups, meeting) => {
-    const date = new Date(meeting.meetingStart).toLocaleDateString([], {
+    const date = new Date(meeting.startTime).toLocaleDateString([], {
       weekday: 'long',
       month: 'long',
       day: 'numeric'
@@ -206,5 +248,5 @@ function groupMeetingsByDate(meetings: Meeting[]): Record<string, Meeting[]> {
     }
     groups[date].push(meeting)
     return groups
-  }, {} as Record<string, Meeting[]>)
+  }, {} as Record<string, LiveMeetingData[]>)
 }
