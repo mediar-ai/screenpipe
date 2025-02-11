@@ -33,22 +33,34 @@ type User = {
   bio: string;
 }
 
-async function writeToConfigFile(userData: User, tauriStorePath: string) {
-  let config = {};
+type AuthPayload = {
+  token: string;
+  email: string;
+  user_id: string;
+}
 
-  const fileContent = fs.readFileSync(tauriStorePath, 'utf8');
-  config = JSON.parse(fileContent);
+async function sendAuthData(authPayload: AuthPayload) {
+  const response = await fetch(`http://localhost:11435/auth`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(authPayload),
+  });
 
-  const updatedConfig = {
-    ...config,
-    user: userData,
-  };
-  writeFileSync(tauriStorePath, JSON.stringify(updatedConfig, null, 2));
+  console.log(response);
+
+  if (!response.ok) {
+    throw new Error("failed to send auth data");
+  }
+
+  const data = await response.json();
+  return data;
 }
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
-const getUser = async (token: string): Promise<User> => { 
+async function getUser(token: string): Promise<User> { 
   const response = await fetch(process.env.NODE_ENV === 'development' 
     ? 'http://localhost:3001/api/user' 
     : 'https://screenpi.pe/api/user', 
@@ -75,18 +87,6 @@ const getUser = async (token: string): Promise<User> => {
 
   return userData;
 };
-
-const getTauriStore = async () => {
-  const tauriStore = await fetch(`http://localhost:3030/app-info`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
-
-  const tauriStoreData = await tauriStore.json();
-  return tauriStoreData.store_path;
-}
 
 export async function cliLogin() {
     // create localhost server for our page to call back to
@@ -152,8 +152,11 @@ export async function cliLogin() {
         loadingSpinner.start();
         const authData = await authPromise;
         const userData = await getUser(authData.apiKey as string);
-        const tauriStoreData = await getTauriStore();
-        writeToConfigFile(userData, tauriStoreData);
+        await sendAuthData({
+            token: authData.apiKey as string,
+            email: userData.email,
+            user_id: userData.id,
+        });
 
         loadingSpinner.succeed("authentication successful");
         server.close();
