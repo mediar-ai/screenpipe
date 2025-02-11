@@ -674,6 +674,12 @@ struct UpdatePipeConfigRequest {
     config: serde_json::Value,
 }
 
+#[derive(Deserialize)]
+struct UpdatePipeVersionRequest {
+    pipe_id: String,
+    source: String,
+}
+
 // Handler functions
 async fn download_pipe_handler(
     State(state): State<Arc<AppState>>,
@@ -816,6 +822,33 @@ async fn update_pipe_config_handler(
             StatusCode::BAD_REQUEST,
             JsonResponse(json!({
                 "error": format!("failed to update pipe config: {}", e),
+                "success": false
+            })),
+        )),
+    }
+}
+
+async fn update_pipe_version_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<UpdatePipeVersionRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    debug!("Updating pipe version for: {}", payload.pipe_id);
+    match state
+        .pipe_manager
+        .update_pipe_version(&payload.pipe_id, &payload.source)
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe version updated"
+            },
+            "success": true
+        }))),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("failed to update pipe version: {}", e),
                 "success": false
             })),
         )),
@@ -1989,6 +2022,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/pipes/update-version", post(update_pipe_version_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
         .route("/health", get(health_check))
         .route("/ws/health", get(ws_health_handler))

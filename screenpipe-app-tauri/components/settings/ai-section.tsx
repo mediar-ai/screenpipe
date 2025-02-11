@@ -15,21 +15,13 @@ import {
   EyeOff,
   Eye,
   RefreshCw,
-  Check,
-  X,
-  Play,
   Loader2,
   ChevronsUpDown,
-  Cpu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import React, { useState, useEffect } from "react";
-import { LogFileButton } from "../log-file-button";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
-import { toast } from "../ui/use-toast";
-import { invoke } from "@tauri-apps/api/core";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "../ui/card";
@@ -180,6 +172,7 @@ const AISection = () => {
 
   const fetchModels = async () => {
     setIsLoadingModels(true);
+    console.log(settings.aiProviderType, settings.openaiApiKey, settings.aiUrl);
     try {
       switch (settings.aiProviderType) {
         case "screenpipe-cloud":
@@ -219,6 +212,33 @@ const AISection = () => {
           ]);
           break;
 
+        case "custom":
+          try {
+            const customResponse = await fetch(`${settings.aiUrl}/models`, {
+              headers: settings.openaiApiKey
+                ? { Authorization: `Bearer ${settings.openaiApiKey}` }
+                : {},
+            });
+            if (!customResponse.ok)
+              throw new Error("Failed to fetch custom models");
+            const customData = await customResponse.json();
+            console.log(customData);
+            setModels(
+              (customData.data || []).map((model: { id: string }) => ({
+                id: model.id,
+                name: model.id,
+                provider: "custom",
+              }))
+            );
+          } catch (error) {
+            console.error(
+              "Failed to fetch custom models, allowing manual input:",
+              error
+            );
+            setModels([]);
+          }
+          break;
+
         default:
           setModels([]);
       }
@@ -235,7 +255,7 @@ const AISection = () => {
 
   useEffect(() => {
     fetchModels();
-  }, [settings.aiProviderType]);
+  }, [settings.aiProviderType, settings.openaiApiKey, settings.aiUrl]);
 
   return (
     <div className="w-full space-y-6 py-4">

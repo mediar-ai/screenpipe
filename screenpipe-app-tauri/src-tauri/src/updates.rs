@@ -44,6 +44,10 @@ impl UpdatesManager {
                 return Result::Ok(false);
             }
         }
+        if cfg!(debug_assertions) {
+            println!("dev mode is enabled, skipping update check");
+            return Result::Ok(false);
+        }
 
         if let Err(err) = self.app.emit("update-all-pipes", ()) {
             error!("Failed to update all pipes: {}", err);

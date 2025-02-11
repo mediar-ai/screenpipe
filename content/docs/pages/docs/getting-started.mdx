@@ -50,6 +50,41 @@ now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to a
 
 </MotionDiv>
 
+### connect to AI providers
+
+<MotionDiv>
+screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
+
+<Tabs items={['ollama', 'lmstudio']}>
+  <Tab>
+    1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
+    ```bash copy
+    # start ollama with your preferred model
+    ollama run phi4:14b-q4_K_M
+    ```
+    2. then configure screenpipe to use ollama in your settings with model phi4:14b-q4_K_M
+    
+    that's it! screenpipe will now use ollama for AI like search, rewind, and more. you can change the model in settings.
+  </Tab>
+  <Tab>
+    to use LMStudio:
+
+    1. download and install [LMStudio](https://lmstudio.ai)
+    2. select your preferred model
+    3. start the local server
+    
+    ![select model](./lmstudio2.png)
+    ![start server](./lmstudio3.png)
+    ![lmstudio setup](./lmstudio1.png)
+
+x
+  </Tab>
+</Tabs>
+
+verify your ai provider using any pipe in the store!
+
+</MotionDiv>
+
 ### for developers
 
 if you're interested in building from source or contributing to screenpipe, please check our [contributing guide](https://github.com/mediar-ai/screenpipe/blob/main/CONTRIBUTING.md).

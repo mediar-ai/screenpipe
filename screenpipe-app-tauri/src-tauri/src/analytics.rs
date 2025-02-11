@@ -1,4 +1,4 @@
-use log::{error, info, warn};
+use log::{error, warn};
 use reqwest::Client;
 use serde_derive::Deserialize;
 use serde_json::json;

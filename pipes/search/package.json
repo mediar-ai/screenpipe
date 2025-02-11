@@ -1,6 +1,6 @@
 {
   "name": "search",
-  "version": "0.1.10",
+  "version": "0.1.13",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
