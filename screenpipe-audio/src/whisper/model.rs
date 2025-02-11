@@ -11,6 +11,7 @@ pub struct WhisperModel {
     pub tokenizer: Box<Tokenizer>,
     pub device: Device,
     pub mel_filters: Vec<f32>,
+    // pub weights_filename: String,
 }
 
 impl WhisperModel {
@@ -81,6 +82,19 @@ impl WhisperModel {
             device,
             mel_filters,
         })
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        match &mut self.model {
+            Model::Normal(m) => {
+                m.reset_kv_cache();
+            }
+            Model::Quantized(m) => {
+                m.reset_kv_cache();
+            }
+        }
+
+        Ok(())
     }
 }
 

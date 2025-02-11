@@ -55,11 +55,12 @@ pub async fn process_with_whisper(
 
     debug!("initializing decoder");
     let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
-
+    dc.reset_kv_cache();
     debug!("starting decoding process");
     let segments = dc.run(&mel)?;
     debug!("decoding complete");
 
+    dc.reset_kv_cache();
     process_segments(segments)
 }
 

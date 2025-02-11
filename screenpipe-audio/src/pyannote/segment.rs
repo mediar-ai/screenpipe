@@ -1,9 +1,14 @@
 use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
+use ort::Session;
 use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
 
 use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
+
+lazy_static::lazy_static! {
+    static ref SEGMENTATION_SESSION: Mutex<Option<Session>> = Mutex::new(None);
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -93,7 +98,6 @@ fn handle_new_segment(
 pub struct SegmentIterator {
     samples: Vec<f32>,
     sample_rate: u32,
-    session: ort::Session,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
     embedding_manager: Arc<Mutex<EmbeddingManager>>,
     current_position: usize,
@@ -114,7 +118,10 @@ impl SegmentIterator {
         embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
         embedding_manager: Arc<Mutex<EmbeddingManager>>,
     ) -> Result<Self> {
-        let session = session::create_session(model_path.as_ref())?;
+        let mut session = SEGMENTATION_SESSION.lock().unwrap();
+        if session.is_none() {
+            *session = Some(session::create_session(model_path, true)?);
+        }
         let window_size = (sample_rate * 10) as usize;
 
         let padded_samples = {
@@ -126,7 +133,6 @@ impl SegmentIterator {
         Ok(Self {
             samples,
             sample_rate,
-            session,
             embedding_extractor,
             embedding_manager,
             current_position: 0,
@@ -149,10 +155,9 @@ impl SegmentIterator {
             .to_owned();
 
         let inputs = ort::inputs![array].context("Failed to prepare inputs")?;
-        let ort_outs = self
-            .session
-            .run(inputs)
-            .context("Failed to run the session")?;
+        let session = SEGMENTATION_SESSION.lock().unwrap();
+        let session = session.as_ref().unwrap();
+        let ort_outs = session.run(inputs).context("Failed to run the session")?;
         let ort_out = ort_outs.get("output").context("Output tensor not found")?;
 
         let ort_out = ort_out
