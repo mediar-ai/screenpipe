@@ -2356,7 +2356,7 @@ pub async fn delete_pipe_handler(
 // Add this new handler function
 pub async fn purge_pipe_handler(
     State(state): State<Arc<AppState>>,
-    Json(_request): Json<DeletePipeRequest>,
+    Json(_request): Json<PurgePipeRequest>,
 ) -> impl IntoResponse {
     match state.pipe_manager.purge_pipes().await {
         Ok(_) => (
@@ -2367,7 +2367,7 @@ pub async fn purge_pipe_handler(
             })),
         ),
         Err(e) => {
-            error!("failed to delete pipe: {}", e);
+            error!("failed to purge pipes: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -2384,6 +2384,10 @@ pub async fn purge_pipe_handler(
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
     pipe_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PurgePipeRequest {
 }
 
 #[derive(Deserialize, Debug)]

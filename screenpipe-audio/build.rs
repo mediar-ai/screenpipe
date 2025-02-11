@@ -88,14 +88,14 @@ fn install_onnxruntime() {
         println!("cargo:rustc-flag=-C target-feature=+crt-static");
     }
 
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-gpu-1.19.2.zip";
-    let client = Client::builder()
-        .timeout(Duration::from_secs(300))
-        .build()
-        .expect("failed to build client");
-    let resp = client.get(url).send().expect("request failed");
-    let body = resp.bytes().expect("body invalid");
-    fs::write("./onnxruntime-win-x64-gpu-1.19.2.zip", &body).expect("failed to write");
+    // let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.19.2/onnxruntime-win-x64-gpu-1.19.2.zip";
+    // let client = Client::builder()
+    //     .timeout(Duration::from_secs(300))
+    //     .build()
+    //     .expect("failed to build client");
+    // let resp = client.get(url).send().expect("request failed");
+    // let body = resp.bytes().expect("body invalid");
+    // fs::write("./onnxruntime-win-x64-gpu-1.19.2.zip", &body).expect("failed to write");
     let unzip_path = find_unzip().expect("could not find unzip executable - please install it via GnuWin32 or add it to PATH");
     
     let status = Command::new(unzip_path)
