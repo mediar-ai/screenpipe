@@ -270,7 +270,7 @@ impl PipeManager {
             // Stop all running pipes
             for pipe in pipes {
                 if pipe.enabled {
-                    debug!("stopping pipe {} before purge", pipe.id);
+                    debug!("stopping pipe [{}] before purge", pipe.id);
                     self.stop_pipe(&pipe.id).await?;
                 }
             }

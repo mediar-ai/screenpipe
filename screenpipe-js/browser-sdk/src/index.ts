@@ -85,7 +85,6 @@ export interface BrowserPipe {
     download: (url: string) => Promise<boolean>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
-    purge: () => Promise<boolean>;
 
     update: (
       pipeId: string,
@@ -283,7 +282,6 @@ class BrowserPipeImpl implements BrowserPipe {
     download: (url: string) => Promise<boolean>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
-    purge: () => Promise<boolean>;
     update: (
       pipeId: string,
       config: { [key: string]: string }
@@ -343,19 +341,6 @@ class BrowserPipeImpl implements BrowserPipe {
           body: JSON.stringify({
             pipe_id: pipeId,
           }),
-        });
-
-        return response.ok;
-      } catch (error) {
-        console.error("failed to disable pipe:", error);
-        return false;
-      }
-    },
-    purge: async () => {
-      try {
-        const response = await fetch("http://localhost:3030/pipes/purge", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
         });
 
         return response.ok;

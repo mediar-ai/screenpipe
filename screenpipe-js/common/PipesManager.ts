@@ -90,20 +90,4 @@ export class PipesManager {
       return false;
     }
   }
-
-  async purge(): Promise<boolean> {
-    try {
-      const apiUrl = "http://localhost:3030";
-      const response = await fetch(`${apiUrl}/pipes/purge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      return response.ok;
-    } catch (error) {
-      console.error("failed to purge pipes:", error);
-      return false;
-    }
-  }
-
 }

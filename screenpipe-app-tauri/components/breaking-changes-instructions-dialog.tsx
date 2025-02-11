@@ -48,21 +48,23 @@ export function BreakingChangesInstructionsDialog() {
       const response = await fetch(`http://localhost:3030/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+        }),
       });
-      if(!response.ok){
+      if(response.ok){
+        toast({
+          title: "all pipes deleted",
+          description: "you can now reinstall the updated pipes from the store",
+        });
+        localforage.setItem("has-shown-delete-pipes-dialog", true);
+        setOpen(false);
+      } else {
         toast({
           title: "failed to purge pipes",
           description: "failed to purge pipes, please try again",
           variant: "destructive"
         });
-        return;
       }
-      toast({
-        title: "all pipes deleted",
-        description: "you can now reinstall the updated pipes from the store",
-      });
-      localforage.setItem("has-shown-delete-pipes-dialog", true);
-      setOpen(false);
     } catch (error) {
       console.error("failed to reset pipes:", error);
       toast({
