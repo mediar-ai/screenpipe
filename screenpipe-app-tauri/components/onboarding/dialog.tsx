@@ -35,18 +35,6 @@ const Onboarding: React.FC = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (showOnboarding) {
-      const hideCloseButton = () => {
-        const closeButton = document.querySelector(".lucide-x");
-        if (closeButton) {
-          (closeButton as HTMLElement).classList.add("hidden");
-        }
-      };
-      setTimeout(hideCloseButton, 100);
-    }
-  }, [showOnboarding]);
-
-  useEffect(() => {
     if (error) {
       toast({
         title: "error",
@@ -58,7 +46,7 @@ const Onboarding: React.FC = () => {
 
   return (
     <Dialog open={showOnboarding} onOpenChange={(t) => console.log({t})}>
-      <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]">
+      <DialogContent className="max-w-4xl h-[640px] max-h-[100vh]" hideCloseButton>
         <AnimatePresence mode="wait">
           <motion.div 
           key={currentSlide} 
