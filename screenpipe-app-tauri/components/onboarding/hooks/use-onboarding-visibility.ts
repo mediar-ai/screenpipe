@@ -29,6 +29,10 @@ export function useOnboardingVisibility(
       setShowOnboarding(true);
     } 
   
+
+    // the following functions can be seen as 
+    // named actions that are taken on the onboarding dialog's visibility.
+    // this makes it easier to understand why onboarding is visible or not.
     function skipOnboarding() {
       setShowOnboardingToFalse();
       posthog.capture("onboarding_skipped");
@@ -49,9 +53,22 @@ export function useOnboardingVisibility(
       setShowOnboardingToFalse();
     };
 
+    // after login, deeplink could be used to show onboarding
     function loginShowOnboarding() {  
       setShowOnboardingToTrue();
     }
+
+  // manually show onboarding, for example from the header -> settings
+    function manuallyShowOnboarding() {
+      setShowOnboardingToTrue();
+    }
   
-    return { showOnboarding, skipOnboarding, completeOnboarding, handleEnd, loginShowOnboarding };
+    return { 
+      showOnboarding, 
+      skipOnboarding, 
+      completeOnboarding, 
+      handleEnd, 
+      loginShowOnboarding, 
+      manuallyShowOnboarding 
+    };
 }

@@ -104,7 +104,7 @@ export default function Header() {
     await localforage.setItem("inboxMessages", []);
   };
 
-  const { setShowOnboarding } = useOnboarding();
+  const { manuallyShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -191,7 +191,7 @@ export default function Header() {
             <DropdownMenuGroup>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => setShowOnboarding(true)}
+                onClick={() => manuallyShowOnboarding()}
               >
                 <Play className="mr-2 h-4 w-4" />
                 <span>show onboarding</span>
