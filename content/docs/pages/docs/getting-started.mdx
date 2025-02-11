@@ -1,5 +1,6 @@
 import MotionDiv from '../../components/motion-div'
 import { Tabs, Tab } from 'nextra/components'
+import Image from 'next/image'
 
 # getting started
 
@@ -73,11 +74,27 @@ screenpipe can connect to various AI providers to process your data. here's how 
     2. select your preferred model
     3. start the local server
     
-    ![select model](./lmstudio2.png)
-    ![start server](./lmstudio3.png)
-    ![lmstudio setup](./lmstudio1.png)
-
-x
+    <Image 
+      src="/lmstudio2.png" 
+      alt="Select model in LMStudio" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
+    <Image 
+      src="/lmstudio3.png" 
+      alt="Start server in LMStudio" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
+    <Image 
+      src="/lmstudio1.png" 
+      alt="LMStudio setup" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
   </Tab>
 </Tabs>
 
