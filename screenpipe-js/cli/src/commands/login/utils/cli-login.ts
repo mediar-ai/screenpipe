@@ -1,6 +1,5 @@
 import http from "http";
 import { spawn } from "child_process";
-import { writeFileSync } from "fs";
 import { ParsedUrlQuery } from "node:querystring";
 import url from "url";
 import { listen } from "async-listen";
@@ -8,7 +7,7 @@ import { customAlphabet } from "nanoid";
 import { logger, spinner } from "../../components/commands/add/utils/logger";
 import { colors } from "../../../utils/colors";
 import { handleError } from "../../components/commands/add/utils/handle-error";
-import fs from 'fs';
+import { z } from "zod";
 
 class UserCancellationError extends Error {
   constructor(message: string) {
@@ -17,27 +16,13 @@ class UserCancellationError extends Error {
   }
 }
 
-type User = {
-  id: string;
-  email: string;
-  clerk_id: string;
-  token: string;
-  credits: { amount: number };
-  stripe_connected: boolean;
-  stripe_account_status: string;
-  api_key: string;
-  cloud_subscribed: boolean;
-  github_username: string;
-  website: string;
-  contact: string;
-  bio: string;
-}
+type AuthPayload = z.infer<typeof authPayload>;
 
-type AuthPayload = {
-  token: string;
-  email: string;
-  user_id: string;
-}
+const authPayload = z.object({
+  token: z.string(),
+  email: z.string(),
+  user_id: z.string(),
+});
 
 async function sendAuthData(authPayload: AuthPayload) {
   const response = await fetch(`http://localhost:11435/auth`, {
@@ -47,8 +32,6 @@ async function sendAuthData(authPayload: AuthPayload) {
     },
     body: JSON.stringify(authPayload),
   });
-
-  console.log(response);
 
   if (!response.ok) {
     throw new Error("failed to send auth data");
@@ -60,34 +43,6 @@ async function sendAuthData(authPayload: AuthPayload) {
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
-async function getUser(token: string): Promise<User> { 
-  const response = await fetch(process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:3001/api/user' 
-    : 'https://screenpi.pe/api/user', 
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ token }),
-  });
-
-  if (!response.ok) {
-    throw new Error("failed to verify token");
-  }
-
-  const data = await response.json();
-  const userData = {
-    ...data.user,
-  } as User;
-
-  if (!userData) {
-    throw new Error("failed to load user");
-  }
-
-  return userData;
-};
-
 export async function cliLogin() {
     // create localhost server for our page to call back to
     const server = http.createServer();
@@ -96,7 +51,7 @@ export async function cliLogin() {
     logger.info(`server listening on http://127.0.0.1:${port}`);
 
     // set up HTTP server that waits for a request containing an API key
-    const authPromise = new Promise<ParsedUrlQuery>((resolve, reject) => {
+    const authPromise = new Promise<AuthPayload>((resolve, reject) => {
         server.on("request", (req, res) => {
         
         // Set CORS headers for all responses
@@ -118,7 +73,14 @@ export async function cliLogin() {
             } else {
                 res.writeHead(200);
                 res.end("Success");
-                resolve(queryParams);
+                
+                const authData = authPayload.parse(queryParams);
+
+                if (!authData) {
+                    reject(new Error("invalid response from server"));
+                }
+
+                resolve(authData);
             }
         } else {
             res.writeHead(405);
@@ -151,12 +113,7 @@ export async function cliLogin() {
     try {
         loadingSpinner.start();
         const authData = await authPromise;
-        const userData = await getUser(authData.apiKey as string);
-        await sendAuthData({
-            token: authData.apiKey as string,
-            email: userData.email,
-            user_id: userData.id,
-        });
+        await sendAuthData(authData);
 
         loadingSpinner.succeed("authentication successful");
         server.close();
