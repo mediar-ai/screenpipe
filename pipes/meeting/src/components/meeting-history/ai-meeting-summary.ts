@@ -1,9 +1,9 @@
-import { Meeting } from "./types";
 import type { Settings } from "@screenpipe/browser"
 import { createAiClient } from "./ai-meeting-title";
+import { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 export async function generateMeetingSummary(
-  meeting: Meeting,
+  meeting: LiveMeetingData,
   settings: Settings
 ): Promise<string> {
   const openai = createAiClient({ settings });
@@ -12,33 +12,33 @@ export async function generateMeetingSummary(
     console.log(
       "generating ai summary for meeting:", 
       {
-        id: meeting.id,
-        segments_count: meeting.segments.length,
+        startTime: meeting.startTime,
+        chunks_count: meeting.chunks.length,
         notes_count: meeting.notes.length,
-        total_transcript_length: meeting.segments.reduce((acc, s) => acc + s.transcription.length, 0),
+        total_transcript_length: meeting.mergedChunks.reduce((acc, s) => acc + s.text.length, 0),
         total_notes_length: meeting.notes.reduce((acc, n) => acc + n.text.length, 0)
       }
     );
 
-    // Create prompt from meeting data
-    const transcriptContent = meeting.segments
+    // Create prompt from meeting data using mergedChunks
+    const transcriptContent = meeting.mergedChunks
       .map(
         (s) =>
-          `[${s.speaker}]: ${s.transcription}`
+          `[${meeting.speakerMappings[s.speaker || 'speaker_0'] || s.speaker || 'speaker_0'}]: ${meeting.editedMergedChunks[s.id] || s.text}`
       )
       .join("\n");
 
     // Add notes context if available
     const notesContext = meeting.notes.length > 0 
-      ? `\nMeeting notes:\n${meeting.notes.join("\n")}`
+      ? `\nMeeting notes:\n${meeting.notes.map(n => n.text).join("\n")}`
       : "";
 
-    const currentSummary = meeting.aiSummary;
+    const currentSummary = meeting.analysis?.summary;
     const summaryContext = currentSummary 
       ? `\nCurrent summary: "${currentSummary}"\nPlease generate a new summary that might be more accurate.`
       : "";
 
-    const currentTitle = meeting.humanName || meeting.aiName;
+    const currentTitle = meeting.title;
     const titleContext = currentTitle 
       ? `\nMeeting title: "${currentTitle}"`
       : "";
@@ -144,13 +144,13 @@ ${aiSummary}`,
 
 // Helper function to generate summaries for multiple meetings
 export async function generateMeetingSummaries(
-  meetings: Meeting[],
+  meetings: LiveMeetingData[],
   settings: Settings
 ): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
 
   // Process meetings in parallel with a concurrency limit
-  const concurrencyLimit = 2; // Reduced from 3 due to larger content
+  const concurrencyLimit = 2;
   const chunks = [];
   
   for (let i = 0; i < meetings.length; i += concurrencyLimit) {
@@ -160,7 +160,7 @@ export async function generateMeetingSummaries(
   for (const chunk of chunks) {
     const promises = chunk.map(async (meeting) => {
       const summary = await generateMeetingSummary(meeting, settings);
-      results[meeting.id] = summary;
+      results[meeting.startTime] = summary;
     });
 
     await Promise.all(promises);
