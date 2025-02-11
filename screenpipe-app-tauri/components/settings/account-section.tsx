@@ -77,54 +77,6 @@ function PlanCard({
   );
 }
 
-function LoginButton() {
-  const { reloadStore } = useSettings();
-  const [isMacOS, setIsMacOS] = useState(false);
-
-  useEffect(() => {
-    const checkPlatform = async () => {
-      const currentPlatform = platform();
-      setIsMacOS(currentPlatform === "macos");
-    };
-    checkPlatform();
-  }, []);
-
-  if (isMacOS && process.env.NODE_ENV === "development") {
-    return (
-      <Dialog>
-        <DialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="hover:bg-secondary/80"
-          >
-            login
-          </Button>
-        </DialogTrigger>
-        <DialogContent hideCloseButton>
-          <div className="flex flex-col space-y-4 justify-center items-center">
-            <p className="text-sm text-muted-foreground">
-              to login run `@screenpipe/dev login` and then press the button below
-            </p>
-            <Button onClick={() => reloadStore()}>reload settings</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={() => openUrl("https://screenpi.pe/login")}
-      className="hover:bg-secondary/80"
-    >
-      login <ExternalLinkIcon className="w-4 h-4 ml-2" />
-    </Button>
-  );
-}
-
 export function AccountSection() {
   const { settings, updateSettings, loadUser } = useSettings();
   const [isConnectingStripe, setIsConnectingStripe] = useState(false);
@@ -376,7 +328,14 @@ export function AccountSection() {
               </Button>
             </>
           ) : (
-            <LoginButton />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openUrl("https://screenpi.pe/login")}
+              className="hover:bg-secondary/80"
+            >
+              login <ExternalLinkIcon className="w-4 h-4 ml-2" />
+            </Button>
           )}
         </div>
       </div>
