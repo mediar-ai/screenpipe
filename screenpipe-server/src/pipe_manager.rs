@@ -290,7 +290,7 @@ impl PipeManager {
                         retries -= 1;
                         debug!("failed to purge pipes, retrying! ({} retries left)", retries);
                     } else {
-                        return Err(e);
+                        return Err(e.into());
                     }
                 }
             }
