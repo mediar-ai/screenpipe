@@ -24,6 +24,10 @@ export function useOnboardingVisibility(
     function setShowOnboardingToFalse() {
       setShowOnboarding(false);
     }
+
+    function setShowOnboardingToTrue() {
+      setShowOnboarding(true);
+    } 
   
     function skipOnboarding() {
       setShowOnboardingToFalse();
@@ -44,6 +48,10 @@ export function useOnboardingVisibility(
 
       setShowOnboardingToFalse();
     };
+
+    function loginShowOnboarding() {  
+      setShowOnboardingToTrue();
+    }
   
-    return { showOnboarding, skipOnboarding, completeOnboarding, handleEnd };
+    return { showOnboarding, skipOnboarding, completeOnboarding, handleEnd, loginShowOnboarding };
 }

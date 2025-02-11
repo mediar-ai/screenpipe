@@ -27,7 +27,7 @@ export default function Home() {
   const { settings, updateSettings, loadUser } = useSettings();
   const { setActiveProfile } = useProfiles();
   const { toast } = useToast();
-  const { showOnboarding, setShowOnboarding } = useOnboarding();
+  const { showOnboarding, loginShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
@@ -74,7 +74,7 @@ export default function Home() {
           }
 
           if (url.includes("onboarding")) {
-            setShowOnboarding(true);
+            loginShowOnboarding();
           }
 
           if (url.includes("status")) {
@@ -200,19 +200,6 @@ export default function Home() {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [setSettingsOpen]);
-
-  useEffect(() => {
-    const checkScreenPermissionRestart = async () => {
-      const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
-      );
-      if (restartPending) {
-        setShowOnboarding(true);
-      }
-    };
-
-    checkScreenPermissionRestart();
-  }, [setShowOnboarding]);
 
   return (
     <div className="flex flex-col items-center flex-1">
