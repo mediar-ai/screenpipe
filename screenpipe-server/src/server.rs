@@ -2051,7 +2051,6 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/frames/:frame_id", get(get_frame_data))
         .route("/vision/start", post(start_vision_device))
         .route("/vision/stop", post(stop_vision_device))
-        .route("/app-info", get(get_app_info_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2402,57 +2401,6 @@ struct MergeSpeakersRequest {
     speaker_to_merge_id: i64,
 }
 
-
-async fn get_active_profile(profiles_store_path: &PathBuf) -> String {
-    let data: Vec<u8> = match fs::read(profiles_store_path).await {
-        Ok(d) => d,
-        Err(_) => return "default".to_string(),
-    };
-
-    let store: HashMap<String, String> = match bincode::deserialize(&data) {
-        Ok(s) => s,
-        Err(_) => return "default".to_string(),
-    };
-
-    store.get("activeProfile").cloned().unwrap_or_else(|| "default".to_string())
-}
-
-pub async fn get_app_info_handler(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
-    info!("getting app info");
-    let dir: PathBuf = match local_data_dir() {
-        Some(path) => path.join("screenpipe"),
-        None => {
-            error!("failed to determine local data directory.");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "success": false,
-                    "error": format!("failed to determine local data directory.")
-                })),
-            )
-        }
-    };
-
-    let profiles_store_path = dir.join("profiles.bin");
-
-    let active_profile = get_active_profile(&profiles_store_path).await;
-
-    let file = if active_profile == "default" {
-        "store.bin".to_string()
-    } else {
-        format!("store-{}.bin", active_profile)
-    };
-
-    let store_path = dir.join(file);
-
-    (
-        StatusCode::OK,
-        Json(json!({
-            "success": true,
-            "store_path": store_path.to_string_lossy().into_owned()
-        }))
-    )
-}
 /*
 
 Curl commands for reference:
