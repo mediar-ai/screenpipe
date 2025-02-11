@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, memo } from 'react'
-import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, ChevronDown } from 'lucide-react'
+import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, ChevronDown, Mic, MicOff, CheckCircle2 } from 'lucide-react'
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from '../meeting-history/types'
@@ -12,14 +12,23 @@ import { useToast } from '@/hooks/use-toast'
 import { generateMeetingNotes } from './hooks/ai-create-all-notes'
 import { improveNote } from './hooks/ai-create-note'
 import { useRouter } from "next/navigation"
+import { handleStartNewMeeting } from "@/components/meeting-history/meeting-utils"
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
   onBack: () => void
   onNewMeeting: () => void
+  isRecording?: boolean
+  onToggleRecording?: () => void
 }
 
-export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
+export const NotesEditor = memo(function NotesEditor({ 
+  onTimeClick, 
+  onBack, 
+  onNewMeeting,
+  isRecording,
+  onToggleRecording 
+}: Props) {
   const { 
     title, 
     setTitle,
@@ -378,73 +387,13 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
 
 
   const handleNewMeeting = async () => {
-    console.log('starting new meeting from notes editor')
-    try {
-        if (!data) {
-            throw new Error("no meeting data available")
-        }
+    if (!data) {
+      throw new Error("no meeting data available")
+    }
 
-        // Take a snapshot of current data to prevent race conditions
-        const meetingSnapshot = {
-            ...data,
-            mergedChunks: [...data.mergedChunks],
-            editedMergedChunks: { ...data.editedMergedChunks },
-            startTime: data.startTime || new Date().toISOString(),
-            endTime: new Date().toISOString()
-        }
-
-        console.log('current meeting state:', {
-            title,
-            notes_count: notes.length,
-            has_analysis: !!analysis,
-            data_state: {
-                merged_chunks: meetingSnapshot.mergedChunks.length,
-                edited_chunks: Object.keys(meetingSnapshot.editedMergedChunks || {}).length,
-                start_time: meetingSnapshot.startTime,
-                end_time: meetingSnapshot.endTime
-            }
-        })
-
-        // Generate title using snapshot if needed
-        if (!title) {
-            console.log('generating title before archiving')
-            try {
-                const generatedTitle = await generateMeetingName(meetingSnapshot, settings)
-                await setTitle(generatedTitle)
-                console.log('generated title:', generatedTitle)
-            } catch (error) {
-                console.error('failed to generate title:', error)
-                // Continue with archiving even if title generation fails
-            }
-        }
-        
-        // Archive current meeting state
-        const archived = await archiveLiveMeeting()
-        if (!archived) {
-            throw new Error("failed to archive meeting")
-        }
-        
-        // Clear storage
-        await clearLiveMeetingData()
-        
-        // Wait to ensure storage is cleared
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // Try window.location first, fallback to router
-        try {
-            window.location.href = '/meetings/live'
-        } catch (error) {
-            console.error('failed to navigate with window.location:', error)
-            router.push('/meetings/live')
-        }
-        
-    } catch (error) {
-        console.error('failed to start new meeting:', error)
-        toast({
-            title: "error",
-            description: "failed to start new meeting. please try again",
-            variant: "destructive",
-        })
+    const success = await handleStartNewMeeting(data)
+    if (!success) {
+      router.push('/meetings/live')
     }
   }
 
@@ -474,7 +423,50 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
           ${showNav ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1 pointer-events-none'}
         `}>
           <div className="flex flex-col gap-1 bg-gray-100/80 backdrop-blur p-1 rounded-lg shadow-sm">
-          <button
+            <button
+              onClick={async () => {
+                console.log('finishing meeting')
+                try {
+                  const archived = await archiveLiveMeeting()
+                  if (!archived) {
+                    throw new Error("failed to archive meeting")
+                  }
+                  await clearLiveMeetingData()
+                  router.push('/meetings')
+                } catch (error) {
+                  console.error('failed to finish meeting:', error)
+                  toast({
+                    title: "error",
+                    description: "failed to finish meeting. please try again",
+                    variant: "destructive",
+                  })
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>finish meeting</span>
+            </button>
+
+            {onToggleRecording && (
+              <button
+                onClick={onToggleRecording}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
+              >
+                {isRecording ? (
+                  <>
+                    <MicOff className="h-4 w-4 text-red-500" />
+                    <span>stop recording</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-4 w-4 text-green-500" />
+                    <span>start recording</span>
+                  </>
+                )}
+              </button>
+            )}
+            <button
               onClick={onBack}
               className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
             >
