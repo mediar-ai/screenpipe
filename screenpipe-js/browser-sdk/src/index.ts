@@ -85,7 +85,6 @@ export interface BrowserPipe {
     download: (url: string) => Promise<boolean>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
-
     update: (
       pipeId: string,
       config: { [key: string]: string }

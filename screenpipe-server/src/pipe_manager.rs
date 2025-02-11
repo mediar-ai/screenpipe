@@ -271,28 +271,65 @@ impl PipeManager {
             for pipe in pipes {
                 if pipe.enabled {
                     debug!("stopping pipe [{}] before purge", pipe.id);
-                    self.stop_pipe(&pipe.id).await?;
+
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        self.stop_pipe(&pipe.id).await?;
+                    }
+
+                    #[cfg(target_os = "windows")]
+                    {
+                        match self.stop_pipe(&pipe.id).await {
+                            Ok(_) => {
+                                debug!("successfully killed pipe process [{}]", &pipe.id);
+                            }
+                            Err(_) => {
+                                debug!("failed to stop pipe [{}], attempting to kill orphan processes",
+                                    &pipe.id);
+                                if let Err(e) =
+                                crate::auto_destruct::kill_orphan_processes(&pipe.id).await {
+                                    debug!(
+                                        "failed to kill orphan processes for pipe [{}]: {:?}",
+                                        &pipe.id, e
+                                    );
+                                }
+                            }
+                        };
+                    }
                 }
             }
 
             // Wait for all pipes to stop
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-            // Then remove the directory
             let pipe_dir = self.screenpipe_dir.join("pipes");
-            match tokio::fs::remove_dir_all(&pipe_dir).await {
-                Ok(_) => {
-                    debug!("all pipes purged");
-                    return Ok(());
-                }
-                Err(e) => {
-                    if retries > 0 {
-                        retries -= 1;
-                        debug!("failed to purge pipes, retrying! ({} retries left)", retries);
-                    } else {
-                        return Err(e.into());
+            if pipe_dir.exists() {
+                match tokio::fs::remove_dir_all(&pipe_dir).await {
+                    Ok(_) => {
+                        debug!("all pipes purged");
+                        return Ok(());
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::Other => {
+                        debug!("attempting iterative deletion");
+                        let mut entries = tokio::fs::read_dir(&pipe_dir).await?;
+                        while let Some(entry) = entries.next_entry().await? {
+                            if let Err(e) = tokio::fs::remove_file(entry.path()).await {
+                                debug!("failed to remove file: {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if retries > 0 {
+                            retries -= 1;
+                            debug!("failed to purge pipes, retrying! ({} retries left)", retries);
+                        } else {
+                            return Err(e.into());
+                        }
                     }
                 }
+            } else {
+                debug!("pipe directory does not exist");
+                return Ok(());
             }
         }
     }

@@ -2353,7 +2353,6 @@ pub async fn delete_pipe_handler(
     }
 }
 
-// Add this new handler function
 pub async fn purge_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(_request): Json<PurgePipeRequest>,

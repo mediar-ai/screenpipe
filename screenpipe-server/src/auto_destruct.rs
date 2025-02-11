@@ -87,3 +87,40 @@ pub async fn watch_pid(pid: u32) -> bool {
         sleep(Duration::from_secs(1)).await;
     }
 }
+
+// inspiration: ps axuw | grep reddit-auto-posts | grep -v grep | awk '{print $2}' | xargs kill -9
+#[cfg(target_os = "windows")]
+pub async fn kill_orphan_processes(pipe_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let output = Command::new("wmic")
+        .args(&[
+            "process",
+            "where",
+            &format!("executablepath like '%{}%' and executablepath like '%screenpipe%' and executablepath like '%pipes%'", pipe_id),
+            "get",
+            "processid",
+            "/format:csv",
+        ])
+        .output()
+        .expect("failed to run wmic");
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let mut pids = Vec::new();
+
+    for line in output_str.lines().skip(1) {
+        if let Some(pid) = line.split(',').last() {
+            if let Ok(pid) = pid.trim().parse::<u32>() {
+                pids.push(pid);
+            }
+        }
+    }
+
+    for pid in pids {
+        let _ = Command::new("taskkill")
+            .args(&["/PID", &pid.to_string(), "/F"])
+            .output()
+            .expect("failed to kill pid");
+    }
+
+    Ok(())
+}
+
