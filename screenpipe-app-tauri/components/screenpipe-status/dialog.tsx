@@ -4,7 +4,6 @@ import { Button } from "../ui/button";
 import { Check, Folder, Lock, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useScreenpipeStatus } from "./context";
-import { useState } from "react";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { PermissionDevices } from "./types";
 import { Separator } from "../ui/separator";
@@ -15,8 +14,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 export function ScreenpipeStatusDialog() {
     const { isOpen, close } = useStatusDialog();
     const { permissions, isMacOS, handlePermissionButton, health } = useScreenpipeStatus();
-    const { settings, getDataDir } = useSettings();
-    const [ localDataDir, setLocalDataDir ] = useState("");
+    const { settings, localDataDir } = useSettings();
 
     const getStatusMessage = (
         status: string,
@@ -57,8 +55,7 @@ export function ScreenpipeStatusDialog() {
 
     const handleOpenDataDir = async () => {
         try {
-          const dataDir = await getDataDir();
-          await openUrl(dataDir);
+          await openUrl(localDataDir);
         } catch (error) {
           console.error("failed to open data directory:", error);
           toast({
