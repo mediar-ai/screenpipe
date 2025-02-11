@@ -7,21 +7,14 @@ import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { PipeApi } from "@/lib/api/store";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useOnboarding } from "../context";
 
-interface OnboardingPipeStoreProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
-const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingPipeStore = () => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const [isLoading, setIsLoading] = React.useState(false);
   const [status, setStatus] = React.useState<string>("");
   const { settings } = useSettings();
+
   const handleOpenSearchPipe = async () => {
     setIsLoading(true);
     try {
@@ -138,7 +131,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
 
   return (
     <div
-      className={`${className} w-full h-screen flex flex-col px-6 overflow-y-auto`}
+      className={`w-full h-screen flex flex-col px-6 overflow-y-auto`}
     >
       <div className="flex-1 flex flex-col items-center">
         <div className="flex flex-col items-center mb-8">

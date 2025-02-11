@@ -9,14 +9,6 @@ import { invoke } from "@tauri-apps/api/core";
 import OnboardingNavigation from "./navigation";
 import { useOnboarding } from "../context";
 
-interface OnboardingDevOrNonDevProps {
-  className?: string;
-  handleNextSlide: () => void;
-  handlePrevSlide: () => void;
-  handleOptionClick: (option: string) => void;
-  selectedPreference?: string | null;
-}
-
 const DEV_OPTIONS = [
   {
     key: "nonDevMode",

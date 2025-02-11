@@ -1,26 +1,15 @@
 import React, { useEffect } from "react";
-import { ExternalLinkIcon, UserCog, Coins } from "lucide-react";
+import { ExternalLinkIcon, UserCog } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { toast } from "@/components/ui/use-toast";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import OnboardingNavigation from "./navigation";
+import { useOnboarding } from "../context";
 
-interface OnboardingLoginProps {
-  className?: string;
-  handlePrevSlide: () => void;
-  handleNextSlide: () => void;
-}
-
-const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
-  className = "",
-  handlePrevSlide,
-  handleNextSlide,
-}) => {
+const OnboardingLogin = () => {
+  const { handleNextSlide, handlePrevSlide } = useOnboarding();
   const { settings, updateSettings, loadUser } = useSettings();
 
   useEffect(() => {
