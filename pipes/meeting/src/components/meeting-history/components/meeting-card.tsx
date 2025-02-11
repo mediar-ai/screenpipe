@@ -11,6 +11,7 @@ import { LiveMeetingData } from "@/components/live-transcription/hooks/storage-f
 import { generateMeetingName } from "../ai-meeting-title"
 import { generateMeetingSummary } from "../ai-meeting-summary"
 import { MeetingAnalysis } from "../../live-transcription/hooks/ai-create-all-notes"
+import type { MeetingPrep } from "../types"
 
 interface MeetingCardProps {
   meeting: LiveMeetingData
@@ -201,7 +202,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete }: MeetingCa
                     </span>
                   </HoverCardContent>
                 </HoverCard>
-                {meeting.analysis && !meeting.endTime && (
+                {meeting.analysis && !meeting.endTime && 'previousContext' in meeting.analysis && (
                   <HoverCard openDelay={0} closeDelay={0}>
                     <HoverCardTrigger asChild>
                       <Collapsible>
@@ -216,7 +217,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete }: MeetingCa
                           </Button>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="absolute left-0 right-0 mt-2 z-20 bg-white dark:bg-gray-950 border rounded-md p-4 shadow-lg">
-                          <MeetingPrepDetails aiPrep={meeting.analysis} />
+                          <MeetingPrepDetails aiPrep={meeting.analysis as unknown as MeetingPrep} />
                         </CollapsibleContent>
                       </Collapsible>
                     </HoverCardTrigger>
