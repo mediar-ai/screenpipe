@@ -62,7 +62,7 @@ export function TranscriptionView({
     const { fetchRecentChunks } = useRecentChunks()
     const initialDataLoadRef = useRef(true)
 
-    // Add logging for component mount/unmount
+    // Only log loading state on mount/unmount
     useEffect(() => {
         console.log('transcription view mounted', {
             chunksCount: chunks.length,
@@ -70,20 +70,14 @@ export function TranscriptionView({
             hasTitle: !!title,
             hasNotes: notes.length > 0
         })
-        return () => {
-            console.log('transcription view unmounting', {
-                chunksCount: chunks.length,
-                isLoading
-            })
-        }
-    }, [])
+        return () => console.log('transcription view unmounting')
+    }, []) // Empty deps for mount only
 
-    // Add logging for chunks updates
+    // For chunks updates, don't include isLoading
     useEffect(() => {
         console.log('chunks updated in transcription view', {
             count: chunks.length,
             lastChunk: chunks[chunks.length - 1]?.text,
-            isLoading
         })
     }, [chunks])
 
@@ -155,14 +149,6 @@ export function TranscriptionView({
         return merged
     }, [chunks, speakerMappings])
 
-    // Load initial state
-    useEffect(() => {
-        console.log('storing chunks in transcription view', {
-            count: chunks.length,
-            isLoading
-        })
-        storeLiveChunks(chunks)
-    }, [chunks])
 
     const loadStoredData = async () => {
         try {
@@ -185,12 +171,12 @@ export function TranscriptionView({
 
     // Store chunks when they update
     useEffect(() => {
-        console.log('storing chunks:', {
-            count: chunks.length,
-            isLoading
+        console.log('storing chunks in transcription view', {
+            rawChunks: chunks.length,
+            mergedChunks: mergeChunks.length,
         })
-        storeLiveChunks(chunks)
-    }, [chunks])
+        storeLiveChunks(chunks, mergeChunks)
+    }, [chunks, mergeChunks])
 
     // Move handleTextEdit inside the component
     const handleTextEdit = useCallback(async (index: number, newText: string) => {
@@ -340,16 +326,6 @@ export function TranscriptionView({
             improveChunk()
         }
     }, [mergeChunks, title, notes, settings, data, updateStore, handleTextEdit, improvingChunks])
-
-    // Update segments when mergeChunks changes
-    useEffect(() => {
-        console.log('storing chunks in transcription view', {
-            rawChunks: chunks.length,
-            mergedChunks: mergeChunks.length,
-            editedMergedChunks: Object.keys(editedMergedChunks).length,
-        })
-        storeLiveChunks(chunks, mergeChunks)
-    }, [chunks, mergeChunks])
 
     const handleGenerateNote = async (index: number) => {
         try {
