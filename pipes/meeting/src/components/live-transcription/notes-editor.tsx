@@ -418,8 +418,8 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
             }
         }
         
-        // Archive with whatever title we have
-        const archived = await archiveLiveMeeting(meetingSnapshot)
+        // Archive current meeting state
+        const archived = await archiveLiveMeeting()
         if (!archived) {
             throw new Error("failed to archive meeting")
         }
