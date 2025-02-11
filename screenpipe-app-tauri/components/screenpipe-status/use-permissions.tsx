@@ -52,10 +52,35 @@ export function usePermissions() {
             });
             return;
           }
-    
-          // Immediately check permissions after granting
-          const perms = await checkPermissions();
-          if (!perms) return;
+
+          // invoke "request_permission" returns as soon as permissions apple dialog is opened
+          // we wait 3 seconds before checking permissions after dialog is opened
+          // giving user time to grant permissions before we check
+          // otherwise the check will go immidiately, even as user is still granting permissions
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          let perms: PermissionsStatesPerDevice | undefined;
+
+          // trigger 6 checks in a loop, 500ms apart
+          // this gives system time to update permissions
+          for (let i = 0; i < 6; i++) {
+            perms = await checkPermissions();
+            if (!perms) {
+              throw new Error("failed to check permissions");
+            };
+
+            // if the permission is granted, break the entire loop
+            if (perms[type].toLowerCase() === "granted") {
+              i = 7
+              break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+
+          if (!perms) {
+            throw new Error("failed to check permissions");
+          }
     
           const granted = perms[type].toLowerCase() === "granted"
     
