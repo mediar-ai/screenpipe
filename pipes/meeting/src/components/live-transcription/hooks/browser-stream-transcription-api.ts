@@ -98,7 +98,6 @@ export function useBrowserTranscriptionStream(
               speaker
             }
             
-            // Use callback form to ensure we always have latest state
             setChunks(prev => {
               console.log('updating chunks:', { 
                 prevCount: prev.length,
