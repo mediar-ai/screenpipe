@@ -9,10 +9,17 @@ export const liveStore = localforage.createInstance({
     storeName: "transcriptions"
 })
 
+// Add new LocalForage instance for archived meetings
+export const archivedLiveStore = localforage.createInstance({
+    name: "live-meetings",
+    storeName: "archived"  // Different storeName to separate from current live meeting
+})
+
 // Export the key
 export const LIVE_MEETING_KEY = 'current-live-meeting'
 
 export interface LiveMeetingData {
+    id: string  // Add explicit ID field
     chunks: TranscriptionChunk[]  // Keep raw chunks
     mergedChunks: TranscriptionChunk[]  // Add merged chunks
     editedMergedChunks: Record<number, string>  // Rename to be explicit
@@ -53,6 +60,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         const loadData = async () => {
             try {
                 console.log('MeetingProvider: loading data')
+                
                 const stored = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
                 console.log('MeetingProvider: loaded data:', {
                     exists: !!stored,
@@ -76,6 +84,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                 })
                 
                 setData(stored || {
+                    id: `live-meeting-${new Date().toISOString()}`,
                     chunks: [],
                     mergedChunks: [],
                     editedMergedChunks: {},
@@ -187,21 +196,6 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         await updateStore({ ...data, notes })
     }
 
-    const setSegments = async (segments: MeetingSegment[]) => {
-        if (!data) return
-        console.log('setting segments:', segments.length)
-        const chunks = segments.map((seg, index) => ({
-            id: Date.now() + index,
-            timestamp: seg.timestamp,
-            text: seg.transcription,
-            deviceName: seg.deviceName,
-            speaker: seg.speaker,
-            isInput: seg.deviceName?.toLowerCase().includes('input') || false,
-            device: seg.deviceName || 'unknown',
-        }))
-        await updateStore({ ...data, chunks })
-    }
-
     const setAnalysis = async (analysis: MeetingAnalysis | null) => {
         if (!data) return
         console.log('setting analysis:', analysis)
@@ -219,7 +213,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             deviceName: chunk.deviceName || '',
             speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
-        setSegments,
+        setSegments: async () => {},
         analysis: data?.analysis || null,
         setAnalysis,
         isLoading,
@@ -254,6 +248,7 @@ export async function storeLiveChunks(chunks: TranscriptionChunk[] = [], mergedC
     try {
         const existing = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
         const data: LiveMeetingData = {
+            id: `live-meeting-${new Date().toISOString()}`,
             chunks,
             mergedChunks,
             editedMergedChunks: existing?.editedMergedChunks ?? {},
@@ -279,6 +274,7 @@ export async function storeLiveChunks(chunks: TranscriptionChunk[] = [], mergedC
 export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
     try {
         console.log('getLiveMeetingData: loading')
+        
         const data = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
         
         // Ensure dates are properly restored
@@ -337,5 +333,147 @@ export async function clearLiveMeetingData(): Promise<void> {
     } catch (error) {
         console.error('failed to clear live meeting data:', error)
         throw error
+    }
+}
+
+// Add function to archive current live meeting
+export async function archiveLiveMeeting(meeting?: LiveMeetingData) {
+    try {
+        // If no meeting passed, try to get from live store
+        if (!meeting) {
+            meeting = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+            if (!meeting) {
+                throw new Error('no meeting data found to archive')
+            }
+        }
+
+        // Ensure we have required fields
+        if (!meeting.startTime) {
+            meeting.startTime = new Date().toISOString()
+        }
+        
+        // Use ISO string format consistently
+        const id = `live-meeting-${meeting.startTime}`
+        
+        console.log('archiving meeting:', { 
+            id, 
+            startTime: meeting.startTime,
+            title: meeting.title,
+            chunks: meeting.chunks?.length,
+            notes: meeting.notes?.length
+        })
+        
+        // Store using ISO format ID
+        await archivedLiveStore.setItem(id, {
+            ...meeting,
+            id,
+            endTime: meeting.endTime || new Date().toISOString() // Ensure we have an end time
+        })
+        
+        await clearLiveMeetingData()
+        return true
+    } catch (error) {
+        console.error('failed to archive meeting:', error)
+        return false
+    }
+}
+
+// Add function to get all archived meetings
+export async function getArchivedLiveMeetings(): Promise<LiveMeetingData[]> {
+    try {
+        const archived: LiveMeetingData[] = []
+        let needsSaving = false
+        
+        // Iterate through all keys in archived store
+        await archivedLiveStore.iterate<LiveMeetingData, void>((value, key) => {
+            // Ensure each meeting has an ID, construct from start time if missing
+            if (!value.id) {
+                needsSaving = true
+                console.log('meeting missing id, constructing from start time:', {
+                    startTime: value.startTime,
+                    title: value.title
+                })
+                value.id = `live-meeting-${value.startTime}`
+                // Save back to storage
+                archivedLiveStore.setItem(key, value)
+            }
+            archived.push(value)
+        })
+
+        // Sort by start time, newest first
+        archived.sort((a, b) => 
+            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )
+
+        console.log('loaded archived meetings:', {
+            count: archived.length,
+            latest: archived[0]?.title,
+            allHaveIds: archived.every(m => !!m.id),
+            neededIdUpdate: needsSaving
+        })
+
+        return archived
+    } catch (error) {
+        console.error('failed to get archived meetings:', error)
+        return []
+    }
+}
+
+// Add function to delete an archived meeting by its start time
+export async function deleteArchivedMeeting(startTime: string): Promise<void> {
+  try {
+    let keyToDelete: string | null = null
+    
+    // Find the meeting with matching start time
+    await archivedLiveStore.iterate<LiveMeetingData, void>((value, key) => {
+      if (value.startTime === startTime) {
+        keyToDelete = key
+        return
+      }
+    })
+
+    if (keyToDelete) {
+      console.log('deleting archived meeting:', {
+        key: keyToDelete,
+        startTime
+      })
+      await archivedLiveStore.removeItem(keyToDelete)
+    } else {
+      console.log('meeting not found for deletion:', startTime)
+    }
+  } catch (error) {
+    console.error('failed to delete archived meeting:', error)
+    throw error
+  }
+}
+
+// Add function to update an archived meeting
+export async function updateArchivedMeeting(id: string, update: Partial<LiveMeetingData>) {
+    try {
+        const meeting = await archivedLiveStore.getItem<LiveMeetingData>(id)
+        if (!meeting) {
+            console.error('meeting not found for update:', { id })
+            return null
+        }
+        
+        // Create updated meeting data - preserve existing fields
+        const updated = { 
+            ...meeting,  // First spread existing meeting
+            ...update,   // Then apply updates
+            title: update.title ?? meeting.title  // Explicitly preserve title if not in update
+        }
+        
+        console.log('updating archived meeting:', { 
+            id,
+            oldTitle: meeting.title,
+            newTitle: updated.title,
+            fullUpdate: update
+        })
+        
+        await archivedLiveStore.setItem(id, updated)
+        return updated
+    } catch (error) {
+        console.error('failed to update archived meeting:', error)
+        return null
     }
 } 
