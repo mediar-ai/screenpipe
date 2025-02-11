@@ -1990,6 +1990,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
+        .route("/pipes/purge", post(purge_pipe_handler))
         .route("/health", get(health_check))
         .route("/ws/health", get(ws_health_handler))
         .route("/raw_sql", post(execute_raw_sql))
@@ -2351,6 +2352,33 @@ pub async fn delete_pipe_handler(
         }
     }
 }
+
+// Add this new handler function
+pub async fn purge_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<DeletePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.purge_pipes().await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipes purged successfully"
+            })),
+        ),
+        Err(e) => {
+            error!("failed to delete pipe: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                "success": false,
+                "error": format!("failed to purge pipes: {}", e)
+                })),
+            )
+        }
+    }
+}
+
 
 // Add this struct for the request payload
 #[derive(Debug, Deserialize)]

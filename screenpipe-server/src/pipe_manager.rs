@@ -261,31 +261,40 @@ impl PipeManager {
     }
 
     pub async fn purge_pipes(&self) -> Result<()> {
-        // First, get all running pipes
-        let pipes = self.list_pipes().await;
+        let mut retries = 3;
 
-        // Stop all running pipes
-        for pipe in pipes {
-            if pipe.enabled {
-                debug!("stopping pipe {} before purge", pipe.id);
-                self.stop_pipe(&pipe.id).await?;
+        loop {
+            // First, get all running pipes
+            let pipes = self.list_pipes().await;
+
+            // Stop all running pipes
+            for pipe in pipes {
+                if pipe.enabled {
+                    debug!("stopping pipe {} before purge", pipe.id);
+                    self.stop_pipe(&pipe.id).await?;
+                }
+            }
+
+            // Wait for all pipes to stop
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+            // Then remove the directory
+            let pipe_dir = self.screenpipe_dir.join("pipes");
+            match tokio::fs::remove_dir_all(&pipe_dir).await {
+                Ok(_) => {
+                    debug!("all pipes purged");
+                    return Ok(());
+                }
+                Err(e) => {
+                    if retries > 0 {
+                        retries -= 1;
+                        debug!("failed to purge pipes, retrying! ({} retries left)", retries);
+                    } else {
+                        return Err(e);
+                    }
+                }
             }
         }
-
-        // Wait for all pipes to stop
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-        #[cfg(windows)]
-        {
-            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-        }
-
-        // Then remove the directory
-        let pipe_dir = self.screenpipe_dir.join("pipes");
-        tokio::fs::remove_dir_all(pipe_dir).await?;
-
-        debug!("all pipes purged");
-        Ok(())
     }
 
     pub async fn delete_pipe(&self, id: &str) -> Result<()> {
