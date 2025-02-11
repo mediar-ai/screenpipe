@@ -13,11 +13,13 @@ import {
   LiveMeetingData,
   deleteArchivedMeeting,
   updateArchivedMeeting,
-  useMeetingContext
+  useMeetingContext,
+  archiveLiveMeeting
 } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import { useSettings } from "@/lib/hooks/use-settings"
 import { MeetingAnalysis } from "@/components/live-transcription/hooks/ai-create-all-notes"
 import { handleStartNewMeeting } from "@/components/meeting-history/meeting-utils"
+import { toast } from "@/hooks/use-toast"
 
 export function MeetingHistory() {
   const [mounted, setMounted] = useState(false)
@@ -33,47 +35,49 @@ export function MeetingHistory() {
   const router = useRouter()
   const { updateStore } = useMeetingContext()
 
-  const handleResume = async () => {
-    if (!hasLiveMeeting) return
-    
-    console.log('resume: attempting navigation to live meeting')
-    try {
-      const liveData = await getLiveMeetingData()
-      console.log('resume: current live meeting state:', {
-        hasTitle: !!liveData?.title,
-        notesCount: liveData?.notes?.length,
-        firstNote: liveData?.notes?.[0]?.text?.slice(0, 50)
-      })
-      await router.push('/meetings/live')
-      console.log('resume: navigation completed')
-    } catch (e) {
-      console.error('resume: navigation failed:', e)
-    }
-  }
 
   const handleNewMeeting = async () => {
-    if (hasLiveMeeting) {
-      console.log('existing meeting detected, prompting user')
-      const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
-      if (!confirmed) {
-        console.log('user chose to resume existing meeting')
-        router.push('/meetings/live')
-        return
-      }
-    }
-
-    const success = await handleStartNewMeeting(liveMeeting)
+    const success = await handleStartNewMeeting()
     if (!success) {
-      router.push('/meetings/live')
+        router.push('/meetings/live')
     }
   }
 
   const handleDelete = async (meeting: LiveMeetingData) => {
     try {
-      const confirmed = window.confirm('Are you sure you want to delete this meeting?')
-      if (!confirmed) {
-        console.log('meeting deletion cancelled by user')
-        return
+      // Check if user has disabled delete confirmations
+      const skipConfirm = localStorage.getItem('skipDeleteConfirm') === 'true'
+      
+      if (!skipConfirm) {
+        const result = await new Promise<boolean>((resolve) => {
+          const checkbox = document.createElement('input')
+          checkbox.type = 'checkbox'
+          checkbox.id = 'dontAskAgain'
+          
+          const message = document.createElement('div')
+          message.innerHTML = `
+            Are you sure you want to delete this meeting?
+            <br/><br/>
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="dontAskAgain" />
+              <span>don't ask again</span>
+            </label>
+          `
+          
+          const confirmed = window.confirm(message.innerText)
+          const dontAskAgain = (document.getElementById('dontAskAgain') as HTMLInputElement)?.checked
+          
+          if (dontAskAgain) {
+            localStorage.setItem('skipDeleteConfirm', 'true')
+          }
+          
+          resolve(confirmed)
+        })
+
+        if (!result) {
+          console.log('meeting deletion cancelled by user')
+          return
+        }
       }
 
       console.log('deleting meeting:', {
@@ -124,6 +128,74 @@ export function MeetingHistory() {
 
     } catch (error) {
       console.error('failed to update meeting:', error)
+    }
+  }
+
+  const handleLoadArchived = async (meeting: LiveMeetingData) => {
+    console.log('loading archived meeting details:', {
+        id: meeting.id,
+        isArchived: true,
+        title: meeting.title,
+        startTime: meeting.startTime,
+        hasChunks: meeting.chunks?.length,
+        hasNotes: meeting.notes?.length,
+        hasAnalysis: !!meeting.analysis,
+        deviceNames: [...(meeting.deviceNames || [])],
+        selectedDevices: [...(meeting.selectedDevices || [])]
+    })
+
+    try {
+        // First check if we're already viewing this archived meeting
+        const currentMeeting = await getLiveMeetingData()
+        if (currentMeeting?.isArchived && currentMeeting.id === meeting.id) {
+            console.log('already viewing this archived meeting, just navigating')
+            router.push('/meetings/live')
+            return
+        }
+
+        // If viewing a different meeting (archived or live), handle appropriately
+        if (currentMeeting) {
+            if (currentMeeting.isArchived) {
+                // Just clear if it's a different archived meeting
+                await clearLiveMeetingData()
+            } else {
+                // Archive if it's a live meeting
+                const archived = await archiveLiveMeeting()
+                console.log('archived current meeting:', { success: archived })
+                if (!archived) {
+                    throw new Error("failed to archive current meeting")
+                }
+            }
+        }
+        
+        // Wait to ensure storage is cleared
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Store the archived meeting with isArchived flag
+        console.log('attempting to store meeting:', {
+            id: meeting.id,
+            chunks: meeting.chunks?.length,
+            notes: meeting.notes?.length,
+            isArchived: true
+        })
+        const stored = await updateStore({
+            ...meeting,
+            isArchived: true
+        })
+        console.log('store update result:', { success: !!stored })
+        
+        if (!stored) {
+            throw new Error("failed to store archived meeting")
+        }
+        
+        router.push('/meetings/live')
+    } catch (error) {
+        console.error('failed to load archived meeting:', error)
+        toast({
+            title: "error",
+            description: "failed to load archived meeting. please try again",
+            variant: "destructive",
+        })
     }
   }
 
@@ -215,7 +287,7 @@ export function MeetingHistory() {
       >
         <div className="space-y-6">
           {/* Show live meeting if exists */}
-          {liveMeeting && (
+          {liveMeeting && !liveMeeting.isArchived && (
             <div>
               <h3 className="text-xl font-semibold mb-3 text-muted-foreground">Live</h3>
               <div className="relative">
@@ -247,6 +319,7 @@ export function MeetingHistory() {
                   settings={settings}
                   onDelete={() => handleDelete(meeting)}
                   onUpdate={handleUpdate}
+                  onLoadArchived={() => handleLoadArchived(meeting)}
                 />
               ))}
             </div>
