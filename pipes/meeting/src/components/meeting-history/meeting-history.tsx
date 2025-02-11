@@ -12,22 +12,26 @@ import {
   getArchivedLiveMeetings,
   LiveMeetingData,
   deleteArchivedMeeting,
-  updateArchivedMeeting
+  updateArchivedMeeting,
+  useMeetingContext
 } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import { useSettings } from "@/lib/hooks/use-settings"
 import { MeetingAnalysis } from "@/components/live-transcription/hooks/ai-create-all-notes"
+import { handleStartNewMeeting } from "@/components/meeting-history/meeting-utils"
 
 export function MeetingHistory() {
   const [mounted, setMounted] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [windowHeight, setWindowHeight] = useState(0)
   const [hasLiveMeeting, setHasLiveMeeting] = useState(false)
+  const [liveMeeting, setLiveMeeting] = useState<LiveMeetingData | null>(null)
   const [archivedMeetings, setArchivedMeetings] = useState<LiveMeetingData[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const { settings } = useSettings()
   const router = useRouter()
+  const { updateStore } = useMeetingContext()
 
   const handleResume = async () => {
     if (!hasLiveMeeting) return
@@ -53,18 +57,14 @@ export function MeetingHistory() {
       const confirmed = window.confirm('You have an existing meeting in progress. Start a new one anyway?')
       if (!confirmed) {
         console.log('user chose to resume existing meeting')
-        await handleResume()
+        router.push('/meetings/live')
         return
       }
-      console.log('user chose to start new meeting, clearing existing data')
-      await clearLiveMeetingData()
     }
-    console.log('starting new meeting')
-    try {
-      await router.push('/meetings/live')
-      console.log('navigation completed')
-    } catch (e) {
-      console.error('navigation failed:', e)
+
+    const success = await handleStartNewMeeting(liveMeeting)
+    if (!success) {
+      router.push('/meetings/live')
     }
   }
 
@@ -98,19 +98,27 @@ export function MeetingHistory() {
       console.log('updating meeting:', {
         id,
         update,
-        currentMeetings: archivedMeetings.length
+        currentMeetings: archivedMeetings.length,
+        isLive: id === liveMeeting?.id
       })
 
-      // Create updates object
-      const updates: Partial<LiveMeetingData> = {
-        title: update.aiName,
-        analysis: update.analysis
+      // Handle live meeting
+      if (liveMeeting && id === liveMeeting.id) {
+        await updateStore({
+          ...liveMeeting,
+          title: update.aiName ?? liveMeeting.title,
+          analysis: update.analysis ?? liveMeeting.analysis
+        })
+        return
       }
 
-      // Use the ID directly, no need to add prefix
-      await updateArchivedMeeting(id, updates)
+      // Handle archived meeting
+      await updateArchivedMeeting(id, {
+        title: update.aiName,
+        analysis: update.analysis
+      })
       
-      // Refresh the meetings list
+      // Refresh archived meetings list
       const updated = await getArchivedLiveMeetings()
       setArchivedMeetings(updated)
 
@@ -123,28 +131,29 @@ export function MeetingHistory() {
     const loadMeetings = async () => {
       setLoading(true)
       try {
-        const archived = await getArchivedLiveMeetings()
-        console.log('loaded archived meetings:', {
-          count: archived.length,
-          latest: archived[0]?.title
+        // Load both live and archived meetings
+        const [live, archived] = await Promise.all([
+          getLiveMeetingData(),
+          getArchivedLiveMeetings()
+        ])
+        
+        console.log('loaded meetings:', {
+          hasLive: !!live,
+          liveTitle: live?.title,
+          archivedCount: archived.length,
         })
+        
+        setLiveMeeting(live)
+        setHasLiveMeeting(!!live)
         setArchivedMeetings(archived)
       } catch (error) {
-        console.error('failed to load archived meetings:', error)
+        console.error('failed to load meetings:', error)
       } finally {
         setLoading(false)
       }
     }
     loadMeetings()
   }, [refreshTrigger])
-
-  useEffect(() => {
-    const checkLiveMeeting = async () => {
-      const liveData = await getLiveMeetingData()
-      setHasLiveMeeting(!!liveData)
-    }
-    checkLiveMeeting()
-  }, [])
 
   useEffect(() => {
     const updateHeight = () => {
@@ -189,16 +198,6 @@ export function MeetingHistory() {
           >
             <SettingsIcon className="h-4 w-4" />
           </Button>
-          {hasLiveMeeting && (
-            <Button
-              onClick={handleResume}
-              variant="outline"
-              size="sm"
-            >
-              <PlusCircle className="h-4 w-4 mr-2" />
-              resume meeting
-            </Button>
-          )}
           <Button
             onClick={handleNewMeeting}
             variant="default"
@@ -215,12 +214,35 @@ export function MeetingHistory() {
         style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
       >
         <div className="space-y-6">
+          {/* Show live meeting if exists */}
+          {liveMeeting && (
+            <div>
+              <h3 className="text-xl font-semibold mb-3 text-muted-foreground">Live</h3>
+              <div className="relative">
+                <div className="absolute -left-0 z-10 -top-2">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground bg-accent rounded px-1 border border-border/40">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    now
+                  </div>
+                </div>
+                <MeetingCard
+                  key={liveMeeting.id}
+                  meeting={liveMeeting}
+                  settings={settings}
+                  onUpdate={handleUpdate}
+                  isLive={true}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Show archived meetings grouped by date */}
           {Object.entries(groupMeetingsByDate(archivedMeetings)).map(([date, meetings]) => (
             <div key={date}>
               <h3 className="text-xl font-semibold mb-3 text-muted-foreground">{date}</h3>
               {meetings.map((meeting) => (
                 <MeetingCard
-                  key={`${meeting.startTime}-${meeting.title || 'untitled'}-${Math.random()}`}
+                  key={meeting.id}
                   meeting={meeting}
                   settings={settings}
                   onDelete={() => handleDelete(meeting)}
