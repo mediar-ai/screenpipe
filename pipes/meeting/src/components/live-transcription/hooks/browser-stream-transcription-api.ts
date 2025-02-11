@@ -8,6 +8,8 @@ export function useBrowserTranscriptionStream(
   const streamingRef = useRef(false)
   const socketRef = useRef<WebSocket | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const intentionalCloseRef = useRef(false)
   const { toast } = useToast()
 
   const startTranscriptionBrowser = useCallback(async () => {
@@ -16,6 +18,7 @@ export function useBrowserTranscriptionStream(
       return
     }
 
+    intentionalCloseRef.current = false
     // Use env var with fallback to hardcoded key
     const apiKey = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '646b887eceffbf128315d2f419e48a2ff174ab66'
     console.log('using deepgram api key:', apiKey ? 'found' : 'not found')
@@ -29,6 +32,7 @@ export function useBrowserTranscriptionStream(
           sampleRate: 16000
         } 
       })
+      mediaStreamRef.current = stream
       console.log('got media stream:', { tracks: stream.getTracks().length })
 
       console.log('initializing websocket connection to deepgram...')
@@ -126,11 +130,13 @@ export function useBrowserTranscriptionStream(
         console.log('deepgram websocket closed', {
           code: event.code,
           reason: event.reason,
-          wasClean: event.wasClean
+          wasClean: event.wasClean,
+          intentional: intentionalCloseRef.current
         })
         streamingRef.current = false
-        // Attempt reconnection if not intentionally closed
-        if (event.code !== 1000) {
+        
+        // Only attempt reconnection if not intentionally closed
+        if (!intentionalCloseRef.current && event.code !== 1000) {
           console.log('attempting to reconnect...')
           setTimeout(startTranscriptionBrowser, 2000)
         }
@@ -151,15 +157,30 @@ export function useBrowserTranscriptionStream(
   }, [toast, setChunks])
 
   const stopTranscriptionBrowser = useCallback(() => {
+    console.log('stopping browser transcription...')
+    intentionalCloseRef.current = true
+    
+    // Close websocket
     if (socketRef.current) {
       socketRef.current.send(JSON.stringify({ type: 'CloseStream' }))
       socketRef.current.close()
       socketRef.current = null
     }
+
+    // Stop all media tracks
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => {
+        track.stop()
+      })
+      mediaStreamRef.current = null
+    }
+
+    // Close audio context
     if (audioContextRef.current) {
       audioContextRef.current.close()
       audioContextRef.current = null
     }
+
     streamingRef.current = false
     console.log('browser transcription stopped')
   }, [])
