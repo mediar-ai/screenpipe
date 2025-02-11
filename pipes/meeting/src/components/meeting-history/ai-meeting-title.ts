@@ -1,6 +1,6 @@
-import { Meeting } from "./types";
 import { OpenAI } from "openai";
 import type { Settings } from "@screenpipe/browser"
+import { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 interface AiClientConfig {
   settings: Settings;
@@ -18,7 +18,7 @@ export function createAiClient({ settings }: AiClientConfig) {
 }
 
 export async function generateMeetingName(
-  meeting: Meeting,
+  meeting: LiveMeetingData,
   settings: Settings
 ): Promise<string> {
   const openai = createAiClient({ settings });
@@ -27,28 +27,33 @@ export async function generateMeetingName(
     console.log(
       "generating ai name for meeting:", 
       {
-        id: meeting.id,
-        segments_count: meeting.segments.length,
+        merged_chunks_count: meeting.mergedChunks.length,
+        edited_chunks: Object.keys(meeting.editedMergedChunks || {}).length,
         notes_count: meeting.notes.length,
-        total_transcript_length: meeting.segments.reduce((acc, s) => acc + s.transcription.length, 0),
-        total_notes_length: meeting.notes.reduce((acc, n) => acc + n.text.length, 0)
+        has_analysis: !!meeting.analysis,
+        title: meeting.title
       }
     );
 
-    // Create prompt from meeting data
-    const transcriptSample = meeting.segments
-      .map(
-        (s) =>
-          `[${s.speaker}]: ${s.transcription}`
-      )
+    // Create prompt from chunks with edits and speaker mappings
+    const transcriptSample = meeting.mergedChunks
+      .map(chunk => {
+        const text = meeting.editedMergedChunks[chunk.id] || chunk.text;
+        const speaker = meeting.speakerMappings[chunk.speaker || 'speaker_?'] || chunk.speaker || 'speaker_?';
+        return `[${speaker}]: ${text}`;
+      })
       .join("\n");
 
-    // Add notes context if available
+    // Add notes and analysis context
     const notesContext = meeting.notes.length > 0 
-      ? `\nMeeting notes:\n${meeting.notes.join("\n")}`
+      ? `\nMeeting notes:\n${meeting.notes.map(n => n.text).join("\n")}`
       : "";
 
-    const currentTitle = meeting.humanName || meeting.aiName;
+    const analysisContext = meeting.analysis?.summary 
+      ? `\nMeeting summary:\n${meeting.analysis.summary}`
+      : "";
+
+    const currentTitle = meeting.title;
     const titleContext = currentTitle 
       ? `\nCurrent title: "${currentTitle}"\nPlease generate a new title that might be more accurate.`
       : "";
@@ -60,7 +65,7 @@ export async function generateMeetingName(
       },
       {
         role: "user" as const,
-        content: `analyze the meeting context and generate a factual title that captures WHO (key participants/teams), WHAT (main topic/project), or WHY (purpose/goal) if these are clear from the context. keep it under 6 words:${titleContext}\n\n${transcriptSample}${notesContext}`,
+        content: `analyze the meeting context and generate a factual title that captures WHO (key participants/teams), WHAT (main topic/project), or WHY (purpose/goal) if these are clear from the context. keep it under 6 words:${titleContext}\n\n${transcriptSample}${notesContext}${analysisContext}`,
       },
     ];
 
@@ -75,27 +80,19 @@ export async function generateMeetingName(
       max_tokens: 20,
     });
 
-    const aiName = response.choices[0]?.message?.content?.trim() || "untitled meeting";
-    // console.log("raw generated ai name:", aiName);
-    
-    // Sanitize the AI generated name
-    const sanitizedName = aiName
-      .replace(/["']/g, '') // Remove quotes
-      .replace(/[^\w\s-]/g, ' ') // Replace special chars with space
-      .trim();
-    
+    const aiName = response.choices[0]?.message?.content?.trim() || currentTitle || "untitled meeting";
+    const sanitizedName = aiName.replace(/["']/g, '').replace(/[^\w\s-]/g, ' ').trim();
     console.log("sanitized ai name:", sanitizedName);
-
     return sanitizedName;
   } catch (error) {
-    console.error("error generating meeting name:", error);
-    return "untitled meeting";
+    console.error("error generating meeting name:", error)
+    return meeting.title || "untitled meeting";
   }
 }
 
 // Helper function to generate names for multiple meetings
 export async function generateMeetingNames(
-  meetings: Meeting[],
+  meetings: LiveMeetingData[],
   settings: Settings
 ): Promise<Record<string, string>> {
   const results: Record<string, string> = {};
