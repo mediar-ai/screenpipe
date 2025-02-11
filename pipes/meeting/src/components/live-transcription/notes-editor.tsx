@@ -5,7 +5,7 @@ import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, Chev
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from '../meeting-history/types'
-import { useMeetingContext, clearLiveMeetingData } from './hooks/storage-for-live-meeting'
+import { useMeetingContext, clearLiveMeetingData, archiveLiveMeeting } from './hooks/storage-for-live-meeting'
 import { generateMeetingName } from '../meeting-history/ai-meeting-title'
 import { useSettings } from '@/lib/hooks/use-settings'
 import { useToast } from '@/hooks/use-toast'
@@ -27,7 +27,9 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
     setNotes,
     segments,
     analysis,
-    setAnalysis
+    setAnalysis,
+    data,
+    isLoading
   } = useMeetingContext()
   const [currentMessage, setCurrentMessage] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -215,32 +217,26 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
   }
 
   const handleGenerateTitle = async () => {
-    if (isGeneratingTitle) return
+    if (isGeneratingTitle || isLoading) return
     
     setIsGeneratingTitle(true)
     try {
-      console.log("generating title for meeting")
-      const meeting = {
-        id: crypto.randomUUID(),
-        notes: notes.map(note => ({
-          id: note.id,
-          text: note.text,
-          timestamp: note.timestamp.toISOString(),
-          editedAt: note.editedAt?.toISOString()
-        })),
-        meetingStart: notes[0]?.timestamp.toISOString() || new Date().toISOString(),
-        meetingEnd: notes[notes.length - 1]?.timestamp.toISOString() || new Date().toISOString(),
-        humanName: title,
-        aiName: null,
-        agenda: null,
-        aiSummary: null,
-        participants: null,
-        selectedDevices: new Set<string>(),
-        deviceNames: new Set<string>(),
-        segments
+      console.log("generating title for meeting", {
+        hasData: !!data,
+        isLoading,
+        dataState: {
+          merged_chunks: data?.mergedChunks.length,
+          edited_chunks: Object.keys(data?.editedMergedChunks || {}).length,
+          notes: notes.length,
+          has_analysis: !!analysis
+        }
+      })
+
+      if (!data) {
+        throw new Error("meeting data not initialized")
       }
       
-      const aiName = await generateMeetingName(meeting, settings)
+      const aiName = await generateMeetingName(data, settings)
       await setTitle(aiName)
       
       toast({
@@ -384,25 +380,63 @@ export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNe
   const handleNewMeeting = async () => {
     console.log('starting new meeting from notes editor')
     try {
-        // Save current state for logging
-        const currentTitle = title
-        const notesCount = notes.length
-        
+        if (!data) {
+            throw new Error("no meeting data available")
+        }
+
+        // Take a snapshot of current data to prevent race conditions
+        const meetingSnapshot = {
+            ...data,
+            mergedChunks: [...data.mergedChunks],
+            editedMergedChunks: { ...data.editedMergedChunks },
+            startTime: data.startTime || new Date().toISOString(),
+            endTime: new Date().toISOString()
+        }
+
         console.log('current meeting state:', {
-            title: currentTitle,
-            notes_count: notesCount,
-            has_analysis: !!analysis
+            title,
+            notes_count: notes.length,
+            has_analysis: !!analysis,
+            data_state: {
+                merged_chunks: meetingSnapshot.mergedChunks.length,
+                edited_chunks: Object.keys(meetingSnapshot.editedMergedChunks || {}).length,
+                start_time: meetingSnapshot.startTime,
+                end_time: meetingSnapshot.endTime
+            }
         })
+
+        // Generate title using snapshot if needed
+        if (!title) {
+            console.log('generating title before archiving')
+            try {
+                const generatedTitle = await generateMeetingName(meetingSnapshot, settings)
+                await setTitle(generatedTitle)
+                console.log('generated title:', generatedTitle)
+            } catch (error) {
+                console.error('failed to generate title:', error)
+                // Continue with archiving even if title generation fails
+            }
+        }
         
-        // Clear storage first
+        // Archive with whatever title we have
+        const archived = await archiveLiveMeeting(meetingSnapshot)
+        if (!archived) {
+            throw new Error("failed to archive meeting")
+        }
+        
+        // Clear storage
         await clearLiveMeetingData()
         
-        // Wait a bit to ensure storage is cleared
-        await new Promise(resolve => setTimeout(resolve, 100))
+        // Wait to ensure storage is cleared
+        await new Promise(resolve => setTimeout(resolve, 1000))
         
-        console.log('storage cleared, forcing navigation')
-        // Force a full navigation instead of client-side
-        window.location.href = '/meetings/live'
+        // Try window.location first, fallback to router
+        try {
+            window.location.href = '/meetings/live'
+        } catch (error) {
+            console.error('failed to navigate with window.location:', error)
+            router.push('/meetings/live')
+        }
         
     } catch (error) {
         console.error('failed to start new meeting:', error)
