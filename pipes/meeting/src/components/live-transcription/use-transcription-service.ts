@@ -1,7 +1,7 @@
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 import { useTranscriptionStream } from './hooks/screenpipe-stream-transcription-api'
 import { useBrowserTranscriptionStream } from './hooks/browser-stream-transcription-api'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLiveMeetingData } from './hooks/storage-for-live-meeting'
 import { usePostHog } from 'posthog-js/react'
 
@@ -14,6 +14,7 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
   const initRef = useRef(false)
   const modeRef = useRef<TranscriptionMode | null>(null)
   const posthog = usePostHog()
+  const [isRecording, setIsRecording] = useState(true)
 
   // Load stored chunks only once
   useEffect(() => {
@@ -82,9 +83,33 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
     }
   }, [mode, startTranscriptionScreenpipe, stopTranscriptionScreenpipe, startTranscriptionBrowser, stopTranscriptionBrowser, posthog])
 
+  const toggleRecording = useCallback(() => {
+    console.log('transcription-service: toggling recording:', !isRecording)
+    if (isRecording) {
+      if (modeRef.current === 'browser') {
+        stopTranscriptionBrowser()
+      } else {
+        stopTranscriptionScreenpipe()
+      }
+    } else {
+      if (modeRef.current === 'browser') {
+        startTranscriptionBrowser()
+      } else {
+        startTranscriptionScreenpipe()
+      }
+    }
+    setIsRecording(!isRecording)
+    posthog.capture('meeting_web_app_recording_toggled', { 
+      mode: modeRef.current,
+      state: !isRecording ? 'started' : 'stopped'
+    })
+  }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, stopTranscriptionBrowser, stopTranscriptionScreenpipe, posthog])
+
   return {
     chunks,
     isLoadingRecent: isLoading,
-    fetchRecentChunks
+    fetchRecentChunks,
+    isRecording,
+    toggleRecording
   }
 } 
