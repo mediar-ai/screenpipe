@@ -181,7 +181,7 @@ export async function GET() {
   try {
     const settings = await pipe.settings.getNamespaceSettings("obsidian");
     const interval = settings?.interval || 3600000;
-    const obsidianPath = settings?.path;
+    const obsidianPath = settings?.vaultPath;
     const customPrompt = settings?.prompt;
     const pageSize = settings?.pageSize || 100;
     const model = settings?.aiModel;

@@ -45,7 +45,6 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -117,7 +116,6 @@ before you begin:
    cargo build --release
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -150,7 +148,6 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 

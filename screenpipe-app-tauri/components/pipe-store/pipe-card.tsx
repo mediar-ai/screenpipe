@@ -202,7 +202,8 @@ export const PipeCard: React.FC<PipeCardProps> = ({
               </motion.a>
             )}
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 font-mono text-xs">
-              v{pipe.installed_config?.version}
+              {pipe.installed_config?.version && "v"}
+              {pipe.installed_config?.version}
             </span>
             {pipe.has_update && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 font-mono text-xs animate-pulse">

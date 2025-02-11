@@ -193,12 +193,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return true;
     } catch (error) {
-      await this.captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-        distinct_id: userId,
-        email: email,
-      });
       return false;
     }
   }
@@ -251,12 +245,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-        distinct_id: userId,
-        email: email,
-      });
       console.error("error querying screenpipe:", error);
       return null;
     }

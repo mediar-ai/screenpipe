@@ -34,8 +34,8 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use tracing::{debug, error, info};
 use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
+use tracing::{debug, error, info};
 
 use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::OcrEngine;
@@ -264,6 +264,7 @@ fn default_limit() -> u32 {
 #[derive(Serialize, Deserialize)]
 pub struct HealthCheckResponse {
     pub status: String,
+    pub status_code: u16,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
     pub last_ui_timestamp: Option<DateTime<Utc>>,
@@ -607,7 +608,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+    let (overall_status, message, verbose_instructions, status_code) = if (frame_status == "ok"
         || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
@@ -616,6 +617,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "healthy",
             "all systems are functioning normally.".to_string(),
             None,
+            200,
         )
     } else {
         let mut unhealthy_systems = Vec::new();
@@ -633,12 +635,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try contacting us on discord".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string()),
+            500,
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
+        status_code,
         last_frame_timestamp: last_frame,
         last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
@@ -649,7 +653,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         verbose_instructions,
     })
 }
-
 // Request and response structs
 #[derive(Deserialize)]
 struct DownloadPipeRequest {
@@ -672,6 +675,12 @@ struct RunPipeRequest {
 struct UpdatePipeConfigRequest {
     pipe_id: String,
     config: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct UpdatePipeVersionRequest {
+    pipe_id: String,
+    source: String,
 }
 
 // Handler functions
@@ -816,6 +825,33 @@ async fn update_pipe_config_handler(
             StatusCode::BAD_REQUEST,
             JsonResponse(json!({
                 "error": format!("failed to update pipe config: {}", e),
+                "success": false
+            })),
+        )),
+    }
+}
+
+async fn update_pipe_version_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<UpdatePipeVersionRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    debug!("Updating pipe version for: {}", payload.pipe_id);
+    match state
+        .pipe_manager
+        .update_pipe_version(&payload.pipe_id, &payload.source)
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe version updated"
+            },
+            "success": true
+        }))),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("failed to update pipe version: {}", e),
                 "success": false
             })),
         )),
@@ -1933,6 +1969,34 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
     debug!("WebSocket connection closed");
 }
 
+async fn ws_health_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
+    ws.on_upgrade(move |socket| handle_health_socket(socket, state))
+}
+
+async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        tokio::select! {
+        _ = interval.tick() => {
+            let health_response = health_check(State(state.clone())).await;
+            let health_status = serde_json::to_string(&health_response.0).unwrap_or_default();
+            if let Err(e) = socket.send(Message::Text(health_status)).await {
+                error!("Failed to send health status: {}", e);
+                break;
+            }
+        }
+            result = socket.recv() => {
+                if result.is_none() {
+                    break;
+                }
+            }
+        }
+    }
+
+    debug!("WebSocket connection closed gracefully");
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1961,8 +2025,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/pipes/update-version", post(update_pipe_version_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
         .route("/health", get(health_check))
+        .route("/ws/health", get(ws_health_handler))
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))

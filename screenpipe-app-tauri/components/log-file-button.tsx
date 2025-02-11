@@ -30,6 +30,8 @@ import {
   version as osVersion,
   platform as osPlatform,
 } from "@tauri-apps/plugin-os";
+import { ShareLogsButton } from './share-logs-button'
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 const LogContent = ({
   content,
@@ -86,75 +88,6 @@ const LogContent = ({
 };
 LogContent.displayName = "LogContent";
 
-const ShareLogButton = ({
-  onShare,
-  isSending,
-}: {
-  onShare: () => void;
-  isSending: boolean;
-}) => {
-  return (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={onShare}
-      disabled={isSending}
-      className="gap-2 group relative"
-    >
-      {isSending ? (
-        <>
-          <Loader className="h-3.5 w-3.5 animate-spin" />
-          <span>sharing...</span>
-        </>
-      ) : (
-        <>
-          <Upload className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
-          <span>share logs</span>
-        </>
-      )}
-    </Button>
-  );
-};
-
-const ShareLinkDisplay = ({
-  shareLink,
-  onCopy,
-  onClose,
-}: {
-  shareLink: string;
-  onCopy: () => void;
-  onClose: () => void;
-}) => {
-  return (
-    <div className="flex items-center gap-2 bg-secondary/30 px-3 py-2 rounded-lg border border-secondary animate-in fade-in slide-in-from-top-4">
-      <div className="flex items-center gap-2 flex-1">
-        <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
-        <span className="text-sm font-mono">{shareLink}</span>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 hover:bg-secondary/50 transition-colors"
-          onClick={onCopy}
-          title="Copy share link"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 hover:bg-secondary/50 transition-colors text-muted-foreground"
-          onClick={onClose}
-          title="Dismiss"
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 export const LogFileButton = ({
   className,
   isAppLog = false,
@@ -172,9 +105,6 @@ export const LogFileButton = ({
   const [logPath, setLogPath] = useState("");
   const [logContent, setLogContent] = useState("");
   const [logFiles, setLogFiles] = useState<LogFile[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [shareLink, setShareLink] = useState("");
-  const [machineId, setMachineId] = useState("");
 
   interface LogFile {
     name: string;
@@ -223,98 +153,6 @@ export const LogFileButton = ({
     setIsOpen(true);
   };
 
-  useEffect(() => {
-    const loadMachineId = async () => {
-      let id = localStorage.getItem("machineId");
-      if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem("machineId", id);
-      }
-      setMachineId(id);
-    };
-    loadMachineId();
-  }, []);
-
-  const sendLogs = async () => {
-    if (!logFiles.length) return;
-
-    setIsSending(true);
-    try {
-      const BASE_URL = "https://screenpi.pe";
-      const identifier = settings.user?.id || machineId;
-      const type = settings.user?.id ? "user" : "machine";
-
-      // Get all log contents
-      const logContents = await Promise.all(
-        logFiles.map(async (file) => ({
-          name: file.name,
-          content: await readTextFile(file.path),
-        }))
-      );
-
-      // Also get console logs from browser
-      const consoleLog = localStorage.getItem("console_logs") || ""; // You'll need to implement console log capturing
-
-      // Get signed URL
-      const signedRes = await fetch(`${BASE_URL}/api/logs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier, type }),
-      });
-
-      const {
-        data: { signedUrl, path },
-      } = await signedRes.json();
-
-      // Combine all logs with clear separators
-      const combinedLogs =
-        logContents
-          .map((log) => `\n=== ${log.name} ===\n${log.content}`)
-          .join("\n\n") +
-        "\n\n=== Browser Console Logs ===\n" +
-        consoleLog;
-
-      // Upload combined log content
-      await fetch(signedUrl, {
-        method: "PUT",
-        body: combinedLogs,
-        headers: { "Content-Type": "text/plain" },
-      });
-
-      const os = osPlatform();
-      const os_version = osVersion();
-      const app_version = await getVersion();
-
-      // Confirm upload
-      const confirmRes = await fetch(`${BASE_URL}/api/logs/confirm`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path,
-          identifier,
-          type,
-          os,
-          os_version,
-          app_version,
-        }),
-      });
-
-      const {
-        data: { id },
-      } = await confirmRes.json();
-      setShareLink(`${BASE_URL}/logs/${id}`);
-    } catch (err) {
-      console.error("log sharing failed:", err);
-      toast({
-        title: "sharing failed",
-        description: "could not upload logs",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
   return (
     <>
       <TooltipProvider>
@@ -358,18 +196,19 @@ export const LogFileButton = ({
                 </DialogDescription>
               </div>
               <div className="flex mr-8">
-                {!shareLink && (
-                  <ShareLogButton onShare={sendLogs} isSending={isSending} />
-                )}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button>
+                      <Upload className="h-3.5 w-3.5 mr-2" />
+                      send logs
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-100 rounded-2xl">
+                    <ShareLogsButton />
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
-            {shareLink && (
-              <ShareLinkDisplay
-                shareLink={shareLink}
-                onCopy={() => copyToClipboard(shareLink)}
-                onClose={() => setShareLink("")}
-              />
-            )}
           </DialogHeader>
 
           {logFiles.length === 0 ? (
