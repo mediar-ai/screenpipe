@@ -275,6 +275,11 @@ impl PipeManager {
         // Wait for all pipes to stop
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
+        #[cfg(windows)]
+        {
+            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+        }
+
         // Then remove the directory
         let pipe_dir = self.screenpipe_dir.join("pipes");
         tokio::fs::remove_dir_all(pipe_dir).await?;
