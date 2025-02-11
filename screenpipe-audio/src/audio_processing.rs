@@ -166,8 +166,6 @@ pub fn write_audio_to_file(
 // https://github.com/ggerganov/whisper.cpp
 
 use candle::utils::get_num_threads;
-use std::sync::Arc;
-use std::thread;
 
 pub trait Float:
     num_traits::Float + num_traits::FloatConst + num_traits::NumAssign + Send + Sync
@@ -331,7 +329,7 @@ fn log_mel_spectrogram_w<T: Float>(
     mel
 }
 
-pub fn log_mel_spectrogram_<T: Float>(
+pub async fn log_mel_spectrogram_<T: Float + 'static>(
     samples: &[T],
     filters: &[T],
     fft_size: usize,
@@ -370,33 +368,30 @@ pub fn log_mel_spectrogram_<T: Float>(
     let n_threads = std::cmp::min(get_num_threads() - get_num_threads() % 2, 12);
     let n_threads = std::cmp::max(n_threads, 2);
 
-    let hann = Arc::new(hann);
-    let samples = Arc::new(samples);
-    let filters = Arc::new(filters);
+    // Create owned copies of the input data
+    let samples = samples.to_vec();
+    let filters = filters.to_vec();
 
-    // use scope to allow for non static references to be passed to the threads
-    // and directly collect the results into a single vector
-    let all_outputs = thread::scope(|s| {
-        (0..n_threads)
-            // create threads and return their handles
-            .map(|thread_id| {
-                let hann = Arc::clone(&hann);
-                let samples = Arc::clone(&samples);
-                let filters = Arc::clone(&filters);
-                // spawn new thread and start work
-                s.spawn(move || {
-                    log_mel_spectrogram_w(
-                        thread_id, &hann, &samples, &filters, fft_size, fft_step, speed_up, n_len,
-                        n_mel, n_threads,
-                    )
-                })
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-            // wait for each thread to finish and collect their results
-            .map(|handle| handle.join().expect("Thread failed"))
-            .collect::<Vec<_>>()
-    });
+    let mut handles = vec![];
+    for thread_id in 0..n_threads {
+        // Clone the owned vectors for each task
+        let hann = hann.clone();
+        let samples = samples.clone();
+        let filters = filters.clone();
+
+        handles.push(tokio::task::spawn(async move {
+            log_mel_spectrogram_w(
+                thread_id, &hann, &samples, &filters, fft_size, fft_step, speed_up, n_len, n_mel,
+                n_threads,
+            )
+        }));
+    }
+
+    let all_outputs = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .map(|res| res.expect("Task failed"))
+        .collect::<Vec<_>>();
 
     let l = all_outputs[0].len();
     let mut mel = vec![zero; l];
@@ -429,7 +424,7 @@ pub fn log_mel_spectrogram_<T: Float>(
     mel
 }
 
-pub fn pcm_to_mel<T: Float>(
+pub async fn pcm_to_mel<T: Float + 'static>(
     cfg: &candle_transformers::models::whisper::Config,
     samples: &[T],
     filters: &[T],
@@ -442,4 +437,5 @@ pub fn pcm_to_mel<T: Float>(
         cfg.num_mel_bins,
         false,
     )
+    .await
 }

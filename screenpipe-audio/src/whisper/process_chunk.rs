@@ -31,7 +31,7 @@ pub async fn process_with_whisper(
     } = &mut *whisper;
 
     debug!("converting pcm to mel spectrogram");
-    let mel = pcm_to_mel(model.config(), audio, mel_filters);
+    let mel = pcm_to_mel(model.config(), audio, mel_filters).await;
     let mel_len = mel.len();
 
     debug!("creating tensor from mel spectrogram");
