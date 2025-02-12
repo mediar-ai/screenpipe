@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { pipe } from "@screenpipe/js";
 import { generateWorkLog } from "@/lib/helpers";
 import { NotionClient } from "@/lib/notion/client";
+import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
 
 const minute = (min: number) => min * 60 * 1000;
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getNamespaceSettings("notion");
+    const settings = (await getScreenpipeAppSettings())["customSettings"]![
+      "notion"
+    ];
 
     const model = settings?.aiModel;
     const pageSize = settings?.pageSize || 50;
@@ -17,14 +20,14 @@ export async function GET() {
     if (!model) {
       return NextResponse.json(
         { error: "model not selected" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
     if (!settings?.notion?.accessToken || !settings?.notion?.databaseId) {
       return NextResponse.json(
         { error: "notion not configured" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -41,7 +44,7 @@ export async function GET() {
     if (!screenData || screenData.data.length === 0) {
       return NextResponse.json(
         { message: "no screen data found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -50,7 +53,7 @@ export async function GET() {
       model,
       oneHourAgo,
       now,
-      customPrompt
+      customPrompt,
     );
 
     console.log(logEntry);
@@ -67,7 +70,7 @@ export async function GET() {
     console.error("error in work log api:", error);
     return NextResponse.json(
       { error: `failed to process work log: ${error}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
