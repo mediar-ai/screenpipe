@@ -13,7 +13,7 @@ use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStderr, ChildStdin, Command};
 use tokio::sync::mpsc::channel;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -206,53 +206,45 @@ impl VideoCapture {
 }
 
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
-    let fps = if fps > MAX_FPS {
-        warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
-        MAX_FPS
-    } else {
-        fps
-    };
+    let fps = fps.min(MAX_FPS);
 
-    info!("starting FFmpeg process for file: {}", output_file);
+    debug!("starting ffmpeg process for: {}", output_file);
     let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
-    let mut args = vec![
+
+    // Updated FFmpeg arguments for better performance and quality
+    let args = vec![
         "-f",
         "image2pipe",
         "-vcodec",
-        "mjpeg", // consider using mjpeg and change to encode to jpeg below too
+        "mjpeg",
         "-r",
         &fps_str,
         "-i",
         "-",
         "-vf",
-        "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
-    ];
-
-    args.extend_from_slice(&[
-        "-vcodec",
+        "format=yuv420p,pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
+        "-c:v",
         "libx265",
         "-tag:v",
         "hvc1",
         "-preset",
-        "ultrafast",
+        "medium", // Changed from ultrafast for better compression
         "-crf",
-        "23",
-    ]);
-
-    args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
+        "28", // Slightly higher CRF for smaller file size
+        "-x265-params",
+        "log-level=error", // Reduce x265 logging noise
+        output_file,
+    ];
 
     command
         .args(&args)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
+        .stdout(Stdio::null()) // Changed to null since we don't need stdout
         .stderr(Stdio::piped());
 
-    debug!("FFmpeg command: {:?}", command);
-
+    debug!("ffmpeg command: {:?}", command);
     let child = command.spawn()?;
-    debug!("FFmpeg process spawned");
-
     Ok(child)
 }
 
@@ -262,14 +254,6 @@ pub async fn write_frame_to_ffmpeg(
 ) -> Result<(), anyhow::Error> {
     stdin.write_all(buffer).await?;
     Ok(())
-}
-
-async fn log_ffmpeg_output(stream: impl AsyncBufReadExt + Unpin, stream_name: &str) {
-    let reader = BufReader::new(stream);
-    let mut lines = reader.lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        debug!("FFmpeg {}: {}", stream_name, line);
-    }
 }
 
 async fn save_frames_as_video_with_shutdown(
@@ -311,7 +295,7 @@ async fn save_frames_as_video_with_shutdown(
             match start_ffmpeg_process(&output_file, fps).await {
                 Ok(mut child) => {
                     let mut stdin = child.stdin.take().expect("Failed to open stdin");
-                    spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());
+                    spawn_ffmpeg_loggers(child.stderr.take());
 
                     if let Err(e) = write_frame_to_ffmpeg(&mut stdin, &buffer).await {
                         error!("failed to write first frame to ffmpeg: {}", e);
@@ -390,12 +374,22 @@ fn create_output_file(output_path: &str, monitor_id: u32) -> String {
         .to_string()
 }
 
-fn spawn_ffmpeg_loggers(stderr: Option<ChildStderr>, stdout: Option<ChildStdout>) {
+fn spawn_ffmpeg_loggers(stderr: Option<ChildStderr>) {
     if let Some(stderr) = stderr {
-        tokio::spawn(log_ffmpeg_output(BufReader::new(stderr), "stderr"));
-    }
-    if let Some(stdout) = stdout {
-        tokio::spawn(log_ffmpeg_output(BufReader::new(stdout), "stdout"));
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                // Only log important messages
+                if line.contains("error") || line.contains("fatal") {
+                    error!("ffmpeg: {}", line);
+                } else if line.contains("warning") {
+                    warn!("ffmpeg: {}", line);
+                } else {
+                    debug!("ffmpeg: {}", line);
+                }
+            }
+        });
     }
 }
 

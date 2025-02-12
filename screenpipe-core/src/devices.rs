@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
-use tracing::{debug, info};
+use tracing::debug;
 
 #[derive(Clone, Debug)]
 pub enum DeviceType {
@@ -192,7 +192,7 @@ impl DeviceManager {
                 !watcher.is_closed()
             });
 
-            info!(
+            debug!(
                 "received device_state_request: {:?} watches length: {}",
                 req,
                 watchers.len()

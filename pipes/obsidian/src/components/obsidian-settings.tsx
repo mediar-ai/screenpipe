@@ -551,6 +551,7 @@ export function ObsidianSettings() {
                 }
                 onChange={(value) => {
                   updateSettings({
+                    ...settings,
                     aiModel: value,
                   });
                 }}

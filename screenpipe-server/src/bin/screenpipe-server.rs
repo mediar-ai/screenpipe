@@ -809,7 +809,7 @@ async fn main() -> anyhow::Result<()> {
             if cli.disable_audio && change.control.device.is_audio() {
                 continue;
             }
-            info!("received device update: {:?}", change);
+            debug!("received device update: {:?}", change);
             if let Err(e) = handle_device_update(
                 &change.control.device,
                 change.control.clone(),

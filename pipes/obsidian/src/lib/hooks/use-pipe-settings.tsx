@@ -77,14 +77,17 @@ export function usePipeSettings() {
         ...obsidianSettings,
       };
 
-      // Update screenpipe settings if provided
-      await updateScreenpipeAppSettings({
+      const appSettings = {
         ...screenpipeAppSettings,
         customSettings: {
           ...screenpipeAppSettings?.customSettings,
-          obsidian: mergedObsidianSettings,
+          obsidian: obsidianSettings,
         },
-      });
+      };
+      console.log("updating store settings", appSettings);
+
+      // Update screenpipe settings if provided
+      await updateScreenpipeAppSettings(appSettings);
 
       // Update notion settings in localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
