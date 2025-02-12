@@ -18,9 +18,9 @@ export function useSuggestions(keywordString: string) {
 	const { settings } = useSettings();
 
 	useEffect(() => {
-		setSuggestions([]);
 		const abortController = new AbortController();
 
+		setSuggestions([]);
 		const generateSuggestions = async () => {
 			if (keywordString.length < 3) {
 				setIsLoading(false);

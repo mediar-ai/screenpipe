@@ -2142,22 +2142,12 @@ impl DatabaseManager {
         query: &str,
         limit: u32,
         offset: u32,
-        include_context: bool,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         fuzzy_match: bool,
         order: Order,
     ) -> Result<Vec<SearchMatch>, sqlx::Error> {
-        if let (Some(start), Some(end)) = (start_time, end_time) {
-            if start > end {
-                return Err(sqlx::Error::Protocol(
-                    "start_time cannot be greater than end_time".into(),
-                ));
-            }
-        }
-
         let mut conditions = Vec::new();
-        let keywords: Vec<&str> = query.split_whitespace().collect();
 
         if start_time.is_some() {
             conditions.push("f.timestamp >= ?");
@@ -2166,45 +2156,54 @@ impl DatabaseManager {
             conditions.push("f.timestamp <= ?");
         }
 
-        // Add conditions for each keyword
-        if fuzzy_match {
-            conditions.extend(keywords.iter().map(|_| "o.text LIKE '%' || ? || '%'"));
+        // Create an indexed subquery for FTS matching
+        let search_condition = if !query.is_empty() {
+            let fts_match = if fuzzy_match {
+                query
+                    .split_whitespace()
+                    .map(|word| format!("{}*", word))
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            } else {
+                query.to_string()
+            };
+            conditions.push(
+                "f.id IN (SELECT frame_id FROM ocr_text_fts WHERE text MATCH ? ORDER BY rank)",
+            );
+            fts_match
         } else {
-            conditions.extend(keywords.iter().map(|_| "o.text_json LIKE '%' || ? || '%'"));
-        }
-
-        let where_clause = if conditions.is_empty() {
-            "1=1".to_string()
-        } else {
-            conditions.join(" AND ")
-        };
-
-        let order_direction = match order {
-            Order::Ascending => "ASC",
-            Order::Descending => "DESC",
+            String::new()
         };
 
         let sql = format!(
             r#"
-        SELECT
-            f.id,
-            f.timestamp,
-            o.app_name,
-            o.window_name,
-            o.text as ocr_text,
-            o.text_json
-        FROM frames f
-        JOIN ocr_text o ON f.id = o.frame_id
-        WHERE {}
-        ORDER BY f.timestamp {}
-        LIMIT ? OFFSET ?
-        "#,
-            where_clause, order_direction
+SELECT
+    f.id,
+    f.timestamp,
+    o.app_name,
+    o.window_name,
+    o.text as ocr_text,
+    o.text_json
+FROM frames f
+INNER JOIN ocr_text o ON f.id = o.frame_id
+WHERE {}
+ORDER BY f.timestamp {}
+LIMIT ? OFFSET ?
+"#,
+            if conditions.is_empty() {
+                "1=1".to_string()
+            } else {
+                conditions.join(" AND ")
+            },
+            match order {
+                Order::Ascending => "ASC",
+                Order::Descending => "DESC",
+            }
         );
 
         let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);
 
-        // Bind timestamp parameters
+        // Bind timestamp parameters first
         if let Some(start) = start_time {
             query_builder = query_builder.bind(start);
         }
@@ -2212,63 +2211,38 @@ impl DatabaseManager {
             query_builder = query_builder.bind(end);
         }
 
-        // Bind each keyword
-        for keyword in &keywords {
-            query_builder = query_builder.bind(keyword);
+        // Bind search condition if query is not empty
+        if !query.is_empty() {
+            query_builder = query_builder.bind(&search_condition);
         }
 
-        query_builder = query_builder.bind(limit);
-        query_builder = query_builder.bind(offset);
+        // Bind limit and offset
+        query_builder = query_builder.bind(limit as i64).bind(offset as i64);
 
         let rows = query_builder.fetch_all(&self.pool).await?;
 
-        let matches = rows
+        Ok(rows
             .iter()
-            .filter_map(|row| {
-                let ocr_blocks: Vec<OcrTextBlock> = serde_json::from_str(&row.text_json).ok()?;
-
-                // Check if all keywords match
-                let mut all_positions = Vec::new();
-                for keyword in &keywords {
-                    let positions = find_matching_positions(&ocr_blocks, keyword);
-                    if positions.is_empty() {
-                        return None;
-                    }
-                    all_positions.extend(positions);
-                }
-
-                let mut match_result = SearchMatch {
-                    frame_id: row.id,
-                    timestamp: row.timestamp,
-                    text_positions: all_positions.clone(),
-                    app_name: row.app_name.clone(),
-                    window_name: row.window_name.clone(),
-                    confidence: calculate_confidence(&all_positions),
-                    context: None,
-                    text: row.ocr_text.clone(),
+            .map(|row| {
+                let positions = if !query.is_empty() {
+                    let ocr_blocks: Vec<OcrTextBlock> =
+                        serde_json::from_str(&row.text_json).unwrap_or_default();
+                    find_matching_positions(&ocr_blocks, query)
+                } else {
+                    Vec::new()
                 };
 
-                if include_context {
-                    match_result.context = Some(extract_context(&row.ocr_text, query));
+                SearchMatch {
+                    frame_id: row.id,
+                    timestamp: row.timestamp,
+                    text_positions: positions.clone(),
+                    app_name: row.app_name.clone(),
+                    window_name: row.window_name.clone(),
+                    confidence: calculate_confidence(&positions),
+                    text: row.ocr_text.clone(),
                 }
-
-                Some(match_result)
             })
-            .collect();
-
-        Ok(matches)
-    }
-}
-
-fn extract_context(text: &str, query: &str) -> String {
-    const CONTEXT_CHARS: usize = 50;
-
-    if let Some(pos) = text.to_lowercase().find(&query.to_lowercase()) {
-        let start = pos.saturating_sub(CONTEXT_CHARS);
-        let end = (pos + query.len() + CONTEXT_CHARS).min(text.len());
-        text[start..end].to_string()
-    } else {
-        String::new()
+            .collect())
     }
 }
 

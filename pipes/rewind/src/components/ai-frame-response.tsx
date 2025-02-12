@@ -22,7 +22,11 @@ export const AIFrameResponse = () => {
 
 	const generateFrameResponse = useCallback(async () => {
 		try {
+			if (aiContent !== null) return;
 			const currentFrame = searchResults[debouncedResultIndex];
+			if (settings.openaiApiKey.length === 0) {
+				return;
+			}
 			if (!currentFrame) return;
 
 			const frame = {
@@ -105,7 +109,7 @@ You are an advanced text analyzer. You will be given text and metadata extracted
 		} finally {
 			setIsLoading(false);
 		}
-	}, [debouncedResultIndex]);
+	}, [debouncedResultIndex, settings.openaiApiKey]);
 
 	useEffect(() => {
 		generateFrameResponse();

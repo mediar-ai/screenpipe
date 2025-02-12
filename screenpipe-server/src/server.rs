@@ -2055,7 +2055,6 @@ async fn keyword_search_handler(
             &query.query,
             query.limit,
             query.offset,
-            query.include_context,
             query.start_time,
             query.end_time,
             query.fuzzy_match,
@@ -2079,8 +2078,6 @@ pub struct KeywordSearchRequest {
     limit: u32,
     #[serde(default)]
     offset: u32,
-    #[serde(default)]
-    include_context: bool,
     #[serde(default)]
     start_time: Option<DateTime<Utc>>,
     #[serde(default)]

@@ -14,6 +14,7 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSuggestions } from "@/lib/hooks/use-suggestion";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+// import { useAppNameSuggestion } from "@/lib/hooks/use-app-name-suggestion";
 
 export function SearchCommand() {
 	const [open, setOpen] = useState(false);
@@ -22,6 +23,8 @@ export function SearchCommand() {
 	const deferedValue = useDebounce(search, 400);
 	const { suggestions, isLoading, error } = useSuggestions(deferedValue);
 	const router = useRouter();
+	//	const { search: searchFunc, isLoading, error } = useAppNameSuggestion();
+	//	const [suggestions, setSuggestions] = useState<string[]>([]);
 
 	React.useEffect(() => {
 		if (open) {
@@ -72,6 +75,26 @@ export function SearchCommand() {
 		setSearch("");
 	}, [open]);
 
+	//React.useEffect(() => {
+	//	const fetchAppNames = async () => {
+	//		if (!(deferedValue.length >= 3)) {
+	//			return;
+	//		}
+	//
+	//		const apps = await searchFunc(deferedValue);
+	//
+	//		const uniqueApps = new Set(apps.map((value) => value.app_name));
+	//
+	//		const suggest = uniqueApps
+	//			.values()
+	//			.map((value) => `${deferedValue} from ${value}`);
+	//
+	//		setSuggestions(suggest.toArray());
+	//	};
+	//
+	//	fetchAppNames();
+	//}, [deferedValue]);
+	//
 	return (
 		<>
 			<CommandDialog open={open} onOpenChange={setOpen}>
@@ -90,7 +113,7 @@ export function SearchCommand() {
 								? "Unable to generate suggestions"
 								: search.length < 3
 									? "Type at least 3 characters to search"
-									: "No suggestions found"}
+									: "No suggestions found"}{" "}
 					</CommandEmpty>
 					{!isLoading && suggestions.length > 0 && (
 						<CommandGroup heading="Suggestions">

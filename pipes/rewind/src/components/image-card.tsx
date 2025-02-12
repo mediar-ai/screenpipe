@@ -6,6 +6,7 @@ import { cn, queryParser } from "@/lib/utils";
 import { throttle } from "lodash";
 import { useQueryStates } from "nuqs";
 import { Loader2 } from "lucide-react";
+import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
 export const ImageGrid = ({
 	searchResult,
@@ -13,13 +14,9 @@ export const ImageGrid = ({
 	searchResult: SearchMatch[];
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
-	const {
-		setCurrentResultIndex,
-		currentResultIndex,
-		searchKeywords,
-		searchQuery,
-	} = useKeywordSearchStore();
-	const [{ start_time, end_time, query }] = useQueryStates(queryParser);
+	const { setCurrentResultIndex, currentResultIndex, searchKeywords } =
+		useKeywordSearchStore();
+	const [{ start_time, end_time, query }] = useKeywordParams();
 	const { searchResults, isSearching } = useKeywordSearchStore();
 
 	// Add a function to check scroll position and fetch more results
@@ -28,6 +25,7 @@ export const ImageGrid = ({
 			throttle(() => {
 				const container = containerRef.current;
 				if (!container) return;
+				if (searchResults.length === 0) return;
 
 				const scrollPosition = container.scrollLeft;
 				const scrollWidth = container.scrollWidth;
@@ -38,16 +36,15 @@ export const ImageGrid = ({
 
 				// If we've scrolled past 60%, fetch more results
 				if (scrollPercentage > 0.6) {
-					console.log("should start fetching");
-					searchKeywords(searchQuery, {
+					searchKeywords(query ?? "", {
 						offset: searchResult.length,
 						limit: 20,
 						...(start_time && { start_time }),
 						...(end_time && { end_time }),
 					});
 				}
-			}, 500),
-		[searchResult.length, searchKeywords, searchQuery],
+			}, 400),
+		[searchResult.length, searchKeywords, query, start_time, end_time],
 	);
 
 	// Add scroll event listener
@@ -255,14 +252,14 @@ export const MainImage = () => {
 	) => {
 		if (!imageRect) return null;
 
-		return null;
+		// return null;
 
-		//	return {
-		//		left: bounds.left * imageRect.width,
-		//		top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
-		//		width: bounds.width * imageRect.width,
-		//		height: bounds.height * imageHeight,
-		//	};
+		return {
+			left: bounds.left * imageRect.width,
+			top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
+			width: bounds.width * imageRect.width,
+			height: bounds.height * imageHeight,
+		};
 	};
 
 	if (!currentFrame) {
@@ -301,12 +298,12 @@ export const MainImage = () => {
 								<div
 									key={index}
 									className="absolute bg-yellow-300/40 border border-yellow-500/50"
-									//style={{
-									//	left: `${coords.left}px`,
-									//	top: `${coords.top}px`,
-									//	width: `${coords.width}px`,
-									//	height: `${coords.height}px`,
-									//}}
+									style={{
+										left: `${coords.left}px`,
+										top: `${coords.top}px`,
+										width: `${coords.width}px`,
+										height: `${coords.height}px`,
+									}}
 									title={position.text}
 								/>
 							);

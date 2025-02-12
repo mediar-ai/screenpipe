@@ -11,11 +11,11 @@ import { useQueryStates } from "nuqs";
 import { queryParser } from "@/lib/utils";
 import { useCallback, useEffect } from "react";
 import { parser } from "@/lib/keyword-parser";
-import { Loader2 } from "lucide-react";
 import { CurrentFrame } from "@/components/current-frame";
+import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
 export default function Page() {
-	const [querys, setQuerys] = useQueryStates(queryParser);
+	const [querys, setQuerys] = useKeywordParams();
 	const debounceQuerys = useDebounce(querys, 300);
 	const {
 		searchKeywords,
@@ -28,6 +28,8 @@ export default function Page() {
 	const handleSearch = useCallback(
 		async (query: string, start: Date | undefined, end: Date | undefined) => {
 			await searchKeywords(query, {
+				limit: 20,
+				offset: 0,
 				start_time: start,
 				end_time: end,
 			});
@@ -36,8 +38,6 @@ export default function Page() {
 	);
 
 	useEffect(() => {
-		if (isSearching) return;
-
 		if (!debounceQuerys.query || debounceQuerys.query.length === 0) {
 			setCurrentResultIndex(-1);
 			return;

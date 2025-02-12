@@ -238,7 +238,7 @@ pub struct SearchMatch {
     pub app_name: String,
     pub window_name: String,
     pub confidence: f32,
-    pub context: Option<String>,
+    // pub context: Option<String>,
     pub text: String,
 }
 

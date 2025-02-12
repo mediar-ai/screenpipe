@@ -21,7 +21,6 @@ export interface SearchMatch {
 
 export interface SearchRequest {
 	query: string;
-	timestamp: number;
 	params: {
 		offset?: number;
 		limit?: number;
@@ -39,6 +38,8 @@ export interface KeywordSearchState {
 	searchQuery: string;
 	error: string | null;
 	lastRequest: SearchRequest | null;
+	activeRequestId: string | null;
+	currentAbortController: AbortController | null;
 
 	searchKeywords: (
 		query: string,
@@ -51,6 +52,7 @@ export interface KeywordSearchState {
 			fuzzy_match?: boolean;
 			order?: "ascending" | "descending";
 		},
+		signal?: AbortSignal,
 	) => Promise<void>;
 	setCurrentResultIndex: (index: number) => void;
 	resetSearch: () => void;
@@ -58,7 +60,7 @@ export interface KeywordSearchState {
 	previousResult: () => void;
 }
 
-const fuzzy_default = true;
+const fuzzy_default = false;
 const offset_default = 0;
 
 export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
@@ -68,19 +70,11 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 	searchQuery: "",
 	error: null,
 	lastRequest: null,
+	activeRequestId: null,
+	currentAbortController: null,
 
-	searchKeywords: async (query, options = {}) => {
+	searchKeywords: async (query, options = {}, signal?: AbortSignal) => {
 		if (query.length === 0) return;
-
-		const isInitialSearch = !options.offset || options.offset === 0;
-		if (isInitialSearch && query !== get().searchQuery) {
-			set({
-				searchResults: [],
-				currentResultIndex: -1,
-			});
-		}
-
-		const { searchResults, lastRequest } = get();
 
 		const searchSignature = JSON.stringify({
 			query,
@@ -92,6 +86,7 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 			order: options.order ?? "descending",
 		});
 
+		const { lastRequest } = get();
 		if (
 			lastRequest &&
 			JSON.stringify({
@@ -102,9 +97,47 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 			return;
 		}
 
+		const { currentAbortController } = get();
+		if (currentAbortController) {
+			currentAbortController.abort();
+		}
+
+		const abortController = new AbortController();
+		set({ currentAbortController: abortController });
+
+		const combinedSignal = signal ? new AbortController() : abortController;
+
+		if (signal) {
+			signal.addEventListener("abort", () => combinedSignal.abort());
+			abortController.signal.addEventListener("abort", () =>
+				combinedSignal.abort(),
+			);
+		}
+
+		const requestId = Math.random().toString(36).substring(7);
+		const isInitialSearch = !options.offset || options.offset === 0;
+
+		if (isInitialSearch) {
+			set({
+				searchResults: [],
+				currentResultIndex: -1,
+				activeRequestId: requestId,
+				isSearching: true,
+				error: null,
+			});
+		} else {
+			set((state) => ({
+				...state,
+				activeRequestId: requestId,
+				isSearching: true,
+				error: null,
+			}));
+		}
+
+		const { searchResults } = get();
+
 		const searchRequest: SearchRequest = {
 			query,
-			timestamp: Date.now(),
 			params: {
 				offset: options.offset || offset_default,
 				limit: options.limit,
@@ -115,18 +148,12 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 			},
 		};
 
-		set({
-			lastRequest: searchRequest,
-			isSearching: true,
-			error: null,
-		});
-
 		try {
 			const params = new URLSearchParams({
 				query,
 				offset: (options.offset ?? 0).toString(),
 				include_context: (options.include_context ?? false).toString(),
-				fuzzy_match: (options.fuzzy_match ?? true).toString(),
+				fuzzy_match: (options.fuzzy_match ?? fuzzy_default).toString(),
 			});
 
 			if (options.start_time) {
@@ -164,6 +191,7 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 
 			const response = await fetch(
 				`http://localhost:3030/search/keyword?${params}`,
+				{ signal: combinedSignal.signal },
 			);
 
 			if (!response.ok) {
@@ -172,28 +200,46 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 
 			const results = await response.json();
 
-			if (!isInitialSearch) {
-				const existingFrameIds = new Set(searchResults.map((r) => r.frame_id));
-				const uniqueNewResults = results.filter(
-					(result: SearchMatch) => !existingFrameIds.has(result.frame_id),
-				);
+			if (get().activeRequestId === requestId) {
+				if (!isInitialSearch) {
+					const existingFrameIds = new Set(
+						searchResults.map((r) => r.frame_id),
+					);
+					const uniqueNewResults = results.filter(
+						(result: SearchMatch) => !existingFrameIds.has(result.frame_id),
+					);
 
-				set({
-					searchResults: [...searchResults, ...uniqueNewResults],
-					currentResultIndex: get().currentResultIndex,
-					searchQuery: query,
-				});
-			} else {
-				set({
-					searchResults: results,
-					currentResultIndex: results.length > 0 ? 0 : -1,
-					searchQuery: query,
-				});
+					set({
+						searchResults: [...searchResults, ...uniqueNewResults],
+						currentResultIndex: get().currentResultIndex,
+						searchQuery: query,
+						isSearching: false,
+						lastRequest: searchRequest,
+						currentAbortController: null,
+					});
+				} else {
+					set({
+						searchResults: results,
+						currentResultIndex: results.length > 0 ? 0 : -1,
+						searchQuery: query,
+						isSearching: false,
+						lastRequest: searchRequest,
+						currentAbortController: null,
+					});
+				}
 			}
 		} catch (error) {
-			set({ error: error instanceof Error ? error.message : "Search failed" });
-		} finally {
-			set({ isSearching: false });
+			if (error instanceof Error && error.name === "AbortError") {
+				return;
+			}
+
+			if (get().activeRequestId === requestId) {
+				set({
+					error: error instanceof Error ? error.message : "Search failed",
+					isSearching: false,
+					currentAbortController: null,
+				});
+			}
 		}
 	},
 
@@ -202,14 +248,20 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 	},
 
 	resetSearch: () => {
-		const { lastRequest } = get();
+		const { currentAbortController } = get();
+		if (currentAbortController) {
+			currentAbortController.abort();
+		}
+
 		set({
 			searchResults: [],
 			currentResultIndex: -1,
 			isSearching: false,
 			searchQuery: "",
 			error: null,
-			lastRequest,
+			lastRequest: null,
+			activeRequestId: null,
+			currentAbortController: null,
 		});
 	},
 
