@@ -12,9 +12,9 @@ import { toast } from "../ui/use-toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 export function ScreenpipeStatusDialog() {
-    const { isOpen, close } = useStatusDialog();
     const { permissions, isMacOS, handlePermissionButton, health } = useScreenpipeStatus();
     const { settings, localDataDir } = useSettings();
+    const { isOpen, close } = useStatusDialog();
 
     const getStatusMessage = (
         status: string,
@@ -47,7 +47,6 @@ export function ScreenpipeStatusDialog() {
         settings.disableAudio ?? "",
         settings.enableUiMonitoring
     );
-
 
     const formatTimestamp = (timestamp: string | null) => {
         return timestamp ? new Date(timestamp).toLocaleString() : "n/a";
