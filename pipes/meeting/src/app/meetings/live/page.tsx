@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation'
 import { LiveTranscription } from '@/components/live-transcription/new-meeting-wrapper'
 import { useEffect, useRef } from 'react'
-import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 
 export default function LiveMeetingPage() {
   const router = useRouter()
@@ -23,14 +22,12 @@ export default function LiveMeetingPage() {
   
   return (
     <div className="h-full">
-      <MeetingProvider>
-        <LiveTranscription 
-          onBack={() => {
-            console.log('live meeting back pressed')
-            router.push('/meetings')
-          }} 
-        />
-      </MeetingProvider>
+      <LiveTranscription 
+        onBack={() => {
+          console.log('live meeting back pressed')
+          router.push('/meetings')
+        }} 
+      />
     </div>
   )
 }
