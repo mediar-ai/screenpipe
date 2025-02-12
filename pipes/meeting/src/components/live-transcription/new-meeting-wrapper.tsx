@@ -38,7 +38,6 @@ export function LiveTranscription({ onBack }: Props) {
     const updateHeight = () => {
         const vh = window.innerHeight
         const headerOffset = 32
-        console.log('window height:', vh, 'header offset:', headerOffset)
         setWindowHeight(vh - headerOffset)
     }
 
@@ -125,7 +124,6 @@ export function LiveTranscription({ onBack }: Props) {
                     {/* Transcription Panel */}
                     <div className="flex flex-col relative">
                         <TranscriptionView
-                            chunks={chunks}
                             settings={settings}
                             isLoading={isLoading}
                             isAutoScrollEnabled={isScrolledToBottom}
