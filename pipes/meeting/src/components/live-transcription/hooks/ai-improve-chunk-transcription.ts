@@ -25,16 +25,6 @@ export async function improveTranscription(
     })
 
     try {
-        console.log("improving transcription quality:", {
-            text_length: text.length,
-            context: {
-                has_title: !!context.meetingTitle,
-                chunks_count: context.recentChunks.length,
-                notes_count: context.notes?.length || 0,
-                vocab_count: context.vocabulary?.length || 0
-            }
-        })
-
         // Build context from recent chunks
         const recentTranscript = context.recentChunks
             .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
@@ -53,7 +43,7 @@ export async function improveTranscription(
                 role: "system" as const,
                 content: `you are an expert at improving speech-to-text transcription quality. 
                          focus on fixing common transcription errors while preserving the original meaning.
-                         use provided vocabulary corrections and meeting context to improve accuracy.
+                         use provided vocabulary corrections only for a very obvious very close match.
                          maintain original capitalization and punctuation style.
                          return only the improved text without any quotation marks or additional commentary.`
             },
@@ -76,7 +66,7 @@ export async function improveTranscription(
             }
         ]
 
-        console.log("sending request to openai for transcription improvement")
+        // console.log("sending request to openai for transcription improvement")
         const response = await openai.chat.completions.create({
             model: settings.aiModel,
             messages,
