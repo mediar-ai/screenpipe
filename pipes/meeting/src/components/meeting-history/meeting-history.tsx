@@ -7,14 +7,11 @@ import { Loader2, PlusCircle, Settings as SettingsIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingSettings } from "./components/meeting-settings"
 import { 
-  getLiveMeetingData, 
-  clearLiveMeetingData,
   getArchivedLiveMeetings,
   LiveMeetingData,
   deleteArchivedMeeting,
   updateArchivedMeeting,
   useMeetingContext,
-  archiveLiveMeeting
 } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import { useSettings } from "@/lib/hooks/use-settings"
 import { MeetingAnalysis } from "@/components/live-transcription/hooks/ai-create-all-notes"
@@ -25,21 +22,18 @@ export function MeetingHistory() {
   const [mounted, setMounted] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [windowHeight, setWindowHeight] = useState(0)
-  const [hasLiveMeeting, setHasLiveMeeting] = useState(false)
-  const [liveMeeting, setLiveMeeting] = useState<LiveMeetingData | null>(null)
   const [archivedMeetings, setArchivedMeetings] = useState<LiveMeetingData[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const { settings } = useSettings()
   const router = useRouter()
-  const { updateStore } = useMeetingContext()
-
+  const { data: liveMeeting, updateStore, reloadData } = useMeetingContext()
 
   const handleNewMeeting = async () => {
     const success = await handleStartNewMeeting()
     if (!success) {
-        router.push('/meetings/live')
+      router.push('/meetings/live')
     }
   }
 
@@ -133,69 +127,52 @@ export function MeetingHistory() {
 
   const handleLoadArchived = async (meeting: LiveMeetingData) => {
     console.log('loading archived meeting details:', {
-        id: meeting.id,
-        isArchived: true,
-        title: meeting.title,
-        startTime: meeting.startTime,
-        hasChunks: meeting.chunks?.length,
-        hasNotes: meeting.notes?.length,
-        hasAnalysis: !!meeting.analysis,
-        deviceNames: [...(meeting.deviceNames || [])],
-        selectedDevices: [...(meeting.selectedDevices || [])]
+      id: meeting.id,
+      isArchived: true,
+      title: meeting.title,
+      startTime: meeting.startTime,
+      hasChunks: meeting.chunks?.length,
+      hasNotes: meeting.notes?.length,
+      hasAnalysis: !!meeting.analysis,
+      deviceNames: [...(meeting.deviceNames || [])],
+      selectedDevices: [...(meeting.selectedDevices || [])]
     })
 
     try {
-        // First check if we're already viewing this archived meeting
-        const currentMeeting = await getLiveMeetingData()
-        if (currentMeeting?.isArchived && currentMeeting.id === meeting.id) {
-            console.log('already viewing this archived meeting, just navigating')
-            router.push('/meetings/live')
-            return
-        }
-
-        // If viewing a different meeting (archived or live), handle appropriately
-        if (currentMeeting) {
-            if (currentMeeting.isArchived) {
-                // Just clear if it's a different archived meeting
-                await clearLiveMeetingData()
-            } else {
-                // Archive if it's a live meeting
-                const archived = await archiveLiveMeeting()
-                console.log('archived current meeting:', { success: archived })
-                if (!archived) {
-                    throw new Error("failed to archive current meeting")
-                }
-            }
-        }
-        
-        // Wait to ensure storage is cleared
-        await new Promise(resolve => setTimeout(resolve, 100))
-        
-        // Store the archived meeting with isArchived flag
-        console.log('attempting to store meeting:', {
-            id: meeting.id,
-            chunks: meeting.chunks?.length,
-            notes: meeting.notes?.length,
-            isArchived: true
-        })
-        const stored = await updateStore({
-            ...meeting,
-            isArchived: true
-        })
-        console.log('store update result:', { success: !!stored })
-        
-        if (!stored) {
-            throw new Error("failed to store archived meeting")
-        }
-        
+      // First check if we're already viewing this archived meeting
+      if (liveMeeting?.isArchived && liveMeeting.id === meeting.id) {
+        console.log('already viewing this archived meeting, just navigating')
         router.push('/meetings/live')
+        return
+      }
+
+      // Store the archived meeting with isArchived flag
+      console.log('attempting to store meeting:', {
+        id: meeting.id,
+        chunks: meeting.chunks?.length,
+        notes: meeting.notes?.length,
+        isArchived: true
+      })
+      
+      const stored = await updateStore({
+        ...meeting,
+        isArchived: true
+      })
+      
+      console.log('store update result:', { success: !!stored })
+      
+      if (!stored) {
+        throw new Error("failed to store archived meeting")
+      }
+      
+      router.push('/meetings/live')
     } catch (error) {
-        console.error('failed to load archived meeting:', error)
-        toast({
-            title: "error",
-            description: "failed to load archived meeting. please try again",
-            variant: "destructive",
-        })
+      console.error('failed to load archived meeting:', error)
+      toast({
+        title: "error",
+        description: "failed to load archived meeting. please try again",
+        variant: "destructive",
+      })
     }
   }
 
@@ -203,20 +180,13 @@ export function MeetingHistory() {
     const loadMeetings = async () => {
       setLoading(true)
       try {
-        // Load both live and archived meetings
-        const [live, archived] = await Promise.all([
-          getLiveMeetingData(),
-          getArchivedLiveMeetings()
-        ])
-        
+        const archived = await getArchivedLiveMeetings()
         console.log('loaded meetings:', {
-          hasLive: !!live,
-          liveTitle: live?.title,
+          hasLive: !!liveMeeting,
+          liveTitle: liveMeeting?.title,
           archivedCount: archived.length,
         })
         
-        setLiveMeeting(live)
-        setHasLiveMeeting(!!live)
         setArchivedMeetings(archived)
       } catch (error) {
         console.error('failed to load meetings:', error)
@@ -225,7 +195,7 @@ export function MeetingHistory() {
       }
     }
     loadMeetings()
-  }, [refreshTrigger])
+  }, [refreshTrigger, liveMeeting])
 
   useEffect(() => {
     const updateHeight = () => {
