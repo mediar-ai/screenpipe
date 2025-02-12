@@ -122,16 +122,6 @@ export const NotesEditor = memo(function NotesEditor({
   )
 
   useEffect(() => {
-    console.log('NotesEditor deps changed:', {
-      notesLength: notes.length,
-      segmentsLength: segments.length,
-      hasAnalysis: !!analysis,
-      title,
-      stack: new Error().stack?.split('\n')[2] // Just the immediate caller
-    })
-  }, [notes.length, segments.length, analysis, title])
-
-  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (editingId && editRef.current && !editRef.current.contains(event.target as Node)) {
         // Save the current edit text before closing
