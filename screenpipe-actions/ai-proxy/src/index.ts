@@ -341,17 +341,11 @@ export default Sentry.withSentry(
 				const url = new URL(request.url);
 				const path = url.pathname;
 
-				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
-				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
-					console.log('websocket request to /v1/listen detected, bypassing auth');
-					return await handleWebSocketUpgrade(request, env);
-				}
-
 				// Add auth check for protected routes
 				if (path !== '/test') {
 					const authHeader = request.headers.get('Authorization');
 					console.log('authHeader', authHeader);
-					if (!authHeader || !(authHeader.startsWith('Bearer ') || authHeader.startsWith('Token '))) {
+					if (!authHeader || !(authHeader.startsWith('Bearer ') || !authHeader.startsWith('Token '))) {
 						const response = new Response(JSON.stringify({ error: 'unauthorized' }), {
 							status: 401,
 							headers: {
@@ -390,6 +384,12 @@ export default Sentry.withSentry(
 						response.headers.append('Vary', 'Origin');
 						return response;
 					}
+				}
+
+				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
+				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
+					console.log('websocket request to /v1/listen detected, bypassing auth');
+					return await handleWebSocketUpgrade(request, env);
 				}
 
 				console.log('path', path);
@@ -606,7 +606,7 @@ terminal 2
 HOST=https://ai-proxy.i-f9f.workers.dev
 HOST=http://localhost:8787
 TOKEN=foobar (check app settings)
-in 
+in
 less "$HOME/Library/Application Support/screenpipe/store.bin"
 
 
