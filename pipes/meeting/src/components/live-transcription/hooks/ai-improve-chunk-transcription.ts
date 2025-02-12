@@ -1,4 +1,4 @@
-import { OpenAI } from "openai"
+import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
 import type { Settings } from "@screenpipe/browser"
 import { TranscriptionChunk } from "../../meeting-history/types"
 import { VocabularyEntry, getVocabularyEntries } from "./storage-vocabulary"
@@ -16,13 +16,7 @@ export async function improveTranscription(
     context: TranscriptionContext,
     settings: Settings
 ): Promise<string> {
-    const openai = new OpenAI({
-        apiKey: settings.aiProviderType === "screenpipe-cloud" 
-            ? settings.user.token 
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-    })
+    const openai = createAiClient(settings)
 
     try {
         // Build context from recent chunks
@@ -67,11 +61,14 @@ export async function improveTranscription(
         ]
 
         // console.log("sending request to openai for transcription improvement")
-        const response = await openai.chat.completions.create({
+        const response = await callOpenAI(openai, {
             model: settings.aiModel,
             messages,
-            temperature: 0.3, // lower temperature for more consistent corrections
-            max_tokens: text.length * 2, // allow some expansion
+            temperature: 0.3,
+            max_tokens: text.length * 2,
+        }, {
+            maxRetries: 3,
+            initialDelay: 1000
         })
 
         let improved = response.choices[0]?.message?.content?.trim() || text
@@ -86,12 +83,19 @@ export async function improveTranscription(
 
         return improved
     } catch (error) {
-        console.error("error improving transcription:", error)
+        console.error("error improving transcription:", {
+            error,
+            text_length: text.length,
+            context: {
+                title: context.meetingTitle,
+                chunks: context.recentChunks.length
+            }
+        })
         return text
     }
 }
 
-// Helper to improve multiple chunks in parallel
+// Update batch processing to use throttling
 export async function improveTranscriptionBatch(
     chunks: TranscriptionChunk[],
     meeting: Meeting,
@@ -99,9 +103,10 @@ export async function improveTranscriptionBatch(
 ): Promise<Record<number, string>> {
     const results: Record<number, string> = {}
     const vocabulary = await getVocabularyEntries()
+    const openai = createAiClient(settings)
 
-    // Process in parallel with concurrency limit
-    const concurrencyLimit = 3
+    // Process in smaller batches with built-in throttling
+    const concurrencyLimit = 2 // Reduced from 3
     const batches = []
     
     for (let i = 0; i < chunks.length; i += concurrencyLimit) {
@@ -117,8 +122,16 @@ export async function improveTranscriptionBatch(
                 vocabulary
             }
 
-            const improved = await improveTranscription(chunk.text, context, settings)
-            results[idx] = improved
+            try {
+                const improved = await improveTranscription(chunk.text, context, settings)
+                results[idx] = improved
+            } catch (error) {
+                console.error("batch chunk improvement failed:", {
+                    chunk_idx: idx,
+                    error
+                })
+                results[idx] = chunk.text // Fallback to original
+            }
         })
 
         await Promise.all(promises)
