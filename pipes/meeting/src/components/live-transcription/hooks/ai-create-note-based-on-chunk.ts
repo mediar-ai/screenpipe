@@ -1,18 +1,12 @@
-import { OpenAI } from "openai"
 import type { Settings } from "@screenpipe/browser"
 import { TranscriptionChunk } from "../../meeting-history/types"
+import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
 
 export async function generateMeetingNote(
     chunks: TranscriptionChunk[],
     settings: Settings
 ): Promise<string> {
-    const openai = new OpenAI({
-        apiKey: settings.aiProviderType === "screenpipe-cloud" 
-            ? settings.user.token 
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-    })
+    const openai = createAiClient(settings)
 
     try {
         console.log("generating meeting note from chunks:", {
@@ -40,11 +34,14 @@ export async function generateMeetingNote(
         ]
 
         console.log("sending request to openai for note generation")
-        const response = await openai.chat.completions.create({
+        const response = await callOpenAI(openai, {
             model: settings.aiModel,
             messages,
             temperature: 0.3,
             max_tokens: 60,
+        }, {
+            maxRetries: 3,
+            initialDelay: 1000
         })
 
         const note = response.choices[0]?.message?.content?.trim() || "failed to generate note"
@@ -53,7 +50,10 @@ export async function generateMeetingNote(
         return note
 
     } catch (error) {
-        console.error("error generating meeting note:", error)
+        console.error("error generating meeting note:", {
+            error,
+            chunks_count: chunks.length
+        })
         return "failed to generate note"
     }
 } 
