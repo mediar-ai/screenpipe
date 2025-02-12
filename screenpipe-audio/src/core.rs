@@ -136,7 +136,7 @@ pub async fn record_and_transcribe(
 
 pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
@@ -183,19 +183,23 @@ async fn run_record_and_transcribe(
     );
 
     const OVERLAP_SECONDS: usize = 2;
-    let mut collected_audio = Vec::new();
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
+    let duration_samples = (duration.as_secs_f64() * sample_rate as f64).ceil() as usize;
+    let max_samples = duration_samples + overlap_samples;
+
+    let mut collected_audio = Vec::with_capacity(max_samples);
 
     while is_running.load(Ordering::Relaxed)
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
     {
         let start_time = tokio::time::Instant::now();
 
+        // Collect audio for the duration period
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => {
-                    collected_audio.extend(chunk);
+                    collected_audio.extend_from_slice(&chunk);
                 }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
@@ -203,6 +207,12 @@ async fn run_record_and_transcribe(
                 }
                 Err(_) => {} // Timeout, continue loop
             }
+        }
+
+        // Discard oldest samples if we exceed buffer capacity
+        if collected_audio.len() > max_samples {
+            let excess = collected_audio.len() - max_samples;
+            collected_audio.drain(0..excess);
         }
 
         if !collected_audio.is_empty() {
@@ -215,9 +225,14 @@ async fn run_record_and_transcribe(
             }) {
                 Ok(_) => {
                     debug!("sent audio segment to audio model");
-                    if collected_audio.len() > overlap_samples {
-                        collected_audio =
-                            collected_audio.split_off(collected_audio.len() - overlap_samples);
+                    // Retain only overlap samples for next iteration
+                    let current_len = collected_audio.len();
+                    if current_len > overlap_samples {
+                        let keep_from = current_len - overlap_samples;
+                        collected_audio.drain(0..keep_from);
+                    } else {
+                        // If we don't have enough samples, keep all (unlikely case)
+                        collected_audio.truncate(current_len);
                     }
                 }
                 Err(e) => {

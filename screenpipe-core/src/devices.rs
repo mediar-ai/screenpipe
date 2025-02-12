@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
-use tracing::debug;
+use tracing::{debug, info};
 
 #[derive(Clone, Debug)]
 pub enum DeviceType {
@@ -140,6 +140,14 @@ impl Clone for DeviceManager {
     }
 }
 
+impl Drop for DeviceManager {
+    fn drop(&mut self) {
+        if self.state_sender.is_closed() {
+            debug!("cleaning up device manager resources");
+        }
+    }
+}
+
 #[derive(Debug)]
 enum DeviceStateRequest {
     Get {
@@ -180,7 +188,15 @@ impl DeviceManager {
         let mut watchers = Vec::new();
 
         while let Some(req) = receiver.recv().await {
-            debug!("received device_state_request: {:?}", req);
+            watchers.retain(|watcher: &tokio::sync::mpsc::Sender<DeviceStateChange>| {
+                !watcher.is_closed()
+            });
+
+            info!(
+                "received device_state_request: {:?} watches length: {}",
+                req,
+                watchers.len()
+            );
             match req {
                 DeviceStateRequest::Get { respond_to } => {
                     debug!("sending get request to {} devices", devices.len());

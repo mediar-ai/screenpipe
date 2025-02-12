@@ -7,10 +7,15 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::any::Any;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
+use tokio::time::interval;
 use tokio_stream::wrappers::BroadcastStream;
 
 static EVENT_MANAGER: Lazy<EventManager> = Lazy::new(EventManager::new);
+
+const CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(600); // 10 minutes
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Event<T = Value> {
@@ -18,9 +23,14 @@ pub struct Event<T = Value> {
     pub data: T,
 }
 
+struct SubscriptionEntry {
+    last_used: Instant,
+    subscription: Box<dyn Any + Send + Sync>,
+}
+
 pub struct EventManager {
     sender: broadcast::Sender<Event>,
-    subscriptions: RwLock<HashMap<String, Box<dyn Any + Send + Sync>>>,
+    subscriptions: RwLock<HashMap<String, SubscriptionEntry>>,
 }
 
 // #[macro_export]
@@ -61,6 +71,12 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for EventSubscription<T> {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         let me = self.get_mut();
+
+        // Update last_used timestamp when polling
+        if let Some(manager) = EVENT_MANAGER.subscriptions.write().get_mut(&me.event_name) {
+            manager.last_used = Instant::now();
+        }
+
         loop {
             match me.stream.as_mut().poll_next(cx) {
                 std::task::Poll::Ready(Some(Ok(event))) => {
@@ -84,10 +100,26 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for EventSubscription<T> {
 impl EventManager {
     fn new() -> Self {
         let (sender, _) = broadcast::channel(10000);
-        Self {
+        let manager = Self {
             sender,
             subscriptions: RwLock::new(HashMap::new()),
-        }
+        };
+
+        // spawn cleanup task
+        tokio::spawn(async move {
+            let mut interval = interval(CLEANUP_INTERVAL);
+            loop {
+                interval.tick().await;
+                EVENT_MANAGER.cleanup_stale_subscriptions();
+            }
+        });
+
+        manager
+    }
+
+    fn cleanup_stale_subscriptions(&self) {
+        let mut subs = self.subscriptions.write();
+        subs.retain(|_, entry| entry.last_used.elapsed() < SUBSCRIPTION_TIMEOUT);
     }
 
     pub fn instance() -> &'static EventManager {
@@ -124,9 +156,10 @@ impl EventManager {
     ) -> EventSubscription<T> {
         let event_name = event.into();
         {
-            let subs = self.subscriptions.read();
-            if let Some(sub) = subs.get(&event_name) {
-                if let Some(typed_sub) = sub.downcast_ref::<EventSubscription<T>>() {
+            let mut subs = self.subscriptions.write();
+            if let Some(entry) = subs.get_mut(&event_name) {
+                entry.last_used = Instant::now();
+                if let Some(typed_sub) = entry.subscription.downcast_ref::<EventSubscription<T>>() {
                     return typed_sub.clone();
                 }
             }
@@ -140,7 +173,13 @@ impl EventManager {
         };
 
         let mut subs = self.subscriptions.write();
-        subs.insert(event_name, Box::new(sub.clone()));
+        subs.insert(
+            event_name,
+            SubscriptionEntry {
+                last_used: Instant::now(),
+                subscription: Box::new(sub.clone()),
+            },
+        );
         sub
     }
 }

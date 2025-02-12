@@ -39,9 +39,9 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Weak<OcrEngine>,
         monitor_id: u32,
-        ignore_list: Arc<Vec<String>>,
-        include_list: Arc<Vec<String>>,
-        languages: Arc<Vec<Language>>,
+        ignore_list: Arc<[String]>,
+        include_list: Arc<[String]>,
+        languages: Arc<[Language]>,
         capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
@@ -220,7 +220,7 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-f",
         "image2pipe",
         "-vcodec",
-        "png", // consider using mjpeg and change to encode to jpeg below too
+        "mjpeg", // consider using mjpeg and change to encode to jpeg below too
         "-r",
         &fps_str,
         "-i",
@@ -370,11 +370,11 @@ async fn wait_for_first_frame(
 
 fn encode_frame(frame: &CaptureResult) -> Vec<u8> {
     let mut buffer = Vec::new();
-    frame
-        .image
+    let rgb_image = frame.image.to_rgb8();
+    rgb_image
         .write_to(
             &mut std::io::Cursor::new(&mut buffer),
-            image::ImageFormat::Png,
+            image::ImageFormat::Jpeg,
         )
         .expect("Failed to encode frame");
     buffer
@@ -408,17 +408,22 @@ async fn process_frames(
     shutdown_rx: &watch::Receiver<bool>,
 ) {
     let write_timeout = Duration::from_secs_f64(1.0 / fps);
-    while *frame_count < frames_per_video {
+    let mut should_break = false;
+
+    while *frame_count < frames_per_video && !should_break {
         if *shutdown_rx.borrow() {
             info!("process_frames: shutdown signal received, breaking out");
-            break;
+            should_break = true;
+            continue;
         }
+
         if let Some(frame) = frame_queue.pop() {
             let buffer = encode_frame(&frame);
             if let Some(stdin) = current_stdin.as_mut() {
                 if let Err(e) = write_frame_with_retry(stdin, &buffer).await {
                     error!("failed to write frame to ffmpeg after max retries: {}", e);
-                    break;
+                    should_break = true;
+                    continue;
                 }
                 *frame_count += 1;
                 debug!("wrote frame {} to ffmpeg", frame_count);
@@ -427,6 +432,11 @@ async fn process_frames(
         } else {
             tokio::time::sleep(write_timeout).await;
         }
+    }
+
+    // Cleanup remaining frames
+    while frame_queue.pop().is_some() {
+        debug!("cleaning up remaining frame from queue");
     }
 }
 

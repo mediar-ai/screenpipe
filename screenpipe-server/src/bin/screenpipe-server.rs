@@ -575,15 +575,15 @@ async fn main() -> anyhow::Result<()> {
             if cli.realtime_audio_device.is_empty() {
                 // Use default devices
                 if let Ok(input_device) = default_input_device() {
-                    realtime_audio_devices.push(Arc::new(input_device.clone()));
+                    realtime_audio_devices.push(input_device.clone());
                 }
                 if let Ok(output_device) = default_output_device() {
-                    realtime_audio_devices.push(Arc::new(output_device.clone()));
+                    realtime_audio_devices.push(output_device.clone());
                 }
             } else {
                 for d in &cli.realtime_audio_device {
                     let device = parse_audio_device(d).expect("failed to parse audio device");
-                    realtime_audio_devices.push(Arc::new(device.clone()));
+                    realtime_audio_devices.push(device.clone());
                 }
             }
 
@@ -716,7 +716,7 @@ async fn main() -> anyhow::Result<()> {
                     video_chunk_duration: Duration::from_secs(cli.video_chunk_duration),
                     use_pii_removal: cli.use_pii_removal,
                     capture_unfocused_windows: cli.capture_unfocused_windows,
-                    languages: Arc::new(languages.clone()),
+                    languages: Arc::from(languages.clone()),
                 };
 
                 let audio_config = AudioConfig {
@@ -726,7 +726,7 @@ async fn main() -> anyhow::Result<()> {
                     vad_sensitivity: cli.vad_sensitivity.clone(),
                     deepgram_api_key: cli.deepgram_api_key.clone(),
                     realtime_enabled: cli.enable_realtime_audio_transcription,
-                    realtime_devices: realtime_audio_devices.clone(),
+                    realtime_devices: Arc::from(realtime_audio_devices.clone()),
                     whisper_sender: whisper_sender.clone(),
                     whisper_receiver: whisper_receiver.clone(),
                 };
@@ -734,8 +734,8 @@ async fn main() -> anyhow::Result<()> {
                 let vision_config = VisionConfig {
                     disabled: cli.disable_vision,
                     ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
-                    ignored_windows: Arc::new(cli.ignored_windows.clone()),
-                    include_windows: Arc::new(cli.included_windows.clone()),
+                    ignored_windows: Arc::from(cli.ignored_windows.clone()),
+                    include_windows: Arc::from(cli.included_windows.clone()),
                 };
 
                 let recording_future = start_continuous_recording(
@@ -809,7 +809,7 @@ async fn main() -> anyhow::Result<()> {
             if cli.disable_audio && change.control.device.is_audio() {
                 continue;
             }
-            debug!("received device update: {:?}", change);
+            info!("received device update: {:?}", change);
             if let Err(e) = handle_device_update(
                 &change.control.device,
                 change.control.clone(),
@@ -1057,7 +1057,7 @@ async fn main() -> anyhow::Result<()> {
             .enumerate()
             .take(MAX_ITEMS_TO_DISPLAY)
         {
-            let device_str = device.deref().to_string();
+            let device_str = device.to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
             println!("│ {:<22} │ {:<34} │", "", formatted_device);
