@@ -13,6 +13,8 @@ import { generateMeetingSummary } from "../ai-meeting-summary"
 import { MeetingAnalysis } from "../../live-transcription/hooks/ai-create-all-notes"
 import type { MeetingPrep } from "../types"
 import { useRouter } from "next/navigation"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface MeetingCardProps {
   meeting: LiveMeetingData
@@ -25,13 +27,16 @@ interface MeetingCardProps {
   settings: Settings
   onDelete?: () => void
   isLive?: boolean
+  onLoadArchived?: () => void
 }
 
-export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive }: MeetingCardProps) {
+export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onLoadArchived }: MeetingCardProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const { toast } = useToast()
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [dontAskAgain, setDontAskAgain] = useState(false)
 
   const formatTime = (dateStr: string): string => {
     return new Date(dateStr).toLocaleTimeString([], { 
@@ -155,15 +160,57 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive }: M
     if (isLive) {
       console.log('navigating to live meeting')
       router.push('/meetings/live')
+    } else {
+      console.log('loading archived meeting:', {
+        id: meeting.id,
+        title: meeting.title,
+        startTime: meeting.startTime
+      })
+      onLoadArchived?.()
     }
+  }
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const skipConfirm = localStorage.getItem('skipDeleteConfirm') === 'true'
+    
+    if (skipConfirm) {
+      onDelete?.()
+    } else {
+      setShowDeleteDialog(true)
+    }
+  }
+
+  const handleConfirmDelete = () => {
+    if (dontAskAgain) {
+      localStorage.setItem('skipDeleteConfirm', 'true')
+    }
+    setShowDeleteDialog(false)
+    onDelete?.()
   }
 
   return (
     <Card 
-      className={`w-full mb-1 border-0 -mx-2 ${isLive ? 'cursor-pointer hover:bg-accent/50' : ''}`}
-      onClick={isLive ? handleCardClick : undefined}
+      className="w-full mb-1 border-0 -mx-2 cursor-pointer hover:bg-accent/50"
+      onClick={handleCardClick}
     >
       <CardContent className="p-3 relative">
+        {!isLive && onLoadArchived && (
+          <div className="absolute right-2 top-2">
+            <HoverCard openDelay={0} closeDelay={0}>
+              <HoverCardTrigger>
+                <div className="text-xs text-muted-foreground bg-accent/50 px-1.5 py-0.5 rounded">
+                  archived
+                </div>
+              </HoverCardTrigger>
+              <HoverCardContent className="w-auto p-2">
+                <span className="text-sm text-muted-foreground">
+                  click to load and edit this meeting
+                </span>
+              </HoverCardContent>
+            </HoverCard>
+          </div>
+        )}
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted-foreground/10 origin-bottom transition-transform duration-500"
           style={{ 
             transform: `scaleY(${0.5 + Math.min(durationMinutes / 60, 1) * 0.5})`,
@@ -252,7 +299,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive }: M
                       variant="ghost"
                       size="sm"
                       className="h-6 px-1 text-destructive"
-                      onClick={onDelete}
+                      onClick={handleDeleteClick}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -275,6 +322,50 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive }: M
           </div>
         </div>
       </CardContent>
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>delete meeting</DialogTitle>
+          </DialogHeader>
+          <DialogDescription>
+            are you sure you want to delete this meeting?
+          </DialogDescription>
+          <div className="flex items-center space-x-2" onClick={(e) => e.stopPropagation()}>
+            <Checkbox 
+              id="dontAskAgain" 
+              checked={dontAskAgain} 
+              onCheckedChange={(checked) => setDontAskAgain(checked as boolean)} 
+            />
+            <label 
+              htmlFor="dontAskAgain" 
+              className="text-sm text-muted-foreground"
+              onClick={(e) => e.stopPropagation()}
+            >
+              don't ask again
+            </label>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowDeleteDialog(false)
+              }}
+            >
+              cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={(e) => {
+                e.stopPropagation()
+                handleConfirmDelete()
+              }}
+            >
+              delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
