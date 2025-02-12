@@ -2,6 +2,7 @@ use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
+use crossbeam::epoch::Atomic;
 use futures::future::join_all;
 use futures::StreamExt;
 use screenpipe_audio::{
@@ -426,15 +427,9 @@ async fn record_audio(
     let mut device_states = device_manager.watch_devices().await;
     let mut previous_transcript = String::new();
     let mut previous_transcript_id: Option<i64> = None;
+    let mut device_statuses: HashMap<String, Arc<AtomicBool>> = HashMap::new();
 
-    // Create a weak reference to device_manager
-    let device_manager_weak = Arc::downgrade(&device_manager);
-    let mut prev_handles_len = 0;
     loop {
-        if handles.len() != prev_handles_len {
-            prev_handles_len = handles.len();
-            info!("handles length: {}", prev_handles_len);
-        }
         tokio::select! {
             Some(state_change) = device_states.next() => {
                 // Handle cleanup of finished handles
@@ -447,12 +442,14 @@ async fn record_audio(
                     }
                 });
 
+
                 match DeviceType::from_str(&state_change.device) {
                     Ok(DeviceType::Audio(audio_device)) => {
                         let device_id = audio_device.to_string();
 
                         if !state_change.control.is_running {
                             if let Some(handle) = handles.remove(&device_id) {
+                                device_statuses.get_mut(&device_id).unwrap().store(false, Ordering::Relaxed);
                                 handle.abort();
                                 info!("stopped thread for device {}", &audio_device);
                             }
@@ -463,20 +460,26 @@ async fn record_audio(
                             continue;
                         }
 
+                        // insert device status if not exists
+                        if !device_statuses.contains_key(&device_id) {
+                            device_statuses.insert(device_id.clone(), Arc::new(AtomicBool::new(true)));
+                        } else {
+                            continue;
+                        }
+
+                        let is_running = device_statuses.get(&device_id).unwrap();
+
                         info!("starting audio capture thread for device: {}", &audio_device);
 
                         let audio_device = Arc::new(audio_device);
-                        let is_running = Arc::new(AtomicBool::new(true));
 
-                        // Use weak reference for the spawned task
-                        let device_manager_weak = device_manager_weak.clone();
                         let whisper_sender = whisper_sender.clone();
                         let languages = Arc::clone(&languages);
                         let deepgram_api_key = deepgram_api_key.clone();
 
                         let handle = tokio::spawn({
                             let audio_device = Arc::clone(&audio_device);
-                            let is_running = Arc::clone(&is_running);
+                            let is_running = Arc::clone(is_running);
                             let realtime_devices = realtime_audio_devices.iter()
                                 .map(Arc::clone)
                                 .collect::<Vec<_>>();
@@ -486,30 +489,6 @@ async fn record_audio(
                                 let mut did_warn = false;
 
                                 while is_running.load(Ordering::Relaxed) {
-                                    let device_id = audio_device.to_string();
-
-                                    // Upgrade weak reference when needed
-                                    let device_manager = match device_manager_weak.upgrade() {
-                                        Some(dm) => dm,
-                                        None => {
-                                            warn!("device manager no longer exists");
-                                            break;
-                                        }
-                                    };
-
-                                    // Monitor device state changes
-                                    let mut device_states = device_manager.watch_devices().await;
-                                    let is_running_clone = Arc::clone(&is_running);
-
-                                    tokio::spawn(async move {
-                                        while let Some(state_change) = device_states.next().await {
-                                            if state_change.device == device_id && !state_change.control.is_running {
-                                                is_running_clone.store(false, Ordering::Relaxed);
-                                                break;
-                                            }
-                                        }
-                                    });
-
                                     let audio_stream = match AudioStream::from_device(
                                         Arc::clone(&audio_device),
                                         Arc::clone(&is_running),

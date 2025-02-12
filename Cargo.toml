@@ -22,10 +22,10 @@ edition = "2021"
 
 [workspace.dependencies]
 # AI
-candle = { package = "candle-core", version = "0.7.2" }
-candle-nn = { package = "candle-nn", version = "0.7.2" }
-candle-transformers = { package = "candle-transformers", version = "0.7.2" }
-tokenizers = "0.20.0"
+candle = { package = "candle-core", version = "0.8.2" }
+candle-nn = { package = "candle-nn", version = "0.8.2" }
+candle-transformers = { package = "candle-transformers", version = "0.8.2" }
+tokenizers = "0.21.0"
 hf-hub = { version = "0.3.2", git = "https://github.com/neo773/hf-hub", features = [
     "native-tls",
 ] }

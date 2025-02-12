@@ -1,11 +1,11 @@
 use super::Segment;
 use crate::{
+    audio_processing::pcm_to_mel,
     multilingual,
     whisper::{Decoder, WhisperModel},
 };
 use anyhow::Result;
 use candle::Tensor;
-use candle_transformers::models::whisper::audio;
 use lazy_static::lazy_static;
 use log::debug;
 use regex::Regex;
@@ -31,7 +31,7 @@ pub async fn process_with_whisper(
     } = &mut *whisper;
 
     debug!("converting pcm to mel spectrogram");
-    let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);
+    let mel = pcm_to_mel(model.config(), audio, mel_filters).await;
     let mel_len = mel.len();
 
     debug!("creating tensor from mel spectrogram");
@@ -55,11 +55,12 @@ pub async fn process_with_whisper(
 
     debug!("initializing decoder");
     let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
-
+    dc.reset_kv_cache();
     debug!("starting decoding process");
     let segments = dc.run(&mel)?;
     debug!("decoding complete");
 
+    dc.reset_kv_cache();
     process_segments(segments)
 }
 

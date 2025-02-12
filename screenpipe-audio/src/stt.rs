@@ -25,35 +25,6 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-pub fn stt_sync(
-    audio: &[f32],
-    sample_rate: u32,
-    device: &str,
-    whisper_model: Arc<Mutex<WhisperModel>>,
-    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
-    deepgram_api_key: Option<String>,
-    languages: Vec<Language>,
-) -> Result<String> {
-    let audio = audio.to_vec();
-
-    let device = device.to_string();
-    let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-
-        rt.block_on(stt(
-            &audio,
-            sample_rate,
-            &device,
-            whisper_model,
-            audio_transcription_engine,
-            deepgram_api_key,
-            languages,
-        ))
-    });
-
-    handle.join().unwrap()
-}
-
 #[allow(clippy::too_many_arguments)]
 pub async fn stt(
     audio: &[f32],
@@ -174,7 +145,7 @@ pub async fn create_whisper_channel(
             .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?));
 
-    let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(usize::MAX)));
+    let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(25)));
 
     tokio::spawn(async move {
         loop {
@@ -239,20 +210,25 @@ pub async fn create_whisper_channel(
 
                             while let Some(segment) = segments.recv().await {
                                 let path = path.clone();
+                                let device = audio.device.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
                                     #[cfg(target_os = "macos")]
                                     {
+                                        let whisper_model = whisper_model.clone();
+                                        let audio_transcription_engine = audio_transcription_engine.clone();
+                                        let deepgram_api_key = deepgram_api_key.clone();
+                                        let languages = languages.clone();
                                         let timestamp = timestamp + segment.start.round() as u64;
-                                        autoreleasepool(|| {
-                                            run_stt(segment, audio.device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
-                                        })
+                                        autoreleasepool(|| async move {
+                                            run_stt(segment, device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp).await
+                                        }).await
                                     }
                                     #[cfg(not(target_os = "macos"))]
                                     {
                                         unreachable!("This code should not be reached on non-macOS platforms")
                                     }
                                 } else {
-                                    run_stt(segment, audio.device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
+                                    run_stt(segment, device, whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp).await
                                 };
 
                                 if output_sender.send(transcription_result).is_err() {
@@ -275,7 +251,7 @@ pub async fn create_whisper_channel(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run_stt(
+pub async fn run_stt(
     segment: SpeechSegment,
     device: Arc<AudioDevice>,
     whisper_model: Arc<Mutex<WhisperModel>>,
@@ -287,15 +263,17 @@ pub fn run_stt(
 ) -> TranscriptionResult {
     let audio = segment.samples.clone();
     let sample_rate = segment.sample_rate;
-    match stt_sync(
+    match stt(
         &audio,
         sample_rate,
         &device.to_string(),
         whisper_model,
-        audio_transcription_engine.clone(),
-        deepgram_api_key.clone(),
-        languages.clone(),
-    ) {
+        audio_transcription_engine,
+        deepgram_api_key,
+        languages,
+    )
+    .await
+    {
         Ok(transcription) => TranscriptionResult {
             input: AudioInput {
                 data: Arc::new(audio),
