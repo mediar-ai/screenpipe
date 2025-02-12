@@ -39,9 +39,9 @@ impl VideoCapture {
         new_chunk_callback: impl Fn(&str) + Send + Sync + 'static,
         ocr_engine: Weak<OcrEngine>,
         monitor_id: u32,
-        ignore_list: Arc<Vec<String>>,
-        include_list: Arc<Vec<String>>,
-        languages: Arc<Vec<Language>>,
+        ignore_list: Arc<[String]>,
+        include_list: Arc<[String]>,
+        languages: Arc<[Language]>,
         capture_unfocused_windows: bool,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {

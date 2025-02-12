@@ -136,7 +136,7 @@ pub async fn record_and_transcribe(
 
 pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {

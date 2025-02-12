@@ -716,7 +716,7 @@ async fn main() -> anyhow::Result<()> {
                     video_chunk_duration: Duration::from_secs(cli.video_chunk_duration),
                     use_pii_removal: cli.use_pii_removal,
                     capture_unfocused_windows: cli.capture_unfocused_windows,
-                    languages: Arc::new(languages.clone()),
+                    languages: Arc::from(languages.clone()),
                 };
 
                 let audio_config = AudioConfig {
@@ -734,8 +734,8 @@ async fn main() -> anyhow::Result<()> {
                 let vision_config = VisionConfig {
                     disabled: cli.disable_vision,
                     ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
-                    ignored_windows: Arc::new(cli.ignored_windows.clone()),
-                    include_windows: Arc::new(cli.included_windows.clone()),
+                    ignored_windows: Arc::from(cli.ignored_windows.clone()),
+                    include_windows: Arc::from(cli.included_windows.clone()),
                 };
 
                 let recording_future = start_continuous_recording(

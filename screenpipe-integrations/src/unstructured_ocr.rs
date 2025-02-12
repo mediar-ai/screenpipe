@@ -18,7 +18,7 @@ use tokio::time::{timeout, Duration};
 
 pub async fn perform_ocr_cloud(
     image: &DynamicImage,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
 ) -> Result<(String, String, Option<f64>)> {
     let api_key = match env::var("UNSTRUCTURED_API_KEY") {
         Ok(key) => key,

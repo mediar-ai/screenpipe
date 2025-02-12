@@ -25,7 +25,7 @@ impl Default for CustomOcrConfig {
 
 pub async fn perform_ocr_custom(
     image: &DynamicImage,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     config: &CustomOcrConfig,
 ) -> Result<(String, String, Option<f64>)> {
     // Convert image to RGB before encoding to JPEG

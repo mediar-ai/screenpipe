@@ -31,7 +31,7 @@ pub struct RecordingConfig {
     pub video_chunk_duration: Duration,
     pub use_pii_removal: bool,
     pub capture_unfocused_windows: bool,
-    pub languages: Arc<Vec<Language>>,
+    pub languages: Arc<[Language]>,
 }
 
 #[derive(Clone)]
@@ -51,8 +51,8 @@ pub struct AudioConfig {
 pub struct VisionConfig {
     pub disabled: bool,
     pub ocr_engine: Arc<OcrEngine>,
-    pub ignored_windows: Arc<Vec<String>>,
-    pub include_windows: Arc<Vec<String>>,
+    pub ignored_windows: Arc<[String]>,
+    pub include_windows: Arc<[String]>,
 }
 
 #[derive(Clone)]
@@ -63,10 +63,10 @@ pub struct VideoRecordingConfig {
     pub ocr_engine: Weak<OcrEngine>,
     pub monitor_id: u32,
     pub use_pii_removal: bool,
-    pub ignored_windows: Arc<Vec<String>>,
-    pub include_windows: Arc<Vec<String>>,
+    pub ignored_windows: Arc<[String]>,
+    pub include_windows: Arc<[String]>,
     pub video_chunk_duration: Duration,
-    pub languages: Arc<Vec<Language>>,
+    pub languages: Arc<[Language]>,
     pub capture_unfocused_windows: bool,
 }
 
@@ -169,10 +169,10 @@ async fn record_vision(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     capture_unfocused_windows: bool,
-    ignored_windows: Arc<Vec<String>>,
-    include_windows: Arc<Vec<String>>,
+    ignored_windows: Arc<[String]>,
+    include_windows: Arc<[String]>,
     video_chunk_duration: Duration,
     use_pii_removal: bool,
 ) -> Result<()> {
@@ -419,7 +419,7 @@ async fn record_audio(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_audio_enabled: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let mut handles: HashMap<String, JoinHandle<()>> = HashMap::new();
@@ -474,6 +474,7 @@ async fn record_audio(
                         let languages = Arc::clone(&languages);
                         let deepgram_api_key = deepgram_api_key.clone();
 
+                        let device_id_for_handle = device_id.clone();
                         let handle = tokio::spawn({
                             let audio_device = Arc::clone(&audio_device);
                             let is_running = Arc::clone(&is_running);
@@ -484,6 +485,20 @@ async fn record_audio(
                             async move {
                                 info!("starting audio capture thread for device: {}", &audio_device);
                                 let mut did_warn = false;
+
+                                // Move the device state monitoring outside the main loop
+                                let device_states = device_manager_weak.upgrade().unwrap().watch_devices().await;
+                                let is_running_clone = Arc::clone(&is_running);
+
+                                let monitor_handle = tokio::spawn(async move {
+                                    let mut device_states = device_states;
+                                    while let Some(state_change) = device_states.next().await {
+                                        if state_change.device == device_id_for_handle && !state_change.control.is_running {
+                                            is_running_clone.store(false, Ordering::Relaxed);
+                                            break;
+                                        }
+                                    }
+                                });
 
                                 while is_running.load(Ordering::Relaxed) {
                                     let device_id = audio_device.to_string();
@@ -569,6 +584,9 @@ async fn record_audio(
 
                                     join_all(recording_handles).await;
                                 }
+
+                                // Clean up the monitor task
+                                monitor_handle.abort();
                             }
                         });
 
