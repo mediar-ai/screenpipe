@@ -16,7 +16,6 @@ import { handleStartNewMeeting } from "@/components/meeting-history/meeting-util
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
-  onBack: () => void
   onNewMeeting: () => void
   isRecording?: boolean
   onToggleRecording?: () => void
@@ -24,7 +23,6 @@ interface Props {
 
 export const NotesEditor = memo(function NotesEditor({ 
   onTimeClick, 
-  onBack, 
   onNewMeeting,
   isRecording,
   onToggleRecording 
@@ -444,8 +442,8 @@ export const NotesEditor = memo(function NotesEditor({
               }}
               className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              <span>finish meeting</span>
+              <ArrowLeft className="h-4 w-4" />
+              <span>back to meetings history</span>
             </button>
 
             {onToggleRecording && (
@@ -467,14 +465,7 @@ export const NotesEditor = memo(function NotesEditor({
               </button>
             )}
             <button
-              onClick={onBack}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>back to meetings menu</span>
-            </button>
-            <button
-              onClick={handleNewMeeting}
+              onClick={onNewMeeting}
               className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
             >
               <PlusCircle className="h-4 w-4" />
