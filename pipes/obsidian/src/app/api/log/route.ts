@@ -179,12 +179,13 @@ async function syncLogToObsidian(
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getNamespaceSettings("obsidian");
-    const interval = settings?.interval || 3600000;
-    const obsidianPath = settings?.vaultPath;
-    const customPrompt = settings?.prompt;
-    const pageSize = settings?.pageSize || 100;
-    const model = settings?.aiModel;
+    const settings = await pipe.settings.getAll();
+    console.log("settings:", settings);
+    const interval = settings.customSettings?.obsidian?.interval || 3600000;
+    const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
+    const customPrompt = settings.customSettings?.obsidian?.prompt;
+    const pageSize = settings.customSettings?.obsidian?.pageSize || 100;
+    const model = settings.customSettings?.obsidian?.aiModel;
 
     if (!obsidianPath) {
       return NextResponse.json(

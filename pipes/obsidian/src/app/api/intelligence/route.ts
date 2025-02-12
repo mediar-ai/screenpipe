@@ -193,9 +193,9 @@ async function readRecentLogs(
 
 export async function GET() {
   try {
-    const settings = await pipe.settings.getNamespaceSettings("obsidian");
-    const obsidianPath = settings?.vaultPath;
-    const model = settings?.aiModel;
+    const settings = await pipe.settings.getAll();
+    const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
+    const model = settings.customSettings?.obsidian?.aiModel;
 
     if (!obsidianPath) {
       return NextResponse.json(

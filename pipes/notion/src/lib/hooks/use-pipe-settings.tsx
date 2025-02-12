@@ -72,15 +72,13 @@ export function useNotionSettings() {
       };
 
       // Update screenpipe settings if provided
-      if (screenpipeAppSettings) {
-        await updateScreenpipeAppSettings({
-          ...screenpipeAppSettings,
-          customSettings: {
-            ...screenpipeAppSettings.customSettings,
-            notion: mergedNotionSettings,
-          },
-        });
-      }
+      await updateScreenpipeAppSettings({
+        ...screenpipeAppSettings,
+        customSettings: {
+          ...screenpipeAppSettings?.customSettings,
+          notion: mergedNotionSettings,
+        },
+      });
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNotionSettings));
 
