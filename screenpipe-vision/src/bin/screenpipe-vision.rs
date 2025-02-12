@@ -48,7 +48,7 @@ async fn main() {
             Arc::new(OcrEngine::AppleNative),
             id,
             Arc::new(window_filters),
-            Arc::new(languages),
+            Arc::from(languages),
             false,
             shutdown_rx,
         )

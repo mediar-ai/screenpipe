@@ -102,6 +102,14 @@ pub struct CaptureResult {
     pub window_ocr_results: Vec<WindowOcrResult>,
 }
 
+impl Drop for CaptureResult {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.image) == 1 {
+            debug!("dropping last reference to captured image");
+        }
+    }
+}
+
 pub struct WindowOcrResult {
     pub image: Arc<DynamicImage>,
     pub window_name: String,
@@ -126,7 +134,7 @@ pub async fn continuous_capture(
     ocr_engine: Arc<OcrEngine>,
     monitor_id: u32,
     window_filters: Arc<WindowFilters>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     capture_unfocused_windows: bool,
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
@@ -278,7 +286,7 @@ pub struct MaxAverageFrame {
 pub async fn process_ocr_task(
     ocr_task_data: OcrTaskData,
     ocr_engine: Arc<OcrEngine>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
 ) -> Result<(), std::io::Error> {
     let OcrTaskData {
         image,
