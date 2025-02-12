@@ -22,8 +22,24 @@ interface TranscriptionViewProps {
     settings: Settings
 }
 
+function DiffText({ diffs }: { diffs: DiffChunk[] }) {
+    return (
+        <>
+            {diffs.map((diff, i) => {
+                if (diff.added) {
+                    return <span key={i} className="bg-green-100">{diff.value}</span>
+                }
+                if (diff.removed) {
+                    return <span key={i} className="bg-red-100 line-through">{diff.value}</span>
+                }
+                return <span key={i}>{diff.value}</span>
+            })}
+        </>
+    )
+}
+
 export function TranscriptionView({ isLoading, settings }: TranscriptionViewProps) {
-    const { title, notes, setNotes, data, updateStore, reloadData } = useMeetingContext()
+    const { title, notes, setNotes, data, updateStore, reloadData, improvingChunks, recentlyImproved } = useMeetingContext()
     const [viewMode, setViewMode] = useState<'overlay' | 'sidebar' | 'timestamp'>('overlay')
     const [useOverlay, setUseOverlay] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
@@ -37,8 +53,6 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
     const [vocabDialogOpen, setVocabDialogOpen] = useState(false)
     const [vocabEntry, setVocabEntry] = useState('')
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null)
-    const [improvingChunks, setImprovingChunks] = useState<Record<string, boolean>>({})
-    const [recentlyImproved, setRecentlyImproved] = useState<Record<string, boolean>>({})
     const lastProcessedChunkRef = useRef<string>('')
     const [showLoadButton, setShowLoadButton] = useState(false)
     const [loadingHistory, setLoadingHistory] = useState(false)
@@ -171,7 +185,7 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
         }
     }
 
-    const mergedChunks = useMemo(() => data?.mergedChunks || [], [data?.mergedChunks])
+    const mergedChunks = data?.mergedChunks || []
 
     return (
         <>
@@ -236,7 +250,9 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
                                                     improvingChunks[chunk.id] && "animate-shimmer bg-gradient-to-r from-transparent via-gray-100/50 to-transparent bg-[length:200%_100%]",
                                                     recentlyImproved[chunk.id] && "animate-glow"
                                                 )}>
-                                                    {data?.editedMergedChunks[chunk.id] || chunk.text}
+                                                    {data?.editedMergedChunks[chunk.id]?.diffs ? (
+                                                        <DiffText diffs={data.editedMergedChunks[chunk.id].diffs} />
+                                                    ) : data?.editedMergedChunks[chunk.id]?.text || chunk.text}
                                                 </div>
                                             </div>
                                         </>
