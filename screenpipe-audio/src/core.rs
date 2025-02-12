@@ -1,4 +1,5 @@
 use crate::audio_processing::audio_to_mono;
+use crate::deepgram::CUSTOM_DEEPGRAM_API_TOKEN;
 use crate::realtime::realtime_stt;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
@@ -140,6 +141,11 @@ pub async fn start_realtime_recording(
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
+    if deepgram_api_key.is_none() && CUSTOM_DEEPGRAM_API_TOKEN.is_empty() {
+        error!("deepgram api key is not set, skipping realtime recording");
+        return Ok(());
+    }
+
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
             audio_stream.clone(),

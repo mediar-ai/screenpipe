@@ -556,7 +556,7 @@ async fn record_audio(
                                                 ).await;
                                             }
                                         }));
-                                    }
+                                }
 
                                     join_all(recording_handles).await;
                                 }
