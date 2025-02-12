@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { 
     storeLiveChunks,
     LiveMeetingData,
+    getLiveMeetingData,
 } from './hooks/storage-for-live-meeting'
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 
@@ -65,13 +66,35 @@ export function TranscriptionView({
     // Only log loading state on mount/unmount
     useEffect(() => {
         console.log('transcription view mounted', {
-            chunksCount: chunks.length,
+            storedChunks: chunks.length,
             isLoading,
             hasTitle: !!title,
-            hasNotes: notes.length > 0
+            hasNotes: notes?.length > 0
         })
-        return () => console.log('transcription view unmounting')
-    }, []) // Empty deps for mount only
+
+        // Load initial data from storage
+        getLiveMeetingData().then(data => {
+            if (data?.chunks) {
+                console.log('loaded stored chunks:', {
+                    count: data.chunks.length,
+                    mergedCount: data.mergedChunks?.length
+                })
+                setEditedMergedChunks(data.editedMergedChunks)
+                setSpeakerMappings(data.speakerMappings)
+                lastProcessedChunkRef.current = data.lastProcessedIndex
+                setShowLoadButton(false)
+            }
+        })
+
+        return () => {
+            console.log('transcription view unmounting, storing chunks:', {
+                count: chunks.length,
+                mergedCount: editedMergedChunks.length
+            })
+            // Store chunks before unmounting
+            storeLiveChunks(chunks, editedMergedChunks.length > 0 ? [editedMergedChunks[0]] : [])
+        }
+    }, []) // Only on mount/unmount
 
     // For chunks updates, don't include isLoading
     useEffect(() => {
