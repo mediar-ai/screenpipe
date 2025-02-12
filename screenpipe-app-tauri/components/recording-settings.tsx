@@ -112,7 +112,7 @@ const createWindowOptions = (
 };
 
 export function RecordingSettings() {
-  const { settings, updateSettings, getDataDir } = useSettings();
+  const { settings, updateSettings, localDataDir } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
   const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
@@ -459,12 +459,10 @@ export function RecordingSettings() {
 
     async function selectDataDir() {
       try {
-        const dataDir = await getDataDir();
-
         const selected = await open({
           directory: true,
           multiple: false,
-          defaultPath: dataDir,
+          defaultPath: localDataDir,
         });
         // TODO: check permission of selected dir for server to write into
 
