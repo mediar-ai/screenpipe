@@ -18,7 +18,7 @@ use futures::{
     SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
-use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
+use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager, DeviceType};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
@@ -2048,6 +2048,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/frames/:frame_id", get(get_frame_data))
         .route("/vision/start", post(start_vision_device))
         .route("/vision/stop", post(stop_vision_device))
+        .route("/audio/restart", post(restart_audio_devices))
+        .route("/vision/restart", post(restart_vision_devices))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2397,6 +2399,130 @@ struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
 }
+
+#[derive(Serialize)]
+pub struct RestartAudioDevicesResponse {
+    success: bool,
+    message: String,
+    restarted_devices: Vec<String>,
+}
+
+async fn restart_audio_devices(
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<RestartAudioDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("restarting active audio devices");
+
+    // Get currently active devices from device manager
+    let active_devices = state.device_manager.get_active_devices().await;
+    let mut restarted_devices = Vec::new();
+
+    for (_, control) in active_devices {
+        debug!("restarting audio device: {:?}", control.device);
+
+        let audio_device = match control.device {
+            DeviceType::Audio(device) => device,
+            _ => continue,
+        };
+        // Stop the device
+        let _ = state
+            .device_manager
+            .update_device(DeviceControl {
+                device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
+                is_running: false,
+                is_paused: false,
+            })
+            .await;
+
+        // Small delay to ensure clean shutdown
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        // Start the device again
+        let _ = state
+            .device_manager
+            .update_device(DeviceControl {
+                device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
+                is_running: true,
+                is_paused: false,
+            })
+            .await;
+
+        restarted_devices.push(audio_device.name.clone());
+    }
+
+    if restarted_devices.is_empty() {
+        Ok(JsonResponse(RestartAudioDevicesResponse {
+            success: true,
+            message: "no active audio devices to restart".to_string(),
+            restarted_devices,
+        }))
+    } else {
+        Ok(JsonResponse(RestartAudioDevicesResponse {
+            success: true,
+            message: format!("restarted {} audio devices", restarted_devices.len()),
+            restarted_devices,
+        }))
+    }
+}
+
+#[derive(Serialize)]
+pub struct RestartVisionDevicesResponse {
+    success: bool,
+    message: String,
+    restarted_devices: Vec<u32>,
+}
+
+async fn restart_vision_devices(
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
+    debug!("restarting active vision devices");
+
+    let active_devices = state.device_manager.get_active_devices().await;
+    let mut restarted_devices = Vec::new();
+
+    for (_, control) in active_devices {
+        let vision_device = match control.device {
+            DeviceType::Vision(device) => device,
+            _ => continue,
+        };
+
+        debug!("restarting vision device: {:?}", vision_device);
+
+        // Stop the device
+        let _ = state
+            .device_manager
+            .update_device(DeviceControl {
+                device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
+                is_running: false,
+                is_paused: false,
+            })
+            .await;
+
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+
+        // Start the device again
+        let _ = state
+            .device_manager
+            .update_device(DeviceControl {
+                device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
+                is_running: true,
+                is_paused: false,
+            })
+            .await;
+
+        restarted_devices.push(vision_device.clone());
+    }
+
+    Ok(JsonResponse(RestartVisionDevicesResponse {
+        success: true,
+        message: if restarted_devices.is_empty() {
+            "no active vision devices to restart".to_string()
+        } else {
+            format!("restarted {} vision devices", restarted_devices.len())
+        },
+        restarted_devices,
+    }))
+}
+
 /*
 
 Curl commands for reference:
