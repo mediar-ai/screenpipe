@@ -45,7 +45,7 @@ use std::{
     net::SocketAddr,
     num::NonZeroUsize,
     path::PathBuf,
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -63,8 +63,6 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
-
-use screenpipe_audio::LAST_AUDIO_CAPTURE;
 
 use std::str::FromStr;
 
@@ -540,23 +538,8 @@ pub(crate) async fn remove_tags(
     }
 }
 
-pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
-    let app_uptime = (now as i64) - (state.app_start_time.timestamp());
-    let grace_period = 120; // 2 minutes in seconds
-
-    let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
-    let audio_active = if app_uptime < grace_period {
-        true // Consider active during grace period
-    } else {
-        now - last_capture < 5 // Consider active if captured in last 5 seconds
-    };
-
-    let (last_frame, audio, last_ui) = match state.db.get_latest_timestamps().await {
+pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> { 
+    let (last_frame, last_audio, last_ui) = match state.db.get_latest_timestamps().await {
         Ok((frame, audio, ui)) => (frame, audio, ui),
         Err(e) => {
             error!("failed to get latest timestamps: {}", e);
@@ -565,7 +548,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     };
 
     let now = Utc::now();
-    let threshold = Duration::from_secs(3600); // 1 hour
+    let threshold = Duration::from_secs(120); // 2 minutes
 
     let frame_status = if state.vision_disabled {
         "disabled"
@@ -584,10 +567,17 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
 
     let audio_status = if state.audio_disabled {
         "disabled"
-    } else if audio_active {
-        "ok"
     } else {
-        "stale"
+        match last_audio {
+            Some(timestamp)
+                if now.signed_duration_since(timestamp)
+                    < chrono::Duration::from_std(threshold).unwrap() =>
+            {
+                "ok"
+            }
+            Some(_) => "stale",
+            None => "no data",
+        }
     };
 
     let ui_status = if !state.ui_monitoring_enabled {
@@ -641,7 +631,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         status: overall_status.to_string(),
         status_code,
         last_frame_timestamp: last_frame,
-        last_audio_timestamp: audio,
+        last_audio_timestamp: last_audio,
         last_ui_timestamp: last_ui,
         frame_status: frame_status.to_string(),
         audio_status: audio_status.to_string(),
@@ -894,7 +884,7 @@ pub struct Server {
     ui_monitoring_enabled: bool,
 }
 
-impl Server {
+impl Server { 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: Arc<DatabaseManager>,
