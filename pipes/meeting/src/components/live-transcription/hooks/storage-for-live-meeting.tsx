@@ -58,6 +58,7 @@ export interface LiveMeetingData {
             meetingTips: string[]
         }
     }
+    isArchived?: boolean // Add optional flag
 }
 
 // Context type
@@ -72,7 +73,7 @@ interface MeetingContextType {
     setAnalysis: (analysis: MeetingAnalysis | null) => Promise<void>
     isLoading: boolean
     data: LiveMeetingData | null
-    updateStore: (newData: LiveMeetingData) => Promise<void>
+    updateStore: (newData: LiveMeetingData) => Promise<boolean>
 }
 
 // Context creation
@@ -83,6 +84,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
+        console.log('meeting provider mounted')
         const loadData = async () => {
             try {
                 console.log('MeetingProvider: loading data')
@@ -121,7 +123,8 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                     notes: [],
                     analysis: null,
                     deviceNames: new Set(),
-                    selectedDevices: new Set()
+                    selectedDevices: new Set(),
+                    isArchived: false  // Explicitly set as non-archived for new meetings
                 })
             } catch (error) {
                 console.error('MeetingProvider: failed to load meeting data:', error)
@@ -130,69 +133,35 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             }
         }
         loadData()
+        return () => console.log('meeting provider unmounted')
     }, [])
 
     const updateStore = async (newData: LiveMeetingData) => {
-        // Debug: log current and new notes details
-        console.log('updateStore: checking changes', {
-            currentNotes: data?.notes?.length,
-            newNotes: newData.notes?.length,
-            currentNotesData: data?.notes?.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            newNotesData: newData.notes?.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            stack: new Error().stack?.split('\n').slice(1, 3)
-        });
-
-        // Debug: log title differences for clarity
-        console.log('updateStore: checking title change', {
-            currentTitle: data?.title,
-            newTitle: newData.title,
-            titleChanged: data?.title !== newData.title
-        });
-
-        // If no previous data, always update
-        if (!data) {
-            console.log('updateStore: no previous data, saving');
-            await liveStore.setItem(LIVE_MEETING_KEY, newData);
-            setData(newData);
-            return;
-        }
-
-        // Determine if notes have changed
-        const notesChanged =
-            data.notes.length !== newData.notes.length ||
-            JSON.stringify(data.notes) !== JSON.stringify(newData.notes);
-
-        // Determine if title has changed
-        const titleChanged = data.title !== newData.title;
-
-        // If neither notes nor title changed, skip saving
-        if (!notesChanged && !titleChanged) {
-            console.log('updateStore: no changes detected', { notesChanged, titleChanged });
-            return;
-        }
-
-        console.log('updateStore: saving changes', {
-            currentNotes: data.notes.length,
-            newNotes: newData.notes.length,
-            notesChanged,
-            titleChanged
-        });
-
         try {
-            await liveStore.setItem(LIVE_MEETING_KEY, newData);
-            setData(newData);
+            // Get existing data to preserve isArchived if not explicitly set
+            const existing = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+            
+            const dataToStore = {
+                ...newData,
+                // Keep existing isArchived unless explicitly set in newData
+                isArchived: newData.isArchived !== undefined ? newData.isArchived : existing?.isArchived
+            }
+            
+            console.log('updateStore: saving meeting:', {
+                id: dataToStore.id,
+                isArchived: dataToStore.isArchived,
+                title: dataToStore.title,
+                chunks: dataToStore.chunks?.length,
+                preservedFromExisting: existing?.isArchived
+            })
+            
+            await liveStore.setItem(LIVE_MEETING_KEY, dataToStore)
+            return true
         } catch (error) {
-            console.error('updateStore: failed:', error);
+            console.error('updateStore: failed:', error)
+            return false
         }
-    };
+    }
 
     const setTitle = async (title: string) => {
         if (!data) {
@@ -285,11 +254,13 @@ export async function storeLiveChunks(chunks: TranscriptionChunk[] = [], mergedC
             notes: existing?.notes ?? [],
             analysis: existing?.analysis ?? null,
             deviceNames: existing?.deviceNames ?? new Set(),
-            selectedDevices: existing?.selectedDevices ?? new Set()
+            selectedDevices: existing?.selectedDevices ?? new Set(),
+            isArchived: existing?.isArchived // Preserve isArchived flag
         }
         console.log('storing live meeting data:', {
             rawChunks: chunks.length,
-            mergedChunks: mergedChunks.length
+            mergedChunks: mergedChunks.length,
+            isArchived: data.isArchived
         })
         await liveStore.setItem(LIVE_MEETING_KEY, data)
     } catch (error) {
@@ -303,8 +274,17 @@ export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
         
         const data = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
         
+        console.log('getLiveMeetingData: raw data:', {
+            exists: !!data,
+            id: data?.id,
+            isArchived: data?.isArchived,
+            title: data?.title
+        })
+        
+        if (!data) return null
+        
         // Ensure dates are properly restored
-        if (data?.notes) {
+        if (data.notes) {
             data.notes = data.notes.map(note => ({
                 ...note,
                 timestamp: new Date(note.timestamp),
@@ -312,13 +292,6 @@ export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
             }))
         }
         
-        console.log('getLiveMeetingData: result:', {
-            exists: !!data,
-            chunks: data?.chunks?.length,
-            title: data?.title,
-            notes: data?.notes?.length,
-            firstNote: data?.notes?.[0]?.text?.slice(0, 50)
-        })
         return data
     } catch (error) {
         console.error('getLiveMeetingData: failed:', error)
@@ -329,6 +302,16 @@ export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
 export async function clearLiveMeetingData(): Promise<void> {
     try {
         const currentData = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
+        
+        // Don't clear if it's an archived meeting being viewed
+        // if (currentData?.isArchived) {
+        //     console.log('skipping clear for archived meeting:', {
+        //         id: currentData.id,
+        //         title: currentData.title
+        //     })
+        //     return
+        // }
+        
         console.log('clearing live meeting data:', {
             had_title: !!currentData?.title,
             notes_count: currentData?.notes.length,
@@ -340,7 +323,7 @@ export async function clearLiveMeetingData(): Promise<void> {
         // Create empty state with new timestamp for id
         const startTime = new Date().toISOString()
         const emptyState: LiveMeetingData = {
-            id: `live-meeting-${startTime}`,  // Add id field
+            id: `live-meeting-${startTime}`,
             chunks: [],
             mergedChunks: [],
             editedMergedChunks: {},
@@ -351,10 +334,10 @@ export async function clearLiveMeetingData(): Promise<void> {
             notes: [],
             analysis: null,
             deviceNames: new Set(),
-            selectedDevices: new Set()
+            selectedDevices: new Set(),
+            isArchived: false  // Explicitly set as non-archived for new empty state
         }
         
-        // Set empty state first, then remove
         await liveStore.setItem(LIVE_MEETING_KEY, emptyState)
         await liveStore.removeItem(LIVE_MEETING_KEY)
         console.log('live meeting data cleared successfully')
@@ -372,12 +355,20 @@ export async function archiveLiveMeeting(): Promise<boolean> {
             throw new Error('no meeting data found to archive')
         }
 
+        // Don't archive if it's already an archived meeting being viewed
+        if (meeting.isArchived) {
+            console.log('skipping archive for already archived meeting:', {
+                id: meeting.id,
+                title: meeting.title
+            })
+            return true
+        }
+
         // Ensure we have required fields
         if (!meeting.startTime) {
             meeting.startTime = new Date().toISOString()
         }
         
-        // Use ISO string format consistently
         const id = `live-meeting-${meeting.startTime}`
         
         console.log('archiving meeting:', { 
@@ -388,11 +379,10 @@ export async function archiveLiveMeeting(): Promise<boolean> {
             notes: meeting.notes?.length
         })
         
-        // Store using ISO format ID
         await archivedLiveStore.setItem(id, {
             ...meeting,
             id,
-            endTime: meeting.endTime || new Date().toISOString() // Ensure we have an end time
+            endTime: meeting.endTime || new Date().toISOString()
         })
         
         await clearLiveMeetingData()
@@ -409,16 +399,17 @@ export async function getArchivedLiveMeetings(): Promise<LiveMeetingData[]> {
         const archived: LiveMeetingData[] = []
         let needsSaving = false
         
-        // Iterate through all keys in archived store
         await archivedLiveStore.iterate<LiveMeetingData, void>((value, key) => {
-            // Ensure each meeting has an ID, construct from start time if missing
-            if (!value.id) {
+            // Ensure each meeting has required fields
+            if (!value.id || !value.isArchived) {
                 needsSaving = true
-                console.log('meeting missing id, constructing from start time:', {
-                    startTime: value.startTime,
-                    title: value.title
+                console.log('fixing archived meeting metadata:', {
+                    id: value.id || `live-meeting-${value.startTime}`,
+                    title: value.title,
+                    startTime: value.startTime
                 })
-                value.id = `live-meeting-${value.startTime}`
+                value.id = value.id || `live-meeting-${value.startTime}`
+                value.isArchived = true
                 // Save back to storage
                 archivedLiveStore.setItem(key, value)
             }
@@ -434,6 +425,7 @@ export async function getArchivedLiveMeetings(): Promise<LiveMeetingData[]> {
             count: archived.length,
             latest: archived[0]?.title,
             allHaveIds: archived.every(m => !!m.id),
+            allAreArchived: archived.every(m => m.isArchived),
             neededIdUpdate: needsSaving
         })
 
