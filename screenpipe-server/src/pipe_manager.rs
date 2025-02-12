@@ -298,6 +298,66 @@ impl PipeManager {
         }
     }
 
+    #[cfg(unix)]
+    pub fn terminate_process_tree(pid: i32) {
+        use nix::sys::signal::{killpg, Signal};
+        use nix::unistd::Pid;
+
+        if let Err(e) = killpg(Pid::from_raw(pid), Signal::SIGKILL) {
+            warn!("Failed to kill process group {}: {}", pid, e);
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn terminate_process_tree(pid: u32) {
+        use windows::Win32::System::JobObjects::*;
+        use windows::Win32::System::Threading::*;
+        use windows::Win32::Foundation::*;
+        
+        unsafe {
+            let h_job = CreateJobObjectA(None, None);
+            if h_job.0 == 0 {
+                warn!("Failed to create job object");
+                return;
+            }
+
+            let mut info = JOBOBJECT_BASIC_LIMIT_INFORMATION {
+                LimitFlags: JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                ..Default::default()
+            };
+            
+            let mut extended_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+                BasicLimitInformation: info,
+                ..Default::default()
+            };
+
+            if AssignProcessToJobObject(h_job, OpenProcess(PROCESS_ALL_ACCESS, false, pid).unwrap()).is_err() {
+                warn!("Failed to assign process to job object");
+                return;
+            }
+
+            // Closing the job object ensures all child processes are killed
+            CloseHandle(h_job);
+        }
+    }
+    #[cfg(windows)]
+    pub async fn remove_dir_with_retries(path: &Path) -> Result<()> {
+        use tokio::time::{sleep, Duration};
+
+        let max_retries = 5;
+        for attempt in 1..=max_retries {
+            match tokio::fs::remove_dir_all(path).await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    warn!("Attempt {} to delete directory {:?} failed: {:?}", attempt, path, e);
+                    sleep(Duration::from_millis(500 * attempt as u64)).await;
+                }
+            }
+        }
+
+        Err(anyhow::anyhow!("Failed to delete directory {:?}", path))
+    }
+
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
@@ -341,31 +401,11 @@ impl PipeManager {
                     .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
                 }
                 PipeState::Pid(pid) => {
-                    // Force kill the process if it's still running
-                    #[cfg(unix)]
-                    {
-                        use nix::sys::signal::{kill, Signal};
-                        use nix::unistd::Pid;
-                        let _ = kill(Pid::from_raw(pid), Signal::SIGKILL);
-                    }
-                    #[cfg(windows)]
-                    {
-                        use windows::Win32::System::Threading::{
-                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                        };
-                        unsafe {
-                            if let Ok(h_process) = OpenProcess(
-                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                                false,
-                                pid as u32,
-                            ) {
-                                let _ = TerminateProcess(h_process, 1);
-                            }
-                        }
-                    }
+                    Self::terminate_process_tree(pid);
                 }
             }
-
+            #[cfg(windows)]
+            Self::remove_dir_with_retries(&self.screenpipe_dir.join("pipes").join(id)).await?;
             // Clean up cron jobs
             screenpipe_core::pipes::cleanup_pipe_crons(id).await?;
 
