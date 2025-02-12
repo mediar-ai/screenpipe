@@ -3,6 +3,8 @@ import { usePermissions } from "./use-permissions";
 import { PermissionDevices, PermissionsStatesPerDevice } from "./types";
 import { useOnboarding } from "../onboarding/context";
 import { HealthCheckResponse, useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 type ScreenpipeStatusContextType = {
   permissions: PermissionsStatesPerDevice | null;
@@ -10,6 +12,8 @@ type ScreenpipeStatusContextType = {
   checkPermissions: () => Promise<PermissionsStatesPerDevice | undefined>;
   handlePermissionButton: (type: PermissionDevices) => Promise<void>;
   health: HealthCheckResponse | null;
+  isServerDown: boolean;
+  isLoading: boolean;
 }
 
 const ScreenpipeStatusContext = createContext<ScreenpipeStatusContextType | undefined>(
@@ -19,13 +23,15 @@ const ScreenpipeStatusContext = createContext<ScreenpipeStatusContextType | unde
 export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-    const { health, isServerDown, isLoading, fetchHealth, debouncedFetchHealth } = useHealthCheck();
-    const { showOnboarding } = useOnboarding();
     const { permissions, checkPermissions, isMacOS, handlePermissionButton } = usePermissions();
+    const { health, isServerDown, isLoading, fetchHealth } = useHealthCheck();
+    const { open } = useStatusDialog();
 
-    useEffect(() => {
-        checkPermissions();
-    }, []);
+    // if health is down, open the status dialog
+    // if permissions are not granted, open the permissions dialog
+    // if permissions are broken open dialog
+    // if showOnboarding is true do not open any dialog
+
 
     return (
       <ScreenpipeStatusContext.Provider value={{ 
@@ -34,7 +40,12 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
           checkPermissions,
           handlePermissionButton,
           health,
+          isServerDown,
+          isLoading,
       }}>
+        <button onClick={() => open()}>
+          hahaha
+        </button>
           {children}
       </ScreenpipeStatusContext.Provider>
     );

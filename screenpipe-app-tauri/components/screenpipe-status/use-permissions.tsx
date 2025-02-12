@@ -12,6 +12,7 @@ export function usePermissions() {
 
     async function checkPermissions() {
         try {
+          console.log("checking permissions")
           const perms = await invoke<PermissionsStatesPerDevice>("do_permissions_check", {
             initialCheck: true,
           });
@@ -102,7 +103,7 @@ export function usePermissions() {
             duration: 3000,
           });
         }
-      };
+    };
 
     useEffect(() => {
         const checkPlatform = () => {
@@ -110,6 +111,10 @@ export function usePermissions() {
           setIsMacOS(currentPlatform === "macos");
         };
         checkPlatform();
+    }, []);
+
+    useEffect(() => {
+      checkPermissions();
     }, []);
 
     return {

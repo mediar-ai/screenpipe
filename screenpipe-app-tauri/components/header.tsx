@@ -128,7 +128,7 @@ export default function Header() {
             <ShareLogsButton showShareLink={false} onComplete={() => setIsFeedbackOpen(false)} />
           </PopoverContent>
         </Popover>
-        <HealthStatus className="mt-3 cursor-pointer" />
+        <HealthStatus/>
         <Settings />
 
         <Button
