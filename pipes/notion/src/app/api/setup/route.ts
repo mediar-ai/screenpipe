@@ -7,6 +7,14 @@ export async function GET() {
 		const settings = (await getScreenpipeAppSettings())["customSettings"]![
 			"notion"
 		];
+
+		if (!settings.workspace) {
+			return NextResponse.json(
+				{ error: "Please provide workspace name" },
+				{ status: 404 },
+			);
+		}
+
 		const credentials = await automateNotionSetup(settings?.workspace);
 		return NextResponse.json(credentials);
 	} catch (error) {
