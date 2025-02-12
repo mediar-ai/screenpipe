@@ -76,9 +76,9 @@ export function ObsidianSettings() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
-    const path = formData.get("path") as string;
+    const vaultPath = formData.get("vaultPath") as string;
 
-    if (!path?.trim()) {
+    if (!vaultPath?.trim()) {
       toast({
         variant: "destructive",
         title: "error",
@@ -101,7 +101,7 @@ export function ObsidianSettings() {
     try {
       const interval = parseInt(formData.get("interval") as string) * 60000;
       const obsidianSettings = {
-        vaultPath: formData.get("path") as string,
+        vaultPath: formData.get("vaultPath") as string,
         interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
@@ -133,7 +133,7 @@ export function ObsidianSettings() {
       );
       const interval = parseInt(formData.get("interval") as string) * 60000;
       const obsidianSettings = {
-        vaultPath: formData.get("path") as string,
+        vaultPath: formData.get("vaultPath") as string,
         interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
@@ -178,7 +178,7 @@ export function ObsidianSettings() {
       const path = dirHandle.name;
 
       // Update the input value and settings
-      const input = document.getElementById("path") as HTMLInputElement;
+      const input = document.getElementById("vaultPath") as HTMLInputElement;
       if (input) {
         input.value = path;
       }
@@ -188,7 +188,7 @@ export function ObsidianSettings() {
       });
 
       toast({
-        title: "path updated",
+        title: "vault path updated",
         description: "obsidian vault path has been set",
       });
     } catch (err) {
@@ -440,12 +440,12 @@ export function ObsidianSettings() {
         <TabsContent value="logs">
           <form onSubmit={handleSave} className="space-y-4 w-full my-2">
             <div className="space-y-2">
-              <Label htmlFor="path">obsidian vault path</Label>
+              <Label htmlFor="vaultPath">obsidian vault path</Label>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input
-                    id="path"
-                    name="path"
+                    id="vaultPath"
+                    name="vaultPath"
                     defaultValue={settings?.vaultPath}
                     placeholder="/path/to/vault"
                     className={`${
@@ -468,7 +468,7 @@ export function ObsidianSettings() {
                         className="cursor-pointer hover:bg-muted"
                         onClick={() => {
                           const input = document.getElementById(
-                            "path"
+                            "vaultPath"
                           ) as HTMLInputElement;
                           if (input) {
                             input.value = path;
