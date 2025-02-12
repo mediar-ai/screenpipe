@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { usePermissions } from "./use-permissions";
-import { PermissionDevices, PermissionsStatesPerDevice } from "./types";
-import { useOnboarding } from "../onboarding/context";
-import { HealthCheckResponse, useHealthCheck } from "@/lib/hooks/use-health-check";
+import { PermissionDevices, PermissionsStates, PermissionsStatesPerDevice } from "./types";
+import { HealthCheckResponse, useHealthCheck, SystemStatus } from "@/lib/hooks/use-health-check";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useOnboarding } from "../onboarding/context";
 
 type ScreenpipeStatusContextType = {
   permissions: PermissionsStatesPerDevice | null;
@@ -24,14 +23,40 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
   children,
 }) => {
     const { permissions, checkPermissions, isMacOS, handlePermissionButton } = usePermissions();
-    const { health, isServerDown, isLoading, fetchHealth } = useHealthCheck();
+    const { health, isServerDown, isLoading } = useHealthCheck();
     const { open } = useStatusDialog();
+    const { showOnboarding } = useOnboarding();
 
-    // if health is down, open the status dialog
-    // if permissions are not granted, open the permissions dialog
-    // if permissions are broken open dialog
-    // if showOnboarding is true do not open any dialog
+    console.log("health", health);
 
+    useEffect(() => {
+      // if showOnboarding do not open any dialog
+      if (showOnboarding) {
+        return;
+      }
+
+      // if health is down, open the status dialog
+      if (health?.status === SystemStatus.UNHEALTHY || health?.status === SystemStatus.ERROR) {
+        open();
+      }
+
+      // if permissions are broken open dialog
+      if (permissions?.microphone === PermissionsStates.DENIED ||
+          permissions?.screenRecording === PermissionsStates.DENIED ||
+          permissions?.accessibility === PermissionsStates.DENIED
+      ) {
+        open();
+      }
+
+      // if permissions are empty, open the permissions dialog
+      if (permissions?.microphone === PermissionsStates.EMPTY ||
+          permissions?.screenRecording === PermissionsStates.EMPTY ||
+          permissions?.accessibility === PermissionsStates.EMPTY
+      ) {
+        open();
+      }
+
+    }, [health, permissions]);
 
     return (
       <ScreenpipeStatusContext.Provider value={{ 
