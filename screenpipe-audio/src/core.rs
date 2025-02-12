@@ -142,12 +142,12 @@ pub async fn start_realtime_recording(
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     if deepgram_api_key.is_none() && CUSTOM_DEEPGRAM_API_TOKEN.is_empty() {
-        if DEEPGRAM_WEBSOCKET_URL.len() > 0 {
-            info!("using custom deepgram api url for realtime transcription");
-        } else {
-            error!("deepgram api key is not set, skipping realtime recording");
-            return Ok(());
-        }
+        error!("deepgram api key is not set, skipping realtime recording");
+        return Ok(());
+    } else if (CUSTOM_DEEPGRAM_API_TOKEN.len() > 0 || deepgram_api_key.is_some())
+        && DEEPGRAM_WEBSOCKET_URL.is_empty()
+    {
+        info!("using custom deepgram api url for realtime transcription");
     }
 
     while is_running.load(Ordering::Relaxed) {
