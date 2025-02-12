@@ -6,6 +6,7 @@ import { improveTranscription } from './ai-improve-chunk-transcription'
 import type { Settings } from "@screenpipe/browser"
 import { useSettings } from "@/lib/hooks/use-settings"
 import { diffWords } from 'diff'
+import { generateMeetingNote } from './ai-create-note-based-on-chunk'
 
 // Remove liveStore, keep only one store
 export const meetingStore = localforage.createInstance({
@@ -281,23 +282,38 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                             return newData
                         })
 
-                        // Clear both diffs and glow effect after 5 seconds
-                        setTimeout(() => {
-                            setData(current => {
-                                if (!current) return null
-                                const newData = {
-                                    ...current,
-                                    editedMergedChunks: {
-                                        ...current.editedMergedChunks,
-                                        [previousMerged.id]: {
-                                            text: improved,
-                                            diffs: null
-                                        }
-                                    }
-                                }
-                                void updateStore(newData)
-                                return newData
-                            })
+                        // After 5 seconds, clear diffs and generate note
+                        setTimeout(async () => {
+                            // Generate note from the improved chunk
+                            // const note = await generateMeetingNote([{
+                            //     ...previousMerged,
+                            //     text: improved
+                            // }], settings).catch(error => {
+                            //     console.error('failed to generate note:', error)
+                            //     return null
+                            // })
+
+                            // setData(current => {
+                            //     if (!current || !note) return current
+                            //     const newData = {
+                            //         ...current,
+                            //         editedMergedChunks: {
+                            //             ...current.editedMergedChunks,
+                            //             [previousMerged.id]: {
+                            //                 text: improved,
+                            //                 diffs: null
+                            //             }
+                            //         },
+                            //         notes: [...current.notes, {
+                            //             id: `note-${Date.now()}`,
+                            //             text: note,
+                            //             timestamp: previousMerged.timestamp,
+                            //             type: 'auto'
+                            //         }]
+                            //     }
+                            //     void updateStore(newData)
+                            //     return newData
+                            // })
 
                             setRecentlyImproved(prev => {
                                 const next = { ...prev }
