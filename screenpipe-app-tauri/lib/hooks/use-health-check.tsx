@@ -1,18 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { debounce } from "lodash";
 
-interface HealthCheckResponse {
-  status: string;
-  status_code: number;
+const DeviceStatus = {
+  OK: "ok",
+  STALE: "stale",
+  DISABLED: "disabled",
+  NO_DATA: "no data",
+  ERROR: "error",
+} as const;
+type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
+
+const SystemStatus = {
+  HEALTHY: "healthy",
+  UNHEALTHY: "unhealthy",
+  ERROR: "error",
+} as const;
+type SystemStatus = (typeof SystemStatus)[keyof typeof SystemStatus];
+
+
+export type HealthCheckResponse = {
+  status: SystemStatus;
+  status_code: 200 | 500;
   last_frame_timestamp: string | null;
   last_audio_timestamp: string | null;
   last_ui_timestamp: string | null;
-  frame_status: string;
-  audio_status: string;
-  ui_status: string;
+  frame_status: DeviceStatus;
+  audio_status: DeviceStatus;
+  ui_status: DeviceStatus;
   message: string;
 }
-
+ 
 function isHealthChanged(
   oldHealth: HealthCheckResponse | null,
   newHealth: HealthCheckResponse
@@ -31,7 +47,7 @@ function isHealthChanged(
   );
 }
 
-interface HealthCheckHook {
+type HealthCheckHook = {
   health: HealthCheckResponse | null;
   isServerDown: boolean;
   isLoading: boolean;
@@ -73,8 +89,8 @@ export function useHealthCheck() {
       }
 
       if (
-        data.status === "unhealthy" &&
-        previousHealthStatus.current === "healthy"
+        data.status === SystemStatus.UNHEALTHY &&
+        previousHealthStatus.current === SystemStatus.HEALTHY
       ) {
         unhealthyTransitionsRef.current += 1;
       }
@@ -85,14 +101,14 @@ export function useHealthCheck() {
     ws.onerror = (event) => {
       const error = event as ErrorEvent;
       const errorHealth: HealthCheckResponse = {
-        status: "error",
+        status: SystemStatus.ERROR,
         status_code: 500,
         last_frame_timestamp: null,
         last_audio_timestamp: null,
         last_ui_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        ui_status: "error",
+        frame_status: DeviceStatus.ERROR,
+        audio_status: DeviceStatus.ERROR,
+        ui_status: DeviceStatus.ERROR,
         message: error.message,
       };
       setHealth(errorHealth);
@@ -103,16 +119,17 @@ export function useHealthCheck() {
       }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (s) => {
+      console.log("ws.onclose", s)
       const errorHealth: HealthCheckResponse = {
-        status: "error",
+        status: SystemStatus.ERROR,
         status_code: 500,
         last_frame_timestamp: null,
         last_audio_timestamp: null,
         last_ui_timestamp: null,
-        frame_status: "error",
-        audio_status: "error",
-        ui_status: "error",
+        frame_status: DeviceStatus.ERROR,
+        audio_status: DeviceStatus.ERROR,
+        ui_status: DeviceStatus.ERROR,
         message: "WebSocket connection closed",
       };
       setHealth(errorHealth);
@@ -122,18 +139,6 @@ export function useHealthCheck() {
       }
     };
   }, []);
-
-  const debouncedFetchHealth = useCallback(() => {
-    return new Promise<void>((resolve) => {
-      debounce(() => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          fetchHealth().then(resolve);
-        } else {
-          resolve();
-        }
-      }, 1000)();
-    });
-  }, [fetchHealth]);
 
   useEffect(() => {
     fetchHealth();
@@ -151,7 +156,5 @@ export function useHealthCheck() {
     health,
     isServerDown,
     isLoading,
-    fetchHealth,
-    debouncedFetchHealth,
   } as HealthCheckHook;
 }
