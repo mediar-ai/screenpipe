@@ -575,15 +575,15 @@ async fn main() -> anyhow::Result<()> {
             if cli.realtime_audio_device.is_empty() {
                 // Use default devices
                 if let Ok(input_device) = default_input_device() {
-                    realtime_audio_devices.push(Arc::new(input_device.clone()));
+                    realtime_audio_devices.push(input_device.clone());
                 }
                 if let Ok(output_device) = default_output_device() {
-                    realtime_audio_devices.push(Arc::new(output_device.clone()));
+                    realtime_audio_devices.push(output_device.clone());
                 }
             } else {
                 for d in &cli.realtime_audio_device {
                     let device = parse_audio_device(d).expect("failed to parse audio device");
-                    realtime_audio_devices.push(Arc::new(device.clone()));
+                    realtime_audio_devices.push(device.clone());
                 }
             }
 
@@ -726,7 +726,7 @@ async fn main() -> anyhow::Result<()> {
                     vad_sensitivity: cli.vad_sensitivity.clone(),
                     deepgram_api_key: cli.deepgram_api_key.clone(),
                     realtime_enabled: cli.enable_realtime_audio_transcription,
-                    realtime_devices: realtime_audio_devices.clone(),
+                    realtime_devices: Arc::from(realtime_audio_devices.clone()),
                     whisper_sender: whisper_sender.clone(),
                     whisper_receiver: whisper_receiver.clone(),
                 };
@@ -1057,7 +1057,7 @@ async fn main() -> anyhow::Result<()> {
             .enumerate()
             .take(MAX_ITEMS_TO_DISPLAY)
         {
-            let device_str = device.deref().to_string();
+            let device_str = device.to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
             println!("│ {:<22} │ {:<34} │", "", formatted_device);

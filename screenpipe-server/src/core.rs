@@ -42,7 +42,7 @@ pub struct AudioConfig {
     pub vad_sensitivity: CliVadSensitivity,
     pub deepgram_api_key: Option<String>,
     pub realtime_enabled: bool,
-    pub realtime_devices: Vec<Arc<AudioDevice>>,
+    pub realtime_devices: Arc<[AudioDevice]>,
     pub whisper_sender: crossbeam::channel::Sender<AudioInput>,
     pub whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
 }
@@ -418,7 +418,7 @@ async fn record_audio(
     whisper_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     realtime_audio_enabled: bool,
-    realtime_audio_devices: Vec<Arc<AudioDevice>>,
+    realtime_audio_devices: Arc<[AudioDevice]>,
     languages: Arc<[Language]>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
@@ -478,9 +478,7 @@ async fn record_audio(
                         let handle = tokio::spawn({
                             let audio_device = Arc::clone(&audio_device);
                             let is_running = Arc::clone(&is_running);
-                            let realtime_devices = realtime_audio_devices.iter()
-                                .map(Arc::clone)
-                                .collect::<Vec<_>>();
+                            let realtime_devices = realtime_audio_devices.clone();
 
                             async move {
                                 info!("starting audio capture thread for device: {}", &audio_device);
@@ -501,29 +499,7 @@ async fn record_audio(
                                 });
 
                                 while is_running.load(Ordering::Relaxed) {
-                                    let device_id = audio_device.to_string();
 
-                                    // Upgrade weak reference when needed
-                                    let device_manager = match device_manager_weak.upgrade() {
-                                        Some(dm) => dm,
-                                        None => {
-                                            warn!("device manager no longer exists");
-                                            break;
-                                        }
-                                    };
-
-                                    // Monitor device state changes
-                                    let mut device_states = device_manager.watch_devices().await;
-                                    let is_running_clone = Arc::clone(&is_running);
-
-                                    tokio::spawn(async move {
-                                        while let Some(state_change) = device_states.next().await {
-                                            if state_change.device == device_id && !state_change.control.is_running {
-                                                is_running_clone.store(false, Ordering::Relaxed);
-                                                break;
-                                            }
-                                        }
-                                    });
 
                                     let audio_stream = match AudioStream::from_device(
                                         Arc::clone(&audio_device),
