@@ -10,7 +10,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import { useOnboarding } from "../context";
 
 const OnboardingPipeStore = () => {
-  const { handleNextSlide, handlePrevSlide } = useOnboarding();
+  const { handleEnd, handlePrevSlide } = useOnboarding();
   const [isLoading, setIsLoading] = React.useState(false);
   const [status, setStatus] = React.useState<string>("");
   const { settings } = useSettings();
@@ -184,7 +184,7 @@ const OnboardingPipeStore = () => {
       <OnboardingNavigation
         className="py-6"
         handlePrevSlide={handlePrevSlide}
-        handleNextSlide={handleNextSlide}
+        handleNextSlide={async () => await handleEnd()}
         prevBtnText="previous"
         nextBtnText="end"
       />

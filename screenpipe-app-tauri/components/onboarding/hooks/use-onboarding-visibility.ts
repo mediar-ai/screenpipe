@@ -21,25 +21,27 @@ export function useOnboardingVisibility(
       checkFirstTimeUser();
     }, []);
   
-    function setShowOnboardingToFalse() {
+    async function setShowOnboardingToFalse() {
       setShowOnboarding(false);
+      await localforage.setItem("showOnboarding", false);
     }
 
-    function setShowOnboardingToTrue() {
+    async function setShowOnboardingToTrue() {
       setShowOnboarding(true);
+      await localforage.setItem("showOnboarding", true);
     } 
   
 
     // the following functions can be seen as 
     // named actions that are taken on the onboarding dialog's visibility.
     // this makes it easier to understand why onboarding is visible or not.
-    function skipOnboarding() {
-      setShowOnboardingToFalse();
+    async function skipOnboarding() {
+      await setShowOnboardingToFalse();
       posthog.capture("onboarding_skipped");
     }
 
-    function completeOnboarding() {
-      setShowOnboardingToFalse();
+    async function completeOnboarding() {
+      await setShowOnboardingToFalse();
       posthog.capture("onboarding_completed");
     }
 
@@ -50,17 +52,17 @@ export function useOnboardingVisibility(
         finalPersonalization: selectedPersonalization,
       });
 
-      setShowOnboardingToFalse();
+      await setShowOnboardingToFalse();
     };
 
     // after login, deeplink could be used to show onboarding
-    function loginShowOnboarding() {  
-      setShowOnboardingToTrue();
+    async function loginShowOnboarding() {  
+      await setShowOnboardingToTrue();
     }
 
   // manually show onboarding, for example from the header -> settings
-    function manuallyShowOnboarding() {
-      setShowOnboardingToTrue();
+    async function manuallyShowOnboarding() {
+      await setShowOnboardingToTrue();
     }
   
     return { 

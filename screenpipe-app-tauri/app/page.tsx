@@ -74,7 +74,7 @@ export default function Home() {
           }
 
           if (url.includes("onboarding")) {
-            loginShowOnboarding();
+            await loginShowOnboarding();
           }
 
           if (url.includes("status")) {

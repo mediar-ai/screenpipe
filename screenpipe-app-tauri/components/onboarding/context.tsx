@@ -16,12 +16,12 @@ interface OnboardingContextType {
   error: string | null;
   handleNextSlide: () => void;
   handlePrevSlide: () => void;
-  skipOnboarding: () => void;
-  completeOnboarding: () => void;
+  skipOnboarding: () => Promise<void>;
+  completeOnboarding: () => Promise<void> ;
   handleEnd: () => Promise<void>;
   setRestartPending: () => Promise<void>;
-  loginShowOnboarding: () => void;
-  manuallyShowOnboarding: () => void;
+  loginShowOnboarding: () => Promise<void>;
+  manuallyShowOnboarding: () => Promise<void>;
 } 
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(

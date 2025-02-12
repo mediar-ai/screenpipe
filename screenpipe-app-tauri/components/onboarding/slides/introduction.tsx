@@ -5,12 +5,8 @@ import { RainbowButton } from "../../ui/rainbow-button";
 import { ArrowRight } from "lucide-react";
 import { useOnboarding } from "@/components/onboarding/context";
 
-interface OnboardingIntroProps {
-  className?: string;
-}
-
 const OnboardingIntro = () => {
-  const { skipOnboarding, handleNextSlide, currentSlide } = useOnboarding();
+  const { skipOnboarding, handleNextSlide } = useOnboarding();
   return (
     <div className={` flex justify-center items-center flex-col`}>
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
@@ -39,7 +35,7 @@ const OnboardingIntro = () => {
       <div className="flex gap-4 mt-4">
         <Button
           variant="ghost"
-          onClick={skipOnboarding}
+          onClick={async () => await skipOnboarding()}
           className="text-muted-foreground"
         >
           skip onboarding

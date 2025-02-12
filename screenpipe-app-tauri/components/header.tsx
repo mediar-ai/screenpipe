@@ -191,7 +191,7 @@ export default function Header() {
             <DropdownMenuGroup>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onClick={() => manuallyShowOnboarding()}
+                onClick={async () => await manuallyShowOnboarding()}
               >
                 <Play className="mr-2 h-4 w-4" />
                 <span>show onboarding</span>
