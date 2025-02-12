@@ -1,20 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const DeviceStatus = {
+export const DeviceStatus = {
   OK: "ok",
   STALE: "stale",
   DISABLED: "disabled",
   NO_DATA: "no data",
   ERROR: "error",
 } as const;
-type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
+export type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
 
-const SystemStatus = {
+export const SystemStatus = {
   HEALTHY: "healthy",
   UNHEALTHY: "unhealthy",
   ERROR: "error",
 } as const;
-type SystemStatus = (typeof SystemStatus)[keyof typeof SystemStatus];
+export type SystemStatus = (typeof SystemStatus)[keyof typeof SystemStatus];
 
 
 export type HealthCheckResponse = {

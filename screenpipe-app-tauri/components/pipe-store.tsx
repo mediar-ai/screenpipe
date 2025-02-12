@@ -30,6 +30,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useScreenpipeStatus } from "./screenpipe-status/context";
+import { SystemStatus } from "@/lib/hooks/use-health-check";
 
 const corePipes: string[] = ["data-table", "search"];
 
@@ -1069,7 +1070,7 @@ export const PipeStore: React.FC = () => {
 
         <AddPipeForm
           onAddPipe={handleInstallSideload}
-          isHealthy={health?.status !== "error"}
+          isHealthy={(health?.status as SystemStatus) !== SystemStatus.ERROR}
           onLoadFromLocalFolder={handleLoadFromLocalFolder}
         />
       </div>
