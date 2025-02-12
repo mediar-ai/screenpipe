@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, memo } from 'react'
 import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, ChevronDown } from 'lucide-react'
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from '../meeting-history/types'
 import { useMeetingContext, clearLiveMeetingData } from './hooks/storage-for-live-meeting'
-import { generateMeetingName } from '../meeting-history/use-meeting-ai'
+import { generateMeetingName } from '../meeting-history/ai-meeting-title'
 import { useSettings } from '@/lib/hooks/use-settings'
 import { useToast } from '@/hooks/use-toast'
 import { generateMeetingNotes } from './hooks/ai-create-all-notes'
@@ -19,7 +19,7 @@ interface Props {
   onNewMeeting: () => void
 }
 
-export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
+export const NotesEditor = memo(function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const { 
     title, 
     setTitle,
@@ -44,17 +44,83 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
   const { toast } = useToast()
   const router = useRouter()
   const [showNav, setShowNav] = useState(false)
+  const renderCount = useRef(0)
+  const [localTitle, setLocalTitle] = useState(title)
+  const titleDebounceRef = useRef<NodeJS.Timeout>()
+
+  // Split the title input into its own memoized component
+  const TitleInput = useMemo(() => {
+    return (
+      <input
+        type="text"
+        value={localTitle}
+        onChange={(e) => {
+          const newValue = e.target.value
+          setLocalTitle(newValue)
+          
+          // Debounce the update to global state
+          if (titleDebounceRef.current) {
+            clearTimeout(titleDebounceRef.current)
+          }
+          
+          titleDebounceRef.current = setTimeout(() => {
+            console.log('committing title change:', {
+              oldValue: title,
+              newValue
+            })
+            setTitle(newValue)
+          }, 500)
+        }}
+        onBlur={() => {
+          if (localTitle !== title) {
+            console.log('committing title on blur:', {
+              oldValue: title,
+              newValue: localTitle
+            })
+            setTitle(localTitle)
+          }
+        }}
+        placeholder="meeting title"
+        className="w-full text-2xl font-bold bg-transparent focus:outline-none px-3 py-2"
+      />
+    )
+  }, [localTitle, setLocalTitle])
+
+  // Memoize segments conversion
+  const memoizedSegments = useMemo(() => 
+    segments.map(seg => ({
+      timestamp: seg.timestamp,
+      transcription: seg.transcription,
+      deviceName: seg.deviceName || '',
+      speaker: seg.speaker || 'speaker_0'
+    })), 
+    [segments]
+  )
 
   const sortedNotes = useMemo(() => {
-    return [...notes].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    return [...notes].sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime()
+        const timeB = new Date(b.timestamp).getTime()
+        return timeA - timeB
+    })
   }, [notes])
 
   const { scrollRef, onScroll, isScrolledToBottom } = useAutoScroll(
     sortedNotes.map(note => ({
-      ...note,
-      timestamp: note.timestamp.toISOString()
+        ...note,
+        timestamp: note.timestamp
     }))
   )
+
+  useEffect(() => {
+    console.log('NotesEditor deps changed:', {
+      notesLength: notes.length,
+      segmentsLength: segments.length,
+      hasAnalysis: !!analysis,
+      title,
+      stack: new Error().stack?.split('\n')[2] // Just the immediate caller
+    })
+  }, [notes.length, segments.length, analysis, title])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -348,6 +414,20 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
     }
   }
 
+  // Log every render
+  // useEffect(() => {
+  //   console.log('NotesEditor render:', {
+  //     renderCount: renderCount.current++,
+  //     title,
+  //     stack: new Error().stack
+  //   })
+  // })
+
+  // Add effect to sync local state when global title changes
+  useEffect(() => {
+    setLocalTitle(title)
+  }, [title])
+
   return (
     <div className="h-full flex flex-col bg-card relative">
       <div 
@@ -418,13 +498,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
       </div>
 
       <div className="flex-1">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="meeting title"
-          className="w-full text-2xl font-bold bg-transparent focus:outline-none px-3 py-2"
-        />
+        {TitleInput}
         {showInvalidTime && (
           <div className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
             invalid time format
@@ -472,7 +546,10 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
                       </div>
                     ) : (
                       <span className="text-gray-500 text-xs hover:underline">
-                        {note.timestamp.toLocaleTimeString()}
+                        {note.timestamp instanceof Date ? 
+                          note.timestamp.toLocaleTimeString() : 
+                          new Date(note.timestamp).toLocaleTimeString()
+                        }
                       </span>
                     )}
                     {!editingTime && (
@@ -584,4 +661,7 @@ export function NotesEditor({ onTimeClick, onBack, onNewMeeting }: Props) {
       </div>
     </div>
   )
-} 
+}, (prevProps, nextProps) => {
+  // Only re-render if props actually changed
+  return Object.is(prevProps, nextProps)
+}) 

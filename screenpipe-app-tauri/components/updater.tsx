@@ -1,4 +1,4 @@
-import { check,  } from "@tauri-apps/plugin-updater";
+import { check } from "@tauri-apps/plugin-updater";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
@@ -25,7 +25,7 @@ Release notes: ${update.body}
       // on windows only - TODO shouldnt be necessary
       const os = platform();
       if (os === "windows") {
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
       }
 
       const toastId = toast({

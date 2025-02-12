@@ -8,20 +8,18 @@ export const runtime = "nodejs"; // Add this line
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  console.log("getting settings...");
-  const defaultSettings = getDefaultSettings();
+  console.log("[api/settings] getting settings...");
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
-      console.error("settingsManager is undefined");
-      throw new Error("settingsManager not found");
+      console.error("[api/settings] settingsManager is undefined");
+      return NextResponse.json(getDefaultSettings(), { status: 200 });
     }
     const rawSettings = await settingsManager.getAll();
-    // console.log("got settings:", rawSettings);
+    console.log("[api/settings] got settings successfully");
     return NextResponse.json(rawSettings);
   } catch (error) {
-    console.error("failed to get settings:", error);
-    // Return error status to help debug
+    console.error("[api/settings] failed to get settings:", error);
     return NextResponse.json(
       { error: "failed to get settings", details: String(error) },
       { status: 500 }
@@ -30,14 +28,20 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  console.log("[api/settings] updating settings...");
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
-      throw new Error("settingsManager not found");
+      console.error("[api/settings] settingsManager is undefined");
+      return NextResponse.json(
+        { error: "settingsManager not found" },
+        { status: 500 }
+      );
     }
 
     const body = await request.json();
     const { key, value, isPartialUpdate, reset } = body;
+    console.log("[api/settings] received update request:", { key, isPartialUpdate, reset });
 
     if (reset) {
       if (key) {

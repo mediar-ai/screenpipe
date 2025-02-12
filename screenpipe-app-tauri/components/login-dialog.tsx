@@ -44,9 +44,9 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({ open, onOpenChange }) 
 export const useLoginCheck = () => {
   const [showLoginDialog, setShowLoginDialog] = useState(false);
 
-  const checkLogin = (user: any | null) => {
+  const checkLogin = (user: any | null, showDialog: boolean = true) => {
     if (!user?.token) {
-      setShowLoginDialog(true);
+      if (showDialog) setShowLoginDialog(true);
       return false;
     }
     return true;

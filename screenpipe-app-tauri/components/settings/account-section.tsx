@@ -213,9 +213,6 @@ export function AccountSection() {
   const handleConnectStripe = async () => {
     setIsConnectingStripe(true);
     try {
-      const BASE_URL =
-        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
-        "https://screenpi.pe";
       // const host = `${BASE_URL}/api/dev-stripe`;
       const host = `https://screenpi.pe/api/dev/stripe-connect`;
       const response = await fetch(host, {
@@ -284,13 +281,6 @@ export function AccountSection() {
       });
     }
   }, [settings.user]); // Only run when settings.user changes
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
 
   return (
     <div className="w-full space-y-6 py-4">

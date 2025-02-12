@@ -56,11 +56,7 @@ export interface Tool {
 	function: {
 		name: string;
 		description: string;
-		parameters: {
-			type: 'object';
-			properties: Record<string, any>;
-			required?: string[];
-		};
+		parameters: InputSchema
 	};
 }
 
@@ -74,10 +70,13 @@ export interface RequestBody {
 	response_format?: ResponseFormat;
 }
 
+type InputSchema = Anthropic.Tool.InputSchema;
+
 export interface ResponseFormat {
 	type: 'text' | 'json_object' | 'json_schema';
-	schema?: Record<string, any>;
+	schema?: InputSchema;
 	name?: string;
+	description?: string;
 }
 
 export interface ImageContent {

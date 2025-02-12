@@ -39,7 +39,7 @@ const OnboardingPipeStore: React.FC<OnboardingPipeStoreProps> = ({
         await fetch("http://localhost:3030/health");
       } catch (error) {
         // Screenpipe not running, try to spawn it
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
         await new Promise((resolve) => setTimeout(resolve, 1_000));
         await invoke("spawn_screenpipe");
         await new Promise((resolve) => setTimeout(resolve, 5_000));

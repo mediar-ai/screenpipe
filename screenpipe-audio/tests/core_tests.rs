@@ -331,16 +331,15 @@ mod tests {
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
         let mut segments = prepare_segments(
-            &audio_input.data,
+            audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
-            embedding_manager,
+            Arc::new(std::sync::Mutex::new(embedding_manager)),
             embedding_extractor,
             &audio_input.device.to_string(),
         )
         .await
         .unwrap();
-        let mut whisper_model_guard = whisper_model.lock().await;
 
         let mut transcription_result = String::new();
         while let Some(segment) = segments.recv().await {
@@ -348,7 +347,7 @@ mod tests {
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
-                &mut whisper_model_guard,
+                whisper_model.clone(),
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
                 vec![Language::Arabic],
@@ -359,7 +358,6 @@ mod tests {
             transcription_result.push_str(&transcript);
             transcription_result.push('\n');
         }
-        drop(whisper_model_guard);
 
         debug!("Received transcription: {:?}", transcription_result);
         // Check if we received a valid transcription
@@ -416,8 +414,10 @@ mod tests {
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
         // Initialize the WhisperModel
-        let mut whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
-            .expect("Failed to initialize WhisperModel");
+        let whisper_model = Arc::new(Mutex::new(
+            WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
+                .expect("Failed to initialize WhisperModel"),
+        ));
 
         // Initialize VAD engine
         let vad_engine: Box<dyn VadEngine + Send> = Box::new(SileroVad::new().await.unwrap());
@@ -427,10 +427,10 @@ mod tests {
         let start_time = Instant::now();
 
         let mut segments = prepare_segments(
-            &audio_input.data,
+            audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
-            embedding_manager,
+            Arc::new(std::sync::Mutex::new(embedding_manager)),
             embedding_extractor,
             &audio_input.device.to_string(),
         )
@@ -443,7 +443,7 @@ mod tests {
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
-                &mut whisper_model,
+                whisper_model.clone(),
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
                 vec![Language::English],

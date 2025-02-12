@@ -76,9 +76,17 @@ export async function generateMeetingName(
     });
 
     const aiName = response.choices[0]?.message?.content?.trim() || "untitled meeting";
-    console.log("generated ai name:", aiName);
+    // console.log("raw generated ai name:", aiName);
+    
+    // Sanitize the AI generated name
+    const sanitizedName = aiName
+      .replace(/["']/g, '') // Remove quotes
+      .replace(/[^\w\s-]/g, ' ') // Replace special chars with space
+      .trim();
+    
+    console.log("sanitized ai name:", sanitizedName);
 
-    return aiName;
+    return sanitizedName;
   } catch (error) {
     console.error("error generating meeting name:", error);
     return "untitled meeting";

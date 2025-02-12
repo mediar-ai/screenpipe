@@ -1505,7 +1505,7 @@ export function SearchChat() {
         open={isQueryParamsDialogOpen}
         onOpenChange={setIsQueryParamsDialogOpen}
       >
-        <DialogContent className="sm:max-w-[605px]">
+        <DialogContent className="sm:max-w-[605px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>advanced search parameters</DialogTitle>
             <DialogDescription>

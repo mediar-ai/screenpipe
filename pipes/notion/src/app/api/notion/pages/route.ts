@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server";
 import { Client } from "@notionhq/client";
-import { getNotionSettings } from "@/lib/actions/namespace-settings";
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q");
+    const query = searchParams.get("q")?.toLowerCase().trim();
+    const accessToken = searchParams.get("accessToken");
 
-    const settings = await getNotionSettings();
-
-    if (!settings?.notion?.accessToken) {
+    if (!accessToken) {
       return NextResponse.json(
         { error: "notion not configured" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
-    const client = new Client({ auth: settings.notion.accessToken });
+    const client = new Client({ auth: accessToken });
 
     const response = await client.search({
       filter: {
@@ -51,7 +49,7 @@ export async function GET(request: Request) {
     console.error("error fetching pages:", error);
     return NextResponse.json(
       { error: "Failed to fetch pages" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

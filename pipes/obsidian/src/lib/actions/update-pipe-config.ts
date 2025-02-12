@@ -4,7 +4,10 @@ import path from "path";
 
 export async function updatePipeConfig(intervalMinutes: number) {
   try {
-    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const screenpipeDir =
+      process.env.SCREENPIPE_DIR ||
+      (process.env.HOME && path.join(process.env.HOME, ".screenpipe")) ||
+      process.cwd();
     const pipeConfigPath = path.join(
       screenpipeDir,
       "pipes",

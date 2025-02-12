@@ -45,7 +45,6 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -117,7 +116,6 @@ before you begin:
    cargo build --release
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -150,9 +148,12 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
+
+### docker
+
+[check out the docker setup here](https://github.com/sabrehagen/desktop-environment/blob/730a3134362927f8965589f6322b4554e0a5e388/docker/Dockerfile#L403)
 
 ## how can i contribute?
 

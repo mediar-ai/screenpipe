@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PipeInfo {
@@ -432,4 +432,153 @@ impl PipeManager {
             }
         })
     }
+
+    pub async fn update_pipe_version(&self, id: &str, source: &str) -> Result<()> {
+        debug!("updating pipe: {}", id);
+        let pipe_dir = self.screenpipe_dir.join("pipes").join(id);
+
+        // 1. Get source URL from existing config
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        let config = tokio::fs::read_to_string(&pipe_json_path).await?;
+        let mut config: Value = serde_json::from_str(&config)?;
+
+        // Create temp directory outside of pipes dir
+        let tmp_dir = std::env::temp_dir().join(format!("screenpipe_update_{}", id));
+        tokio::fs::create_dir_all(&tmp_dir).await?;
+        debug!("created temp dir: {:?}", tmp_dir);
+
+        // Download new version to temp directory
+        let tmp_pipe_dir = download_pipe_private(id, source, tmp_dir.clone()).await?;
+        debug!("downloaded new version to temp dir: {:?}", tmp_pipe_dir);
+
+        // Verify temp directory exists and contains the pipe files
+        if !tmp_pipe_dir.exists() {
+            error!("temp pipe directory not found: {:?}", tmp_pipe_dir);
+            return Err(anyhow::anyhow!(
+                "temp pipe directory not found: {:?}",
+                tmp_pipe_dir
+            ));
+        }
+
+        // Get version from new pipe.json in temp dir
+        let new_pipe_package_json_path = tmp_pipe_dir.join("package.json");
+        let new_config = tokio::fs::read_to_string(&new_pipe_package_json_path)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to read new package.json: {}", e))?;
+        let new_config: Value = serde_json::from_str(&new_config)
+            .map_err(|e| anyhow::anyhow!("failed to parse new package.json: {}", e))?;
+
+        // Update version in existing config
+        if let Some(new_version) = new_config.get("version").and_then(Value::as_str) {
+            if let Some(obj) = config.as_object_mut() {
+                obj.insert(
+                    "version".to_string(),
+                    Value::String(new_version.to_string()),
+                );
+                // Write updated config back to file
+                let updated_config = serde_json::to_string_pretty(&config)
+                    .map_err(|e| anyhow::anyhow!("failed to serialize updated config: {}", e))?;
+                tokio::fs::write(&pipe_json_path, updated_config)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("failed to write updated config: {}", e))?;
+                debug!("updated version in pipe.json to: {}", new_version);
+            }
+        }
+
+        // 2. Stop current pipe if running
+        self.stop_pipe(id)
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to stop pipe: {}", e))?;
+        debug!("stopped running pipe");
+
+        // 3. Remove old files
+        let files_to_remove = ["node_modules", "bun.lockb", "package.json"];
+        for file in files_to_remove {
+            let path = pipe_dir.join(file);
+            if path.exists() {
+                if path.is_dir() {
+                    tokio::fs::remove_dir_all(&path).await?;
+                } else {
+                    tokio::fs::remove_file(&path).await?;
+                }
+                debug!("removed: {}", file);
+            }
+        }
+
+        debug!("moved old files to trash");
+
+        // 4. Move new files from temp to pipe dir
+        let mut entries = tokio::fs::read_dir(&tmp_pipe_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let file_name = entry.file_name();
+            let src_path = entry.path();
+            let dst_path = pipe_dir.join(&file_name);
+
+            // Skip pipe.json to preserve configuration
+            if file_name == "pipe.json" {
+                continue;
+            }
+
+            if src_path.is_dir() {
+                if dst_path.exists() {
+                    debug!("removing old dir: {:?}", dst_path);
+                    tokio::fs::remove_dir_all(&dst_path).await?;
+                }
+                debug!("creating new dir: {:?}", dst_path);
+                tokio::fs::create_dir_all(&dst_path).await?;
+                debug!("copying new files: {:?}", src_path);
+                copy_dir_all(&src_path, &dst_path).await?;
+            } else {
+                debug!("copying new file: {:?}", src_path);
+                tokio::fs::copy(&src_path, &dst_path).await?;
+            }
+            debug!("moved: {:?}", file_name);
+        }
+
+        // Clean up temp directory
+        tokio::fs::remove_dir_all(&tmp_dir).await?;
+        debug!("cleaned up temp dir");
+
+        // 5. Restart pipe if it was enabled
+        if config
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            let future = self.start_pipe_task(id.to_string()).await?;
+            tokio::spawn(future);
+            debug!("restarted pipe");
+        }
+
+        info!("pipe {} updated successfully", id);
+        Ok(())
+    }
+}
+
+// Helper function to recursively copy directories
+async fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
+    let src = src.as_ref();
+    let dst = dst.as_ref();
+
+    // Create a queue of directories to process
+    let mut dirs_to_process = vec![(src.to_path_buf(), dst.to_path_buf())];
+
+    while let Some((current_src, current_dst)) = dirs_to_process.pop() {
+        tokio::fs::create_dir_all(&current_dst).await?;
+
+        let mut entries = tokio::fs::read_dir(&current_src).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let ty = entry.file_type().await?;
+            let src_path = entry.path();
+            let dst_path = current_dst.join(entry.file_name());
+
+            if ty.is_dir() {
+                dirs_to_process.push((src_path, dst_path));
+            } else {
+                tokio::fs::copy(&src_path, &dst_path).await?;
+            }
+        }
+    }
+
+    Ok(())
 }

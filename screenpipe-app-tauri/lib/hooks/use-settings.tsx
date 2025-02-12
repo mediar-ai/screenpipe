@@ -367,10 +367,6 @@ export function useSettings() {
 
   const loadUser = async (token: string) => {
     try {
-      const BASE_URL =
-        (await invoke("get_env", { name: "BASE_URL_PRIVATE" })) ??
-        "https://screenpi.pe";
-
       const response = await fetch(`https://screenpi.pe/api/user`, {
         method: "POST",
         headers: {
@@ -384,7 +380,6 @@ export function useSettings() {
       }
 
       const data = await response.json();
-      console.log("data", data);
       const userData = {
         ...data.user,
       } as User;

@@ -127,6 +127,4 @@ export function LiveTranscription({ onBack }: Props) {
             </div>
         </div>
     )
-}
-
-export default LiveTranscription 
+} 
