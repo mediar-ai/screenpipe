@@ -55,6 +55,7 @@
     "react": "^18.2.0",
     "react-day-picker": "8.10.1",
     "react-dom": "^18.2.0",
+    "react-error-boundary": "^5.0.0",
     "react-markdown": "^9.0.1",
     "react-split": "^2.0.14",
     "react-syntax-highlighter": "^15.6.1",
