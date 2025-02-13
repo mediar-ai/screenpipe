@@ -92,7 +92,7 @@ export function useBrowserTranscriptionStream(
               speaker: `speaker_${words[0].speaker || 0}`
             }
             
-            console.log('transcription:', { speaker: chunk.speaker, text: chunk.text })
+            // console.log('transcription:', { speaker: chunk.speaker, text: chunk.text })
             onNewChunk(chunk)
           }
         }
