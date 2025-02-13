@@ -52,7 +52,10 @@ export async function generateMeetingNote(
             initialDelay: 1000
         })
 
-        const note = response.choices[0]?.message?.content?.trim() || "failed to generate note"
+        // Handle both streaming and non-streaming responses
+        const note = 'choices' in response 
+            ? response.choices[0]?.message?.content?.trim() || "failed to generate note"
+            : "failed to generate note"
         
         // console.log("AI note generated:", { note })
         return note

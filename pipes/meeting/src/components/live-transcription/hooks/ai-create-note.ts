@@ -68,7 +68,9 @@ export async function improveNote(
             initialDelay: 1000
         })
 
-        const improved = response.choices[0]?.message?.content?.trim() || context.note.text
+        const improved = 'choices' in response 
+            ? response.choices[0]?.message?.content?.trim() || context.note.text
+            : context.note.text
 
         console.log("improved note:", {
             original: context.note.text,

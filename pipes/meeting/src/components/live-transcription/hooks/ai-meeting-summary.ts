@@ -64,7 +64,9 @@ export async function generateMeetingSummary(
       initialDelay: 1500
     })
 
-    const analysis = analysisResponse.choices[0]?.message?.content?.trim() || ""
+    const analysis = 'choices' in analysisResponse 
+        ? analysisResponse.choices[0]?.message?.content?.trim() || ""
+        : ""
     console.log("generated meeting analysis:", analysis.slice(0, 100) + "...")
 
     // Second AI call for final concise summary using the analysis
@@ -100,7 +102,9 @@ ${notesContext}`,
       initialDelay: 1500
     })
 
-    const aiSummary = (response.choices[0]?.message?.content?.trim() || "no summary available")
+    const aiSummary = ('choices' in response 
+        ? response.choices[0]?.message?.content?.trim() || "no summary available"
+        : "no summary available")
       .replace(/\*\*/g, '')
       .replace(/^#+\s*/gm, '')
       .replace(/^\s*[-*]\s*/gm, '• ')
@@ -129,7 +133,9 @@ ${notesContext}`,
       initialDelay: 1000
     })
 
-    const condensedSummary = (condensedResponse.choices[0]?.message?.content?.trim() || aiSummary)
+    const condensedSummary = ('choices' in condensedResponse 
+        ? condensedResponse.choices[0]?.message?.content?.trim() || aiSummary
+        : aiSummary)
       .replace(/\*\*/g, '')
       .replace(/^#+\s*/gm, '')
       .replace(/^\s*[-*]\s*/gm, '• ')

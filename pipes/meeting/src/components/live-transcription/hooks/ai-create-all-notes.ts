@@ -35,11 +35,15 @@ async function extractFacts(
         temperature: 0.1,
         max_tokens: 500,
     })
-    
-    return response.choices[0]?.message?.content
-        ?.split('\n')
-        .filter(fact => fact.trim())
-        .map(fact => fact.replace(/^[•-]\s*/, '').trim()) || []
+
+    // Handle both streaming and non-streaming responses
+    if (response && 'choices' in response && Array.isArray(response.choices)) {
+        return response.choices[0]?.message?.content
+            ?.split('\n')
+            .filter(fact => fact.trim())
+            .map(fact => fact.replace(/^[•-]\s*/, '').trim()) || []
+    }
+    return []
 }
 
 async function extractEvents(
@@ -67,10 +71,13 @@ async function extractEvents(
         max_tokens: 500,
     })
     
-    return response.choices[0]?.message?.content
-        ?.split('\n')
-        .filter(event => event.trim())
-        .map(event => event.replace(/^[•-]\s*/, '').trim()) || []
+    if (response && 'choices' in response && Array.isArray(response.choices)) {
+        return response.choices[0]?.message?.content
+            ?.split('\n')
+            .filter(event => event.trim())
+            .map(event => event.replace(/^[•-]\s*/, '').trim()) || []
+    }
+    return []
 }
 
 async function extractFlow(
@@ -98,10 +105,13 @@ async function extractFlow(
         max_tokens: 500,
     })
     
-    return response.choices[0]?.message?.content
-        ?.split('\n')
-        .filter(flow => flow.trim())
-        .map(flow => flow.replace(/^[•-]\s*/, '').trim()) || []
+    if (response && 'choices' in response && Array.isArray(response.choices)) {
+        return response.choices[0]?.message?.content
+            ?.split('\n')
+            .filter(flow => flow.trim())
+            .map(flow => flow.replace(/^[•-]\s*/, '').trim()) || []
+    }
+    return []
 }
 
 async function extractDecisions(
@@ -129,10 +139,13 @@ async function extractDecisions(
         max_tokens: 500,
     })
     
-    return response.choices[0]?.message?.content
-        ?.split('\n')
-        .filter(decision => decision.trim())
-        .map(decision => decision.replace(/^[•-]\s*/, '').trim()) || []
+    if (response && 'choices' in response && Array.isArray(response.choices)) {
+        return response.choices[0]?.message?.content
+            ?.split('\n')
+            .filter(decision => decision.trim())
+            .map(decision => decision.replace(/^[•-]\s*/, '').trim()) || []
+    }
+    return []
 }
 
 export async function generateMeetingNotes(
@@ -229,13 +242,15 @@ export async function generateMeetingNotes(
             max_tokens: 1000,
         }, {
             maxRetries: 3,
-            initialDelay: 2000 // Longer delay for this complex request
+            initialDelay: 2000
         })
 
-        const notes = response.choices[0]?.message?.content
-            ?.split('\n')
-            .filter(note => note.trim())
-            .map(note => note.replace(/^[•-]\s*/, '').trim()) || []
+        const notes = response && 'choices' in response && Array.isArray(response.choices)
+            ? response.choices[0]?.message?.content
+                ?.split('\n')
+                .filter(note => note.trim())
+                .map(note => note.replace(/^[•-]\s*/, '').trim()) || []
+            : []
 
         console.log("completed meeting analysis:", {
             facts_count: facts.length,
@@ -265,10 +280,12 @@ export async function generateMeetingNotes(
             max_tokens: 300,
         })
 
-        const summary = summaryResponse.choices[0]?.message?.content
-            ?.split('\n')
-            .filter(note => note.trim())
-            .map(note => note.replace(/^[•-]\s*/, '').trim()) || []
+        const summary = summaryResponse && 'choices' in summaryResponse && Array.isArray(summaryResponse.choices)
+            ? summaryResponse.choices[0]?.message?.content
+                ?.split('\n')
+                .filter(note => note.trim())
+                .map(note => note.replace(/^[•-]\s*/, '').trim()) || []
+            : []
 
         return {
             facts,

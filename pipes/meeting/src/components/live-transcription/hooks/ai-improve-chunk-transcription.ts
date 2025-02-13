@@ -71,7 +71,9 @@ export async function improveTranscription(
             initialDelay: 1000
         })
 
-        let improved = response.choices[0]?.message?.content?.trim() || text
+        let improved = 'choices' in response 
+            ? response.choices[0]?.message?.content?.trim() || text
+            : text
         
         // Remove any quotation marks from the response
         improved = improved.replace(/^["']|["']$/g, '').trim()
