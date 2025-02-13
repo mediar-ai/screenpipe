@@ -2,28 +2,15 @@ import { createContext, useContext, useState, useEffect, ReactNode, useMemo, use
 import { TranscriptionChunk, Note, MeetingSegment } from "../../meeting-history/types"
 import { MeetingAnalysis } from "./ai-create-all-notes"
 import localforage from "localforage"
-import { improveTranscription } from './ai-improve-chunk-transcription'
-import type { Settings } from "@screenpipe/browser"
 import { useSettings } from "@/lib/hooks/use-settings"
-import { diffWords } from 'diff'
-import { generateMeetingNote } from './ai-create-note-based-on-chunk'
+import { createHandleNewChunk } from './handle-new-chunk'
+import { ImprovedChunk } from './handle-new-chunk'
 
 // Remove liveStore, keep only one store
 export const meetingStore = localforage.createInstance({
     name: "live-meetings",
     storeName: "meetings"  // All meetings live here
 })
-
-interface DiffChunk {
-    value: string
-    added?: boolean
-    removed?: boolean
-}
-
-interface ImprovedChunk {
-    text: string
-    diffs: DiffChunk[] | null  // Make diffs nullable
-}
 
 export interface LiveMeetingData {
     id: string  // Add explicit ID field
@@ -190,16 +177,16 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
 
     const setNotes = async (notes: Note[]) => {
         if (!data) return
-        console.log('setting notes:', {
-            count: notes.length,
-            notes: notes.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            currentTitle: data.title,
-            stack: new Error().stack?.split('\n').slice(1,3)
-        })
+        // console.log('setting notes:', {
+        //     count: notes.length,
+        //     notes: notes.map(n => ({
+        //         text: n.text?.slice(0, 50),
+        //         timestamp: n.timestamp,
+        //         id: n.id
+        //     })),
+        //     currentTitle: data.title,
+        //     stack: new Error().stack?.split('\n').slice(1,3)
+        // })
         await updateStore({ 
             ...data,
             notes,
@@ -215,135 +202,16 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         await updateStore({ ...data, analysis })
     }
 
-    const handleNewChunk = useCallback(async (chunk: TranscriptionChunk) => {
-        setData(currentData => {
-            if (!currentData) return null
-
-            const chunks = [...currentData.chunks, chunk]
-            
-            // Calculate merged chunks first
-            const mergedChunks = chunks.reduce<TranscriptionChunk[]>((acc, curr) => {
-                const prev = acc[acc.length - 1]
-                
-                if (prev && prev.speaker === curr.speaker) {
-                    prev.text += ' ' + curr.text
-                    return acc
-                }
-                
-                acc.push(Object.assign({}, curr))
-                return acc
-            }, [])
-
-            // Get previous merged chunk (the one that's now complete)
-            const previousMerged = mergedChunks.length > 1 ? mergedChunks[mergedChunks.length - 2] : null
-            
-            // Only improve if:
-            // 1. We have a completed merged chunk
-            // 2. AI is enabled
-            // 3. This chunk hasn't been improved yet
-            if (previousMerged && 
-                settings.aiProviderType === "screenpipe-cloud" && 
-                !currentData.editedMergedChunks[previousMerged.id]) {
-                
-                // Set improving state
-                setImprovingChunks(prev => ({ ...prev, [previousMerged.id]: true }))
-                
-                const context = {
-                    meetingTitle: currentData.title || '',
-                    recentChunks: mergedChunks.slice(-3),
-                    notes: currentData.notes.map(note => note.text)
-                }
-                
-                void improveTranscription(previousMerged.text, context, settings)
-                    .then(improved => {
-                        const diffs = diffWords(previousMerged.text, improved)
-                        
-                        // Clear improving state and set recently improved
-                        setImprovingChunks(prev => {
-                            const next = { ...prev }
-                            delete next[previousMerged.id]
-                            return next
-                        })
-                        setRecentlyImproved(prev => ({ ...prev, [previousMerged.id]: true }))
-
-                        setData(current => {
-                            if (!current) return null
-                            const newData = {
-                                ...current,
-                                editedMergedChunks: {
-                                    ...current.editedMergedChunks,
-                                    [previousMerged.id]: {
-                                        text: improved,
-                                        diffs
-                                    }
-                                }
-                            }
-                            void updateStore(newData)
-                            return newData
-                        })
-
-                        // After 5 seconds, clear diffs and generate note
-                        setTimeout(async () => {
-                            // Generate note from the improved chunk
-                            // const note = await generateMeetingNote([{
-                            //     ...previousMerged,
-                            //     text: improved
-                            // }], settings).catch(error => {
-                            //     console.error('failed to generate note:', error)
-                            //     return null
-                            // })
-
-                            // setData(current => {
-                            //     if (!current || !note) return current
-                            //     const newData = {
-                            //         ...current,
-                            //         editedMergedChunks: {
-                            //             ...current.editedMergedChunks,
-                            //             [previousMerged.id]: {
-                            //                 text: improved,
-                            //                 diffs: null
-                            //             }
-                            //         },
-                            //         notes: [...current.notes, {
-                            //             id: `note-${Date.now()}`,
-                            //             text: note,
-                            //             timestamp: previousMerged.timestamp,
-                            //             type: 'auto'
-                            //         }]
-                            //     }
-                            //     void updateStore(newData)
-                            //     return newData
-                            // })
-
-                            setRecentlyImproved(prev => {
-                                const next = { ...prev }
-                                delete next[previousMerged.id]
-                                return next
-                            })
-                        }, 5000)
-                    })
-                    .catch(error => {
-                        console.error('failed to improve chunk:', error)
-                        // Clear improving state on error
-                        setImprovingChunks(prev => {
-                            const next = { ...prev }
-                            delete next[previousMerged.id]
-                            return next
-                        })
-                    })
-            }
-
-            const newData: LiveMeetingData = {
-                ...currentData,
-                chunks,
-                mergedChunks,
-                lastProcessedIndex: chunks.length
-            }
-            
-            void updateStore(newData)
-            return newData
-        })
-    }, [settings])
+    const handleNewChunk = useCallback(
+        createHandleNewChunk({
+            setData,
+            setImprovingChunks,
+            setRecentlyImproved,
+            updateStore,
+            settings
+        }),
+        [settings]
+    )
 
     // Initialize ref when data loads
     useEffect(() => {
