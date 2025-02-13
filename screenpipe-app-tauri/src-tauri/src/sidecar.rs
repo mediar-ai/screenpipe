@@ -13,6 +13,8 @@ use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
+use crate::permissions::OSPermissionStatus;
+use crate::permissions::do_permissions_check;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -513,9 +515,32 @@ impl SidecarManager {
         }
     }
 
+    pub fn assert_permissions(&mut self) -> Result<(), String> {
+         // check for permissions before spawning
+         let permissions = do_permissions_check(true);
+
+         if permissions.screen_recording != OSPermissionStatus::Granted {
+             return Err("Screen recording permission denied".to_string());
+         }
+         if permissions.microphone != OSPermissionStatus::Granted {
+             return Err("Microphone permission denied".to_string());
+         }
+         if permissions.camera != OSPermissionStatus::Granted {
+            return Err("Camera permission denied".to_string());
+        }
+
+        Ok(())
+    }
+
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
         self.update_settings(app).await?;
+
+        // check for permissions before spawning
+        #[cfg(target_os = "macos")]
+        {
+            self.assert_permissions()?;
+        }
 
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
