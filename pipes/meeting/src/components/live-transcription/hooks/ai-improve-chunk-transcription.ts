@@ -1,4 +1,4 @@
-import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
+import { callOpenAI, createAiClient } from "./ai-client"
 import type { Settings } from "@screenpipe/browser"
 import { TranscriptionChunk } from "../../meeting-history/types"
 import { VocabularyEntry, getVocabularyEntries } from "./storage-vocabulary"
@@ -76,10 +76,10 @@ export async function improveTranscription(
         // Remove any quotation marks from the response
         improved = improved.replace(/^["']|["']$/g, '').trim()
 
-        console.log("improved transcription:", {
-            original: text,
-            improved
-        })
+        // console.log("improved transcription:", {
+        //     original: text,
+        //     improved
+        // })
 
         return improved
     } catch (error) {
