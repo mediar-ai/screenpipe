@@ -11,7 +11,6 @@ type ScreenpipeStatusContextType = {
   checkPermissions: () => Promise<PermissionsStatesPerDevice | undefined>;
   handlePermissionButton: (type: PermissionDevices) => Promise<void>;
   health: HealthCheckResponse | null;
-  isServerDown: boolean;
   isLoading: boolean;
 }
 
@@ -23,11 +22,9 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
   children,
 }) => {
     const { permissions, checkPermissions, isMacOS, handlePermissionButton } = usePermissions();
-    const { health, isServerDown, isLoading } = useHealthCheck();
-    const { open } = useStatusDialog();
+    const { health, isLoading } = useHealthCheck();
+    const { setShowError  } = useStatusDialog();
     const { showOnboarding } = useOnboarding();
-
-    console.log("health", health);
 
     useEffect(() => {
       // if showOnboarding do not open any dialog
@@ -36,8 +33,9 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
       }
 
       // if health is down, open the status dialog
-      if (health?.status === SystemStatus.UNHEALTHY || health?.status === SystemStatus.ERROR) {
-        open();
+      if (health?.status === SystemStatus.UNHEALTHY || health?.status === SystemStatus.ERROR || health?.status === SystemStatus.WEBSOCKET_CLOSED) {
+        setShowError(true);
+        return
       }
 
       // if permissions are broken open dialog
@@ -45,7 +43,8 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
           permissions?.screenRecording === PermissionsStates.DENIED ||
           permissions?.accessibility === PermissionsStates.DENIED
       ) {
-        open();
+        setShowError(true);
+        return
       }
 
       // if permissions are empty, open the permissions dialog
@@ -53,9 +52,11 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
           permissions?.screenRecording === PermissionsStates.EMPTY ||
           permissions?.accessibility === PermissionsStates.EMPTY
       ) {
-        open();
+        setShowError(true);
+        return
       }
 
+      setShowError(false);
     }, [health, permissions]);
 
     return (
@@ -65,12 +66,8 @@ export const ScreenpipeStatusProvider: React.FC<{ children: React.ReactNode }> =
           checkPermissions,
           handlePermissionButton,
           health,
-          isServerDown,
           isLoading,
       }}>
-        <button onClick={() => open()}>
-          hahaha
-        </button>
           {children}
       </ScreenpipeStatusContext.Provider>
     );
