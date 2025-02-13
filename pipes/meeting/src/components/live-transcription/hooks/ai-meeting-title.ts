@@ -1,6 +1,6 @@
 import type { Settings } from "@screenpipe/browser"
 import { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
-import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
+import { callOpenAI, createAiClient } from "./ai-client"
 
 export async function generateMeetingName(
   meeting: LiveMeetingData,
