@@ -113,7 +113,7 @@ pub fn detect_language(
     model: &mut Model,
     tokenizer: &Tokenizer,
     mel: &Tensor,
-    languages: Vec<Language>,
+    languages: &[Language],
 ) -> Result<u32> {
     let (_bsize, _, seq_len) = mel.dims3()?;
     let mel = mel.narrow(

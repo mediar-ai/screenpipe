@@ -545,6 +545,7 @@ impl AudioStream {
     }
 
     pub async fn stop(mut self) -> Result<()> {
+        info!("stopping audio stream for {}", self.device.to_string());
         self.is_disconnected.store(true, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;
@@ -566,5 +567,16 @@ impl AudioStream {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for AudioStream {
+    fn drop(&mut self) {
+        if !self.is_disconnected.load(Ordering::Relaxed) {
+            let this = self.clone();
+            if let Err(e) = futures::executor::block_on(this.stop()) {
+                error!("failed to stop audio stream on drop: {}", e);
+            }
+        }
     }
 }

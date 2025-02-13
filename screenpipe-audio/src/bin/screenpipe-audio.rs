@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
         deepgram_api_key,
         &output_path,
         VadSensitivity::Medium,
-        languages,
+        Arc::from(languages.as_slice()),
         Arc::new(DeviceManager::default()),
     )
     .await?;

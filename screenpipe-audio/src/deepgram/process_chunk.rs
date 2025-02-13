@@ -13,7 +13,7 @@ pub async fn transcribe_with_deepgram(
     audio_data: &[f32],
     device: &str,
     sample_rate: u32,
-    languages: Vec<Language>,
+    languages: &[Language],
 ) -> Result<String> {
     debug!("starting deepgram transcription");
     let client = Client::new();

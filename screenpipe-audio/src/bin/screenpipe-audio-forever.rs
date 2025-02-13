@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
         VadSensitivity::Medium,
-        languages,
+        Arc::from(languages.as_slice()),
         Arc::new(DeviceManager::default()),
     )
     .await?;

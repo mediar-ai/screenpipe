@@ -20,7 +20,7 @@ lazy_static! {
 pub async fn process_with_whisper(
     whisper_model: Arc<Mutex<WhisperModel>>,
     audio: &[f32],
-    languages: Vec<Language>,
+    languages: &[Language],
 ) -> Result<String> {
     let mut whisper = whisper_model.lock().await;
     let WhisperModel {
@@ -47,10 +47,7 @@ pub async fn process_with_whisper(
 
     debug!("detecting language");
     let language_token = Some(multilingual::detect_language(
-        model,
-        tokenizer,
-        &mel,
-        languages.clone(),
+        model, tokenizer, &mel, languages,
     )?);
 
     debug!("initializing decoder");

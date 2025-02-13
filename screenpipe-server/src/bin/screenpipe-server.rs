@@ -29,8 +29,10 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
+use screenpipe_vision::RealtimeVisionEvent;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::atomic::AtomicBool;
 use std::{
     collections::{HashMap, HashSet},
     env, fs,
@@ -676,6 +678,8 @@ async fn main() -> anyhow::Result<()> {
     let dm_clone = device_manager.clone();
     let device_manager_clone = device_manager.clone();
     let device_manager_clone_2 = device_manager.clone();
+    let audio_devices_clone = audio_devices.clone();
+    let monitor_ids_clone = monitor_ids.clone();
 
     let (whisper_sender, whisper_receiver) = if cli.disable_audio {
         // Create a dummy channel if no audio devices are available, e.g. audio disabled
@@ -695,7 +699,7 @@ async fn main() -> anyhow::Result<()> {
             cli.deepgram_api_key.clone(),
             &PathBuf::from(output_path_clone.as_ref()),
             VadSensitivity::from(cli.vad_sensitivity.clone()),
-            languages.clone(),
+            Arc::from(languages.as_slice()),
             device_manager.clone(),
         )
         .await?
@@ -705,7 +709,6 @@ async fn main() -> anyhow::Result<()> {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
 
                 // Create the configs
@@ -722,11 +725,8 @@ async fn main() -> anyhow::Result<()> {
                 let audio_config = AudioConfig {
                     disabled: cli.disable_audio,
                     transcription_engine: Arc::new(cli.audio_transcription_engine.clone().into()),
-                    vad_engine: vad_engine_clone,
-                    vad_sensitivity: cli.vad_sensitivity.clone(),
                     deepgram_api_key: cli.deepgram_api_key.clone(),
                     realtime_enabled: cli.enable_realtime_audio_transcription,
-                    realtime_devices: Arc::from(realtime_audio_devices.clone()),
                     whisper_sender: whisper_sender.clone(),
                     whisper_receiver: whisper_receiver.clone(),
                 };
@@ -736,8 +736,19 @@ async fn main() -> anyhow::Result<()> {
                     ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
                     ignored_windows: Arc::from(cli.ignored_windows.clone()),
                     include_windows: Arc::from(cli.included_windows.clone()),
+                    control: Arc::new(AtomicBool::new(true)),
+                    realtime_sender: Arc::new(
+                        tokio::sync::broadcast::channel::<RealtimeVisionEvent>(1).0,
+                    ),
                 };
 
+                let mut devices = Vec::new();
+                for device in &audio_devices_clone {
+                    devices.push(screenpipe_core::DeviceType::Audio(device.deref().clone()));
+                }
+                for monitor_id in &monitor_ids_clone {
+                    devices.push(screenpipe_core::DeviceType::Vision(*monitor_id));
+                }
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     recording_config,
@@ -745,7 +756,7 @@ async fn main() -> anyhow::Result<()> {
                     vision_config,
                     &vision_handle,
                     &audio_handle,
-                    device_manager.clone(),
+                    devices.into(),
                 );
 
                 let result = tokio::select! {
@@ -1348,7 +1359,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    device_manager_clone_2.shutdown().await;
+    let _ = device_manager_clone_2.shutdown().await;
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);

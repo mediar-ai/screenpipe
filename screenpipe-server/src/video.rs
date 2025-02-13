@@ -207,12 +207,11 @@ impl VideoCapture {
 
 pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
     let fps = fps.min(MAX_FPS);
-
     debug!("starting ffmpeg process for: {}", output_file);
     let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
 
-    // Updated FFmpeg arguments for better performance and quality
+    // Improved FFmpeg arguments for better performance and quality
     let args = vec![
         "-f",
         "image2pipe",
@@ -223,24 +222,26 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "-i",
         "-",
         "-vf",
-        "format=yuv420p,pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
+        "format=yuv420p", // Removed pad filter as it's not always needed
         "-c:v",
         "libx265",
         "-tag:v",
         "hvc1",
         "-preset",
-        "medium", // Changed from ultrafast for better compression
+        "fast", // Better balance between speed and compression
         "-crf",
-        "28", // Slightly higher CRF for smaller file size
+        "23", // Better quality-size ratio
         "-x265-params",
-        "log-level=error", // Reduce x265 logging noise
+        "log-level=error:pools=+frame", // Added frame threading
+        "-movflags",
+        "+faststart", // Enables streaming playback
         output_file,
     ];
 
     command
         .args(&args)
         .stdin(Stdio::piped())
-        .stdout(Stdio::null()) // Changed to null since we don't need stdout
+        .stdout(Stdio::null())
         .stderr(Stdio::piped());
 
     debug!("ffmpeg command: {:?}", command);

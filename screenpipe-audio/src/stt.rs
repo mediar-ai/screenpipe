@@ -33,16 +33,14 @@ pub async fn stt(
     whisper_model: Arc<Mutex<WhisperModel>>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
-    languages: Vec<Language>,
+    languages: Arc<[Language]>,
 ) -> Result<String> {
     let transcription: Result<String> =
         if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
             // Deepgram implementation
             let api_key = deepgram_api_key.unwrap_or_default();
 
-            match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
-                .await
-            {
+            match transcribe_with_deepgram(&api_key, audio, device, sample_rate, &languages).await {
                 Ok(transcription) => Ok(transcription),
                 Err(e) => {
                     error!(
@@ -50,12 +48,12 @@ pub async fn stt(
                         device, e
                     );
                     // Fallback to Whisper
-                    process_with_whisper(whisper_model, audio, languages.clone()).await
+                    process_with_whisper(whisper_model, audio, &languages).await
                 }
             }
         } else {
             // Existing Whisper implementation
-            process_with_whisper(whisper_model, audio, languages.clone()).await
+            process_with_whisper(whisper_model, audio, &languages).await
         };
 
     transcription
@@ -112,7 +110,7 @@ pub async fn create_whisper_channel(
     deepgram_api_key: Option<String>,
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
-    languages: Vec<Language>,
+    languages: Arc<[Language]>,
     device_manager: Arc<DeviceManager>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
@@ -257,7 +255,7 @@ pub async fn run_stt(
     whisper_model: Arc<Mutex<WhisperModel>>,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
-    languages: Vec<Language>,
+    languages: Arc<[Language]>,
     path: String,
     timestamp: u64,
 ) -> TranscriptionResult {
