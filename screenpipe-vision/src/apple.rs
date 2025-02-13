@@ -16,7 +16,7 @@ use std::{ffi::c_void, ptr::null_mut};
 
 static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
  
-pub fn get_apple_languages(languages: Arc<Vec<Language>>) -> Vec<String> {
+pub fn get_apple_languages(languages: Arc<[Language]>) -> Vec<String> {
     let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
         let mut m = HashMap::new();
         m.insert(Language::English, "en-US");
@@ -72,7 +72,7 @@ extern "C" fn release_callback(_refcon: *mut c_void, _data_ptr: *const *const c_
 #[cfg(target_os = "macos")]
 pub fn perform_ocr_apple(
     image: &DynamicImage,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
 ) -> (String, String, Option<f64>) {
     cidre::objc::ar_pool(|| {
         // Convert languages to Apple format and create ns::Array

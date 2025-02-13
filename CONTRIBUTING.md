@@ -151,6 +151,10 @@ before you begin:
    bun tauri build
    ```
 
+### docker
+
+[check out the docker setup here](https://github.com/sabrehagen/desktop-environment/blob/730a3134362927f8965589f6322b4554e0a5e388/docker/Dockerfile#L403)
+
 ## how can i contribute?
 
 ### reporting bugs
@@ -450,6 +454,6 @@ now you can either dev screenpipe on linux or run screenpipe in the cloud that r
 
 ## join the community
 
-say 👋 in our [public discord channel](https://discord.gg/du9ebuw7uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
+say 👋 in our [public discord channel](https://discord.gg/dU9EBuw7Uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉

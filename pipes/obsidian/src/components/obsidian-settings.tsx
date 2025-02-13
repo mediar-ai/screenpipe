@@ -76,9 +76,9 @@ export function ObsidianSettings() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
-    const path = formData.get("path") as string;
+    const vaultPath = formData.get("vaultPath") as string;
 
-    if (!path?.trim()) {
+    if (!vaultPath?.trim()) {
       toast({
         variant: "destructive",
         title: "error",
@@ -101,14 +101,17 @@ export function ObsidianSettings() {
     try {
       const interval = parseInt(formData.get("interval") as string) * 60000;
       const obsidianSettings = {
-        vaultPath: formData.get("path") as string,
+        vaultPath: formData.get("vaultPath") as string,
         interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
         prompt: customPrompt || "",
       };
 
-      await updateSettings(obsidianSettings);
+      await updateSettings({
+        ...settings!,
+        ...obsidianSettings,
+      });
       await updatePipeConfig(interval / 60000);
 
       loadingToast.update({
@@ -129,18 +132,21 @@ export function ObsidianSettings() {
     setTestLogLoading(true);
     try {
       const formData = new FormData(
-        document.querySelector("form") as HTMLFormElement
+        document.querySelector("form") as HTMLFormElement,
       );
       const interval = parseInt(formData.get("interval") as string) * 60000;
       const obsidianSettings = {
-        vaultPath: formData.get("path") as string,
+        vaultPath: formData.get("vaultPath") as string,
         interval,
         pageSize: parseInt(formData.get("pageSize") as string),
         aiModel: formData.get("aiModel") as string,
         prompt: customPrompt || "",
       };
 
-      await updateSettings(obsidianSettings);
+      await updateSettings({
+        ...settings!,
+        ...obsidianSettings,
+      });
       await updatePipeConfig(interval / 60000);
 
       // Then test log generation
@@ -178,17 +184,18 @@ export function ObsidianSettings() {
       const path = dirHandle.name;
 
       // Update the input value and settings
-      const input = document.getElementById("path") as HTMLInputElement;
+      const input = document.getElementById("vaultPath") as HTMLInputElement;
       if (input) {
         input.value = path;
       }
 
       await updateSettings({
+        ...settings!,
         vaultPath: path,
       });
 
       toast({
-        title: "path updated",
+        title: "vault path updated",
         description: "obsidian vault path has been set",
       });
     } catch (err) {
@@ -277,7 +284,7 @@ export function ObsidianSettings() {
       const searchQuery = `path:"${relativePath}"`;
 
       const deepLink = `obsidian://search?vault=${encodeURIComponent(
-        vaultName
+        vaultName,
       )}&query=${encodeURIComponent(searchQuery)}`;
 
       window.open(deepLink, "_blank");
@@ -373,7 +380,7 @@ export function ObsidianSettings() {
         });
       }
     }, 500),
-    []
+    [],
   );
 
   // Add this new useEffect for initial path validation
@@ -440,20 +447,20 @@ export function ObsidianSettings() {
         <TabsContent value="logs">
           <form onSubmit={handleSave} className="space-y-4 w-full my-2">
             <div className="space-y-2">
-              <Label htmlFor="path">obsidian vault path</Label>
+              <Label htmlFor="vaultPath">obsidian vault path</Label>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input
-                    id="path"
-                    name="path"
+                    id="vaultPath"
+                    name="vaultPath"
                     defaultValue={settings?.vaultPath}
                     placeholder="/path/to/vault"
                     className={`${
                       pathValidation.isValid
                         ? "border-green-500"
                         : pathValidation.message
-                        ? "border-red-500"
-                        : ""
+                          ? "border-red-500"
+                          : ""
                     }`}
                     onChange={(e) => validatePath(e.target.value)}
                   />
@@ -468,7 +475,7 @@ export function ObsidianSettings() {
                         className="cursor-pointer hover:bg-muted"
                         onClick={() => {
                           const input = document.getElementById(
-                            "path"
+                            "vaultPath",
                           ) as HTMLInputElement;
                           if (input) {
                             input.value = path;
@@ -551,6 +558,7 @@ export function ObsidianSettings() {
                 }
                 onChange={(value) => {
                   updateSettings({
+                    ...settings,
                     aiModel: value,
                   });
                 }}
@@ -717,7 +725,7 @@ export function ObsidianSettings() {
                           >
                             • {item}
                           </div>
-                        )
+                        ),
                       )}
                     </div>
                   </div>
