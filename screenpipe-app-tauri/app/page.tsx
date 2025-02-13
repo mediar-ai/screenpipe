@@ -5,7 +5,6 @@ import { getStore, useSettings } from "@/lib/hooks/use-settings";
 import React, { useEffect } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import Header from "@/components/header";
-import { usePostHog } from "posthog-js/react";
 import { useToast } from "@/components/ui/use-toast";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
@@ -15,7 +14,6 @@ import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 
-import { platform } from "@tauri-apps/plugin-os";
 import { PipeStore } from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -26,15 +24,21 @@ import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 export default function Home() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loadUser } = useSettings();
   const { setActiveProfile } = useProfiles();
-  const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -196,14 +200,6 @@ export default function Home() {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [setSettingsOpen]);
-
-  useEffect(() => {
-    if (settings.userId) {
-      posthog?.identify(settings.userId, {
-        os: platform(),
-      });
-    }
-  }, [settings.userId, posthog]);
 
   useEffect(() => {
     const checkScreenPermissionRestart = async () => {

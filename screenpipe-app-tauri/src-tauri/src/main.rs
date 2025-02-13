@@ -446,36 +446,62 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
+use tokio::time::{sleep, Duration};
+
 #[tauri::command]
 async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
-    // Read file contents
+    debug!("Starting upload for file: {}", file_path);
+    
+    // Read file contents - do this outside retry loop to avoid multiple reads
     let file_contents = match tokio::fs::read(file_path).await {
-        Ok(contents) => contents,
-        Err(e) => return Err(e.to_string())
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        },
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(e.to_string())
+        }
     };
 
-    // Create client and send PUT request
     let client = reqwest::Client::new();
-    let response = match client
-        .put(signed_url)
-        .body(file_contents)
-        .send()
-        .await {
-            Ok(r) => r,
-            Err(e) => return Err(e.to_string())
-        };
+    let max_retries = 3;
+    let mut attempt = 0;
+    let mut last_error = String::new();
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "Failed to upload file: {}",
-            response.status()
-        ));
+    while attempt < max_retries {
+        attempt += 1;
+        debug!("Upload attempt {} of {}", attempt, max_retries);
+
+        match client
+            .put(signed_url)
+            .body(file_contents.clone())
+            .send()
+            .await 
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    debug!("Successfully uploaded file on attempt {}", attempt);
+                    return Ok(true);
+                }
+                last_error = format!("Upload failed with status: {}", response.status());
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            },
+            Err(e) => {
+                last_error = format!("Request failed: {}", e);
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            }
+        }
+
+        if attempt < max_retries {
+            let delay = Duration::from_secs(2u64.pow(attempt as u32 - 1)); // Exponential backoff
+            debug!("Waiting {}s before retry...", delay.as_secs());
+            sleep(delay).await;
+        }
     }
 
-    Ok(true)
+    Err(format!("Upload failed after {} attempts. Last error: {}", max_retries, last_error))
 }
-
-
 
 // Helper function to parse shortcut string
 fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {

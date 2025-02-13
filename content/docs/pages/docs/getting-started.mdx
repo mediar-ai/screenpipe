@@ -1,5 +1,6 @@
 import MotionDiv from '../../components/motion-div'
 import { Tabs, Tab } from 'nextra/components'
+import Image from 'next/image'
 
 # getting started
 
@@ -26,27 +27,93 @@ screenpipe offers multiple installation methods. for most users, we recommend:
   </Tab>
 </Tabs>
 
-then stream the OCR data (requires `jq`):
+then query the data using our JavaScript SDK:
 
-<Tabs items={['macos', 'linux', 'windows']}>
+```typescript copy
+import { pipe } from "@screenpipe/js";
+
+async function queryScreenpipe() {
+  // get content from last 5 minutes
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+  const results = await pipe.queryScreenpipe({
+    startTime: fiveMinutesAgo,
+    limit: 10,
+    contentType: "all", // can be "ocr", "audio", or "all"
+  });
+
+  if (!results) {
+    console.log("no results found or error occurred");
+    return;
+  }
+
+  console.log(`found ${results.pagination.total} items`);
+
+  // process each result
+  for (const item of results.data) {
+    if (item.type === "OCR") {
+      console.log(`OCR: ${JSON.stringify(item.content)}`);
+    } else if (item.type === "Audio") {
+      console.log(`transcript: ${JSON.stringify(item.content)}`);
+    } 
+  }
+}
+
+queryScreenpipe().catch(console.error);
+```
+
+now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
+
+</MotionDiv>
+
+### connect to AI providers
+
+<MotionDiv>
+screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
+
+<Tabs items={['ollama', 'lmstudio']}>
   <Tab>
+    1. install ollama from [ollama.ai](https://ollama.ai) and run your preferred model
     ```bash copy
-    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
+    # start ollama with your preferred model
+    ollama run phi4:14b-q4_K_M
     ```
+    2. then configure screenpipe to use ollama in your settings with model phi4:14b-q4_K_M
+    
+    that's it! screenpipe will now use ollama for AI like search, rewind, and more. you can change the model in settings.
   </Tab>
   <Tab>
-    ```bash copy
-    curl -N "http://localhost:3030/sse/vision" | while read -r line; do echo $line | sed 's/^data: //' | jq; done
-    ```
-  </Tab>
-  <Tab>
-    ```powershell copy
-    Remove-item alias:curl; curl -N "http://localhost:3030/sse/vision" | ForEach-Object { $_ -replace '^data: ', '' | jq }
-    ```
+    to use LMStudio:
+
+    1. download and install [LMStudio](https://lmstudio.ai)
+    2. select your preferred model
+    3. start the local server
+    
+    <Image 
+      src="/lmstudio2.png" 
+      alt="Select model in LMStudio" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
+    <Image 
+      src="/lmstudio3.png" 
+      alt="Start server in LMStudio" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
+    <Image 
+      src="/lmstudio1.png" 
+      alt="LMStudio setup" 
+      width={800} 
+      height={450}
+      className="rounded-lg"
+    />
   </Tab>
 </Tabs>
 
-now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
+verify your ai provider using any pipe in the store!
 
 </MotionDiv>
 
@@ -56,6 +123,15 @@ if you're interested in building from source or contributing to screenpipe, plea
 
 ### for businesses
 
-[details about business usage...]
+some of our customers use screenpipe in the following ways:
 
+- have existing screen recording software and want enterprise screen search engine 
+- want to integrate team's scale meeting transcriptions
+- want to extract knowledge from enterprise-scale screens
+- running the CLI on their customer's computer
+- running the app on their customer's computer
+- embedding the library or CLI in their own software
+- running the CLI in the cloud and forward the video/audio through SSH
+- using our Microsoft Remote Desktop / SSH integration
 
+[book a call to discuss your business needs](https://cal.com/louis030195/screenpipe-for-businesses)
