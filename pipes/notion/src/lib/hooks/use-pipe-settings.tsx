@@ -41,12 +41,20 @@ export function useNotionSettings() {
 
   const loadSettings = async () => {
     try {
-      // Load notion settings from localStorage
-      const storedSettings = localStorage.getItem(STORAGE_KEY);
-      const notionSettings = storedSettings ? JSON.parse(storedSettings) : {};
-
       // Load screenpipe app settings
       const screenpipeSettings = await getScreenpipeAppSettings();
+
+      console.log(screenpipeSettings);
+      // Load notion settings from localStorage
+      const storedSettings = localStorage.getItem(STORAGE_KEY);
+      const notionSettings = storedSettings
+        ? JSON.parse(storedSettings)
+        : {
+            ...(screenpipeSettings.customSettings?.notion && {
+              ...screenpipeSettings.customSettings?.notion,
+            }),
+          };
+
       // Merge everything together
       setSettings({
         ...DEFAULT_SETTINGS,
@@ -76,7 +84,7 @@ export function useNotionSettings() {
         ...screenpipeAppSettings,
         customSettings: {
           ...screenpipeAppSettings?.customSettings,
-          notion: mergedNotionSettings,
+          notion: notionSettings,
         },
       });
 
