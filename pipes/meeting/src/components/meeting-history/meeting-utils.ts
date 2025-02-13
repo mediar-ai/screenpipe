@@ -1,5 +1,5 @@
 import { toast } from "@/hooks/use-toast"
-import { archiveLiveMeeting, clearLiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
+import { archiveLiveMeeting } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import type { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 export async function handleStartNewMeeting(currentData?: LiveMeetingData | null) {
@@ -11,35 +11,23 @@ export async function handleStartNewMeeting(currentData?: LiveMeetingData | null
 
     try {
         if (currentData && !currentData.isArchived) {
-            // Take a snapshot of current data
-            const meetingSnapshot = {
-                ...currentData,
-                startTime: currentData.startTime || new Date().toISOString(),
-                endTime: new Date().toISOString(),
-                isArchived: true // Ensure it's marked as archived
-            }
-
             console.log('archiving current meeting:', {
-                title: meetingSnapshot.title,
-                notes: meetingSnapshot.notes?.length,
-                chunks: meetingSnapshot.chunks?.length,
-                startTime: meetingSnapshot.startTime,
-                endTime: meetingSnapshot.endTime
+                title: currentData.title,
+                notes: currentData.notes?.length,
+                chunks: currentData.chunks?.length,
+                startTime: currentData.startTime,
             })
 
-            // Archive current meeting state
+            // Archive current meeting state - this will mark it as archived
             const archived = await archiveLiveMeeting()
             if (!archived) {
                 throw new Error("failed to archive meeting")
             }
         }
-
-        // Clear storage regardless of archiving result
-        await clearLiveMeetingData()
         
-        console.log('cleared meeting data, redirecting to /meetings/live')
+        console.log('redirecting to /meetings/live for fresh meeting')
         
-        // Force reload to ensure clean state
+        // Force reload to ensure clean state - this will create a new meeting
         window.location.href = '/meetings/live'
         return true
 
