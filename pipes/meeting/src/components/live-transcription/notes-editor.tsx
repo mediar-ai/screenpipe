@@ -5,7 +5,7 @@ import { ArrowDown, ArrowLeft, List, FileText, Wand2, Sparkles, PlusCircle, Chev
 import { useAutoScroll } from './hooks/auto-scroll'
 import { TextEditor } from './text-editor-within-notes-editor'
 import { Note } from '../meeting-history/types'
-import { useMeetingContext, clearLiveMeetingData, archiveLiveMeeting } from './hooks/storage-for-live-meeting'
+import { useMeetingContext, archiveLiveMeeting } from './hooks/storage-for-live-meeting'
 import { generateMeetingName } from './hooks/ai-meeting-title'
 import { useSettings } from '@/lib/hooks/use-settings'
 import { useToast } from '@/hooks/use-toast'
@@ -419,7 +419,6 @@ export const NotesEditor = memo(function NotesEditor({
                   if (!archived) {
                     throw new Error("failed to archive meeting")
                   }
-                  await clearLiveMeetingData()
                   router.push('/meetings')
                 } catch (error) {
                   console.error('failed to finish meeting:', error)
