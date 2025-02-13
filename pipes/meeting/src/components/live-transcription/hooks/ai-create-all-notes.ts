@@ -1,7 +1,7 @@
 import { OpenAI } from "openai"
 import type { Settings } from "@screenpipe/browser"
 import { Meeting } from "../../meeting-history/types"
-import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
+import { callOpenAI, createAiClient } from "./ai-client"
 
 export interface MeetingAnalysis {
     facts: string[]
