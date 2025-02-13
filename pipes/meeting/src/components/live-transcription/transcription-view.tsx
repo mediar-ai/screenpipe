@@ -10,19 +10,26 @@ import { Button } from "@/components/ui/button"
 import { DialogFooter } from "@/components/ui/dialog"
 import { addVocabularyEntry } from './hooks/storage-vocabulary'
 import { generateMeetingNote } from './hooks/ai-create-note-based-on-chunk'
-import { improveTranscription } from './hooks/ai-improve-chunk-transcription'
 import { useMeetingContext } from './hooks/storage-for-live-meeting'
 import type { Settings } from "@screenpipe/browser"
 import { cn } from "@/lib/utils"
 import { useRecentChunks } from './hooks/pull-meetings-from-screenpipe'
 import { useAutoScroll } from './hooks/auto-scroll'
 
+interface DiffChunk {
+    value: string
+    added?: boolean
+    removed?: boolean
+}
+
 interface TranscriptionViewProps {
     isLoading: boolean
     settings: Settings
 }
 
-function DiffText({ diffs }: { diffs: DiffChunk[] }) {
+function DiffText({ diffs }: { diffs: DiffChunk[] | null }) {
+    if (!diffs) return null
+    
     return (
         <>
             {diffs.map((diff, i) => {
@@ -53,7 +60,7 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
     const [vocabDialogOpen, setVocabDialogOpen] = useState(false)
     const [vocabEntry, setVocabEntry] = useState('')
     const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null)
-    const lastProcessedChunkRef = useRef<string>('')
+    const lastProcessedChunkRef = useRef<number>(0)
     const [showLoadButton, setShowLoadButton] = useState(false)
     const [loadingHistory, setLoadingHistory] = useState(false)
     const { fetchRecentChunks } = useRecentChunks()
@@ -66,7 +73,7 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
     }, [])
 
     useEffect(() => {
-        if (data?.editedChunks && initialDataLoadRef.current) {
+        if (data?.editedMergedChunks && initialDataLoadRef.current) {
             console.log('loading initial data from storage')
             lastProcessedChunkRef.current = data.chunks?.length - 1 || 0
             initialDataLoadRef.current = false
@@ -207,12 +214,12 @@ export function TranscriptionView({ isLoading, settings }: TranscriptionViewProp
                     onMouseUp={handleSelection}
                     className="flex-1 overflow-y-auto bg-card min-h-0"
                 >
-                    {data?.chunks.length === 0 && (
+                    {(!data?.chunks || data.chunks.length === 0) && (
                         <div className="flex items-center justify-center h-full text-gray-500">
                             <p>waiting for transcription...</p>
                         </div>
                     )}
-                    {data?.chunks.length > 0 && (
+                    {data?.chunks && data.chunks.length > 0 && (
                         <div className="space-y-2 relative p-4">
                             <button
                                 onClick={() => setViewMode(prev => {
