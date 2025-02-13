@@ -1,10 +1,10 @@
 // comes from src-tauri/src/permissions.rs 
 // pub enumOSPermissionStatus
 export const PermissionsStates = {
-    NOT_NEEDED: "NotNeeded",
-    EMPTY: "Empty",
-    GRANTED: "Granted",
-    DENIED: "Denied",
+    NOT_NEEDED: "notNeeded",
+    EMPTY: "empty",
+    GRANTED: "granted",
+    DENIED: "denied",
 } as const;
 export type PermissionsStates = (typeof PermissionsStates)[keyof typeof PermissionsStates];
 
