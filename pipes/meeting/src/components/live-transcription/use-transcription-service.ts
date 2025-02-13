@@ -6,70 +6,130 @@ import { useMeetingContext } from './hooks/storage-for-live-meeting'
 
 type TranscriptionMode = 'browser' | 'screenpipe'
 
+// Global state to prevent multiple instances
+const GLOBAL_STATE = {
+    isInitialized: false
+}
+
 export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
-  const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
-  const { onNewChunk } = useMeetingContext()
-  const { startTranscriptionScreenpipe, stopTranscriptionScreenpipe } = useTranscriptionStream(setChunks)
-  const { startTranscriptionBrowser, stopTranscriptionBrowser } = useBrowserTranscriptionStream(onNewChunk)
-  const modeRef = useRef<TranscriptionMode | null>(null)
-  const [isRecording, setIsRecording] = useState(false)
-  const mountedRef = useRef(true)
+    const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
+    const { onNewChunk } = useMeetingContext()
+    const { startTranscriptionScreenpipe, stopTranscriptionScreenpipe } = useTranscriptionStream(setChunks)
+    const { startTranscriptionBrowser, stopTranscriptionBrowser } = useBrowserTranscriptionStream(onNewChunk)
+    const modeRef = useRef<TranscriptionMode | null>(null)
+    const [isRecording, setIsRecording] = useState(false)
+    const mountedRef = useRef(true)
 
-  // Initialize transcription on mount only
-  useEffect(() => {
-    modeRef.current = mode
-    if (!mode) return
-
-    if (mode === 'browser') {
-      startTranscriptionBrowser()
-    } else {
-      startTranscriptionScreenpipe()
-    }
-    setIsRecording(true)
-
-    return () => {
-      if (!mountedRef.current) {
-        if (modeRef.current === 'browser') {
-          stopTranscriptionBrowser()
-        } else {
-          stopTranscriptionScreenpipe()
+    // Handle cleanup on unmount
+    useEffect(() => {
+        return () => {
+            mountedRef.current = false
+            if (modeRef.current === 'browser') {
+                stopTranscriptionBrowser()
+            } else {
+                stopTranscriptionScreenpipe()
+            }
+            GLOBAL_STATE.isInitialized = false
+            console.log('transcription service unmounted, cleaned up global state')
         }
-        setIsRecording(false)
-      }
-    }
-  }, [])
+    }, [stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
-  // Track unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
+    // Handle visibility change
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            console.log('visibility changed:', {
+                state: document.visibilityState,
+                isInitialized: GLOBAL_STATE.isInitialized,
+                currentMode: modeRef.current
+            })
 
-  const toggleRecording = useCallback(() => {
-    const newState = !isRecording
-    if (newState) {
-      if (modeRef.current === 'browser') {
-        startTranscriptionBrowser()
-      } else {
-        startTranscriptionScreenpipe()
-      }
-    } else {
-      if (modeRef.current === 'browser') {
-        stopTranscriptionBrowser()
-      } else {
-        stopTranscriptionScreenpipe()
-      }
-    }
-    setIsRecording(newState)
-  }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, 
-      stopTranscriptionBrowser, stopTranscriptionScreenpipe])
+            if (document.visibilityState === 'visible') {
+                // Only restart if we were previously initialized but not currently running
+                if (!GLOBAL_STATE.isInitialized && isRecording) {
+                    console.log('restarting transcription after visibility change')
+                    if (modeRef.current === 'browser') {
+                        startTranscriptionBrowser()
+                    } else {
+                        startTranscriptionScreenpipe()
+                    }
+                    GLOBAL_STATE.isInitialized = true
+                }
+            } else {
+                // Clean up when hidden
+                if (GLOBAL_STATE.isInitialized) {
+                    console.log('stopping transcription on visibility change')
+                    if (modeRef.current === 'browser') {
+                        stopTranscriptionBrowser()
+                    } else {
+                        stopTranscriptionScreenpipe()
+                    }
+                    GLOBAL_STATE.isInitialized = false
+                }
+            }
+        }
 
-  return {
-    chunks,
-    isLoadingRecent: isLoading,
-    fetchRecentChunks,
-    isRecording,
-    toggleRecording
-  }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, 
+        stopTranscriptionBrowser, stopTranscriptionScreenpipe])
+
+    // Initialize transcription on mount only if not already initialized
+    useEffect(() => {
+        modeRef.current = mode
+        if (!mode || GLOBAL_STATE.isInitialized) {
+            console.log('skipping transcription init:', {
+                hasMode: !!mode,
+                isInitialized: GLOBAL_STATE.isInitialized
+            })
+            return
+        }
+
+        console.log('initializing transcription:', { mode })
+        if (mode === 'browser') {
+            startTranscriptionBrowser()
+        } else {
+            startTranscriptionScreenpipe()
+        }
+        GLOBAL_STATE.isInitialized = true
+        setIsRecording(true)
+    }, [mode, startTranscriptionBrowser, startTranscriptionScreenpipe])
+
+    const toggleRecording = useCallback(() => {
+        const newState = !isRecording
+        console.log('toggling recording:', {
+            newState,
+            currentMode: modeRef.current,
+            isInitialized: GLOBAL_STATE.isInitialized
+        })
+
+        if (newState) {
+            if (!GLOBAL_STATE.isInitialized) {
+                if (modeRef.current === 'browser') {
+                    startTranscriptionBrowser()
+                } else {
+                    startTranscriptionScreenpipe()
+                }
+                GLOBAL_STATE.isInitialized = true
+            }
+        } else {
+            if (GLOBAL_STATE.isInitialized) {
+                if (modeRef.current === 'browser') {
+                    stopTranscriptionBrowser()
+                } else {
+                    stopTranscriptionScreenpipe()
+                }
+                GLOBAL_STATE.isInitialized = false
+            }
+        }
+        setIsRecording(newState)
+    }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, 
+        stopTranscriptionBrowser, stopTranscriptionScreenpipe])
+
+    return {
+        chunks,
+        isLoadingRecent: isLoading,
+        fetchRecentChunks,
+        isRecording,
+        toggleRecording
+    }
 } 
