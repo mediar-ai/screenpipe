@@ -22,12 +22,7 @@ export default function LiveMeetingPage() {
   
   return (
     <div className="h-full">
-      <LiveTranscription 
-        onBack={() => {
-          console.log('live meeting back pressed')
-          router.push('/meetings')
-        }} 
-      />
+      <LiveTranscription />
     </div>
   )
 }
