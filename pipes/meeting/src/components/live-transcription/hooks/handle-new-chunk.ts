@@ -18,8 +18,8 @@ export interface ImprovedChunk {
 
 interface HandleNewChunkDeps {
     setData: (fn: (currentData: LiveMeetingData | null) => LiveMeetingData | null) => void
-    setImprovingChunks: (chunks: Record<number, boolean>) => void
-    setRecentlyImproved: (chunks: Record<number, boolean>) => void
+    setImprovingChunks: (fn: (prev: Record<number, boolean>) => Record<number, boolean>) => void
+    setRecentlyImproved: (fn: (prev: Record<number, boolean>) => Record<number, boolean>) => void
     updateStore: (newData: LiveMeetingData) => Promise<boolean>
     settings: Settings
 }
@@ -124,7 +124,7 @@ export function createHandleNewChunk(deps: HandleNewChunkDeps) {
                     
                     console.log('processing chunk:', { id: previousMerged.id, text: previousMerged.text })
                     processingChunks.add(previousMerged.id)
-                    setImprovingChunks(prev => ({ ...prev, [previousMerged.id]: true }))
+                    setImprovingChunks((prev: Record<number, boolean>) => ({ ...prev, [previousMerged.id]: true }))
                     
                     const context = {
                         meetingTitle: currentData.title || '',
@@ -137,12 +137,12 @@ export function createHandleNewChunk(deps: HandleNewChunkDeps) {
                             const diffs = diffWords(previousMerged.text, improved)
                             
                             processingChunks.delete(previousMerged.id)
-                            setImprovingChunks(prev => {
+                            setImprovingChunks((prev: Record<number, boolean>) => {
                                 const next = { ...prev }
                                 delete next[previousMerged.id]
                                 return next
                             })
-                            setRecentlyImproved(prev => ({ ...prev, [previousMerged.id]: true }))
+                            setRecentlyImproved((prev: Record<number, boolean>) => ({ ...prev, [previousMerged.id]: true }))
 
                             setData(current => {
                                 if (!current) return null
