@@ -69,7 +69,10 @@ export async function generateMeetingName(
       initialDelay: 1000
     })
 
-    const aiName = response.choices[0]?.message?.content?.trim() || currentTitle || "untitled meeting"
+    const aiName = 'choices' in response 
+        ? response.choices[0]?.message?.content?.trim() || currentTitle || "untitled meeting"
+        : currentTitle || "untitled meeting"
+        
     const sanitizedName = aiName.replace(/["']/g, '').replace(/[^\w\s-]/g, ' ').trim()
     console.log("sanitized ai name:", sanitizedName)
     return sanitizedName
