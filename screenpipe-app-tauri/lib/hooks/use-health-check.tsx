@@ -6,6 +6,7 @@ export const DeviceStatus = {
   DISABLED: "disabled",
   NO_DATA: "no data",
   ERROR: "error",
+  UNKNOWN: "unknown",
 } as const;
 export type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
 
@@ -13,6 +14,7 @@ export const SystemStatus = {
   HEALTHY: "healthy",
   UNHEALTHY: "unhealthy",
   ERROR: "error",
+  WEBSOCKET_CLOSED: "websocket_closed",
 } as const;
 export type SystemStatus = (typeof SystemStatus)[keyof typeof SystemStatus];
 
@@ -34,16 +36,8 @@ function isHealthChanged(
   newHealth: HealthCheckResponse
 ): boolean {
   if (!oldHealth) return true;
-  return (
-    oldHealth.status !== newHealth.status ||
-    oldHealth.status_code !== newHealth.status_code ||
-    oldHealth.last_frame_timestamp !== newHealth.last_frame_timestamp ||
-    oldHealth.last_audio_timestamp !== newHealth.last_audio_timestamp ||
-    oldHealth.last_ui_timestamp !== newHealth.last_ui_timestamp ||
-    oldHealth.frame_status !== newHealth.frame_status ||
-    oldHealth.audio_status !== newHealth.audio_status ||
-    oldHealth.ui_status !== newHealth.ui_status ||
-    oldHealth.message !== newHealth.message
+  return Object.keys(newHealth).some(
+    (key) => oldHealth[key as keyof HealthCheckResponse] !== newHealth[key as keyof HealthCheckResponse]
   );
 }
 
@@ -57,7 +51,6 @@ type HealthCheckHook = {
 
 export function useHealthCheck() {
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
-  const [isServerDown, setIsServerDown] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const healthRef = useRef(health);
   const wsRef = useRef<WebSocket | null>(null);
@@ -106,13 +99,12 @@ export function useHealthCheck() {
         last_frame_timestamp: null,
         last_audio_timestamp: null,
         last_ui_timestamp: null,
-        frame_status: DeviceStatus.ERROR,
-        audio_status: DeviceStatus.ERROR,
-        ui_status: DeviceStatus.ERROR,
+        frame_status: DeviceStatus.UNKNOWN,
+        audio_status: DeviceStatus.UNKNOWN,
+        ui_status: DeviceStatus.UNKNOWN,
         message: error.message,
       };
       setHealth(errorHealth);
-      setIsServerDown(true);
       setIsLoading(false);
       if (!retryIntervalRef.current) {
         retryIntervalRef.current = setInterval(fetchHealth, 2000);
@@ -122,18 +114,18 @@ export function useHealthCheck() {
     ws.onclose = (s) => {
       console.log("ws.onclose", s)
       const errorHealth: HealthCheckResponse = {
-        status: SystemStatus.ERROR,
+        status: SystemStatus.WEBSOCKET_CLOSED,
         status_code: 500,
         last_frame_timestamp: null,
         last_audio_timestamp: null,
         last_ui_timestamp: null,
-        frame_status: DeviceStatus.ERROR,
-        audio_status: DeviceStatus.ERROR,
-        ui_status: DeviceStatus.ERROR,
-        message: "WebSocket connection closed",
+        frame_status: DeviceStatus.UNKNOWN,
+        audio_status: DeviceStatus.UNKNOWN,
+        ui_status: DeviceStatus.UNKNOWN,
+        message: "websocket connection closed",
       };
+
       setHealth(errorHealth);
-      setIsServerDown(true);
       if (!retryIntervalRef.current) {
         retryIntervalRef.current = setInterval(fetchHealth, 2000);
       }
@@ -154,7 +146,6 @@ export function useHealthCheck() {
 
   return {
     health,
-    isServerDown,
     isLoading,
   } as HealthCheckHook;
 }
