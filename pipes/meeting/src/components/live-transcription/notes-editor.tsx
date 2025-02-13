@@ -504,144 +504,146 @@ export const NotesEditor = memo(function NotesEditor({
           ${showNav ? 'rotate-180' : ''}`} />
       </div>
 
-      <div className="flex-1">
-        {TitleInput}
-        {showInvalidTime && (
-          <div className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
-            invalid time format
-          </div>
-        )}
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-none">
+          {TitleInput}
+          {showInvalidTime && (
+            <div className="absolute top-2 right-2 bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
+              invalid time format
+            </div>
+          )}
+        </div>
 
-        {viewMode === 'timeline' ? (
-          <div 
-            ref={scrollRef}
-            onScroll={onScroll}
-            className="flex-1 overflow-y-auto p-3 space-y-3"
-          >
-            {sortedNotes.map(note => (
-              <div 
-                key={note.id} 
-                onClick={() => !editingId && onTimeClick(note.timestamp)}
-                className="text-sm mb-2 hover:bg-gray-100 active:bg-gray-200 transition-colors select-text cursor-pointer group"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {editingTime === note.id ? (
-                      <div className="relative">
-                        <input
-                          ref={editTimeRef}
-                          type="text"
-                          id={`time-edit-${note.id}`}
-                          name={`time-edit-${note.id}`}
-                          value={editTimeText}
-                          onChange={(e) => setEditTimeText(e.target.value)}
-                          className="w-24 bg-white border rounded px-1 py-0.5 focus:outline-none text-xs text-gray-500"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              updateTime(note.id)
-                            }
-                            if (e.key === 'Escape') {
-                              setEditingTime(null)
-                            }
-                          }}
-                        />
-                        <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
-                          format: HH:MM:SS
+        <div className="flex-1 min-h-0">
+          {viewMode === 'timeline' ? (
+            <div 
+              ref={scrollRef}
+              onScroll={onScroll}
+              className="h-full overflow-y-auto p-3 space-y-3"
+            >
+              {sortedNotes.map(note => (
+                <div 
+                  key={note.id} 
+                  onClick={() => !editingId && onTimeClick(note.timestamp)}
+                  className="text-sm mb-2 hover:bg-gray-100 active:bg-gray-200 transition-colors select-text cursor-pointer group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      {editingTime === note.id ? (
+                        <div className="relative">
+                          <input
+                            ref={editTimeRef}
+                            type="text"
+                            id={`time-edit-${note.id}`}
+                            name={`time-edit-${note.id}`}
+                            value={editTimeText}
+                            onChange={(e) => setEditTimeText(e.target.value)}
+                            className="w-24 bg-white border rounded px-1 py-0.5 focus:outline-none text-xs text-gray-500"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                updateTime(note.id)
+                              }
+                              if (e.key === 'Escape') {
+                                setEditingTime(null)
+                              }
+                            }}
+                          />
+                          <div className="absolute -bottom-4 left-0 text-[10px] text-gray-500">
+                            format: HH:MM:SS
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span className="text-gray-500 text-xs hover:underline">
-                        {note.timestamp instanceof Date ? 
-                          note.timestamp.toLocaleTimeString() : 
-                          new Date(note.timestamp).toLocaleTimeString()
-                        }
-                      </span>
-                    )}
-                    {!editingTime && (
+                      ) : (
+                        <span className="text-gray-500 text-xs hover:underline">
+                          {note.timestamp instanceof Date ? 
+                            note.timestamp.toLocaleTimeString() : 
+                            new Date(note.timestamp).toLocaleTimeString()
+                          }
+                        </span>
+                      )}
+                      {!editingTime && (
+                        <button
+                          onClick={(e) => startEditingTime(note, e)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-1"
+                        >
+                          edit
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {note.editedAt && (
+                        <span className="text-gray-400 text-xs">
+                          edited {note.editedAt.toLocaleTimeString()}
+                        </span>
+                      )}
                       <button
-                        onClick={(e) => startEditingTime(note, e)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-1"
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          await handleImprove(note)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-2 py-0.5"
                       >
-                        edit
+                        improve
                       </button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {note.editedAt && (
-                      <span className="text-gray-400 text-xs">
-                        edited {note.editedAt.toLocaleTimeString()}
-                      </span>
-                    )}
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation()
-                        await handleImprove(note)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 rounded text-xs text-gray-500 px-2 py-0.5"
-                    >
-                      improve
-                    </button>
-                  </div>
-                </div>
-                {editingId === note.id ? (
-                  <div 
-                    ref={editRef}
-                    className="mt-1"
-                  >
-                    <input
-                      type="text"
-                      id={`note-edit-${note.id}`}
-                      name={`note-edit-${note.id}`}
-                      value={editText}
-                      onChange={(e) => setEditText(e.target.value)}
-                      className="w-full bg-gray-50 border rounded px-2 py-1 focus:outline-none font-mono text-sm"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          updateNote()
-                        }
-                        if (e.key === 'Escape') {
-                          setEditingId(null)
-                        }
-                      }}
-                    />
-                    <div className="mt-1 text-xs text-gray-500">
-                      press Enter to save • Esc to discard
                     </div>
                   </div>
-                ) : (
-                  <div 
-                    className="mt-1 cursor-text hover:bg-gray-50 transition-colors rounded"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      startEditing(note, e)
-                    }}
-                  >
-                    {note.text}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <TextEditor 
-            notes={sortedNotes}
-            setNotes={(newNotes: Note[]) => setNotes(newNotes)}
-            scrollRef={scrollRef}
-            onScroll={onScroll}
-            isEditing={true}
-            analysis={analysis?.summary ? {
-              summary: analysis.summary,
-              facts: [],
-              events: [],
-              flow: [],
-              decisions: []
-            } : null}
-          />
-        )}
+                  {editingId === note.id ? (
+                    <div 
+                      ref={editRef}
+                      className="mt-1"
+                    >
+                      <input
+                        type="text"
+                        id={`note-edit-${note.id}`}
+                        name={`note-edit-${note.id}`}
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        className="w-full bg-gray-50 border rounded px-2 py-1 focus:outline-none font-mono text-sm"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            updateNote()
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingId(null)
+                          }
+                        }}
+                      />
+                      <div className="mt-1 text-xs text-gray-500">
+                        press Enter to save • Esc to discard
+                      </div>
+                    </div>
+                  ) : (
+                    <div 
+                      className="mt-1 cursor-text hover:bg-gray-50 transition-colors rounded"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startEditing(note, e)
+                      }}
+                    >
+                      {note.text}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <TextEditor 
+              notes={sortedNotes}
+              setNotes={(newNotes: Note[]) => setNotes(newNotes)}
+              isEditing={true}
+              analysis={analysis?.summary ? {
+                summary: analysis.summary,
+                facts: [],
+                events: [],
+                flow: [],
+                decisions: []
+              } : null}
+            />
+          )}
+        </div>
 
         {!isScrolledToBottom && (
           <button
@@ -651,21 +653,21 @@ export const NotesEditor = memo(function NotesEditor({
             <ArrowDown className="h-4 w-4" />
           </button>
         )}
-
-        {viewMode === 'timeline' && (
-          <form onSubmit={sendMessage} className="p-2 bg-gray-100">
-            <input
-              type="text"
-              id="new-note"
-              name="new-note"
-              value={currentMessage}
-              onChange={(e) => setCurrentMessage(e.target.value)}
-              className="flex-1 px-2 py-1.5 bg-transparent focus:outline-none text-sm"
-              placeholder="type a note..."
-            />
-          </form>
-        )}
       </div>
+
+      {viewMode === 'timeline' && (
+        <form onSubmit={sendMessage} className="flex-none p-2 bg-gray-100">
+          <input
+            type="text"
+            id="new-note"
+            name="new-note"
+            value={currentMessage}
+            onChange={(e) => setCurrentMessage(e.target.value)}
+            className="flex-1 px-2 py-1.5 bg-transparent focus:outline-none text-sm"
+            placeholder="type a note..."
+          />
+        </form>
+      )}
     </div>
   )
 }, (prevProps, nextProps) => {
