@@ -6,7 +6,7 @@ import { useSettings } from "@/lib/hooks/use-settings"
 import { createHandleNewChunk } from './handle-new-chunk'
 import { ImprovedChunk } from './handle-new-chunk'
 
-// Remove liveStore, keep only one store
+// Single store for all meetings
 export const meetingStore = localforage.createInstance({
     name: "live-meetings",
     storeName: "meetings"  // All meetings live here
@@ -91,12 +91,16 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
     const loadData = async () => {
         try {
             let activeMeeting: LiveMeetingData | null = null
-            await meetingStore.iterate<LiveMeetingData, void>((value) => {
-                if (!value.isArchived) {
-                    activeMeeting = value
-                    return
+            
+            // Get all meetings and find the first non-archived one
+            const allMeetings = await meetingStore.keys()
+            for (const key of allMeetings) {
+                const meeting = await meetingStore.getItem<LiveMeetingData>(key)
+                if (meeting && !meeting.isArchived) {
+                    activeMeeting = meeting
+                    break
                 }
-            })
+            }
 
             console.log('MeetingProvider: loaded data:', {
                 exists: !!activeMeeting,
@@ -238,7 +242,6 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         data,
         updateStore,
         reloadData,
-        setSegments: async () => {},
         onNewChunk: handleNewChunk,
         improvingChunks,
         setImprovingChunks,
@@ -261,83 +264,31 @@ export function useMeetingContext() {
     return context
 }
 
-// Storage operations
-export const getCurrentKey = () => LIVE_MEETING_KEY
-
-export const clearCurrentKey = () => {
-    meetingStore.removeItem(LIVE_MEETING_KEY)
-    console.log('cleared live meeting data')
-}
-
-
-export async function clearLiveMeetingData(): Promise<void> {
-    try {
-        const currentData = await meetingStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-        
-        console.log('clearing live meeting data:', {
-            had_title: !!currentData?.title,
-            notes_count: currentData?.notes.length,
-            chunks_count: currentData?.chunks.length,
-            analysis: !!currentData?.analysis,
-            start_time: currentData?.startTime,
-        })
-        
-        await meetingStore.removeItem(LIVE_MEETING_KEY)
-        console.log('live meeting data cleared successfully')
-    } catch (error) {
-        console.error('failed to clear live meeting data:', error)
-        throw error
-    }
-}
-
-// Add function to archive current live meeting
-export async function archiveLiveMeeting(): Promise<boolean> {
+// Rename function to better reflect its purpose
+export async function archiveLiveMeeting(): Promise<LiveMeetingData | null> {
     try {
         // Find active meeting
-        let activeMeeting: LiveMeetingData | null = null
-        await meetingStore.iterate<LiveMeetingData, void>((value) => {
-            if (!value.isArchived) {
-                activeMeeting = value
-                return
+        const allMeetings = await meetingStore.keys()
+        for (const key of allMeetings) {
+            const meeting = await meetingStore.getItem<LiveMeetingData>(key)
+            if (meeting && !meeting.isArchived) {
+                console.log('archiving active meeting:', {
+                    id: meeting.id,
+                    title: meeting.title
+                })
+                const archivedMeeting = {
+                    ...meeting,
+                    isArchived: true,
+                    endTime: new Date().toISOString()
+                }
+                await meetingStore.setItem(key, archivedMeeting)
+                return archivedMeeting
             }
-        })
-
-        if (!activeMeeting) {
-            throw new Error('no meeting data found to archive')
         }
-
-        // Don't archive if it's already an archived meeting being viewed
-        if (activeMeeting.isArchived) {
-            console.log('skipping archive for already archived meeting:', {
-                id: activeMeeting.id,
-                title: activeMeeting.title
-            })
-            return true
-        }
-
-        // Ensure we have required fields
-        if (!activeMeeting.startTime) {
-            activeMeeting.startTime = new Date().toISOString()
-        }
-        
-        console.log('archiving meeting:', { 
-            id: activeMeeting.id,
-            startTime: activeMeeting.startTime,
-            title: activeMeeting.title,
-            chunks: activeMeeting.chunks?.length,
-            notes: activeMeeting.notes?.length
-        })
-        
-        await meetingStore.setItem(activeMeeting.id, {
-            ...activeMeeting,
-            isArchived: true,
-            endTime: activeMeeting.endTime || new Date().toISOString()
-        })
-        
-        return true
+        return null
     } catch (error) {
-        console.error('failed to archive meeting:', error)
-        return false
+        console.error('failed to archive meeting data:', error)
+        throw error
     }
 }
 
@@ -346,7 +297,7 @@ export async function getArchivedLiveMeetings(): Promise<LiveMeetingData[]> {
     try {
         const archived: LiveMeetingData[] = []
         
-        await meetingStore.iterate<LiveMeetingData, void>((value) => {
+        await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData) => {
             if (value.isArchived) {
                 archived.push(value)
             }
@@ -375,7 +326,7 @@ export async function deleteArchivedMeeting(startTime: string): Promise<void> {
     let keyToDelete: string | null = null
     
     // Find the meeting with matching start time
-    await meetingStore.iterate<LiveMeetingData, void>((value, key) => {
+    await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData, key: string) => {
       if (value.startTime === startTime) {
         keyToDelete = key
         return
