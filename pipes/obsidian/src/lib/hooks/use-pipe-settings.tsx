@@ -6,7 +6,7 @@ import {
 } from "../actions/get-screenpipe-app-settings";
 
 const DEFAULT_SETTINGS: Partial<Settings> = {
-  prompt: `yo, you're my personal data detective! 🕵️‍♂️
+  prompt: `yo, you're my personal data detective! 🕵
 
 rules for the investigation:
 - extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
@@ -39,20 +39,31 @@ export function usePipeSettings() {
   const [settings, setSettings] = useState<Partial<Settings> | null>(null);
   const [loading, setLoading] = useState(true);
 
-  console.log("settings", settings);
-
   useEffect(() => {
     loadSettings();
   }, []);
 
   const loadSettings = async () => {
     try {
-      // Load notion settings from localStorage
-      const storedSettings = localStorage.getItem(STORAGE_KEY);
-      const notionSettings = storedSettings ? JSON.parse(storedSettings) : {};
-
       // Load screenpipe app settings
       const screenpipeSettings = await getScreenpipeAppSettings();
+
+      console.log(screenpipeSettings);
+
+      // Load notion settings from localStorage
+      //const storedSettings = localStorage.getItem(STORAGE_KEY);
+      //const notionSettings = storedSettings
+      //  ? JSON.parse(storedSettings)
+      //  : {
+      //      ...(screenpipeSettings.customSettings?.obsidian && {
+      //        ...screenpipeSettings.customSettings?.obsidian,
+      //      }),
+      //    };
+      const notionSettings = {
+        ...(screenpipeSettings.customSettings?.obsidian && {
+          ...screenpipeSettings.customSettings?.obsidian,
+        }),
+      };
 
       // Merge everything together
       setSettings({
@@ -77,20 +88,17 @@ export function usePipeSettings() {
         ...obsidianSettings,
       };
 
-      const appSettings = {
+      // Update screenpipe settings if provided
+      await updateScreenpipeAppSettings({
         ...screenpipeAppSettings,
         customSettings: {
           ...screenpipeAppSettings?.customSettings,
           obsidian: obsidianSettings,
         },
-      };
-      console.log("updating store settings", appSettings);
-
-      // Update screenpipe settings if provided
-      await updateScreenpipeAppSettings(appSettings);
+      });
 
       // Update notion settings in localStorage
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
+      // localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
 
       // Update state with everything
       setSettings({
