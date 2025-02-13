@@ -1,39 +1,47 @@
 import type { Settings } from "@screenpipe/browser"
 import { TranscriptionChunk } from "../../meeting-history/types"
-import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
+import { callOpenAI, createAiClient } from "./ai-client"
 
 export async function generateMeetingNote(
     chunks: TranscriptionChunk[],
-    settings: Settings
+    settings: Settings,
+    existingNotes: string[] = []
 ): Promise<string> {
     const openai = createAiClient(settings)
 
     try {
         console.log("generating meeting note from chunks:", {
-            chunks_count: chunks.length
+            chunks_count: chunks.length,
+            existing_notes_count: existingNotes.length
         })
 
         const transcript = chunks
             .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
             .join("\n")
 
+        const existingNotesContext = existingNotes.length > 0 
+            ? `existing notes from this meeting:\n${existingNotes.join("\n")}\n\n`
+            : ""
+
         const messages = [
             {
                 role: "system" as const,
-                content: `generate a single, concise first-person note about what happened in this meeting segment.
+                content: `generate a single, concise note about what happened in this segment.
                          be factual and specific.
-                         use "i" perspective.
+                         focus on the key point or action item.
                          keep it a few word sentence.
-                         do not use quotes.`
+                         do not use quotes.
+                         do not use wrapping words like "disucssion on", jump straight into note.
+                         avoid repeating information from existing notes.`
             },
             {
                 role: "user" as const,
-                content: `conversation transcript:
+                content: `${existingNotesContext}conversation transcript:
                 ${transcript}`
             }
         ]
 
-        console.log("sending request to openai for note generation")
+        // console.log("sending request to openai for note generation")
         const response = await callOpenAI(openai, {
             model: settings.aiModel,
             messages,
@@ -46,7 +54,7 @@ export async function generateMeetingNote(
 
         const note = response.choices[0]?.message?.content?.trim() || "failed to generate note"
         
-        console.log("generated note:", { note })
+        // console.log("AI note generated:", { note })
         return note
 
     } catch (error) {
