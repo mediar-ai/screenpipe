@@ -12,15 +12,11 @@ import { ArrowLeft, Mic, MicOff, Square, Play } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
-import { clearLiveMeetingData } from './hooks/storage-for-live-meeting'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-interface Props {
-  onBack: () => void
-}
 
-export function LiveTranscription({ onBack }: Props) {
+export function LiveTranscription() {
     const {
         chunks,
         isLoadingRecent: isLoading,
@@ -74,11 +70,6 @@ export function LiveTranscription({ onBack }: Props) {
         if (newSizes[1] < 25) setSizes([100, 0])
     }
 
-    const handleBack = () => {
-        console.log('navigating back to meeting history')
-        router.push('/meetings')
-    }
-
     return (
         <div className="h-full flex flex-col">
             <div
@@ -126,10 +117,6 @@ export function LiveTranscription({ onBack }: Props) {
                         <TranscriptionView
                             settings={settings}
                             isLoading={isLoading}
-                            isAutoScrollEnabled={isScrolledToBottom}
-                            scrollRef={scrollRef}
-                            onScroll={onScroll}
-                            isScrolledToBottom={isScrolledToBottom}
                         />
                     </div>
 
@@ -137,9 +124,7 @@ export function LiveTranscription({ onBack }: Props) {
                     <div>
                         <NotesEditor 
                             onTimeClick={handleTimeClick} 
-                            onBack={handleBack}
                             onNewMeeting={() => {
-                                clearLiveMeetingData()
                                 router.refresh()
                             }}
                         />
