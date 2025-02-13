@@ -51,14 +51,19 @@ export function usePipeSettings() {
       console.log(screenpipeSettings);
 
       // Load notion settings from localStorage
-      const storedSettings = localStorage.getItem(STORAGE_KEY);
-      const notionSettings = storedSettings
-        ? JSON.parse(storedSettings)
-        : {
-            ...(screenpipeSettings.customSettings?.obsidian && {
-              ...screenpipeSettings.customSettings?.obsidian,
-            }),
-          };
+      //const storedSettings = localStorage.getItem(STORAGE_KEY);
+      //const notionSettings = storedSettings
+      //  ? JSON.parse(storedSettings)
+      //  : {
+      //      ...(screenpipeSettings.customSettings?.obsidian && {
+      //        ...screenpipeSettings.customSettings?.obsidian,
+      //      }),
+      //    };
+      const notionSettings = {
+        ...(screenpipeSettings.customSettings?.obsidian && {
+          ...screenpipeSettings.customSettings?.obsidian,
+        }),
+      };
 
       // Merge everything together
       setSettings({
@@ -93,7 +98,7 @@ export function usePipeSettings() {
       });
 
       // Update notion settings in localStorage
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
+      // localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
 
       // Update state with everything
       setSettings({

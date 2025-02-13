@@ -46,14 +46,19 @@ export function useNotionSettings() {
 
       console.log(screenpipeSettings);
       // Load notion settings from localStorage
-      const storedSettings = localStorage.getItem(STORAGE_KEY);
-      const notionSettings = storedSettings
-        ? JSON.parse(storedSettings)
-        : {
-            ...(screenpipeSettings.customSettings?.notion && {
-              ...screenpipeSettings.customSettings?.notion,
-            }),
-          };
+      // const storedSettings = localStorage.getItem(STORAGE_KEY);
+      // const notionSettings = storedSettings
+      //   ? JSON.parse(storedSettings)
+      //   : {
+      //       ...(screenpipeSettings.customSettings?.notion && {
+      //         ...screenpipeSettings.customSettings?.notion,
+      //       }),
+      //     };
+      const notionSettings = {
+        ...(screenpipeSettings.customSettings?.notion && {
+          ...screenpipeSettings.customSettings?.notion,
+        }),
+      };
 
       // Merge everything together
       setSettings({
@@ -88,7 +93,7 @@ export function useNotionSettings() {
         },
       });
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNotionSettings));
+      // localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedNotionSettings));
 
       // Update state with everything
       setSettings({
