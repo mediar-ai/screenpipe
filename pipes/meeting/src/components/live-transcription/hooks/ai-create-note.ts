@@ -1,6 +1,6 @@
 import type { Settings } from "@screenpipe/browser"
 import { Note } from "../../meeting-history/types"
-import { callOpenAI, createAiClient } from "../../meeting-history/ai-client"
+import { callOpenAI, createAiClient } from "./ai-client"
 
 interface NoteContext {
     note: Note
