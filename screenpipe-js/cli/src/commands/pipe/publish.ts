@@ -7,6 +7,7 @@ import crypto from "crypto";
 import ignore from "ignore";
 import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
+import { logger } from "../components/commands/add/utils/logger";
 
 interface ProjectFiles {
   required: string[];
@@ -112,7 +113,7 @@ export const publishCommand = new Command('publish')
           colors.error(
             `${
               symbols.error
-            } Not logged in. Please login first using ${colors.highlight(
+            } not logged in. please login first using ${colors.highlight(
               "screenpipe login"
             )}`
           )
@@ -130,7 +131,7 @@ export const publishCommand = new Command('publish')
       } catch (error) {
         console.error(
           colors.error(
-            `${symbols.error} Failed to read package.json. Make sure you're in the correct directory.`
+            `${symbols.error} failed to read package.json. Make sure you're in the correct directory.`
           )
         );
         process.exit(1);
@@ -139,20 +140,20 @@ export const publishCommand = new Command('publish')
       if (!packageJson.name || !packageJson.version) {
         console.error(
           colors.error(
-            `${symbols.error} Package name and version are required in package.json`
+            `${symbols.error} package name and version are required in package.json`
           )
         );
         process.exit(1);
       }
 
-      console.log(
+      logger.info(
         colors.info(
-          `\n${symbols.info} Publishing ${colors.highlight(
+          `\n${symbols.info} publishing ${colors.highlight(
             packageJson.name
           )} v${packageJson.version}...`
         )
       );
-      console.log(colors.dim(`${symbols.arrow} Creating package archive...`));
+      logger.log(colors.dim(`${symbols.arrow} creating package archive...`));
 
       // Create temporary zip file
       const zipPath = path.join(
@@ -274,7 +275,7 @@ export const publishCommand = new Command('publish')
         const { uploadUrl, path } = await urlResponse.json();
 
         // Upload directly to Supabase
-        console.log(colors.dim(`${symbols.arrow} Uploading to storage...`));
+        logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
         const uploadResponse = await retryFetch(uploadUrl, {
           method: "PUT",
           headers: {
@@ -289,7 +290,7 @@ export const publishCommand = new Command('publish')
         }
 
         // Notify server that upload is complete
-        console.log(colors.dim(`${symbols.arrow} Finalizing upload...`));
+        logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
         const finalizeResponse = await fetch(
           `${API_BASE_URL}/api/plugins/publish/finalize`,
           {
@@ -317,29 +318,28 @@ export const publishCommand = new Command('publish')
         const data = await finalizeResponse.json();
 
         // Success messages
+        logger.success(`\n${symbols.success} successfully published plugin!`)
+        
         console.log(
-          colors.success(`\n${symbols.success} Successfully published plugin!`)
+          colors.listItem(`${colors.label("name")} ${packageJson.name}`)
         );
         console.log(
-          colors.listItem(`${colors.label("Name")} ${packageJson.name}`)
-        );
-        console.log(
-          colors.listItem(`${colors.label("Version")} ${packageJson.version}`)
+          colors.listItem(`${colors.label("version")} ${packageJson.version}`)
         );
         console.log(
           colors.listItem(
-            `${colors.label("Size")} ${(fileSize / 1024).toFixed(2)} KB`
+            `${colors.label("size")} ${(fileSize / 1024).toFixed(2)} KB`
           )
         );
 
         if (data.message) {
-          console.log(colors.info(`\n${symbols.info} ${data.message}`));
+          logger.info(`\n${symbols.info} ${data.message}`);
         }
 
         // Cleanup zip file
         fs.unlinkSync(zipPath);
         if (opts.verbose) {
-          console.log(
+          logger.log(
             colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
           );
         }
@@ -348,7 +348,7 @@ export const publishCommand = new Command('publish')
         if (fs.existsSync(zipPath)) {
           fs.unlinkSync(zipPath);
           if (opts.verbose) {
-            console.log(
+            logger.log(
               colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
             );
           }

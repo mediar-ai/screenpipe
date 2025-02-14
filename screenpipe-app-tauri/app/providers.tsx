@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
-import { store as SettingsStore } from "@/lib/hooks/use-settings";
+import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";
 import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
 
 export const Providers = forwardRef<

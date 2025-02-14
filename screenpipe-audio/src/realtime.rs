@@ -7,7 +7,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 pub async fn realtime_stt(
     stream: Arc<AudioStream>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {

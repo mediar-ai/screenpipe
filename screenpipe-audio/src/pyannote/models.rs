@@ -118,6 +118,14 @@ async fn download_model(model_type: PyannoteModel) -> Result<()> {
     tokio::io::AsyncWriteExt::write_all(&mut file, &model_data).await?;
     info!("{} model successfully downloaded and saved", filename);
 
+    // debug!("optimizing {} model", filename);
+    // let session = ort::SessionBuilder::new()?
+    //     .with_optimization_level(ort::GraphOptimizationLevel::Level3)?
+    //     .with_intra_threads(1)?
+    //     .with_inter_threads(1)?
+    //     .with_optimized_model_path(path.to_str().unwrap())?;
+    // session.commit_from_file(path.to_str().unwrap())?;
+
     Ok(())
 }
 

@@ -103,7 +103,6 @@ export class PipeApi {
       }
 
       const data = (await response.json()) as PurchaseHistoryResponse;
-      console.log("purchase history data", data);
       return data;
     } catch (error) {
       console.error("error getting purchase history:", error);

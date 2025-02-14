@@ -46,10 +46,6 @@ class NodePipe {
       });
       return true;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-      });
       console.error("failed to send notification:", error);
       return false;
     }
@@ -120,10 +116,6 @@ class NodePipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-      });
       console.error("error querying screenpipe:", error);
       return null;
     }

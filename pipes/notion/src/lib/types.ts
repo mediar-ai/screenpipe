@@ -1,3 +1,5 @@
+import type { Settings as ScreenpipeAppSettings } from "@screenpipe/js";
+
 export interface NotionCredentials {
   accessToken: string;
   databaseId: string;
@@ -43,4 +45,5 @@ export interface Settings {
   backend: "notion";
   notion: NotionCredentials;
   prompt: string;
+  screenpipeAppSettings: ScreenpipeAppSettings;
 }

@@ -155,6 +155,7 @@ export function TextEditor({
     editedAt: undefined
   })
 
+
   return (
     <div 
       ref={scrollRef}
