@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { endOfDay, startOfDay } from "date-fns";
-import { useQueryStates } from "nuqs";
-import { queryParser } from "@/lib/utils";
 import { useCallback, useEffect } from "react";
 import { parser } from "@/lib/keyword-parser";
 import { CurrentFrame } from "@/components/current-frame";

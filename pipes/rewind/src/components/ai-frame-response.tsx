@@ -24,7 +24,7 @@ export const AIFrameResponse = () => {
 		try {
 			if (aiContent !== null) return;
 			const currentFrame = searchResults[debouncedResultIndex];
-			if (settings.openaiApiKey.length === 0) {
+			if (settings?.aiModel?.length === 0) {
 				return;
 			}
 			if (!currentFrame) return;
@@ -42,10 +42,10 @@ export const AIFrameResponse = () => {
 			// Initialize OpenAI
 			const openai = new OpenAI({
 				apiKey:
-					settings.aiProviderType === "screenpipe-cloud"
-						? settings.user.token
-						: settings.openaiApiKey,
-				baseURL: settings.aiUrl,
+					settings?.aiProviderType === "screenpipe-cloud"
+						? settings?.user?.token
+						: settings?.openaiApiKey,
+				baseURL: settings?.aiUrl,
 				dangerouslyAllowBrowser: true,
 			});
 
@@ -53,7 +53,7 @@ export const AIFrameResponse = () => {
 
 			// Generate suggestions using OpenAI
 			const response = await openai.chat.completions.create({
-				model: settings.aiModel,
+				model: settings?.aiModel || "",
 				messages: [
 					{
 						role: "system",
@@ -69,7 +69,7 @@ You are an advanced text analyzer. You will be given text and metadata extracted
 ### **Input Format Example:**
 {
     "frame_id": <frame_id>,
-    "timestamp": <dat and time of frame>,
+    "timestamp": <date and time of frame>,
     "app_name": <app_name>,
     "window_name": <window_name>,
     "text": <ocr content of frame>
@@ -109,7 +109,7 @@ You are an advanced text analyzer. You will be given text and metadata extracted
 		} finally {
 			setIsLoading(false);
 		}
-	}, [debouncedResultIndex, settings.openaiApiKey]);
+	}, [debouncedResultIndex, settings]);
 
 	useEffect(() => {
 		generateFrameResponse();

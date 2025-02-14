@@ -71,10 +71,10 @@ export function useSuggestions(keywordString: string) {
 
 				const openai = new OpenAI({
 					apiKey:
-						settings.aiProviderType === "screenpipe-cloud"
-							? settings.user.token
-							: settings.openaiApiKey,
-					baseURL: settings.aiUrl,
+						settings?.aiProviderType === "screenpipe-cloud"
+							? settings?.user?.token
+							: settings?.openaiApiKey,
+					baseURL: settings?.aiUrl,
 					dangerouslyAllowBrowser: true,
 				});
 
@@ -94,7 +94,7 @@ export function useSuggestions(keywordString: string) {
 
 				const response = await openai.chat.completions.create(
 					{
-						model: settings.aiModel,
+						model: settings?.aiModel || "",
 						messages: [
 							{
 								role: "system",
@@ -121,15 +121,20 @@ export function useSuggestions(keywordString: string) {
 					const result = JSON.parse(content);
 					setSuggestions(result.suggestions);
 				}
+
+				setIsLoading(false);
 			} catch (err) {
 				setError(
 					err instanceof Error
 						? err.message
 						: "Unable to generate suggestions. Please try again.",
 				);
+
+				if (err instanceof Error && err.name !== "AbortError") {
+					setIsLoading(false);
+				}
+
 				setSuggestions([]);
-			} finally {
-				setIsLoading(false);
 			}
 		};
 

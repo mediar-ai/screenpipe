@@ -14,6 +14,15 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSuggestions } from "@/lib/hooks/use-suggestion";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "./ui/tooltip";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { MultiSelectCombobox } from "./ui/multi-select-combobox";
+import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 // import { useAppNameSuggestion } from "@/lib/hooks/use-app-name-suggestion";
 
 export function SearchCommand() {
@@ -94,7 +103,7 @@ export function SearchCommand() {
 	//
 	//	fetchAppNames();
 	//}, [deferedValue]);
-	//
+
 	return (
 		<>
 			<CommandDialog open={open} onOpenChange={setOpen}>
@@ -106,6 +115,11 @@ export function SearchCommand() {
 					ref={inputRef}
 				/>
 				<CommandList>
+					{
+						//<div>
+						//	<AppSelect />
+						//</div>
+					}
 					<CommandEmpty>
 						{isLoading
 							? "Generating suggestions..."
@@ -135,5 +149,59 @@ export function SearchCommand() {
 				</CommandList>
 			</CommandDialog>
 		</>
+	);
+}
+
+export function AppSelect() {
+	const [selected, setSelected] = React.useState<string[]>([]);
+	const { items, isLoading } = useSqlAutocomplete("app");
+
+	const appItems = React.useMemo(() => {
+		return items.map((app) => ({
+			value: app.name,
+			count: app.count,
+			label: app.name,
+		}));
+	}, [items]);
+
+	const renderTech = (option: (typeof appItems)[number]) => (
+		<div className="flex items-center gap-2">
+			<span className="text-xl">icon</span>
+			<div className="flex flex-col">
+				<span>{option.label}</span>
+			</div>
+		</div>
+	);
+
+	const renderSelected = (value: string[]) => (
+		<TooltipProvider>
+			<Tooltip>
+				<TooltipTrigger>
+					<div className="flex gap-1">
+						{value.map((id) => {
+							const tech = appItems.find((t) => t.value === id)!;
+							return <span key={id}>{}</span>;
+						})}
+					</div>
+				</TooltipTrigger>
+				<TooltipContent>
+					{value.map((id) => {
+						const tech = appItems.find((t) => t.value === id)!;
+						return <div key={id}>{tech.label}</div>;
+					})}
+				</TooltipContent>
+			</Tooltip>
+		</TooltipProvider>
+	);
+
+	return (
+		<MultiSelectCombobox
+			label="Applications"
+			options={appItems}
+			value={selected}
+			onChange={setSelected}
+			renderItem={renderTech}
+			renderSelectedItem={renderSelected}
+		/>
 	);
 }

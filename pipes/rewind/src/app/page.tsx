@@ -7,8 +7,6 @@ import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
-import { TimelineSearch } from "@/components/timeline/timeline-search";
-import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
 import { addDays, isAfter, isSameDay, subDays } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
@@ -264,11 +262,16 @@ export default function Timeline() {
 		if (!hasDateBeenFetched(newDate)) {
 			setCurrentFrame(null);
 			const frameTimeStamp = new Date(newDate);
-			if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
+			console.log(
+				frameTimeStamp.getDate() === new Date(currentDate).getDate(),
+				startAndEndDates.start.getDate(),
+				newDate.getDate(),
+			);
+			if (isSameDay(frameTimeStamp, new Date(currentDate))) {
 				return;
 			}
 
-			if (isAfter(startAndEndDates.start.getDate(), newDate.getDate())) {
+			if (isAfter(startAndEndDates.start, newDate)) {
 				return;
 			}
 

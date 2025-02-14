@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SearchCommand } from "@/components/search-command";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
+import { SettingsProvider } from "@/components/settings-provider";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -28,9 +30,7 @@ export default async function RootLayout({
 }>) {
 	const checkSettings = async () => {
 		try {
-			const port = process.env.PORT || 3000;
-			const response = await fetch(`http://localhost:${port}/api/settings`);
-			const settings = await response.json();
+			const settings = await getScreenpipeAppSettings();
 
 			return settings.enableFrameCache;
 		} catch (error) {
@@ -46,22 +46,24 @@ export default async function RootLayout({
 			<body
 				className={`${geistSans.variable} ${geistMono.variable} antialiased`}
 			>
-				{!enabled ? (
-					<div className="flex items-center justify-center h-screen">
-						<div className="text-center space-y-4">
-							<h2 className="text-xl font-medium">Frame Cache Disabled</h2>
-							<p className="text-muted-foreground">
-								Please enable frame cache in settings to use the timeline
-								feature.
-							</p>
+				<SettingsProvider>
+					{!enabled ? (
+						<div className="flex items-center justify-center h-screen">
+							<div className="text-center space-y-4">
+								<h2 className="text-xl font-medium">Frame Cache Disabled</h2>
+								<p className="text-muted-foreground">
+									Please enable frame cache in settings to use the timeline
+									feature.
+								</p>
+							</div>
 						</div>
-					</div>
-				) : (
-					<>
-						<SearchCommand />
-						<NuqsAdapter>{children}</NuqsAdapter>
-					</>
-				)}
+					) : (
+						<>
+							<SearchCommand />
+							<NuqsAdapter>{children}</NuqsAdapter>
+						</>
+					)}
+				</SettingsProvider>
 			</body>
 		</html>
 	);
