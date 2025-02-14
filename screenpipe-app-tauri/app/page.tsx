@@ -202,19 +202,6 @@ export default function Home() {
   }, [setSettingsOpen]);
 
   useEffect(() => {
-    const checkScreenPermissionRestart = async () => {
-      const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
-      );
-      if (restartPending) {
-        setShowOnboarding(true);
-      }
-    };
-
-    checkScreenPermissionRestart();
-  }, [setShowOnboarding]);
-
-  useEffect(() => {
     const unlisten = listen("cli-login", async (event) => {
       console.log("received cli-login event:", event);
       await reloadStore();
