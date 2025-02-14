@@ -238,6 +238,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                 )}
               </div>
               <div className="flex">
+                {/* Temporarily disabled title generation
                 <HoverCard openDelay={0} closeDelay={0}>
                   <HoverCardTrigger asChild>
                     <Button
@@ -256,6 +257,8 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                     </span>
                   </HoverCardContent>
                 </HoverCard>
+                */}
+                {/* Temporarily disabled summary generation
                 <HoverCard openDelay={0} closeDelay={0}>
                   <HoverCardTrigger asChild>
                     <Button
@@ -274,6 +277,7 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
                     </span>
                   </HoverCardContent>
                 </HoverCard>
+                */}
                 {meeting.analysis && !meeting.endTime && 'previousContext' in meeting.analysis && (
                   <HoverCard openDelay={0} closeDelay={0}>
                     <HoverCardTrigger asChild>
