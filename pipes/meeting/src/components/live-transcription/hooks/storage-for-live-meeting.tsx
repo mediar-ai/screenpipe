@@ -53,6 +53,7 @@ export interface LiveMeetingData {
         }
     }
     isArchived?: boolean // Add optional flag
+    isAiNotesEnabled: boolean  // Add this field
 }
 
 // Context type
@@ -124,6 +125,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
                     analysis: null,
                     deviceNames: new Set<string>(),
                     selectedDevices: new Set<string>(),
+                    isAiNotesEnabled: true,  // Default to enabled
                     isArchived: false
                 }
                 await meetingStore.setItem(newData.id, newData)
@@ -292,33 +294,6 @@ export async function archiveLiveMeeting(): Promise<LiveMeetingData | null> {
     }
 }
 
-// Add function to get all archived meetings
-export async function getArchivedLiveMeetings(): Promise<LiveMeetingData[]> {
-    try {
-        const archived: LiveMeetingData[] = []
-        
-        await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData) => {
-            if (value.isArchived) {
-                archived.push(value)
-            }
-        })
-
-        // Sort by start time, newest first
-        archived.sort((a, b) => 
-            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
-        )
-
-        console.log('loaded archived meetings:', {
-            count: archived.length,
-            latest: archived[0]?.title
-        })
-
-        return archived
-    } catch (error) {
-        console.error('failed to get archived meetings:', error)
-        return []
-    }
-}
 
 // Add function to delete an archived meeting by its start time
 export async function deleteArchivedMeeting(startTime: string): Promise<void> {
@@ -385,5 +360,31 @@ export async function updateArchivedMeeting(id: string, update: Partial<LiveMeet
     } catch (error) {
         console.error('failed to update archived meeting:', error)
         return null
+    }
+}
+
+export async function getAllMeetings(): Promise<LiveMeetingData[]> {
+    try {
+        const meetings: LiveMeetingData[] = []
+        
+        await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData) => {
+            meetings.push(value)
+        })
+
+        // Sort by start time, newest first
+        meetings.sort((a, b) => 
+            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )
+
+        console.log('loaded all meetings:', {
+            count: meetings.length,
+            live: meetings.find(m => !m.isArchived)?.title,
+            archived: meetings.filter(m => m.isArchived).length
+        })
+
+        return meetings
+    } catch (error) {
+        console.error('failed to get meetings:', error)
+        return []
     }
 } 
