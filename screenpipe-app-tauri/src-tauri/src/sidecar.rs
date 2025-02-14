@@ -521,7 +521,7 @@ impl SidecarManager {
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
         self.last_restart = Instant::now();
-        debug!("last_restart: {:?}", self.last_restart);
+        info!("last restart: {:?}", self.last_restart);
 
         // kill previous task if any
         if let Some(task) = self.restart_task.take() {
@@ -529,6 +529,7 @@ impl SidecarManager {
         }
 
         let restart_interval = self.restart_interval.clone();
+        info!("restart_interval: {:?}", restart_interval);
         // Add this function outside the SidecarManager impl
         async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
             let state = app_handle.state::<SidecarState>();
@@ -545,7 +546,7 @@ impl SidecarManager {
         self.restart_task = Some(tauri::async_runtime::spawn(async move {
             loop {
                 let interval = *restart_interval.lock().await;
-                debug!("interval: {}", interval.as_secs());
+                info!("interval: {}", interval.as_secs());
                 if let Err(e) = check_and_restart_sidecar(&app_handle).await {
                     error!("Failed to check and restart sidecar: {}", e);
                 }
@@ -582,20 +583,42 @@ impl SidecarManager {
     pub async fn check_and_restart(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let interval = *self.restart_interval.lock().await;
         let dev_mode = *self.dev_mode.lock().await;
-        debug!("interval: {}", interval.as_secs());
-        debug!("last_restart: {:?}", self.last_restart);
-        debug!("elapsed: {:?}", self.last_restart.elapsed());
+        info!("interval: {}", interval.as_secs());
+        info!("last_restart: {:?}", self.last_restart);
+        info!("elapsed: {:?}", self.last_restart.elapsed());
+
         if interval.as_secs() > 0 && self.last_restart.elapsed() >= interval && !dev_mode {
-            debug!("Restarting sidecar due to restart interval");
+            info!("attempting to restart sidecar due to restart interval");
+            
+            // Safely kill the existing sidecar
             if let Some(child) = self.child.take() {
-                let _ = child.kill();
+                match child.kill() {
+                    Ok(_) => info!("successfully killed previous sidecar"),
+                    Err(e) => {
+                        error!("failed to kill previous sidecar: {}", e);
+                        // Continue anyway as the process might have already died
+                    }
+                }
             }
-            // sleep for 5 seconds
+
+            // Wait for process cleanup
             sleep(Duration::from_secs(5)).await;
-            let child = spawn_sidecar(app)?;
-            self.child = Some(child);
-            self.last_restart = Instant::now();
+
+            // Try to spawn new sidecar
+            match spawn_sidecar(app) {
+                Ok(new_child) => {
+                    info!("successfully spawned new sidecar");
+                    self.child = Some(new_child);
+                    self.last_restart = Instant::now();
+                }
+                Err(e) => {
+                    error!("failed to spawn new sidecar: {}", e);
+                    // Don't propagate error - let the app continue running
+                    // The next check interval will try again
+                }
+            }
         }
+        
         Ok(())
     }
 }

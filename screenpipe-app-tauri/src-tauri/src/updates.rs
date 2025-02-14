@@ -45,7 +45,7 @@ impl UpdatesManager {
             }
         }
         if cfg!(debug_assertions) {
-            println!("dev mode is enabled, skipping update check");
+            info!("dev mode is enabled, skipping update check");
             return Result::Ok(false);
         }
 

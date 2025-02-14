@@ -69,9 +69,7 @@ use screenpipe_audio::LAST_AUDIO_CAPTURE;
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
-use std::collections::HashMap;
-use dirs::data_local_dir as local_data_dir;
-use tokio::fs;
+
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
