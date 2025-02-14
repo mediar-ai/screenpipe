@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useSettings } from "./use-settings";
 import OpenAI from "openai";
-import { fetchAppAndWindowNames } from "../raw_sql_queries";
+// import { fetchAppAndWindowNames } from "../raw_sql_queries";
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { parser } from "../keyword-parser";
+import { getAppandWindowByRank } from "./use-app-name-suggestion";
 
 interface AppStats {
 	apps: Record<string, number>;
@@ -40,9 +41,9 @@ export function useSuggestions(keywordString: string) {
 					return;
 				}
 
-				const appData = await fetchAppAndWindowNames(
-					keywords,
-					abortController.signal,
+				const appData = await getAppandWindowByRank(
+					keywords.join(" "),
+					abortController,
 				);
 
 				const appStats: AppStats = {
@@ -124,23 +125,26 @@ export function useSuggestions(keywordString: string) {
 
 				setIsLoading(false);
 			} catch (err) {
-				setError(
-					err instanceof Error
-						? err.message
-						: "Unable to generate suggestions. Please try again.",
-				);
-
-				if (err instanceof Error && err.name !== "AbortError") {
+				if (err instanceof Error) {
+					// Only set error if it's not an abort error
+					if (err.name !== "AbortError") {
+						setError(err.message);
+						setSuggestions([]);
+					}
+					// Always set loading to false for both abort and other errors
+					setIsLoading(false);
+				} else {
+					setError("Unable to generate suggestions. Please try again.");
+					setSuggestions([]);
 					setIsLoading(false);
 				}
-
-				setSuggestions([]);
 			}
 		};
 
 		generateSuggestions();
 
 		return () => {
+			setIsLoading(false);
 			abortController.abort();
 		};
 	}, [keywordString]);

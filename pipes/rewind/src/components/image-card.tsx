@@ -252,8 +252,6 @@ export const MainImage = () => {
 	) => {
 		if (!imageRect) return null;
 
-		// return null;
-
 		return {
 			left: bounds.left * imageRect.width,
 			top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
@@ -284,33 +282,35 @@ export const MainImage = () => {
 				className="h-full w-full object-contain max-h-[50vh]"
 				draggable={false}
 			/>
-			{imageRect && (
-				<div className="absolute inset-0 pointer-events-none">
-					{currentFrame.text_positions?.map(
-						(position: TextPosition, index: number) => {
-							const coords = convertVisionCoordinates(
-								position.bounds,
-								imageRect.height,
-							);
-							if (!coords) return null;
-
-							return (
-								<div
-									key={index}
-									className="absolute bg-yellow-300/40 border border-yellow-500/50"
-									style={{
-										left: `${coords.left}px`,
-										top: `${coords.top}px`,
-										width: `${coords.width}px`,
-										height: `${coords.height}px`,
-									}}
-									title={position.text}
-								/>
-							);
-						},
-					)}
-				</div>
-			)}
+			{
+				//     imageRect && (
+				//	<div className="absolute inset-0 pointer-events-none">
+				//		{currentFrame.text_positions?.map(
+				//			(position: TextPosition, index: number) => {
+				//				const coords = convertVisionCoordinates(
+				//					position.bounds,
+				//					imageRect.height,
+				//				);
+				//				if (!coords) return null;
+				//
+				//				return (
+				//					<div
+				//						key={index}
+				//						className="absolute bg-yellow-300/40 border border-yellow-500/50"
+				//						style={{
+				//							left: `${coords.left}px`,
+				//							top: `${coords.top}px`,
+				//							width: `${coords.width}px`,
+				//							height: `${coords.height}px`,
+				//						}}
+				//						title={position.text}
+				//					/>
+				//				);
+				//			},
+				//         )}
+				//	</div>
+				//)
+			}
 		</div>
 	);
 };

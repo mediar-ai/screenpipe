@@ -14,7 +14,7 @@ export function useAppNameSuggestion() {
 		try {
 			setIsLoading(true);
 			setError(null);
-			const searchResults = await searchOcrText(searchText);
+			const searchResults = await getAppandWindowByRank(searchText);
 			return searchResults;
 		} catch (err) {
 			setError(
@@ -35,13 +35,10 @@ export function useAppNameSuggestion() {
 	};
 }
 
-export async function searchOcrText(searchText: string): Promise<
-	Array<{
-		rank: number;
-		app_name: string;
-		window_name: string;
-	}>
-> {
+export async function getAppandWindowByRank(
+	searchText: string,
+	abortContorller?: AbortController,
+): Promise<SearchResult[]> {
 	// Input validation
 	if (!searchText || typeof searchText !== "string") {
 		throw new Error("Search text must be a non-empty string");
@@ -79,6 +76,7 @@ export async function searchOcrText(searchText: string): Promise<
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({ query }),
+			signal: abortContorller?.signal,
 		});
 
 		if (!response.ok) {
