@@ -277,7 +277,50 @@ impl PipeManager {
 
         // Then remove the directory
         let pipe_dir = self.screenpipe_dir.join("pipes");
-        tokio::fs::remove_dir_all(pipe_dir).await?;
+        let dir = pipe_dir.to_str();
+        match dir {
+            Some(dir) => {
+                #[cfg(target_os = "windows")]
+                {
+                    use windows::Win32::Foundation::HANDLE;
+                    use windows::Win32::Security::{
+                        AdjustTokenPrivileges, LookupPrivilegeValueW, LUID_AND_ATTRIBUTES,
+                        SE_PRIVILEGE_ENABLED, SE_TAKE_OWNERSHIP_NAME, TOKEN_ADJUST_PRIVILEGES,
+                        TOKEN_PRIVILEGES,
+                    };
+                    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+                    let mut token: HANDLE = HANDLE(std::ptr::null_mut());
+                    unsafe {
+                        OpenProcessToken(
+                            GetCurrentProcess(),
+                            windows::Win32::Security::TOKEN_ADJUST_PRIVILEGES,
+                            &mut token,
+                        )?;
+
+                        let mut privilege = TOKEN_PRIVILEGES {
+                            PrivilegeCount: 1,
+                            Privileges: [LUID_AND_ATTRIBUTES {
+                                Luid: Default::default(),
+                                Attributes: SE_PRIVILEGE_ENABLED,
+                            }],
+                        };
+
+                        LookupPrivilegeValueW(
+                            None,
+                            SE_TAKE_OWNERSHIP_NAME,
+                            &mut privilege.Privileges[0].Luid,
+                        )?;
+
+                        AdjustTokenPrivileges(token, false, Some(&mut privilege), 0, None, None)?;
+                    }
+
+                   tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                }
+                tokio::fs::remove_dir_all(pipe_dir).await?;
+            }
+            None => return Err(anyhow::anyhow!("failed to convert pipe_dir to string")),
+        }
 
         debug!("all pipes purged");
         Ok(())
