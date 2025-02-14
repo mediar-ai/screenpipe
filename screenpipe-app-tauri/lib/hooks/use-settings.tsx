@@ -126,7 +126,7 @@ const DEFAULT_SETTINGS: Settings = {
   monitorIds: ["default"],
   audioDevices: ["default"],
   usePiiRemoval: false,
-  restartInterval: 0,
+  restartInterval: 120,
   port: 3030,
   dataDir: "default",
   disableAudio: false,
