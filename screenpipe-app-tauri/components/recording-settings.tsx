@@ -1372,7 +1372,7 @@ export function RecordingSettings() {
 
         <div className="space-y-8 py-4">
           <div className="space-y-6">
-            <div className="flex flex-col space-y-2">
+            {/* <div className="flex flex-col space-y-2">
               <Label
                 htmlFor="restartInterval"
                 className="flex items-center space-x-2"
@@ -1413,7 +1413,7 @@ export function RecordingSettings() {
                   {settings.restartInterval || 0} min
                 </span>
               </div>
-            </div>
+            </div> */}
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">
