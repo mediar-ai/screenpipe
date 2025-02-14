@@ -1665,12 +1665,12 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-// #[derive(Deserialize)]
-// pub struct AudioDeviceControlRequest {
-//     device_name: String,
-//     #[serde(default)]
-//     device_type: Option<DeviceType>,
-// }
+#[derive(Deserialize)]
+pub struct AudioDeviceControlRequest {
+    device_name: String,
+    #[serde(default)]
+    device_type: Option<DeviceType>,
+}
 
 #[derive(Serialize)]
 pub struct AudioDeviceControlResponse {
@@ -1829,11 +1829,11 @@ pub struct VisionDeviceControlRequest {
     device_id: u32,
 }
 
-// impl VisionDeviceControlRequest {
-//     pub fn new(device_id: u32) -> Self {
-//         Self { device_id }
-//     }
-// }
+impl VisionDeviceControlRequest {
+    pub fn new(device_id: u32) -> Self {
+        Self { device_id }
+    }
+}
 
 #[derive(Serialize)]
 pub struct VisionDeviceControlResponse {

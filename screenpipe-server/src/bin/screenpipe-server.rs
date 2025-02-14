@@ -334,6 +334,17 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Check if Screenpipe is present in PATH
+    // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
+    match ensure_screenpipe_in_path().await {
+        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
+        Err(e) => {
+            warn!("screenpipe PATH check failed: {}", e);
+            warn!("please ensure screenpipe is installed correctly and is in your PATH");
+            // do not crash
+        }
+    }
+
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
@@ -388,6 +399,8 @@ async fn main() -> anyhow::Result<()> {
                 };
                 devices_status.insert(input_device, device_control);
             }
+            // audio output only on macos <15.0 atm ?
+            // see https://github.com/mediar-ai/screenpipe/pull/106
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
@@ -433,6 +446,8 @@ async fn main() -> anyhow::Result<()> {
                 if let Ok(input_device) = default_input_device() {
                     realtime_audio_devices.push(Arc::new(input_device.clone()));
                 }
+                // audio output only on macos <15.0 atm ?
+                // see https://github.com/mediar-ai/screenpipe/pull/106
                 if let Ok(output_device) = default_output_device() {
                     realtime_audio_devices.push(Arc::new(output_device.clone()));
                 }
@@ -449,8 +464,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
-    resource_monitor.start_monitoring(Duration::from_secs(10), Some(Duration::from_secs(60)));
+    let resource_monitor = ResourceMonitor::new();
+    resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
         DatabaseManager::new(&format!("{}/db.sqlite", local_data_dir.to_string_lossy()))
@@ -465,6 +480,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Channel for controlling the recorder ! TODO RENAME SHIT
     let vision_control = Arc::new(AtomicBool::new(true));
+
+    let vision_control_server_clone = vision_control.clone();
 
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
@@ -507,6 +524,7 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
+    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
@@ -586,6 +604,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let (audio_devices_tx, _) = broadcast::channel(100);
+    let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
 
     let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
@@ -934,35 +953,10 @@ async fn main() -> anyhow::Result<()> {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
-            // sleep for 1 seconds
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            // sleep for 5 seconds
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
-
-                // Get list of enabled pipes
-                let pipes = pipe_manager.list_pipes().await;
-                let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
-                // Stop all enabled pipes in parallel
-                let stop_futures = enabled_pipes.iter().map(|pipe| {
-                    let pipe_manager = pipe_manager.clone();
-                    let pipe_id = pipe.id.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = pipe_manager.stop_pipe(&pipe_id).await {
-                            error!("failed to stop pipe {}: {}", pipe_id, e);
-                        }
-                    })
-                });
-                // Wait for all pipes to stop with timeout
-                let timeout = tokio::time::sleep(Duration::from_secs(10));
-                tokio::pin!(timeout);
-                tokio::select! {
-                    _ = futures::future::join_all(stop_futures) => {
-                        info!("all pipes stopped successfully");
-                    }
-                    _ = &mut timeout => {
-                        warn!("timeout waiting for pipes to stop");
-                    }
-                }
                 let _ = shutdown_tx_clone.send(());
             }
         });
@@ -1291,6 +1285,149 @@ async fn handle_pipe_command(
         }
     }
     Ok(())
+}
+
+async fn ensure_screenpipe_in_path() -> anyhow::Result<()> {
+    use tokio::process::Command;
+
+    // Check if 'screenpipe' is already in the PATH
+    let output = if cfg!(target_os = "windows") {
+        Command::new("where").arg("screenpipe").output().await?
+    } else {
+        Command::new("which").arg("screenpipe").output().await?
+    };
+
+    // If 'screenpipe' is found, log and return early
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let screenpipe_path = PathBuf::from(stdout.trim());
+        info!(
+            "screenpipe already in PATH at: {}",
+            screenpipe_path.display()
+        );
+        return Ok(());
+    }
+
+    // If not found, add 'screenpipe' to the PATH permanently
+    let current_exe = env::current_exe()?;
+    let current_dir = match current_exe.parent() {
+        Some(dir) => dir,
+        None => {
+            return Err(anyhow::anyhow!(
+                "failed to get current executable directory"
+            ))
+        }
+    };
+    let screenpipe_bin = current_dir.join("screenpipe");
+
+    let paths = env::split_paths(&env::var("PATH")?).collect::<Vec<_>>();
+    if !paths.contains(&current_dir.to_path_buf()) {
+        // Platform-specific persistence
+        if cfg!(target_os = "windows") {
+            persist_path_windows(current_dir.to_path_buf())?;
+        } else if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
+            persist_path_unix(current_dir.to_path_buf())?;
+        }
+        info!("added {} to the PATH permanently", screenpipe_bin.display());
+    }
+
+    Ok(())
+}
+
+fn persist_path_windows(new_path: PathBuf) -> anyhow::Result<()> {
+    // Try to read the current PATH environment variable
+    let current_path =
+        env::var("PATH").map_err(|e| anyhow::anyhow!("Failed to read current PATH: {}", e))?;
+
+    // Check if the new path is already in the current PATH
+    if current_path.contains(new_path.to_str().unwrap_or("")) {
+        info!("PATH already contains {}", new_path.display());
+        return Ok(());
+    }
+
+    // Ensure 'setx' command can handle the new PATH length
+    if current_path.len() + new_path.to_str().unwrap_or("").len() + 1 > 1024 {
+        return Err(anyhow::anyhow!(
+            "the PATH is too long to persist using 'setx'. please shorten the PATH."
+        ));
+    }
+
+    // Construct the new PATH string
+    let new_path_env = format!("{};{}", current_path, new_path.display());
+
+    // Execute the 'setx' command to persist the PATH
+    let output = std::process::Command::new("setx")
+        .arg("PATH")
+        .arg(&new_path_env)
+        .output()
+        .map_err(|e| anyhow::anyhow!("failed to execute 'setx' command: {}", e))?;
+
+    // Check if the 'setx' command was successful
+    if output.status.success() {
+        info!("persisted PATH on Windows using setx");
+        Ok(())
+    } else {
+        // Capture the stderr output from 'setx' if the command fails
+        let error_message = String::from_utf8_lossy(&output.stderr);
+        Err(anyhow::anyhow!(
+            "failed to persist PATH using 'setx': {}",
+            error_message
+        ))
+    }
+}
+
+fn persist_path_unix(new_path: PathBuf) -> anyhow::Result<()> {
+    let home_dir = env::var("HOME")?;
+    let shell_config = get_shell_config()?;
+    let shell_config_path = PathBuf::from(format!("{}/{}", home_dir, shell_config));
+
+    let new_path_entry = format!("\nexport PATH=\"$PATH:{}\"\n", new_path.display());
+
+    // Check if the new path is already in the config file
+    if let Ok(config_content) = fs::read_to_string(&shell_config_path) {
+        if config_content.contains(new_path.to_str().unwrap()) {
+            info!(
+                "PATH is already persisted in {}",
+                shell_config_path.display()
+            );
+            return Ok(());
+        }
+    }
+
+    // Create the config file if it doesn't exist
+    if !shell_config_path.exists() {
+        fs::File::create(&shell_config_path)?;
+    }
+
+    // Append the new path entry to the config file
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&shell_config_path)?;
+    file.write_all(new_path_entry.as_bytes())?;
+    info!("persisted PATH in {}", shell_config_path.display());
+    info!(
+        "please run 'source {}' or restart your shell to apply the changes.",
+        shell_config_path.display()
+    );
+
+    Ok(())
+}
+
+fn get_shell_config() -> anyhow::Result<&'static str> {
+    let shell = env::var("SHELL").unwrap_or_default();
+    if shell.contains("zsh") {
+        Ok(".zshrc")
+    } else if shell.contains("bash") {
+        if cfg!(target_os = "macos") {
+            Ok(".bash_profile")
+        } else {
+            Ok(".bashrc")
+        }
+    } else if shell.contains("fish") {
+        Ok(".config/fish/config.fish")
+    } else {
+        Ok(".profile")
+    }
 }
 
 // Add this function near the end of the file
