@@ -177,17 +177,7 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
             newTitle: title,
             dataState: !!data
         })
-        if (!data) {
-            console.log('setTitle: no data available')
-            return
-        }
-        console.log('setTitle: starting update', {
-            oldTitle: data.title,
-            newTitle: title,
-            dataState: !!data
-        })
         await updateStore({ ...data, title })
-        console.log('setTitle: completed update')
         console.log('setTitle: completed update')
     }
 
