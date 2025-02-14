@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt, str::FromStr};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use tokio_stream::Stream;
-use tracing::debug;
+use tracing::{debug, error, warn};
 
 #[derive(Clone, Debug)]
 pub enum DeviceType {
@@ -189,14 +189,20 @@ impl DeviceManager {
 
         while let Some(req) = receiver.recv().await {
             watchers.retain(|watcher: &tokio::sync::mpsc::Sender<DeviceStateChange>| {
-                !watcher.is_closed()
+                let is_open = !watcher.is_closed();
+                if !is_open {
+                    debug!("removing closed watcher");
+                }
+                is_open
             });
 
             debug!(
-                "received device_state_request: {:?} watches length: {}",
+                "received device_state_request: {:?}, active devices: {}, watchers: {}",
                 req,
+                devices.len(),
                 watchers.len()
             );
+
             match req {
                 DeviceStateRequest::Get { respond_to } => {
                     debug!("sending get request to {} devices", devices.len());
@@ -204,29 +210,42 @@ impl DeviceManager {
                 }
                 DeviceStateRequest::Update(control) => {
                     let device_id = control.device.to_string();
-                    let changed = devices
-                        .get(&device_id)
-                        .map_or(true, |current| current.is_running != control.is_running);
+                    let changed = devices.get(&device_id).map_or(true, |current| {
+                        let changed = current.is_running != control.is_running;
+                        if changed {
+                            debug!(
+                                "device '{}' state changed: {} -> {}",
+                                device_id, current.is_running, control.is_running
+                            );
+                        }
+                        changed
+                    });
 
                     if changed {
                         debug!(
                             "updating device '{}' with new control state: {:?}",
                             device_id, control
                         );
-                        debug!("notifying watchers of the change: {:?}", watchers);
                         devices.insert(device_id.clone(), control.clone());
 
-                        // Notify watchers of the change
-                        watchers.retain(
-                            |watcher: &tokio::sync::mpsc::Sender<DeviceStateChange>| {
-                                watcher
-                                    .try_send(DeviceStateChange {
-                                        device: device_id.clone(),
-                                        control: control.clone(),
-                                    })
-                                    .is_ok()
-                            },
-                        );
+                        let mut failed_watchers = 0;
+                        watchers.retain(|watcher| {
+                            match watcher.try_send(DeviceStateChange {
+                                device: device_id.clone(),
+                                control: control.clone(),
+                            }) {
+                                Ok(_) => true,
+                                Err(e) => {
+                                    failed_watchers += 1;
+                                    error!("failed to notify watcher: {}", e);
+                                    false
+                                }
+                            }
+                        });
+
+                        if failed_watchers > 0 {
+                            warn!("removed {} failed watchers", failed_watchers);
+                        }
                     }
                 }
                 DeviceStateRequest::Watch { respond_to } => {
@@ -267,12 +286,22 @@ impl DeviceManager {
         Ok(())
     }
 
-    pub async fn shutdown(&self) {
-        for device in self.get_active_devices().await.values_mut() {
+    pub async fn shutdown(&self) -> anyhow::Result<()> {
+        debug!("initiating device manager shutdown");
+        let mut active_devices = self.get_active_devices().await;
+        debug!("shutting down {} active devices", active_devices.len());
+
+        for device in active_devices.values_mut() {
+            debug!("shutting down device: {:?}", device.device);
             device.is_running = false;
             if !self.state_sender.is_closed() {
-                self.update_device(device.clone()).await.unwrap();
+                if let Err(e) = self.update_device(device.clone()).await {
+                    error!("failed to update device during shutdown: {}", e);
+                }
             }
         }
+
+        debug!("device manager shutdown complete");
+        Ok(())
     }
 }

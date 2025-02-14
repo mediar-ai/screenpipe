@@ -49,7 +49,7 @@ pub async fn stt(
                         "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
                         device, e
                     );
-                    // Fallback to Whisper
+                    debug!("attempting whisper fallback for device: {}", device);
                     process_with_whisper(whisper_model, audio, languages.clone()).await
                 }
             }
@@ -139,11 +139,18 @@ pub async fn create_whisper_channel(
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
     let segmentation_model_path = get_or_download_model(PyannoteModel::Segmentation).await?;
 
-    let embedding_extractor = Arc::new(StdMutex::new(EmbeddingExtractor::new(
-        embedding_model_path
-            .to_str()
-            .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
-    )?));
+    let embedding_extractor = Arc::new(StdMutex::new(
+        match EmbeddingExtractor::new(embedding_model_path.to_str().ok_or_else(|| {
+            error!("failed to convert embedding model path to string");
+            anyhow!("Invalid embedding model path")
+        })?) {
+            Ok(extractor) => extractor,
+            Err(e) => {
+                error!("failed to create embedding extractor: {:?}", e);
+                return Err(e);
+            }
+        },
+    ));
 
     let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(25)));
 
@@ -153,6 +160,9 @@ pub async fn create_whisper_channel(
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
+                            debug!("processing audio input: len={}, sample_rate={}, device={}",
+                                audio.data.len(), audio.sample_rate, audio.device);
+
                             // Check device state
                             if let Some(device) = device_manager.get_active_devices().await.get(&audio.device.to_string()) {
                                 if !device.is_running {
@@ -183,6 +193,8 @@ pub async fn create_whisper_channel(
                                 audio.data.as_ref().to_vec()
                             };
 
+                            debug!("resampled audio: len={}", audio_data.len());
+
                             audio.data = Arc::new(audio_data);
                             audio.sample_rate = m::SAMPLE_RATE as u32;
 
@@ -193,6 +205,8 @@ pub async fn create_whisper_channel(
                                     continue;
                                 }
                             };
+
+                            debug!("prepared {} speech segments", segments.len());
 
                             let path = match write_audio_to_file(
                                 audio.data.as_ref(),
@@ -207,8 +221,10 @@ pub async fn create_whisper_channel(
                                     "".to_string()
                                 }
                             };
-
                             while let Some(segment) = segments.recv().await {
+                                debug!("processing segment: start={:.2}s, end={:.2}s, samples={}",
+                                    segment.start, segment.end, segment.samples.len());
+
                                 let path = path.clone();
                                 let device = audio.device.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
@@ -232,12 +248,13 @@ pub async fn create_whisper_channel(
                                 };
 
                                 if output_sender.send(transcription_result).is_err() {
+                                    error!("Failed to send transcription result to output_sender");
                                     break;
                                 }
                             }
                         },
                         Err(e) => {
-                            error!("Error receiving input: {:?}", e);
+                            error!("failed to receive audio input: {}", e);
                             break;
                         }
                     }
@@ -344,7 +361,13 @@ pub fn longest_common_word_substring(s1: &str, s2: &str) -> Option<(usize, usize
     }
 
     match (max_index_s1, max_index_s2) {
-        (Some(idx1), Some(idx2)) => Some((idx1, idx2)),
-        _ => None,
+        (Some(idx1), Some(idx2)) => {
+            debug!("found common substring at indices: ({}, {})", idx1, idx2);
+            Some((idx1, idx2))
+        }
+        _ => {
+            debug!("no common substring found");
+            None
+        }
     }
 }

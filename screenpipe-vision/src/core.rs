@@ -26,10 +26,8 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
-use tokio::sync::mpsc::WeakSender;
 use tokio::sync::watch;
 use tracing::info;
-use tracing::warn;
 
 #[cfg(target_os = "macos")]
 use xcap_macos::Monitor;
@@ -37,7 +35,7 @@ use xcap_macos::Monitor;
 #[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
-fn serialize_image<S>(image: &Option<Arc<DynamicImage>>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
@@ -47,7 +45,7 @@ where
         let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 80);
 
         encoder
-            .encode_image(image.as_ref())
+            .encode_image(image)
             .map_err(serde::ser::Error::custom)?;
 
         let base64_string = general_purpose::STANDARD.encode(webp_buffer);
@@ -57,7 +55,7 @@ where
     }
 }
 
-fn deserialize_image<'de, D>(deserializer: D) -> Result<Option<Arc<DynamicImage>>, D::Error>
+fn deserialize_image<'de, D>(deserializer: D) -> Result<Option<DynamicImage>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -74,7 +72,7 @@ where
     let cursor = std::io::Cursor::new(image_bytes);
     let image = image::load(cursor, image::ImageFormat::Jpeg).map_err(serde::de::Error::custom)?;
 
-    Ok(Some(Arc::new(image)))
+    Ok(Some(image))
 }
 
 fn serialize_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
@@ -96,22 +94,14 @@ where
 }
 
 pub struct CaptureResult {
-    pub image: Arc<DynamicImage>,
+    pub image: DynamicImage,
     pub frame_number: u64,
     pub timestamp: Instant,
     pub window_ocr_results: Vec<WindowOcrResult>,
 }
 
-impl Drop for CaptureResult {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.image) == 1 {
-            debug!("dropping last reference to captured image");
-        }
-    }
-}
-
 pub struct WindowOcrResult {
-    pub image: Arc<DynamicImage>,
+    pub image: DynamicImage,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
@@ -121,7 +111,7 @@ pub struct WindowOcrResult {
 }
 
 pub struct OcrTaskData {
-    pub image: Arc<DynamicImage>,
+    pub image: DynamicImage,
     pub window_images: Vec<CapturedWindow>,
     pub frame_number: u64,
     pub timestamp: Instant,
@@ -139,7 +129,7 @@ pub async fn continuous_capture(
     mut shutdown_rx: watch::Receiver<bool>,
 ) {
     let mut frame_counter: u64 = 0;
-    let mut previous_image: Option<Arc<DynamicImage>> = None;
+    let mut previous_image: Option<DynamicImage> = None;
     let mut max_average: Option<MaxAverageFrame> = None;
     let mut max_avg_value = 0.0;
 
@@ -188,7 +178,6 @@ pub async fn continuous_capture(
                 };
 
                 if let Some((image, window_images, image_hash)) = capture_result {
-                    let image = Arc::new(image);
                     let current_average = match compare_with_previous_image(
                         previous_image.as_ref(),
                         &image,
@@ -224,41 +213,37 @@ pub async fn continuous_capture(
 
                     if current_average > max_avg_value {
                         max_average = Some(MaxAverageFrame {
-                            image: Arc::clone(&image),
+                            image: image.clone(),
                             window_images,
                             image_hash,
                             frame_number: frame_counter,
                             timestamp: Instant::now(),
-                            result_tx: result_tx.downgrade(),
+                            result_tx: result_tx.clone(),
                             average: current_average,
                         });
                         max_avg_value = current_average;
                     }
 
-                    previous_image = Some(Arc::clone(&image));
+                    previous_image = Some(image);
 
                     if let Some(max_avg_frame) = max_average.take() {
-                        if let Some(sender) = max_avg_frame.result_tx.upgrade() {
-                            let ocr_task_data = OcrTaskData {
-                                image: max_avg_frame.image.clone(),
-                                window_images: max_avg_frame.window_images.iter().cloned().collect(),
-                                frame_number: max_avg_frame.frame_number,
-                                timestamp: max_avg_frame.timestamp,
-                                result_tx: sender,
-                            };
+                        let ocr_task_data = OcrTaskData {
+                            image: max_avg_frame.image.clone(),
+                            window_images: max_avg_frame.window_images.iter().cloned().collect(),
+                            frame_number: max_avg_frame.frame_number,
+                            timestamp: max_avg_frame.timestamp,
+                            result_tx: result_tx.clone(),
+                        };
 
-                            if let Err(e) =
-                                process_ocr_task(ocr_task_data, ocr_engine.clone(), languages_clone).await
-                            {
-                                error!("Error processing OCR task: {}", e);
-                            }
-
-                            frame_counter = 0;
-                            max_avg_value = 0.0;
-                        } else {
-                            warn!("result_tx was dropped, skipping OCR task");
-                            return;
+                        if let Err(e) =
+                            process_ocr_task(ocr_task_data, ocr_engine.clone(), languages_clone).await
+                        {
+                            error!("Error processing OCR task: {}", e);
                         }
+
+                        frame_counter = 0;
+                        max_avg_value = 0.0;
+
                     }
                 } else {
                     debug!("Skipping frame {} due to capture failure", frame_counter);
@@ -274,12 +259,12 @@ pub async fn continuous_capture(
 }
 
 pub struct MaxAverageFrame {
-    pub image: Arc<DynamicImage>,
+    pub image: DynamicImage,
     pub window_images: Vec<CapturedWindow>,
     pub image_hash: u64,
     pub frame_number: u64,
     pub timestamp: Instant,
-    pub result_tx: WeakSender<CaptureResult>,
+    pub result_tx: Sender<CaptureResult>,
     pub average: f64,
 }
 
@@ -339,7 +324,7 @@ pub async fn process_ocr_task(
         }
 
         let ocr_result = WindowOcrResult {
-            image: Arc::new(captured_window.image),
+            image: captured_window.image,
             window_name: captured_window.window_name,
             app_name: captured_window.app_name,
             text: window_text,
@@ -419,7 +404,7 @@ pub struct WindowOcr {
         serialize_with = "serialize_image",
         deserialize_with = "deserialize_image"
     )]
-    pub image: Option<Arc<DynamicImage>>,
+    pub image: Option<DynamicImage>,
     pub window_name: String,
     pub app_name: String,
     pub text: String,

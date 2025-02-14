@@ -183,12 +183,14 @@ async fn run_record_and_transcribe(
     );
 
     const OVERLAP_SECONDS: usize = 2;
-    let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
-    let overlap_samples = OVERLAP_SECONDS * sample_rate;
-    let duration_samples = (duration.as_secs_f64() * sample_rate as f64).ceil() as usize;
+    let overlap_samples = OVERLAP_SECONDS * 16000;
+    let duration_samples = (duration.as_secs_f64() * 16000.0).ceil() as usize;
     let max_samples = duration_samples + overlap_samples;
 
-    let mut collected_audio = Vec::with_capacity(max_samples);
+    // Pre-allocate fixed-size buffer with exact capacity
+    let mut collected_audio = vec![0.0; max_samples]; // Fixed size, never resized
+    let mut write_position: usize = 0; // Tracks where new samples will be written
+    let mut total_samples: usize = 0; // Tracks valid samples in buffer
 
     while is_running.load(Ordering::Relaxed)
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
@@ -199,7 +201,35 @@ async fn run_record_and_transcribe(
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => {
-                    collected_audio.extend_from_slice(&chunk);
+                    let chunk_len = chunk.len();
+
+                    // Calculate how much space we need to make
+                    let needed_space = chunk_len.saturating_sub(max_samples - total_samples);
+
+                    // Instead of draining, overwrite oldest samples
+                    if needed_space > 0 {
+                        write_position = 0;
+                        total_samples = total_samples.saturating_sub(needed_space);
+                    }
+
+                    // Calculate how much we can actually write
+                    let writeable = (max_samples - total_samples).min(chunk_len);
+
+                    // Write new samples to the end
+                    let write_end = write_position + writeable;
+                    if write_end <= max_samples {
+                        collected_audio[write_position..write_end]
+                            .copy_from_slice(&chunk[..writeable]);
+                    } else {
+                        // This should never happen due to space calculation, but handle safely
+                        let first_part = max_samples - write_position;
+                        collected_audio[write_position..].copy_from_slice(&chunk[..first_part]);
+                        collected_audio[0..writeable - first_part]
+                            .copy_from_slice(&chunk[first_part..writeable]);
+                    }
+
+                    write_position = (write_position + writeable) % max_samples;
+                    total_samples += writeable;
                 }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
@@ -209,40 +239,53 @@ async fn run_record_and_transcribe(
             }
         }
 
-        // Discard oldest samples if we exceed buffer capacity
-        if collected_audio.len() > max_samples {
-            let excess = collected_audio.len() - max_samples;
-            collected_audio.drain(0..excess);
-        }
+        // Always send the most recent duration_samples (may include some overlap)
+        let audio_segment = if total_samples >= duration_samples {
+            let start = total_samples.saturating_sub(duration_samples);
+            let end = total_samples;
 
-        if !collected_audio.is_empty() {
-            debug!("sending audio segment to audio model");
-            match whisper_sender.try_send(AudioInput {
-                data: Arc::new(collected_audio.clone()),
-                device: audio_stream.device.clone(),
-                sample_rate: audio_stream.device_config.sample_rate().0,
-                channels: audio_stream.device_config.channels(),
-            }) {
-                Ok(_) => {
-                    debug!("sent audio segment to audio model");
-                    // Retain only overlap samples for next iteration
-                    let current_len = collected_audio.len();
-                    if current_len > overlap_samples {
-                        let keep_from = current_len - overlap_samples;
-                        collected_audio.drain(0..keep_from);
-                    } else {
-                        // If we don't have enough samples, keep all (unlikely case)
-                        collected_audio.truncate(current_len);
-                    }
-                }
-                Err(e) => {
-                    if e.is_disconnected() {
-                        error!("whisper channel disconnected, restarting recording process");
-                        return Err(anyhow!("Whisper channel disconnected"));
-                    } else if e.is_full() {
-                        warn!("whisper channel full, dropping audio segment");
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
+            if start <= end {
+                collected_audio[start..end].to_vec()
+            } else {
+                // This case should never occur due to buffer management
+                let mut seg = Vec::with_capacity(duration_samples);
+                seg.extend_from_slice(&collected_audio[start..]);
+                seg.extend_from_slice(&collected_audio[0..end]);
+                seg
+            }
+        } else {
+            continue; // Not enough samples yet
+        };
+
+        debug!("sending audio segment to audio model");
+        match whisper_sender.try_send(AudioInput {
+            data: Arc::new(audio_segment),
+            device: audio_stream.device.clone(),
+            sample_rate: audio_stream.device_config.sample_rate().0,
+            channels: 1,
+        }) {
+            Ok(_) => {
+                debug!("sent audio segment to audio model");
+                // Maintain overlap by keeping last overlap_samples
+                let keep_from = total_samples.saturating_sub(overlap_samples);
+                collected_audio.copy_within(keep_from..total_samples, 0);
+                write_position = total_samples - keep_from;
+                total_samples = overlap_samples;
+            }
+            Err(e) => {
+                // Maintain buffer size even when send fails
+                collected_audio.resize(max_samples, 0.0);
+                write_position = 0;
+                total_samples = 0;
+                if e.is_disconnected() {
+                    error!("whisper channel disconnected, restarting recording process");
+                    return Err(anyhow!("Whisper channel disconnected"));
+                } else if e.is_full() {
+                    warn!("whisper channel full, dropping audio segment");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                } else {
+                    error!("whisper channel error, restarting recording process: {}", e);
+                    return Err(anyhow!("Whisper channel error"));
                 }
             }
         }

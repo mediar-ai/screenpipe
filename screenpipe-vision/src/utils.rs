@@ -7,7 +7,6 @@ use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error, warn};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[cfg(target_os = "macos")]
@@ -83,7 +82,7 @@ pub async fn capture_screenshot(
 }
 
 pub async fn compare_with_previous_image(
-    previous_image: Option<&Arc<DynamicImage>>,
+    previous_image: Option<&DynamicImage>,
     current_image: &DynamicImage,
     max_average: &mut Option<MaxAverageFrame>,
     frame_number: u64,

@@ -1348,7 +1348,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    device_manager_clone_2.shutdown().await;
+    let _ = device_manager_clone_2.shutdown().await;
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);

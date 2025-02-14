@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use ort::Session;
 use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
+use tracing::debug;
 
 use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
 
@@ -63,6 +64,7 @@ fn create_speech_segment(
         }
     };
     let speaker = get_speaker_from_embedding(embedding_manager, embedding.clone());
+    debug!("speaker: {}", speaker);
 
     Ok(SpeechSegment {
         start,
@@ -147,6 +149,7 @@ impl SegmentIterator {
     }
 
     fn process_window(&mut self, window: &[f32]) -> Result<Option<SpeechSegment>> {
+        debug!("processing window at position: {}", self.current_position);
         let array = ndarray::Array1::from_vec(window.to_vec());
         let array = array
             .view()
@@ -172,10 +175,12 @@ impl SegmentIterator {
 
                 if max_index != 0 {
                     if !self.is_speeching {
+                        debug!("speech started at offset: {}", self.offset);
                         self.start_offset = self.offset as f64;
                         self.is_speeching = true;
                     }
                 } else if self.is_speeching {
+                    debug!("speech ended at offset: {}", self.offset);
                     let new_segment = match create_speech_segment(
                         self.start_offset,
                         self.offset,
@@ -185,8 +190,15 @@ impl SegmentIterator {
                         self.embedding_extractor.clone(),
                         self.embedding_manager.clone(),
                     ) {
-                        Ok(segment) => segment,
-                        Err(_) => {
+                        Ok(segment) => {
+                            debug!(
+                                "created new segment: start={}, end={}",
+                                segment.start, segment.end
+                            );
+                            segment
+                        }
+                        Err(e) => {
+                            debug!("failed to create speech segment: {}", e);
                             return Ok(None);
                         }
                     };
@@ -196,6 +208,7 @@ impl SegmentIterator {
                         handle_new_segment(self.current_segment.take(), new_segment, &mut segments);
 
                     if !segments.is_empty() {
+                        debug!("emitting completed segment");
                         result = segments.pop();
                     }
 
@@ -213,25 +226,36 @@ impl Iterator for SegmentIterator {
     type Item = Result<SpeechSegment>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        debug!(
+            "processing next window, current_position: {}",
+            self.current_position
+        );
         let mut result = None;
 
         while self.current_position < self.padded_samples.len() - 1 {
             let end = (self.current_position + self.window_size).min(self.padded_samples.len());
             let window = self.padded_samples[self.current_position..end].to_vec();
+            debug!("processing window size: {}", window.len());
 
             // Process the window
             match self.process_window(&window) {
                 Ok(Some(segment)) => {
+                    debug!(
+                        "found segment: start={}, end={}",
+                        segment.start, segment.end
+                    );
                     result = Some(Ok(segment));
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    debug!("no segment found in current window");
+                }
                 Err(e) => {
+                    debug!("error processing window: {}", e);
                     result = Some(Err(e));
                     break;
                 }
             }
 
-            // Update current_position after processing the window
             self.current_position += self.window_size;
         }
 

@@ -2,7 +2,6 @@ use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
-use futures::future::join_all;
 use futures::StreamExt;
 use screenpipe_audio::{
     record_and_transcribe, AudioInput, AudioTranscriptionEngine, TranscriptionResult,
@@ -426,18 +425,11 @@ async fn record_audio(
     let mut device_states = device_manager.watch_devices().await;
     let mut previous_transcript = String::new();
     let mut previous_transcript_id: Option<i64> = None;
+    let mut device_statuses: HashMap<String, Arc<AtomicBool>> = HashMap::new();
 
-    // Create a weak reference to device_manager
-    let device_manager_weak = Arc::downgrade(&device_manager);
-    let mut prev_handles_len = 0;
     loop {
-        if handles.len() != prev_handles_len {
-            prev_handles_len = handles.len();
-            info!("handles length: {}", prev_handles_len);
-        }
         tokio::select! {
             Some(state_change) = device_states.next() => {
-                // Handle cleanup of finished handles
                 handles.retain(|device_id, handle| {
                     if handle.is_finished() {
                         info!("handle for device {} has finished", device_id);
@@ -453,6 +445,7 @@ async fn record_audio(
 
                         if !state_change.control.is_running {
                             if let Some(handle) = handles.remove(&device_id) {
+                                device_statuses.get_mut(&device_id).unwrap().store(false, Ordering::Relaxed);
                                 handle.abort();
                                 info!("stopped thread for device {}", &audio_device);
                             }
@@ -463,106 +456,97 @@ async fn record_audio(
                             continue;
                         }
 
+                        // insert device status if not exists
+                        if !device_statuses.contains_key(&device_id) {
+                            device_statuses.insert(device_id.clone(), Arc::new(AtomicBool::new(true)));
+                        } else {
+                            continue;
+                        }
+
+                        let is_running = device_statuses.get(&device_id).unwrap();
+
                         info!("starting audio capture thread for device: {}", &audio_device);
 
                         let audio_device = Arc::new(audio_device);
-                        let is_running = Arc::new(AtomicBool::new(true));
-
-                        // Use weak reference for the spawned task
-                        let device_manager_weak = device_manager_weak.clone();
                         let whisper_sender = whisper_sender.clone();
                         let languages = Arc::clone(&languages);
                         let deepgram_api_key = deepgram_api_key.clone();
+                        let realtime_devices = realtime_audio_devices.iter()
+                            .cloned()
+                            .collect::<Vec<_>>();
 
-                        let device_id_for_handle = device_id.clone();
                         let handle = tokio::spawn({
                             let audio_device = Arc::clone(&audio_device);
-                            let is_running = Arc::clone(&is_running);
-                            let realtime_devices = realtime_audio_devices.clone();
+                            let is_running = Arc::clone(is_running);
 
                             async move {
-                                info!("starting audio capture thread for device: {}", &audio_device);
-                                let mut did_warn = false;
+                                info!("starting audio recording for device: {}", audio_device);
 
-                                // Move the device state monitoring outside the main loop
-                                let device_states = device_manager_weak.upgrade().unwrap().watch_devices().await;
-                                let is_running_clone = Arc::clone(&is_running);
-
-                                let monitor_handle = tokio::spawn(async move {
-                                    let mut device_states = device_states;
-                                    while let Some(state_change) = device_states.next().await {
-                                        if state_change.device == device_id_for_handle && !state_change.control.is_running {
-                                            is_running_clone.store(false, Ordering::Relaxed);
-                                            break;
+                                let audio_stream = match AudioStream::from_device(
+                                    Arc::clone(&audio_device),
+                                    Arc::clone(&is_running),
+                                ).await {
+                                    Ok(stream) => Arc::new(stream),
+                                    Err(e) => {
+                                        if e.to_string().contains("audio device not found") {
+                                            error!("audio device not found: {}", audio_device.name);
+                                            tokio::time::sleep(Duration::from_secs(1)).await;
+                                            return;
+                                        } else {
+                                            error!("failed to create audio stream: {}", e);
+                                            return;
                                         }
                                     }
-                                });
+                                };
 
-                                while is_running.load(Ordering::Relaxed) {
+                                let mut recording_handles = vec![];
 
+                                recording_handles.push(tokio::spawn({
+                                    let audio_stream = Arc::clone(&audio_stream);
+                                    let is_running = Arc::clone(&is_running);
+                                    let whisper_sender = whisper_sender.clone();
 
-                                    let audio_stream = match AudioStream::from_device(
-                                        Arc::clone(&audio_device),
-                                        Arc::clone(&is_running),
-                                    ).await {
-                                        Ok(stream) => Arc::new(stream),
-                                        Err(e) => {
-                                            if e.to_string().contains("audio device not found") {
-                                                if !did_warn {
-                                                    warn!("audio device not found: {}", audio_device.name);
-                                                    did_warn = true;
-                                                }
-                                                tokio::time::sleep(Duration::from_secs(1)).await;
-                                                continue;
-                                            } else {
-                                                error!("failed to create audio stream: {}", e);
-                                                return;
-                                            }
-                                        }
-                                    };
+                                    async move {
+                                        let _ = record_and_transcribe(
+                                            audio_stream,
+                                            chunk_duration,
+                                            whisper_sender,
+                                            is_running,
+                                        ).await;
+                                    }
+                                }));
 
-                                    let mut recording_handles = vec![];
-
-                                    // Spawn record and transcribe task
+                                if realtime_audio_enabled && realtime_devices.contains(&audio_device) {
                                     recording_handles.push(tokio::spawn({
                                         let audio_stream = Arc::clone(&audio_stream);
                                         let is_running = Arc::clone(&is_running);
-                                        let whisper_sender = whisper_sender.clone();
+                                        let languages = Arc::clone(&languages);
+                                        let deepgram_api_key = deepgram_api_key.clone();
 
                                         async move {
-                                            let _ = record_and_transcribe(
+                                            let _ = start_realtime_recording(
                                                 audio_stream,
-                                                chunk_duration,
-                                                whisper_sender,
+                                                languages,
                                                 is_running,
+                                                deepgram_api_key,
                                             ).await;
                                         }
                                     }));
-
-                                    // Spawn realtime recording task if enabled
-                                    if realtime_audio_enabled && realtime_devices.contains(&audio_device) {
-                                        recording_handles.push(tokio::spawn({
-                                            let audio_stream = Arc::clone(&audio_stream);
-                                            let is_running = Arc::clone(&is_running);
-                                            let languages = Arc::clone(&languages);
-                                            let deepgram_api_key = deepgram_api_key.clone();
-
-                                            async move {
-                                                let _ = start_realtime_recording(
-                                                    audio_stream,
-                                                    languages,
-                                                    is_running,
-                                                    deepgram_api_key,
-                                                ).await;
-                                            }
-                                        }));
-                                    }
-
-                                    join_all(recording_handles).await;
                                 }
 
-                                // Clean up the monitor task
-                                monitor_handle.abort();
+                                // Don't wait for handles, just spawn and monitor them
+                                for handle in recording_handles {
+                                    tokio::spawn(async move {
+                                        if let Err(e) = handle.await {
+                                            error!("recording handle failed: {}", e);
+                                        }
+                                    });
+                                }
+
+                                // Wait until is_running becomes false
+                                while is_running.load(Ordering::Relaxed) {
+                                    tokio::time::sleep(Duration::from_secs(1)).await;
+                                }
                             }
                         });
 
@@ -603,7 +587,6 @@ async fn record_audio(
                 continue;
             }
 
-            // Process the audio result
             match process_audio_result(
                 &db,
                 transcription,
