@@ -1372,6 +1372,49 @@ export function RecordingSettings() {
 
         <div className="space-y-8 py-4">
           <div className="space-y-6">
+            <div className="flex flex-col space-y-2">
+              <Label
+                htmlFor="restartInterval"
+                className="flex items-center space-x-2"
+              >
+                <span>auto restart interval (minutes)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <HelpCircle className="h-4 w-4 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>
+                        automatically restart screenpipe after the specified
+                        interval.
+                        <br />
+                        0 means no automatic restart.
+                        <br />
+                        useful if you face memory issues and ensure stable
+                        recording.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </Label>
+              <div className="flex items-center space-x-4">
+                <Slider
+                  id="restartInterval"
+                  min={0}
+                  max={1440}
+                  step={30}
+                  value={[settings.restartInterval || 0]}
+                  onValueChange={(value) =>
+                    handleSettingsChange({ restartInterval: value[0] })
+                  }
+                  className="flex-grow"
+                />
+                <span className="w-16 text-right">
+                  {settings.restartInterval || 0} min
+                </span>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <h4 className="font-medium">

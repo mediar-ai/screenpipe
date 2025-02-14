@@ -590,6 +590,8 @@ impl SidecarManager {
             if let Some(child) = self.child.take() {
                 let _ = child.kill();
             }
+            // sleep for 5 seconds
+            sleep(Duration::from_secs(5)).await;
             let child = spawn_sidecar(app)?;
             self.child = Some(child);
             self.last_restart = Instant::now();
