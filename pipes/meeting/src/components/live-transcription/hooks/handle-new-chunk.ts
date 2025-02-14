@@ -44,46 +44,52 @@ export function createHandleNewChunk(deps: HandleNewChunkDeps) {
         //     bufferContent: totalText
         // })
 
-        if (wordCount >= 50) {
-            // Get current data first
-            let existingNotes: string[] = []
-            setData(currentData => {
-                existingNotes = currentData?.notes?.map(n => n.text) || []
-                return currentData
-            })
+        // Get current data to check if AI notes are enabled
+        let shouldGenerate = false
+        let existingNotes: string[] = []
+        
+        setData(currentData => {
+            shouldGenerate = currentData?.isAiNotesEnabled ?? true
+            existingNotes = currentData?.notes?.map(n => n.text) || []
+            return currentData
+        })
 
-            const note = await generateMeetingNote(
-                noteBuffer, 
-                settings,
-                existingNotes
-            ).catch(error => {
-                console.error('failed to generate note:', error)
-                return null
-            })
-
-            setData(current => {
-                if (note && current) {
-                    const timestamp = noteBuffer.length > 0 
-                        ? new Date(noteBuffer[0].timestamp)
-                        : new Date(now)
-
-                    const newData = {
-                        ...current,
-                        notes: [...current.notes, {
-                            id: `note-${now}`,
-                            text: `• ${note}`,
-                            timestamp,
-                            type: 'auto'
-                        }]
-                    }
-                    void updateStore(newData)
-                    return newData
-                }
-                return current
-            })
-            // Clear buffer after successful note generation
-            noteBuffer.length = 0
+        // Early return if AI notes are disabled
+        if (!shouldGenerate || wordCount < 50) {
+            return
         }
+
+        const note = await generateMeetingNote(
+            noteBuffer, 
+            settings,
+            existingNotes
+        ).catch(error => {
+            console.error('failed to generate note:', error)
+            return null
+        })
+
+        setData(current => {
+            if (note && current) {
+                const timestamp = noteBuffer.length > 0 
+                    ? new Date(noteBuffer[0].timestamp)
+                    : new Date(now)
+
+                const newData = {
+                    ...current,
+                    notes: [...current.notes, {
+                        id: `note-${now}`,
+                        text: `• ${note}`,
+                        timestamp,
+                        type: 'auto'
+                    }]
+                }
+                void updateStore(newData)
+                return newData
+            }
+            return current
+        })
+        // Clear buffer after successful note generation
+        noteBuffer.length = 0
     }
 
     return async function handleNewChunk(chunk: TranscriptionChunk) {
@@ -120,7 +126,8 @@ export function createHandleNewChunk(deps: HandleNewChunkDeps) {
                 if (previousMerged && 
                     settings.aiProviderType === "screenpipe-cloud" && 
                     !currentData.editedMergedChunks[previousMerged.id] &&
-                    !processingChunks.has(previousMerged.id)) {
+                    !processingChunks.has(previousMerged.id) &&
+                    currentData.isAiNotesEnabled) {
                     
                     console.log('processing chunk:', { id: previousMerged.id, text: previousMerged.text })
                     processingChunks.add(previousMerged.id)
