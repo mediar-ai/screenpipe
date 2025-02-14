@@ -3,6 +3,7 @@ import { useTranscriptionStream } from './hooks/screenpipe-stream-transcription-
 import { useBrowserTranscriptionStream } from './hooks/browser-stream-transcription-api'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useMeetingContext } from './hooks/storage-for-live-meeting'
+import { useSettings } from "@/lib/hooks/use-settings"
 
 type TranscriptionMode = 'browser' | 'screenpipe'
 
@@ -11,7 +12,11 @@ const GLOBAL_STATE = {
     isInitialized: false
 }
 
-export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
+export function useTranscriptionService(mode?: TranscriptionMode) {
+    const { settings } = useSettings()
+    
+    // Force browser mode regardless of settings
+    const effectiveMode: TranscriptionMode = 'browser'
     const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
     const { onNewChunk } = useMeetingContext()
     const { startTranscriptionScreenpipe, stopTranscriptionScreenpipe } = useTranscriptionStream(setChunks)
@@ -76,21 +81,22 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
 
     // Initialize transcription on mount only if not already initialized
     useEffect(() => {
-        modeRef.current = mode
+        modeRef.current = effectiveMode
         const isFromArchive = new URLSearchParams(window.location.search).get('from') === 'archive'
         
-        if (!mode || GLOBAL_STATE.isInitialized || isTransitioningRef.current || isFromArchive) {
+        if (!effectiveMode || GLOBAL_STATE.isInitialized || isTransitioningRef.current || isFromArchive) {
             console.log('skipping transcription init:', {
-                hasMode: !!mode,
+                hasMode: !!effectiveMode,
                 isInitialized: GLOBAL_STATE.isInitialized,
                 isTransitioning: isTransitioningRef.current,
-                isFromArchive
+                isFromArchive,
+                mode: effectiveMode
             })
             return
         }
 
-        console.log('initializing transcription:', { mode })
-        if (mode === 'browser') {
+        console.log('initializing transcription:', { mode: effectiveMode })
+        if (effectiveMode === 'browser') {
             startTranscriptionBrowser()
         } else {
             startTranscriptionScreenpipe()
@@ -113,7 +119,7 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
                 isTransitioningRef.current = false
             }, 100)
         }
-    }, [mode, startTranscriptionBrowser, startTranscriptionScreenpipe, 
+    }, [effectiveMode, startTranscriptionBrowser, startTranscriptionScreenpipe, 
         stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
     const toggleRecording = useCallback(() => {

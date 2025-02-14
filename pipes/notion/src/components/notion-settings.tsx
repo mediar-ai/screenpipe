@@ -14,9 +14,9 @@ import {
 import { OllamaModelsList } from "./ollama-models-list";
 import { validateCredentials } from "@/lib/notion/notion";
 import { toast } from "@/hooks/use-toast";
-import { useNotionSettings } from "@/lib/hooks/use-notion-settings";
+import { useNotionSettings } from "@/lib/hooks/use-pipe-settings";
 import { ChevronDown, Loader2 } from "lucide-react";
-import { NotionCredentials, Settings } from "@/lib/types";
+import { Settings } from "@/lib/types";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
 import {
@@ -37,24 +37,14 @@ import { INTEGRATION_NAME } from "@/lib/utils";
 export function NotionSettings() {
   const { settings, updateSettings, loading } = useNotionSettings();
   const [isSettingUp, setIsSettingUp] = useState(false);
-  const [credentials, setCredentials] = useState<NotionCredentials>({
-    accessToken: "",
-    databaseId: "",
-    intelligenceDbId: "",
-  });
+
   const [testingLog, setTestingLog] = useState(false);
   const [testingIntelligence, setTestingIntelligence] = useState(false);
   const [localSettings, setLocalSettings] = useState<Partial<Settings> | null>(
-    {}
+    {},
   );
 
   useEffect(() => {
-    setCredentials({
-      accessToken: settings?.notion?.accessToken || "",
-      databaseId: settings?.notion?.databaseId || "",
-      intelligenceDbId: settings?.notion?.intelligenceDbId || "",
-    });
-
     setLocalSettings({
       ...settings,
     });
@@ -63,14 +53,22 @@ export function NotionSettings() {
   const handleValidate = async () => {
     setIsSettingUp(true);
     try {
-      const isValid = await validateCredentials(credentials);
+      const isValid = await validateCredentials({
+        accessToken: settings?.notion?.accessToken || "",
+        databaseId: settings?.notion?.databaseId || "",
+        intelligenceDbId: settings?.notion?.intelligenceDbId || "",
+      });
       if (!isValid) {
         throw new Error("Invalid credentials");
       }
 
       await updateSettings({
         ...settings!,
-        notion: credentials,
+        notion: {
+          accessToken: settings?.notion?.accessToken || "",
+          databaseId: settings?.notion?.databaseId || "",
+          intelligenceDbId: settings?.notion?.intelligenceDbId || "",
+        },
       });
 
       toast({
@@ -190,6 +188,21 @@ export function NotionSettings() {
         prompt: localSettings?.prompt || settings?.prompt,
         interval: localSettings?.interval || settings?.interval,
         pageSize: localSettings?.pageSize || settings?.pageSize,
+        workspace: localSettings?.workspace || settings?.workspace,
+        notion: {
+          accessToken:
+            localSettings?.notion?.accessToken ||
+            settings?.notion?.accessToken ||
+            "",
+          databaseId:
+            localSettings?.notion?.databaseId ||
+            settings?.notion?.databaseId ||
+            "",
+          intelligenceDbId:
+            localSettings?.notion?.intelligenceDbId ||
+            settings?.notion?.intelligenceDbId ||
+            "",
+        },
       });
 
       if (localSettings?.interval !== settings?.interval) {
@@ -248,8 +261,13 @@ export function NotionSettings() {
                 make sure to keep the prompt within llm context window size.
                 <br />
                 protip: use the @mention feature to link to other pages in your
-                notion as context.(make sure the page is shared with
-                integration)
+                notion as context.
+                <br />
+                <br />
+                <strong>
+                  (make sure these pages are shared with the integration)
+                </strong>
+                <br />
                 <br />
                 if you have connected with notion automatically, then your
                 integration name will{" "}
@@ -288,7 +306,7 @@ export function NotionSettings() {
                 this is required when you are connecting automatically. you can
                 find your workspace name{" "}
                 <a
-                  href="https://www.notion.so/settings/workspace-settings"
+                  href="https://www.notion.so"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-400 underline"
@@ -322,12 +340,17 @@ export function NotionSettings() {
               </Label>
               <Input
                 placeholder="Access Token"
-                value={credentials.accessToken}
+                value={localSettings?.notion?.accessToken || ""}
                 onChange={(e) =>
-                  setCredentials((prev) => ({
-                    ...prev,
-                    accessToken: e.target.value,
-                  }))
+                  setLocalSettings({
+                    ...localSettings!,
+                    notion: {
+                      databaseId: localSettings?.notion?.databaseId || "",
+                      intelligenceDbId:
+                        localSettings?.notion?.intelligenceDbId || "",
+                      accessToken: e.target.value,
+                    },
+                  })
                 }
               />
               <p className="text-xs text-muted-foreground">
@@ -346,9 +369,17 @@ export function NotionSettings() {
             <div className="space-y-2">
               <NotionIdInput
                 label="Database ID"
-                value={credentials.databaseId}
+                value={localSettings?.notion?.databaseId || ""}
                 onChange={(value) =>
-                  setCredentials((prev) => ({ ...prev, databaseId: value }))
+                  setLocalSettings({
+                    ...localSettings!,
+                    notion: {
+                      accessToken: localSettings?.notion?.accessToken || "",
+                      intelligenceDbId:
+                        localSettings?.notion?.intelligenceDbId || "",
+                      databaseId: value,
+                    },
+                  })
                 }
                 dialogTitle="Extract Database ID from URL"
               />
@@ -356,12 +387,16 @@ export function NotionSettings() {
             <div className="space-y-2">
               <NotionIdInput
                 label="Intelligence ID"
-                value={credentials.intelligenceDbId}
+                value={localSettings?.notion?.intelligenceDbId || ""}
                 onChange={(value) =>
-                  setCredentials((prev) => ({
-                    ...prev,
-                    intelligenceDbId: value,
-                  }))
+                  setLocalSettings({
+                    ...localSettings!,
+                    notion: {
+                      accessToken: localSettings?.notion?.accessToken || "",
+                      databaseId: localSettings?.notion?.databaseId || "",
+                      intelligenceDbId: value,
+                    },
+                  })
                 }
                 dialogTitle="Extract Intelligence Database ID from URL"
               />
@@ -373,9 +408,9 @@ export function NotionSettings() {
                   isAutoDisabled={isSettingUp || !settings?.workspace}
                   isManualDisabled={
                     isSettingUp ||
-                    !credentials.accessToken ||
-                    !credentials.databaseId ||
-                    !credentials.intelligenceDbId
+                    !localSettings?.notion?.accessToken ||
+                    !localSettings?.notion?.databaseId ||
+                    !localSettings?.notion?.intelligenceDbId
                   }
                   handleAuto={handleSetup}
                   handleManual={handleValidate}

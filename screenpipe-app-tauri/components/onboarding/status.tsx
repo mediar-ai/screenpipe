@@ -227,7 +227,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       duration: Infinity,
     });
     try {
-      await invoke("kill_all_sreenpipes");
+      await invoke("stop_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 1_000));
 
       await invoke("spawn_screenpipe");

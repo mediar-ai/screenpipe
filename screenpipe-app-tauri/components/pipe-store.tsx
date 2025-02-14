@@ -12,6 +12,7 @@ import {
   PurchaseHistoryItem,
 } from "@/lib/api/store";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { listen } from "@tauri-apps/api/event";
 import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
 import { PipeDetails } from "./pipe-store/pipe-details";
 import { PipeCard } from "./pipe-store/pipe-card";
@@ -35,7 +36,7 @@ const corePipes: string[] = ["data-table", "search"];
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings } = useSettings();
+  const { settings, loadUser } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -74,6 +75,25 @@ export const PipeStore: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filteredPipes.length]);
+
+  useEffect(() => {
+    const unsubscribePromise = listen("update-all-pipes", async () => {
+      // not sure this is a good idea ... basically pipes will break in the hand of users when update will happen
+      if (!checkLogin(settings.user, false)) return;
+
+      for (const pipe of pipes) {
+        // Then download the new version
+        await handleUpdatePipe(pipe);
+      }
+
+      // Refresh the pipe list
+      await fetchInstalledPipes();
+    });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
+  }, []);
 
   const fetchStorePlugins = async () => {
     try {
@@ -457,22 +477,23 @@ export const PipeStore: React.FC = () => {
     }
   };
 
-  const handleUpdateAllPipes = async () => {
+  const handleUpdateAllPipes = async (delayToast: boolean = false) => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      posthog.capture("update_all_pipes", {});
-
-      const t = toast({
-        title: "checking for updates",
-        description: (
-          <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">checking installed pipes...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
+      let t;
+      if (!delayToast) {
+        t = toast({
+          title: "checking for updates",
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">checking installed pipes...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }
 
       // Filter installed pipes that have updates available
       const pipesToUpdate = pipes.filter(
@@ -480,27 +501,42 @@ export const PipeStore: React.FC = () => {
       );
 
       if (pipesToUpdate.length === 0) {
-        t.update({
-          id: t.id,
-          title: "no updates available",
-          description: "all pipes are up to date",
-          duration: 2000,
-        });
+        if (t) {
+          t.update({
+            id: t.id,
+            title: "no updates available",
+            description: "all pipes are up to date",
+            duration: 2000,
+          });
+        }
         return;
       }
 
       // Update progress message
-      t.update({
-        id: t.id,
-        title: `updating ${pipesToUpdate.length} pipes`,
-        description: (
-          <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">starting updates...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
+      if (t) {
+        t.update({
+          id: t.id,
+          title: `updating ${pipesToUpdate.length} pipes`,
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">starting updates...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      } else {
+        t = toast({
+          title: `updating ${pipesToUpdate.length} pipes`,
+          description: (
+            <div className="space-y-2">
+              <Progress value={0} className="h-1" />
+              <p className="text-xs">starting updates...</p>
+            </div>
+          ),
+          duration: 100000,
+        });
+      }
 
       // Update each pipe sequentially
       for (let i = 0; i < pipesToUpdate.length; i++) {
@@ -548,11 +584,6 @@ export const PipeStore: React.FC = () => {
     onComplete: () => void
   ) => {
     try {
-      posthog.capture("toggle_pipe", {
-        pipe_id: pipe.id,
-        enabled: !pipe.installed_config?.enabled,
-      });
-
       const t = toast({
         title: "loading pipe",
         description: "please wait...",
@@ -682,9 +713,6 @@ export const PipeStore: React.FC = () => {
   };
   const handleDeletePipe = async (pipe: PipeWithStatus) => {
     try {
-      posthog.capture("delete_pipe", {
-        pipe_id: pipe.id,
-      });
       toast({
         title: "deleting pipe",
         description: "please wait...",
@@ -725,10 +753,6 @@ export const PipeStore: React.FC = () => {
 
   const handleRefreshFromDisk = async (pipe: PipeWithStatus) => {
     try {
-      posthog.capture("refresh_pipe_from_disk", {
-        pipe_id: pipe.name,
-      });
-
       toast({
         title: "refreshing pipe",
         description: "please wait...",
@@ -766,10 +790,6 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      posthog.capture("update_pipe", {
-        pipe_id: pipe.name,
-      });
-
       const currentVersion = pipe.installed_config?.version!;
       const storeApi = await PipeApi.create(settings.user!.token!);
       const update = await storeApi.checkUpdate(pipe.id, currentVersion);
@@ -781,52 +801,61 @@ export const PipeStore: React.FC = () => {
         return;
       }
 
-      // Create initial toast with progress bar
       const t = toast({
         title: "updating pipe",
         description: (
           <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">deleting old version...</p>
+            <Progress value={25} className="h-1" />
+            <p className="text-xs">checking for updates...</p>
           </div>
         ),
         duration: 100000,
       });
 
-      // First delete the pipe
-      await handleDeletePipe(pipe);
+      // Update progress for download start
+      t.update({
+        id: t.id,
+        description: (
+          <div className="space-y-2">
+            <Progress value={50} className="h-1" />
+            <p className="text-xs">downloading update...</p>
+          </div>
+        ),
+      });
 
-      // Then download the new version
-      if (pipe.installed_config?.source) {
-        t.update({
-          id: t.id,
-          title: "updating pipe",
-          description: (
-            <div className="space-y-2">
-              <Progress value={50} className="h-1" />
-              <p className="text-xs">downloading new version...</p>
-            </div>
-          ),
-          duration: 100000,
-        });
+      const responseDownload = await storeApi.downloadPipe(pipe.id);
 
-        await handleInstallPipe(pipe);
+      // Update progress for installation
+      t.update({
+        id: t.id,
+        description: (
+          <div className="space-y-2">
+            <Progress value={75} className="h-1" />
+            <p className="text-xs">installing update...</p>
+          </div>
+        ),
+      });
 
-        // Enable the pipe after installation
-        const response = await fetch(`http://localhost:3030/pipes/enable`, {
+      const response = await fetch(
+        `http://localhost:3030/pipes/update-version`,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ pipe_id: pipe.name }),
-        });
-
-        const data = await response.json();
-        if (!data.success) {
-          console.warn("failed to enable pipe:", data.error);
+          body: JSON.stringify({
+            pipe_id: pipe.name,
+            source: responseDownload.download_url,
+          }),
         }
+      );
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error);
       }
 
+      // Update progress for completion
       t.update({
         id: t.id,
         title: "pipe updated",
@@ -839,9 +868,7 @@ export const PipeStore: React.FC = () => {
         duration: 2000,
       });
 
-      // Refresh the pipe list
       await fetchInstalledPipes();
-
       t.dismiss();
     } catch (error) {
       console.error("failed to update pipe:", error);
@@ -1003,7 +1030,7 @@ export const PipeStore: React.FC = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={handleUpdateAllPipes}
+                      onClick={() => handleUpdateAllPipes()}
                       className="flex items-center gap-2"
                       disabled={
                         !pipes.some(

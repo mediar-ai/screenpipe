@@ -86,7 +86,7 @@ export function useBrowserTranscriptionStream(
             const chunk: TranscriptionChunk = {
               id: Date.now(),
               timestamp: new Date().toISOString(),
-              text: data.channel.alternatives[0].transcript,
+              text,
               isInput: true,
               device: 'browser',
               speaker: `speaker_${words[0].speaker || 0}`

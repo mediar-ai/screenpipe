@@ -54,7 +54,7 @@ export function useAiProvider(settings: Settings): AIProviderStatus {
             break;
 
           case "custom":
-            if (!settings.aiUrl || !settings.openaiApiKey) {
+            if (!settings.aiUrl) {
               setStatus({
                 isAvailable: false,
                 error: "custom ai url not configured",
