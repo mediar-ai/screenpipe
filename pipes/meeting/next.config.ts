@@ -18,7 +18,16 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "connect-src 'self' wss://api.deepgram.com https://*.posthog.com http://localhost:* ipc:* https://ai-proxy.i-f9f.workers.dev https://api.openai.com",
+              "connect-src 'self' " + 
+                "wss://api.deepgram.com " +
+                "https://api.deepgram.com " +
+                "wss://*.posthog.com " +
+                "https://*.posthog.com " +
+                "http://localhost:* " +
+                "ipc:* " +
+                "ipc://localhost/* " +
+                "https://ai-proxy.i-f9f.workers.dev " +
+                "https://api.openai.com",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
