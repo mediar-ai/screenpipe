@@ -12,20 +12,20 @@ import { useToast } from '@/hooks/use-toast'
 import { generateMeetingNotes } from './hooks/ai-create-all-notes'
 import { improveNote } from './hooks/ai-create-note'
 import { useRouter } from "next/navigation"
-import { handleStartNewMeeting } from "@/components/meeting-history/meeting-utils"
+import { Switch } from "@/components/ui/switch"
 
 interface Props {
   onTimeClick: (timestamp: Date) => void
   onNewMeeting: () => void
-  isRecording?: boolean
-  onToggleRecording?: () => void
+  isRecording: boolean
+  onToggleRecording: () => void
 }
 
 export const NotesEditor = memo(function NotesEditor({ 
   onTimeClick, 
   onNewMeeting,
   isRecording,
-  onToggleRecording 
+  onToggleRecording
 }: Props) {
   const { 
     title, 
@@ -36,7 +36,8 @@ export const NotesEditor = memo(function NotesEditor({
     analysis,
     setAnalysis,
     data,
-    isLoading
+    isLoading,
+    updateStore,
   } = useMeetingContext()
   const [currentMessage, setCurrentMessage] = useState("")
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -373,18 +374,6 @@ export const NotesEditor = memo(function NotesEditor({
     await setNotes(updatedNotes)
   }
 
-
-  const handleNewMeeting = async () => {
-    if (!data) {
-      throw new Error("no meeting data available")
-    }
-
-    const success = await handleStartNewMeeting(data)
-    if (!success) {
-      router.push('/meetings/live')
-    }
-  }
-
   // Log every render
   // useEffect(() => {
   //   console.log('NotesEditor render:', {
@@ -398,6 +387,11 @@ export const NotesEditor = memo(function NotesEditor({
   useEffect(() => {
     setLocalTitle(title)
   }, [title])
+
+  const handleNewMeetingClick = () => {
+    setShowNav(false) // Close the sidebar
+    onNewMeeting() // Call the passed handler
+  }
 
   return (
     <div className="h-full flex flex-col bg-card relative">
@@ -413,11 +407,21 @@ export const NotesEditor = memo(function NotesEditor({
           <div className="flex flex-col gap-1 bg-gray-100/80 backdrop-blur p-1 rounded-lg shadow-sm">
             <button
               onClick={async () => {
-                console.log('finishing meeting')
+                console.log('finishing meeting:', {
+                  hasData: !!data,
+                  isArchived: data?.isArchived
+                })
                 try {
-                  const archived = await archiveLiveMeeting()
-                  if (!archived) {
-                    throw new Error("failed to archive meeting")
+                  // Only try to archive if meeting exists and isn't already archived
+                  if (data && !data.isArchived) {
+                    const archived = await archiveLiveMeeting()
+                    console.log('archive result:', {
+                      success: archived,
+                      meetingId: data.id
+                    })
+                    if (!archived) {
+                      throw new Error("failed to archive meeting")
+                    }
                   }
                   router.push('/meetings')
                 } catch (error) {
@@ -435,26 +439,8 @@ export const NotesEditor = memo(function NotesEditor({
               <span>back to meetings history</span>
             </button>
 
-            {onToggleRecording && (
-              <button
-                onClick={onToggleRecording}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
-              >
-                {isRecording ? (
-                  <>
-                    <MicOff className="h-4 w-4 text-red-500" />
-                    <span>stop recording</span>
-                  </>
-                ) : (
-                  <>
-                    <Mic className="h-4 w-4 text-green-500" />
-                    <span>start recording</span>
-                  </>
-                )}
-              </button>
-            )}
             <button
-              onClick={onNewMeeting}
+              onClick={handleNewMeetingClick}
               className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-200/80 rounded transition-colors w-full text-left"
             >
               <PlusCircle className="h-4 w-4" />
@@ -477,7 +463,24 @@ export const NotesEditor = memo(function NotesEditor({
               <span>append AI summary</span>
             </button>
 
-            
+            <div className="mt-1 pt-1 border-t border-gray-200">
+              <div className="px-3 py-1 text-xs text-gray-500">settings</div>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-xs">auto ai notes</span>
+                <Switch
+                  checked={data?.isAiNotesEnabled ?? true}
+                  onCheckedChange={async (checked) => {
+                    if (!data) return
+                    await updateStore({
+                      ...data,
+                      isAiNotesEnabled: checked
+                    })
+                  }}
+                  size="sm"
+                />
+              </div>
+            </div>
+
             <div className="mt-1 pt-1 border-t border-gray-200">
               <div className="px-3 py-1 text-xs text-gray-500">view type</div>
               <button
@@ -499,8 +502,10 @@ export const NotesEditor = memo(function NotesEditor({
             </div>
           </div>
         </div>
-        <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 hover:text-gray-600 
-          ${showNav ? 'rotate-180' : ''}`} />
+        <div className="p-1 rounded-md bg-gray-100/80 backdrop-blur hover:bg-gray-200/80 transition-colors">
+          <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 hover:text-gray-600 
+            ${showNav ? 'rotate-180' : ''}`} />
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col">
