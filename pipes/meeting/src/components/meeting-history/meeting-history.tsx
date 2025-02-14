@@ -7,16 +7,17 @@ import { Loader2, PlusCircle, Settings as SettingsIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { MeetingSettings } from "./components/meeting-settings"
 import { 
-  getArchivedLiveMeetings,
   LiveMeetingData,
   deleteArchivedMeeting,
   updateArchivedMeeting,
   useMeetingContext,
+  getAllMeetings,
 } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 import { useSettings } from "@/lib/hooks/use-settings"
 import { MeetingAnalysis } from "@/components/live-transcription/hooks/ai-create-all-notes"
 import { handleStartNewMeeting } from "@/components/meeting-history/meeting-utils"
 import { toast } from "@/hooks/use-toast"
+import { handleLoadMeeting } from "@/components/meeting-history/meeting-utils"
 
 export function MeetingHistory() {
   const [mounted, setMounted] = useState(false)
@@ -28,13 +29,48 @@ export function MeetingHistory() {
 
   const { settings } = useSettings()
   const router = useRouter()
-  const { data: liveMeeting, updateStore, reloadData } = useMeetingContext()
 
-  const handleNewMeeting = async () => {
-    const success = await handleStartNewMeeting()
-    if (!success) {
-      router.push('/meetings/live')
+  const handleUpdate = async (id: string, update: { 
+    aiName?: string; 
+    aiSummary?: string;
+    analysis?: MeetingAnalysis | null;
+  }) => {
+    try {
+      console.log('updating meeting:', {
+        id,
+        update,
+        currentMeetings: archivedMeetings.length,
+      })
+
+      // Handle archived meeting
+      await updateArchivedMeeting(id, {
+        title: update.aiName,
+        analysis: update.analysis
+      })
+      
+      // Refresh archived meetings list
+      const updated = await getAllMeetings()
+      setArchivedMeetings(updated.filter(m => m.isArchived))
+
+    } catch (error) {
+      console.error('failed to update meeting:', error)
     }
+  }
+
+  const handleLoadArchived = async (meeting: LiveMeetingData) => {
+    console.log('loading archived meeting details:', {
+      id: meeting.id,
+      isArchived: true,
+      title: meeting.title,
+      startTime: meeting.startTime,
+      hasChunks: meeting.chunks?.length,
+      hasNotes: meeting.notes?.length,
+      hasAnalysis: !!meeting.analysis,
+      deviceNames: [...(meeting.deviceNames || [])],
+      selectedDevices: [...(meeting.selectedDevices || [])]
+    })
+
+    await handleLoadMeeting(meeting)
   }
 
   const handleDelete = async (meeting: LiveMeetingData) => {
@@ -87,107 +123,21 @@ export function MeetingHistory() {
     }
   }
 
-  const handleUpdate = async (id: string, update: { 
-    aiName?: string; 
-    aiSummary?: string;
-    analysis?: MeetingAnalysis | null;
-  }) => {
-    try {
-      console.log('updating meeting:', {
-        id,
-        update,
-        currentMeetings: archivedMeetings.length,
-        isLive: id === liveMeeting?.id
-      })
-
-      // Handle live meeting
-      if (liveMeeting && id === liveMeeting.id) {
-        await updateStore({
-          ...liveMeeting,
-          title: update.aiName ?? liveMeeting.title,
-          analysis: update.analysis ?? liveMeeting.analysis
-        })
-        return
-      }
-
-      // Handle archived meeting
-      await updateArchivedMeeting(id, {
-        title: update.aiName,
-        analysis: update.analysis
-      })
-      
-      // Refresh archived meetings list
-      const updated = await getArchivedLiveMeetings()
-      setArchivedMeetings(updated)
-
-    } catch (error) {
-      console.error('failed to update meeting:', error)
-    }
-  }
-
-  const handleLoadArchived = async (meeting: LiveMeetingData) => {
-    console.log('loading archived meeting details:', {
-      id: meeting.id,
-      isArchived: true,
-      title: meeting.title,
-      startTime: meeting.startTime,
-      hasChunks: meeting.chunks?.length,
-      hasNotes: meeting.notes?.length,
-      hasAnalysis: !!meeting.analysis,
-      deviceNames: [...(meeting.deviceNames || [])],
-      selectedDevices: [...(meeting.selectedDevices || [])]
-    })
-
-    try {
-      // First check if we're already viewing this archived meeting
-      if (liveMeeting?.isArchived && liveMeeting.id === meeting.id) {
-        console.log('already viewing this archived meeting, just navigating')
-        router.push('/meetings/live')
-        return
-      }
-
-      // Store the archived meeting with isArchived flag
-      console.log('attempting to store meeting:', {
-        id: meeting.id,
-        chunks: meeting.chunks?.length,
-        notes: meeting.notes?.length,
-        isArchived: true
-      })
-      
-      const stored = await updateStore({
-        ...meeting,
-        isArchived: true
-      })
-      
-      console.log('store update result:', { success: !!stored })
-      
-      if (!stored) {
-        throw new Error("failed to store archived meeting")
-      }
-      
-      router.push('/meetings/live')
-    } catch (error) {
-      console.error('failed to load archived meeting:', error)
-      toast({
-        title: "error",
-        description: "failed to load archived meeting. please try again",
-        variant: "destructive",
-      })
-    }
+  const handleNewMeeting = async () => {
+    await handleStartNewMeeting()
   }
 
   useEffect(() => {
     const loadMeetings = async () => {
       setLoading(true)
       try {
-        const archived = await getArchivedLiveMeetings()
+        const meetings = await getAllMeetings()
         console.log('loaded meetings:', {
-          hasLive: !!liveMeeting,
-          liveTitle: liveMeeting?.title,
-          archivedCount: archived.length,
+          total: meetings.length,
+          live: meetings.find(m => !m.isArchived)?.title
         })
         
-        setArchivedMeetings(archived)
+        setArchivedMeetings(meetings.filter(m => m.isArchived))
       } catch (error) {
         console.error('failed to load meetings:', error)
       } finally {
@@ -195,7 +145,7 @@ export function MeetingHistory() {
       }
     }
     loadMeetings()
-  }, [refreshTrigger, liveMeeting])
+  }, [refreshTrigger])
 
   useEffect(() => {
     const updateHeight = () => {
@@ -256,28 +206,6 @@ export function MeetingHistory() {
         style={{ height: windowHeight ? `${windowHeight}px` : '100vh' }}
       >
         <div className="space-y-6">
-          {/* Show live meeting if exists */}
-          {liveMeeting && !liveMeeting.isArchived && (
-            <div>
-              <h3 className="text-xl font-semibold mb-3 text-muted-foreground">Live</h3>
-              <div className="relative">
-                <div className="absolute -left-0 z-10 -top-2">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground bg-accent rounded px-1 border border-border/40">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    now
-                  </div>
-                </div>
-                <MeetingCard
-                  key={liveMeeting.id}
-                  meeting={liveMeeting}
-                  settings={settings}
-                  onUpdate={handleUpdate}
-                  isLive={true}
-                />
-              </div>
-            </div>
-          )}
-
           {/* Show archived meetings grouped by date */}
           {Object.entries(groupMeetingsByDate(archivedMeetings)).map(([date, meetings]) => (
             <div key={date}>
