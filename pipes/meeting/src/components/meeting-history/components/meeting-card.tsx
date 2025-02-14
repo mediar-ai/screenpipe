@@ -30,6 +30,14 @@ interface MeetingCardProps {
   onLoadArchived?: () => void
 }
 
+function getWordCount(meeting: LiveMeetingData): number {
+  return meeting.chunks?.reduce((count, chunk) => {
+    // Split by whitespace and filter out empty strings
+    const words = chunk.text?.split(/\s+/).filter(word => word.length > 0) || []
+    return count + words.length
+  }, 0) || 0
+}
+
 export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onLoadArchived }: MeetingCardProps) {
   const router = useRouter()
   const [isGenerating, setIsGenerating] = useState(false)
@@ -151,22 +159,19 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
 
   const durationMinutes = getDurationMinutes(meeting.startTime, meeting.endTime)
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    // Don't navigate if clicking buttons
-    if ((e.target as HTMLElement).closest('button')) {
-      return
-    }
-    
+  const wordCount = getWordCount(meeting)
+
+  const handleCardClick = () => {
     if (isLive) {
-      console.log('navigating to live meeting')
-      router.push('/meetings/live')
-    } else {
-      console.log('loading archived meeting:', {
-        id: meeting.id,
-        title: meeting.title,
-        startTime: meeting.startTime
-      })
-      onLoadArchived?.()
+        // Instead of router.push, use window.location for a full page load
+        window.location.href = '/meetings/live'
+    } else if (onLoadArchived) {
+        console.log('loading archived meeting:', {
+            id: meeting.id,
+            title: meeting.title,
+            startTime: meeting.startTime
+        })
+        onLoadArchived()
     }
   }
 
@@ -225,10 +230,12 @@ export function MeetingCard({ meeting, onUpdate, settings, onDelete, isLive, onL
             <div className="text-sm text-muted-foreground flex items-center justify-between">
               <div className="flex items-center">
                 {formatTime(meeting.startTime)} • {formatDuration(meeting.startTime, meeting.endTime)}
-                <div 
-                  className="h-3 w-2 bg-muted-foreground/20 origin-left transition-transform duration-500 ml-2"
-                  style={{ transform: `scaleX(${0.5 + Math.min(durationMinutes / 60, 1) * 5.0})` }}
-                />
+                {wordCount > 0 && (
+                  <>
+                    {" • "}
+                    {wordCount.toLocaleString()} words
+                  </>
+                )}
               </div>
               <div className="flex">
                 <HoverCard openDelay={0} closeDelay={0}>
