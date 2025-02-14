@@ -62,26 +62,24 @@ webrtc-vad = "0.4.0"
 reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
-screenpipe-events = { path = "../screenpipe-events" }
 
 # crossbeam
 crossbeam = { workspace = true }
+dashmap = { workspace = true }
 
 # Directories
 dirs = "5.0.1"
 
-lazy_static = "1.4.0"
+lazy_static = { version = "1.4.0" }
 realfft = "3.4.0"
 regex = "1.11.0"
 ndarray = "0.16"
 ort = "=2.0.0-rc.6"
-knf-rs = { git = "https://github.com/Neptune650/knf-rs.git", branch = "main" }
+knf-rs = { git = "https://github.com/Neptune650/knf-rs.git" }
 ort-sys = "=2.0.0-rc.8"
 futures = "0.3.31"
-deepgram = { git = "https://github.com/EzraEllette/deepgram-rust-sdk.git" }
+deepgram = "0.6.4"
 bytes = { version = "1.9.0", features = ["serde"] }
-lru = "0.13.0"
-num-traits = "0.2.19"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.6", features = [

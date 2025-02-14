@@ -8,11 +8,10 @@ use screenpipe_audio::list_audio_devices;
 use screenpipe_audio::parse_audio_device;
 use screenpipe_audio::record_and_transcribe;
 use screenpipe_audio::vad_engine::VadSensitivity;
+use screenpipe_audio::AudioDevice;
 use screenpipe_audio::AudioStream;
 use screenpipe_audio::AudioTranscriptionEngine;
 use screenpipe_audio::VadEngineEnum;
-use screenpipe_core::AudioDevice;
-use screenpipe_core::DeviceManager;
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -89,14 +88,14 @@ async fn main() -> Result<()> {
     }
 
     let chunk_duration = Duration::from_secs_f32(args.audio_chunk_duration);
-    let (whisper_sender, whisper_receiver) = create_whisper_channel(
+    let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
         Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
         VadEngineEnum::Silero, // Or VadEngineEnum::WebRtc, hardcoded for now
         args.deepgram_api_key,
         &PathBuf::from("output.mp4"),
         VadSensitivity::Medium,
         languages,
-        Arc::new(DeviceManager::default()),
+        None,
     )
     .await?;
 

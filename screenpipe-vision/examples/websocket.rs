@@ -8,7 +8,7 @@ use screenpipe_vision::{
     continuous_capture, monitor::get_default_monitor, CaptureResult, OcrEngine,
 };
 use serde::Serialize;
-use serde_json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
@@ -24,10 +24,11 @@ struct SimplifiedResult {
 
 #[derive(Clone, Serialize)]
 pub struct SimplifiedWindowResult {
+    // pub image: String,
     pub window_name: String,
     pub app_name: String,
     pub text: String,
-    pub text_json: Vec<serde_json::Value>,
+    pub text_json: Vec<HashMap<String, String>>, // Change this line
     pub focused: bool,
     pub confidence: f64,
 }
@@ -91,17 +92,16 @@ async fn main() -> Result<()> {
             Duration::from_secs_f64(1.0 / cli.fps),
             // if apple use apple otherwise if windows use windows native otherwise use tesseract
             if cfg!(target_os = "macos") {
-                Arc::new(OcrEngine::AppleNative)
+                OcrEngine::AppleNative
             } else if cfg!(target_os = "windows") {
-                Arc::new(OcrEngine::WindowsNative)
+                OcrEngine::WindowsNative
             } else {
-                Arc::new(OcrEngine::Tesseract)
+                OcrEngine::Tesseract
             },
             id,
             window_filters,
-            Arc::new([].to_vec()),
+            vec![],
             false,
-            tokio::sync::watch::channel(false).1,
         )
         .await
     });
@@ -147,10 +147,11 @@ async fn run_websocket_server(
                         let _base64_image = general_purpose::STANDARD.encode(buffer);
 
                         SimplifiedWindowResult {
+                            // image: base64_image,
                             window_name: window.window_name,
                             app_name: window.app_name,
                             text: window.text,
-                            text_json: window.text_json,
+                            text_json: window.text_json, // Add this line
                             focused: window.focused,
                             confidence: window.confidence,
                         }

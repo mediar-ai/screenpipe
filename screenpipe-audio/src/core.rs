@@ -1,12 +1,13 @@
 use crate::audio_processing::audio_to_mono;
-use crate::realtime::realtime_stt;
+use crate::realtime::{realtime_stt, RealtimeTranscriptionEvent};
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::StreamError;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
-use screenpipe_core::{AudioDevice, AudioDeviceType, Language};
+use screenpipe_core::Language;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
@@ -44,6 +45,68 @@ impl fmt::Display for AudioTranscriptionEngine {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DeviceControl {
+    pub is_running: bool,
+    pub is_paused: bool,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
+pub enum DeviceType {
+    Input,
+    Output,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
+pub struct AudioDevice {
+    pub name: String,
+    pub device_type: DeviceType,
+}
+
+impl AudioDevice {
+    pub fn new(name: String, device_type: DeviceType) -> Self {
+        AudioDevice { name, device_type }
+    }
+
+    pub fn from_name(name: &str) -> Result<Self> {
+        if name.trim().is_empty() {
+            return Err(anyhow!("Device name cannot be empty"));
+        }
+
+        let (name, device_type) = if name.to_lowercase().ends_with("(input)") {
+            (
+                name.trim_end_matches("(input)").trim().to_string(),
+                DeviceType::Input,
+            )
+        } else if name.to_lowercase().ends_with("(output)") {
+            (
+                name.trim_end_matches("(output)").trim().to_string(),
+                DeviceType::Output,
+            )
+        } else {
+            return Err(anyhow!(
+                "Device type (input/output) not specified in the name"
+            ));
+        };
+
+        Ok(AudioDevice::new(name, device_type))
+    }
+}
+
+impl fmt::Display for AudioDevice {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{} ({})",
+            self.name,
+            match self.device_type {
+                DeviceType::Input => "input",
+                DeviceType::Output => "output",
+            }
+        )
+    }
+}
+
 pub fn parse_audio_device(name: &str) -> Result<AudioDevice> {
     AudioDevice::from_name(name)
 }
@@ -53,18 +116,18 @@ pub async fn get_device_and_config(
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
 
-    let is_output_device = audio_device.device_type == AudioDeviceType::Output;
+    let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
 
     let cpal_audio_device = if audio_device.to_string() == "default" {
         match audio_device.device_type {
-            AudioDeviceType::Input => host.default_input_device(),
-            AudioDeviceType::Output => host.default_output_device(),
+            DeviceType::Input => host.default_input_device(),
+            DeviceType::Output => host.default_output_device(),
         }
     } else {
         let mut devices = match audio_device.device_type {
-            AudioDeviceType::Input => host.input_devices()?,
-            AudioDeviceType::Output => host.output_devices()?,
+            DeviceType::Input => host.input_devices()?,
+            DeviceType::Output => host.output_devices()?,
         };
 
         #[cfg(target_os = "macos")]
@@ -89,7 +152,7 @@ pub async fn get_device_and_config(
                 .unwrap_or(false)
         })
     }
-    .ok_or_else(|| anyhow!("audio device not found"))?;
+    .ok_or_else(|| anyhow!("Audio device not found"))?;
 
     // if output device and windows, using output config
     let config = if is_output_device && !is_display {
@@ -136,14 +199,16 @@ pub async fn record_and_transcribe(
 
 pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
-    languages: Arc<[Language]>,
+    languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
+    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
             audio_stream.clone(),
             languages.clone(),
+            realtime_transcription_sender.clone(),
             is_running.clone(),
             deepgram_api_key.clone(),
         )
@@ -183,23 +248,26 @@ async fn run_record_and_transcribe(
     );
 
     const OVERLAP_SECONDS: usize = 2;
+    let mut collected_audio = Vec::new();
     let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
     let overlap_samples = OVERLAP_SECONDS * sample_rate;
-    let duration_samples = (duration.as_secs_f64() * sample_rate as f64).ceil() as usize;
-    let max_samples = duration_samples + overlap_samples;
-
-    let mut collected_audio = Vec::with_capacity(max_samples);
 
     while is_running.load(Ordering::Relaxed)
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
     {
         let start_time = tokio::time::Instant::now();
 
-        // Collect audio for the duration period
         while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Ok(chunk)) => {
-                    collected_audio.extend_from_slice(&chunk);
+                    collected_audio.extend(chunk);
+                    LAST_AUDIO_CAPTURE.store(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        Ordering::Relaxed,
+                    );
                 }
                 Ok(Err(e)) => {
                     error!("error receiving audio data: {}", e);
@@ -207,12 +275,6 @@ async fn run_record_and_transcribe(
                 }
                 Err(_) => {} // Timeout, continue loop
             }
-        }
-
-        // Discard oldest samples if we exceed buffer capacity
-        if collected_audio.len() > max_samples {
-            let excess = collected_audio.len() - max_samples;
-            collected_audio.drain(0..excess);
         }
 
         if !collected_audio.is_empty() {
@@ -225,14 +287,9 @@ async fn run_record_and_transcribe(
             }) {
                 Ok(_) => {
                     debug!("sent audio segment to audio model");
-                    // Retain only overlap samples for next iteration
-                    let current_len = collected_audio.len();
-                    if current_len > overlap_samples {
-                        let keep_from = current_len - overlap_samples;
-                        collected_audio.drain(0..keep_from);
-                    } else {
-                        // If we don't have enough samples, keep all (unlikely case)
-                        collected_audio.truncate(current_len);
+                    if collected_audio.len() > overlap_samples {
+                        collected_audio =
+                            collected_audio.split_off(collected_audio.len() - overlap_samples);
                     }
                 }
                 Err(e) => {
@@ -258,7 +315,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
 
     for device in host.input_devices()? {
         if let Ok(name) = device.name() {
-            devices.push(AudioDevice::new(name, AudioDeviceType::Input));
+            devices.push(AudioDevice::new(name, DeviceType::Input));
         }
     }
 
@@ -285,7 +342,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
             for device in host.input_devices()? {
                 if let Ok(name) = device.name() {
                     if should_include_output_device(&name) {
-                        devices.push(AudioDevice::new(name, AudioDeviceType::Output));
+                        devices.push(AudioDevice::new(name, DeviceType::Output));
                     }
                 }
             }
@@ -296,7 +353,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
     for device in host.output_devices()? {
         if let Ok(name) = device.name() {
             if should_include_output_device(&name) {
-                devices.push(AudioDevice::new(name, AudioDeviceType::Output));
+                devices.push(AudioDevice::new(name, DeviceType::Output));
             }
         }
     }
@@ -308,10 +365,7 @@ pub async fn list_audio_devices() -> Result<Vec<AudioDevice>> {
             && should_include_output_device(&device.name().unwrap())
         {
             // TODO: not sure if it can be input, usually aggregate or multi output
-            devices.push(AudioDevice::new(
-                device.name().unwrap(),
-                AudioDeviceType::Output,
-            ));
+            devices.push(AudioDevice::new(device.name().unwrap(), DeviceType::Output));
         }
     }
 
@@ -323,7 +377,7 @@ pub fn default_input_device() -> Result<AudioDevice> {
     let device = host
         .default_input_device()
         .ok_or(anyhow!("No default input device detected"))?;
-    Ok(AudioDevice::new(device.name()?, AudioDeviceType::Input))
+    Ok(AudioDevice::new(device.name()?, DeviceType::Input))
 }
 // this should be optional ?
 pub fn default_output_device() -> Result<AudioDevice> {
@@ -333,7 +387,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
         if let Ok(host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
             if let Some(device) = host.default_input_device() {
                 if let Ok(name) = device.name() {
-                    return Ok(AudioDevice::new(name, AudioDeviceType::Output));
+                    return Ok(AudioDevice::new(name, DeviceType::Output));
                 }
             }
         }
@@ -341,7 +395,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        Ok(AudioDevice::new(device.name()?, AudioDeviceType::Output))
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -350,7 +404,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, AudioDeviceType::Output));
+        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
     }
 }
 
@@ -446,13 +500,6 @@ impl AudioStream {
                         move |data: &[f32], _: &_| {
                             let mono = audio_to_mono(data, channels);
                             let _ = tx.send(mono);
-                            LAST_AUDIO_CAPTURE.store(
-                                std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                                Ordering::Relaxed,
-                            );
                         },
                         error_callback,
                         None,
@@ -464,13 +511,6 @@ impl AudioStream {
                         move |data: &[i16], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
-                            LAST_AUDIO_CAPTURE.store(
-                                std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                                Ordering::Relaxed,
-                            );
                         },
                         error_callback,
                         None,
@@ -482,13 +522,6 @@ impl AudioStream {
                         move |data: &[i32], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
-                            LAST_AUDIO_CAPTURE.store(
-                                std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                                Ordering::Relaxed,
-                            );
                         },
                         error_callback,
                         None,
@@ -500,13 +533,6 @@ impl AudioStream {
                         move |data: &[i8], _: &_| {
                             let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
                             let _ = tx.send(mono);
-                            LAST_AUDIO_CAPTURE.store(
-                                std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_secs(),
-                                Ordering::Relaxed,
-                            );
                         },
                         error_callback,
                         None,

@@ -2,7 +2,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
-use screenpipe_core::AudioDevice;
+use screenpipe_audio::AudioDevice;
 use screenpipe_server::{db_types::ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             "test_engine",
             &AudioDevice::new(
                 "test_device".to_string(),
-                screenpipe_core::AudioDeviceType::Input,
+                screenpipe_audio::DeviceType::Input,
             ),
             None,
             None,
