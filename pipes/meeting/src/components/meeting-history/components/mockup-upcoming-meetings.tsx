@@ -62,7 +62,8 @@ const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "2",
@@ -122,7 +123,8 @@ const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "3",
@@ -181,7 +183,8 @@ const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "4",
@@ -246,7 +249,8 @@ const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
           "prepare specific TOTVS use cases"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "5",
@@ -305,7 +309,8 @@ const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   }
 ] 
 

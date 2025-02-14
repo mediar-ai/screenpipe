@@ -34,7 +34,8 @@ export async function handleStartNewMeeting(currentData?: LiveMeetingData | null
             analysis: null,
             deviceNames: new Set<string>(),
             selectedDevices: new Set<string>(),
-            isArchived: false
+            isArchived: false,
+            isAiNotesEnabled: true
         }
 
         // 3. Store new meeting and wait for confirmation
