@@ -19,6 +19,7 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
     const modeRef = useRef<TranscriptionMode | null>(null)
     const [isRecording, setIsRecording] = useState(false)
     const mountedRef = useRef(true)
+    const isTransitioningRef = useRef(false)
 
     // Handle cleanup on unmount
     useEffect(() => {
@@ -76,10 +77,14 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
     // Initialize transcription on mount only if not already initialized
     useEffect(() => {
         modeRef.current = mode
-        if (!mode || GLOBAL_STATE.isInitialized) {
+        const isFromArchive = new URLSearchParams(window.location.search).get('from') === 'archive'
+        
+        if (!mode || GLOBAL_STATE.isInitialized || isTransitioningRef.current || isFromArchive) {
             console.log('skipping transcription init:', {
                 hasMode: !!mode,
-                isInitialized: GLOBAL_STATE.isInitialized
+                isInitialized: GLOBAL_STATE.isInitialized,
+                isTransitioning: isTransitioningRef.current,
+                isFromArchive
             })
             return
         }
@@ -92,7 +97,24 @@ export function useTranscriptionService(mode: TranscriptionMode = 'browser') {
         }
         GLOBAL_STATE.isInitialized = true
         setIsRecording(true)
-    }, [mode, startTranscriptionBrowser, startTranscriptionScreenpipe])
+
+        return () => {
+            isTransitioningRef.current = true
+            if (modeRef.current === 'browser') {
+                stopTranscriptionBrowser()
+            } else {
+                stopTranscriptionScreenpipe()
+            }
+            GLOBAL_STATE.isInitialized = false
+            console.log('transcription service cleanup complete')
+            
+            // Reset transition flag after a short delay
+            setTimeout(() => {
+                isTransitioningRef.current = false
+            }, 100)
+        }
+    }, [mode, startTranscriptionBrowser, startTranscriptionScreenpipe, 
+        stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
     const toggleRecording = useCallback(() => {
         const newState = !isRecording
