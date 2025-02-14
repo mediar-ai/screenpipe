@@ -481,8 +481,6 @@ async fn main() -> anyhow::Result<()> {
     // Channel for controlling the recorder ! TODO RENAME SHIT
     let vision_control = Arc::new(AtomicBool::new(true));
 
-    let vision_control_server_clone = vision_control.clone();
-
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
@@ -524,7 +522,6 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
@@ -604,7 +601,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let (audio_devices_tx, _) = broadcast::channel(100);
-    let audio_devices_tx_clone = Arc::new(audio_devices_tx.clone());
 
     let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
@@ -957,6 +953,31 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
+
+                // Get list of enabled pipes
+                let pipes = pipe_manager.list_pipes().await;
+                let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
+                // Stop all enabled pipes in parallel
+                let stop_futures = enabled_pipes.iter().map(|pipe| {
+                    let pipe_manager = pipe_manager.clone();
+                    let pipe_id = pipe.id.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = pipe_manager.stop_pipe(&pipe_id).await {
+                            error!("failed to stop pipe {}: {}", pipe_id, e);
+                        }
+                    })
+                });
+                // Wait for all pipes to stop with timeout
+                let timeout = tokio::time::sleep(Duration::from_secs(10));
+                tokio::pin!(timeout);
+                tokio::select! {
+                    _ = futures::future::join_all(stop_futures) => {
+                        info!("all pipes stopped successfully");
+                    }
+                    _ = &mut timeout => {
+                        warn!("timeout waiting for pipes to stop");
+                    }
+                }
                 let _ = shutdown_tx_clone.send(());
             }
         });
