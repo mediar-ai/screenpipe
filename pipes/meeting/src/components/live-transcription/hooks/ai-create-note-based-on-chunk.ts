@@ -8,16 +8,15 @@ export async function generateMeetingNote(
     existingNotes: string[] = []
 ): Promise<string> {
     const openai = createAiClient(settings)
+    const transcript = chunks
+        .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
+        .join("\n")
 
     try {
         console.log("generating meeting note from chunks:", {
             chunks_count: chunks.length,
             existing_notes_count: existingNotes.length
         })
-
-        const transcript = chunks
-            .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
-            .join("\n")
 
         const existingNotesContext = existingNotes.length > 0 
             ? `existing notes from this meeting:\n${existingNotes.join("\n")}\n\n`
@@ -61,10 +60,15 @@ export async function generateMeetingNote(
         return note
 
     } catch (error) {
-        console.error("error generating meeting note:", {
+        // Log error details for debugging but with lower severity
+        console.log("note generation failed:", {
             error,
-            chunks_count: chunks.length
+            chunks_count: chunks.length,
+            transcript_length: transcript.length,
+            has_existing_notes: existingNotes.length > 0
         })
-        return "failed to generate note"
+        
+        // Return empty string instead of error message to avoid showing errors in UI
+        return ""
     }
 } 
