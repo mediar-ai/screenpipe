@@ -85,7 +85,8 @@ export async function improveTranscription(
 
         return improved
     } catch (error) {
-        console.error("error improving transcription:", {
+        // Log error details but at debug level
+        console.debug("[transcription-improve] failed:", {
             error,
             text_length: text.length,
             context: {
@@ -93,6 +94,7 @@ export async function improveTranscription(
                 chunks: context.recentChunks.length
             }
         })
+        // Silently fallback to original text
         return text
     }
 }
@@ -128,11 +130,12 @@ export async function improveTranscriptionBatch(
                 const improved = await improveTranscription(chunk.text, context, settings)
                 results[idx] = improved
             } catch (error) {
-                console.error("batch chunk improvement failed:", {
+                // Log at debug level for troubleshooting
+                console.debug("[transcription-batch] chunk failed:", {
                     chunk_idx: idx,
                     error
                 })
-                results[idx] = chunk.text // Fallback to original
+                results[idx] = chunk.text // Silently fallback to original
             }
         })
 
