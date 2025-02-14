@@ -547,6 +547,10 @@ prioritize precision over recall - better to return no match than a wrong match.
 	}, [appStats]);
 
 	const loadSuggestionsIfNeeded = useCallback(() => {
+		if (!settings?.aiModel) {
+			setSuggestions([]);
+			return;
+		}
 		if (
 			!hasLoadedSuggestions.current &&
 			frames.length > 1_000 &&
@@ -557,16 +561,16 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 			const openai = new OpenAI({
 				apiKey:
-					settings.aiProviderType === "screenpipe-cloud"
-						? settings.user.token
-						: settings.openaiApiKey,
-				baseURL: settings.aiUrl,
+					settings?.aiProviderType === "screenpipe-cloud"
+						? settings?.user?.token
+						: settings?.openaiApiKey,
+				baseURL: settings?.aiUrl,
 				dangerouslyAllowBrowser: true,
 			});
 
 			getCachedOrGenerateSuggestions(
 				openai,
-				settings.aiModel,
+				settings?.aiModel,
 				getSystemPrompt(),
 				appStats,
 			)
@@ -607,10 +611,10 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 		const openai = new OpenAI({
 			apiKey:
-				settings.aiProviderType === "screenpipe-cloud"
-					? settings.user.token
-					: settings.openaiApiKey,
-			baseURL: settings.aiUrl,
+				settings?.aiProviderType === "screenpipe-cloud"
+					? settings?.user?.token
+					: settings?.openaiApiKey,
+			baseURL: settings?.aiUrl,
 			dangerouslyAllowBrowser: true,
 		});
 
@@ -621,7 +625,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 				query,
 				frames,
 				openai,
-				settings.aiModel,
+				settings?.aiModel || "mistral",
 				(status) => setSearchStatus(status),
 				systemPrompt,
 				0,
@@ -654,10 +658,10 @@ prioritize precision over recall - better to return no match than a wrong match.
 		setIsLoadingSuggestions(true);
 		const openai = new OpenAI({
 			apiKey:
-				settings.aiProviderType === "screenpipe-cloud"
-					? settings.user.token
-					: settings.openaiApiKey,
-			baseURL: settings.aiUrl,
+				settings?.aiProviderType === "screenpipe-cloud"
+					? settings?.user?.token
+					: settings?.openaiApiKey,
+			baseURL: settings?.aiUrl,
 			dangerouslyAllowBrowser: true,
 		});
 
@@ -667,7 +671,7 @@ prioritize precision over recall - better to return no match than a wrong match.
 
 			const newSuggestions = await generateSuggestions(
 				openai,
-				settings.aiModel,
+				settings?.aiModel || "mistral",
 				getSystemPrompt(),
 				appStats,
 			);

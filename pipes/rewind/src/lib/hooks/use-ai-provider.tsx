@@ -6,7 +6,9 @@ interface AIProviderStatus {
 	error: string;
 }
 
-export function useAiProvider(settings: Partial<Settings>): AIProviderStatus {
+export function useAiProvider(
+	settings: Partial<Settings> | null | undefined,
+): AIProviderStatus {
 	const [status, setStatus] = useState<AIProviderStatus>({
 		isAvailable: true,
 		error: "",
@@ -15,6 +17,14 @@ export function useAiProvider(settings: Partial<Settings>): AIProviderStatus {
 	useEffect(() => {
 		const checkAiProvider = async () => {
 			try {
+				if (!settings) {
+					setStatus({
+						isAvailable: false,
+						error: "no settings found",
+					});
+					return;
+				}
+
 				if (!settings.aiProviderType) {
 					setStatus({ isAvailable: false, error: "no ai-provider is set" });
 					return;
