@@ -476,7 +476,6 @@ export const NotesEditor = memo(function NotesEditor({
                       isAiNotesEnabled: checked
                     })
                   }}
-                  size="sm"
                 />
               </div>
             </div>
