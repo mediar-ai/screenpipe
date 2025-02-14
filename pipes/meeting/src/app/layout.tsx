@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Meeting • Screenpipe",
-  description: "The AI notepad for people in back-to-back meetings",
+  description: "The AI notepad for people in back-to-back meetings"
 }
 
 export default function RootLayout({
@@ -38,7 +38,8 @@ export default function RootLayout({
           </main>
           <Toaster />
           <ChatButton />
-          <Analytics mode={process.env.NODE_ENV === "development" ? "development" : "production"} />
+          {/* Comment this out temporarily for testing */}
+          {/* <Analytics mode={process.env.NODE_ENV === "development" ? "development" : "production"} /> */}
         </RootProvider>
       </body>
     </html>
