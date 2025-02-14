@@ -8,12 +8,14 @@ import { NotesEditor } from '@/components/live-transcription/notes-editor'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Split from 'react-split'
 import { TranscriptionView } from '@/components/live-transcription/transcription-view'
-import { ArrowLeft, Mic, MicOff, Square, Play } from "lucide-react"
+import { Square, Play } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { MeetingProvider } from '@/components/live-transcription/hooks/storage-for-live-meeting'
+import { MeetingProvider, useMeetingContext, archiveLiveMeeting, LiveMeetingData } from '@/components/live-transcription/hooks/storage-for-live-meeting'
 import { useSettings } from "@/lib/hooks/use-settings"
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { toast } from "@/hooks/use-toast"
+import { handleStartNewMeeting } from '@/components/meeting-history/meeting-utils'
 
 
 export function LiveTranscription() {
@@ -30,6 +32,7 @@ export function LiveTranscription() {
     const [sizes, setSizes] = useState([50, 50])
     const router = useRouter()
     const { settings } = useSettings()
+    const { data, updateStore, reloadData } = useMeetingContext()
 
     const updateHeight = () => {
         const vh = window.innerHeight
@@ -68,6 +71,10 @@ export function LiveTranscription() {
         // Auto collapse while dragging
         if (newSizes[0] < 25) setSizes([0, 100])
         if (newSizes[1] < 25) setSizes([100, 0])
+    }
+
+    const handleNewMeeting = async () => {
+        await handleStartNewMeeting(data)
     }
 
     return (
@@ -124,9 +131,9 @@ export function LiveTranscription() {
                     <div>
                         <NotesEditor 
                             onTimeClick={handleTimeClick} 
-                            onNewMeeting={() => {
-                                router.refresh()
-                            }}
+                            onNewMeeting={handleNewMeeting}
+                            isRecording={isRecording}
+                            onToggleRecording={toggleRecording}
                         />
                     </div>
                 </Split>
