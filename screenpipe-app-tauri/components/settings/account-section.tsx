@@ -25,6 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import posthog from "posthog-js";
+import { platform } from "@tauri-apps/plugin-os";
+import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 
 function PlanCard({
   title,

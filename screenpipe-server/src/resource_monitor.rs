@@ -199,18 +199,51 @@ impl ResourceMonitor {
         }
     }
 
+    async fn send_audio_restart_signal() {
+        let client = Client::new();
+        match client
+            .post("http://localhost:3030/audio/restart")
+            .send()
+            .await
+        {
+            Ok(_) => info!("sent audio restart signal"),
+            Err(e) => error!("failed to send audio restart signal: {}", e),
+        }
+    }
+    async fn send_vision_restart_signal() {
+        let client = Client::new();
+        match client
+            .post("http://localhost:3030/vision/restart")
+            .send()
+            .await
+        {
+            Ok(_) => info!("sent vision restart signal"),
+            Err(e) => error!("failed to send vision restart signal: {}", e),
+        }
+    }
+
     pub fn start_monitoring(self: &Arc<Self>, interval: Duration) {
-        // Clone the Arc since we need to move it into the spawned task
         let monitor = Arc::clone(self);
 
         tokio::spawn(async move {
-            let mut sys = System::new_all();
+            let mut sys = System::new_all(); 
+            let mut last_audio_restart = Instant::now();
+            let audio_restart_interval = Duration::from_secs(60 * 60 * 2); // TODO: change to 2 hours for release
 
             loop {
                 tokio::select! {
                     _ = tokio::time::sleep(interval) => {
                         sys.refresh_all();
                         monitor.log_status(&sys).await;
+
+                        // Check if it's time to send audio restart signal
+                        if last_audio_restart.elapsed() >= audio_restart_interval {
+                            tokio::join!(
+                                Self::send_audio_restart_signal(),
+                                Self::send_vision_restart_signal()
+                            );
+                            last_audio_restart = Instant::now();
+                        }
                     }
                 }
             }

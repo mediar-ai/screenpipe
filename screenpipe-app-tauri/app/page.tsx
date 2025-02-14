@@ -24,7 +24,7 @@ import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { ScreenpipeStatusDialog } from "@/components/screenpipe-status/dialog";
 
 export default function Home() {
-  const { settings, updateSettings, loadUser } = useSettings();
+  const { settings, updateSettings, loadUser, reloadStore } = useSettings();
   const { setActiveProfile } = useProfiles();
   const { toast } = useToast();
   const { showOnboarding, loginShowOnboarding } = useOnboarding();
@@ -200,6 +200,30 @@ export default function Home() {
       if (deepLinkUnsubscribe) deepLinkUnsubscribe();
     };
   }, [setSettingsOpen]);
+
+  useEffect(() => {
+    const checkScreenPermissionRestart = async () => {
+      const restartPending = await localforage.getItem(
+        "screenPermissionRestartPending"
+      );
+      if (restartPending) {
+        setShowOnboarding(true);
+      }
+    };
+
+    checkScreenPermissionRestart();
+  }, [setShowOnboarding]);
+
+  useEffect(() => {
+    const unlisten = listen("cli-login", async (event) => {
+      console.log("received cli-login event:", event);
+      await reloadStore();
+    });
+
+    return () => {
+      unlisten.then((unlistenFn) => unlistenFn());
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center flex-1">
