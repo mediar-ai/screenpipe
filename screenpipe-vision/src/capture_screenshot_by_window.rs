@@ -256,7 +256,7 @@ pub fn is_valid_window(
     capture_unfocused_windows: bool,
 ) -> bool {
     if !capture_unfocused_windows {
-        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
+        let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
 
         if !is_focused {
             return false;
