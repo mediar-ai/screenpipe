@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "@/hooks/use-toast"
 import { handleStartNewMeeting } from '@/components/meeting-history/meeting-utils'
+import { cn } from "@/lib/utils"
 
 
 export function LiveTranscription() {
@@ -111,16 +112,25 @@ export function LiveTranscription() {
                     </Tooltip>
                 </TooltipProvider>
 
+                {/* Mobile-first approach: vertical on mobile, horizontal on desktop */}
                 <Split
-                    className="flex gap-0 h-full [&_.gutter]:bg-gray-100 [&_.gutter]:bg-dotted [&_.gutter]:w-[3px] [&_.gutter]:mx-1 [&_.gutter]:cursor-col-resize"
+                    className={cn(
+                        "flex h-full",
+                        // Base mobile styles
+                        "flex-col [&_.gutter]:h-[3px] [&_.gutter]:my-1 [&_.gutter]:cursor-row-resize",
+                        // Desktop styles (md and up)
+                        "md:flex-row md:[&_.gutter]:w-[3px] md:[&_.gutter]:mx-1 md:[&_.gutter]:cursor-col-resize",
+                        "[&_.gutter]:bg-gray-100 [&_.gutter]:bg-dotted"
+                    )}
                     sizes={sizes}
                     minSize={0}
                     snapOffset={100}
                     onDragEnd={onDragEnd}
                     onDrag={onDrag}
+                    direction={typeof window !== 'undefined' && window.innerWidth >= 768 ? 'horizontal' : 'vertical'}
                 >
                     {/* Transcription Panel */}
-                    <div className="flex flex-col relative">
+                    <div className="h-full overflow-hidden">
                         <TranscriptionView
                             settings={settings}
                             isLoading={isLoading}
@@ -128,7 +138,7 @@ export function LiveTranscription() {
                     </div>
 
                     {/* Notes Panel */}
-                    <div>
+                    <div className="h-full overflow-hidden">
                         <NotesEditor 
                             onTimeClick={handleTimeClick} 
                             onNewMeeting={handleNewMeeting}
