@@ -42,6 +42,9 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
+# TO-DO: use a released version. Done for now to avoid waiting xcap release.
+xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
+
 once_cell = { workspace = true }
 chrono = { version = "0.4.39", features = ["serde"] }
 base64 = "0.22.1"
@@ -96,13 +99,10 @@ windows = { version = "0.58", features = [
   "Storage",
   "Storage_Streams",
 ] }
-xcap = "0.0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-xcap-macos = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
 cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"
-xcap = "0.0.14"

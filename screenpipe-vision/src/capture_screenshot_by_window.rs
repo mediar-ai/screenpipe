@@ -7,10 +7,6 @@ use std::fmt;
 use std::time::Duration;
 use tokio::time;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::{Monitor, Window, XCapError};
-
-#[cfg(not(target_os = "macos"))]
 use xcap::{Monitor, Window, XCapError};
 
 #[derive(Debug)]
@@ -238,7 +234,7 @@ pub async fn capture_all_visible_windows(
                     image,
                     app_name: app_name.to_string(),
                     window_name: window_name.to_string(),
-                    is_focused: is_valid,
+                    is_focused: window.is_focused(),
                 });
             }
             Err(e) => error!(
@@ -260,12 +256,7 @@ pub fn is_valid_window(
     capture_unfocused_windows: bool,
 ) -> bool {
     if !capture_unfocused_windows {
-        // Early returns for simple checks
-        #[cfg(target_os = "macos")]
         let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
-
-        #[cfg(not(target_os = "macos"))]
-        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
 
         if !is_focused {
             return false;
