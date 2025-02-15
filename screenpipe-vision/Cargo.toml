@@ -33,7 +33,6 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
-screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
@@ -44,6 +43,7 @@ which = "6.0"
 serde = "1.0.200"
 
 once_cell = { workspace = true }
+chrono = { version = "0.4.39", features = ["serde"] }
 base64 = "0.22.1"
 
 reqwest = { workspace = true }
