@@ -5,7 +5,7 @@ use screenpipe_vision::{
     OcrEngine,
 };
 use std::{sync::Arc, time::Duration};
-use tokio::sync::mpsc::channel;
+use tokio::sync::{mpsc::channel, watch};
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 #[derive(Parser)]
@@ -48,8 +48,9 @@ async fn main() {
             Arc::new(window_filters),
             languages.clone(),
             false,
+            watch::channel(false).1,
         )
-        .await
+        .await;
     });
 
     // Example: Process results for 10 seconds, then pause for 5 seconds, then stop

@@ -264,6 +264,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
+    /// Automatically detect and use all monitors, including newly connected ones
+    #[arg(long, default_value_t = false)]
+    pub use_all_monitors: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 

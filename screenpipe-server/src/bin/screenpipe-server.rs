@@ -560,6 +560,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.enable_realtime_audio_transcription,
                     Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
+                    cli.use_all_monitors,
                 );
 
                 let result = tokio::select! {
