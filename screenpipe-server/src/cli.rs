@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueHint};
+use clap_complete::{generate, Shell};
+use clap::CommandFactory;
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
@@ -150,7 +152,7 @@ pub struct Cli {
     pub list_audio_devices: bool,
 
     /// Data directory. Default to $HOME/.screenpipe
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
 
     /// Enable debug logging for screenpipe modules
@@ -281,6 +283,11 @@ impl Cli {
         }
         Ok(unique_langs.into_iter().collect())
     }
+    pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
+        let mut cmd = Self::command();
+        generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
+        Ok(())
+    }
 }
 
 #[derive(Subcommand)]
@@ -295,7 +302,7 @@ pub enum Command {
         /// Path to folder containing video files
         path: String,
         /// Data directory. Default to $HOME/.screenpipe
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::DirPath)]
         data_dir: Option<String>,
         /// Output format
         #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
@@ -307,7 +314,7 @@ pub enum Command {
         #[arg(short = 'o', long, value_enum)]
         ocr_engine: Option<CliOcrEngine>,
         /// Path to JSON file containing metadata overrides
-        #[arg(long)]
+        #[arg(long, value_hint = ValueHint::FilePath)]
         metadata_override: Option<PathBuf>,
         /// Copy videos to screenpipe data directory
         #[arg(long, default_value_t = true)]
@@ -327,6 +334,12 @@ pub enum Command {
     },
     /// Run database migrations
     Migrate,
+         /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 

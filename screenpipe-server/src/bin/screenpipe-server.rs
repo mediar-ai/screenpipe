@@ -197,9 +197,12 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
-
-    if let Some(command) = cli.command {
+    if let Some(ref command) = cli.command {
         match command {
+            Command::Completions { shell } => {
+                cli.handle_completions(shell.clone())?;
+                return Ok(());
+            }
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
@@ -297,7 +300,7 @@ async fn main() -> anyhow::Result<()> {
                 let local_data_dir = get_base_dir(&data_dir)?;
 
                 // Update logging filter if debug is enabled
-                if debug {
+                if *debug {
                     tracing::subscriber::set_global_default(
                         tracing_subscriber::registry()
                             .with(
@@ -323,14 +326,14 @@ async fn main() -> anyhow::Result<()> {
                 );
                 handle_index_command(
                     local_data_dir,
-                    path,
-                    pattern,
+                    path.to_string(),
+                    pattern.clone(),
                     db,
-                    output,
-                    ocr_engine,
-                    metadata_override,
-                    copy_videos,
-                    use_embedding,
+                    output.clone(),
+                    ocr_engine.clone(),
+                    metadata_override.clone(),
+                    *copy_videos,
+                    *use_embedding,
                 )
                 .await?;
                 return Ok(());
@@ -1051,7 +1054,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_pipe_command(
-    command: PipeCommand,
+    command: &PipeCommand,
     pipe_manager: &Arc<PipeManager>,
 ) -> anyhow::Result<()> {
     let client = reqwest::Client::new();
