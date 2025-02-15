@@ -142,8 +142,8 @@ async fn main() -> anyhow::Result<()> {
     let _sentry_guard = if !cli.disable_telemetry {
         let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
         let release_name = format!(
-            "{:?}{}",
-            sentry::release_name!(),
+            "{}{}",
+            sentry::release_name!().unwrap_or_default(),
             sentry_release_name_append
         );
         Some(sentry::init((
