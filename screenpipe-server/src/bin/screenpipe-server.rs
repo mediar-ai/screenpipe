@@ -90,8 +90,6 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("symphonia=error".parse().unwrap())
         .add_directive("hf_hub=error".parse().unwrap());
 
-    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
-    // which is noise
     #[cfg(target_os = "windows")]
     let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
@@ -119,23 +117,29 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         env_filter
     };
 
-    tracing_subscriber::registry()
+    let registry = tracing_subscriber::registry()
         .with(env_filter)
         .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking))
-        .init();
+        .with(fmt::layer().with_writer(non_blocking));
+
+    // Build the final registry with conditional Sentry layer
+    if !cli.disable_telemetry {
+        registry.with(sentry::integrations::tracing::layer()).init();
+    } else {
+        registry.init();
+    };
 
     Ok(guard)
 }
 
 #[tokio::main]
+#[tracing::instrument]
 async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
     // Initialize Sentry only if telemetry is enabled
     let _sentry_guard = if !cli.disable_telemetry {
-        // check if SENTRY_RELEASE_NAME_APPEND is set
         let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
         let release_name = format!(
             "{:?}{}",
@@ -506,7 +510,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
@@ -517,7 +520,6 @@ async fn main() -> anyhow::Result<()> {
                 let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
@@ -543,7 +545,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
                 );
 
