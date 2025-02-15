@@ -1,5 +1,6 @@
 use crate::{
-    deepgram::CUSTOM_DEEPGRAM_API_TOKEN, realtime::RealtimeTranscriptionEvent, AudioStream,
+    deepgram::CUSTOM_DEEPGRAM_API_TOKEN, deepgram::DEEPGRAM_WEBSOCKET_URL,
+    realtime::RealtimeTranscriptionEvent, AudioStream,
 };
 use crate::{AudioDevice, DeviceType};
 use anyhow::Result;
@@ -12,15 +13,16 @@ use deepgram::common::stream_response::StreamResponse;
 use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
 use screenpipe_core::Language;
+use screenpipe_events::send_event;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
-use tracing::error;
+use tokio::sync::oneshot;
+use tracing::info;
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
-    languages: Vec<Language>,
+    _languages: Vec<Language>, // TODO impl language
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
@@ -28,9 +30,7 @@ pub async fn stream_transcription_deepgram(
         stream.subscribe().await,
         stream.device.clone(),
         stream.device_config.sample_rate().0,
-        realtime_transcription_sender,
         is_running,
-        languages,
         deepgram_api_key,
     )
     .await?;
@@ -42,9 +42,7 @@ pub async fn start_deepgram_stream(
     stream: Receiver<Vec<f32>>,
     device: Arc<AudioDevice>,
     sample_rate: u32,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     is_running: Arc<AtomicBool>,
-    _languages: Vec<Language>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let api_key = deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string());
@@ -53,7 +51,28 @@ pub async fn start_deepgram_stream(
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
-    let deepgram = deepgram::Deepgram::new(api_key)?;
+    // create shutdown rx from is_running
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+
+    tokio::spawn(async move {
+        loop {
+            let running = is_running.load(std::sync::atomic::Ordering::SeqCst);
+            if !running {
+                shutdown_tx.send(()).unwrap();
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    });
+
+    info!("Starting deepgram stream for device: {}", device);
+
+    let deepgram = match DEEPGRAM_WEBSOCKET_URL.as_str().is_empty() {
+        true => deepgram::Deepgram::new(api_key)?,
+        false => {
+            deepgram::Deepgram::with_base_url_and_api_key(DEEPGRAM_WEBSOCKET_URL.as_str(), api_key)?
+        }
+    };
 
     let deepgram_transcription = deepgram.transcription();
 
@@ -71,20 +90,18 @@ pub async fn start_deepgram_stream(
 
     let mut handle = req.clone().handle().await?;
     let mut results = req.stream(get_stream(stream)).await?;
-    let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
     let device_clone = device.clone();
 
     loop {
-        if !is_running.load(std::sync::atomic::Ordering::SeqCst) {
-            break;
-        }
-
         tokio::select! {
+            _ = &mut shutdown_rx => {
+                info!("Shutting down deepgram stream for device: {}", device);
+                break;
+            }
             result = results.try_next() => {
                 if let Ok(Some(result)) = result {
                     handle_transcription(
                         result,
-                        realtime_transcription_sender_clone.clone(),
                         device_clone.clone(),
                     ).await;
                 }
@@ -108,18 +125,16 @@ fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, R
             for sample in data {
                 bytes.put_i16_le((sample * i16::MAX as f32) as i16);
             }
-            tx.send(Ok(bytes.freeze())).await.unwrap();
+            if tx.send(Ok(bytes.freeze())).await.is_err() {
+                tx.close_channel();
+            }
         }
     });
 
     rx
 }
 
-async fn handle_transcription(
-    result: StreamResponse,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
-    device: Arc<AudioDevice>,
-) {
+async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) {
     if let StreamResponse::TranscriptResponse {
         channel, is_final, ..
     } = result
@@ -129,20 +144,16 @@ async fn handle_transcription(
         let is_input = device.device_type == DeviceType::Input;
 
         if !text.is_empty() {
-            match realtime_transcription_sender.send(RealtimeTranscriptionEvent {
-                timestamp: chrono::Utc::now(),
-                device: device.to_string(),
-                transcription: text.to_string(),
-                is_final,
-                is_input,
-            }) {
-                Ok(_) => {}
-                Err(e) => {
-                    if !e.to_string().contains("channel closed") {
-                        error!("Error sending transcription event: {}", e);
-                    }
-                }
-            }
+            let _ = send_event(
+                "transcription",
+                RealtimeTranscriptionEvent {
+                    timestamp: chrono::Utc::now(),
+                    device: device.to_string(),
+                    transcription: text.to_string(),
+                    is_final,
+                    is_input,
+                },
+            );
         }
     }
 }
