@@ -2,21 +2,22 @@ use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
-use crate::resample;
 pub use crate::segments::prepare_segments;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
     whisper::{process_with_whisper, WhisperModel},
-    AudioTranscriptionEngine,
+    AudioDevice, AudioTranscriptionEngine,
 };
+use crate::{resample, DeviceControl};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
-use log::{debug, error};
+use dashmap::DashMap;
+use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
-use screenpipe_core::{AudioDevice, DeviceManager, Language};
-// use std::time::Duration;
+use screenpipe_core::Language;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     path::Path,
     sync::Arc,
@@ -25,38 +26,80 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+pub fn stt_sync(
+    audio: &[f32],
+    sample_rate: u32,
+    device: &str,
+    whisper_model: &mut WhisperModel,
+    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
+    deepgram_api_key: Option<String>,
+    languages: Vec<Language>,
+) -> Result<String> {
+    let mut whisper_model = whisper_model.clone();
+    let audio = audio.to_vec();
+
+    let device = device.to_string();
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        rt.block_on(stt(
+            &audio,
+            sample_rate,
+            &device,
+            &mut whisper_model,
+            audio_transcription_engine,
+            deepgram_api_key,
+            languages,
+        ))
+    });
+
+    handle.join().unwrap()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn stt(
     audio: &[f32],
     sample_rate: u32,
     device: &str,
-    whisper_model: Arc<Mutex<WhisperModel>>,
+    whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
 ) -> Result<String> {
-    let transcription: Result<String> =
-        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
-            // Deepgram implementation
-            let api_key = deepgram_api_key.unwrap_or_default();
+    let model = &whisper_model.model;
 
-            match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
-                .await
-            {
-                Ok(transcription) => Ok(transcription),
-                Err(e) => {
-                    error!(
-                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                        device, e
-                    );
-                    // Fallback to Whisper
-                    process_with_whisper(whisper_model, audio, languages.clone()).await
-                }
+    debug!("Loading mel filters");
+    let mel_bytes = match model.config().num_mel_bins {
+        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
+        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
+        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+    };
+    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
+
+    let transcription: Result<String> = if audio_transcription_engine
+        == AudioTranscriptionEngine::Deepgram.into()
+    {
+        // Deepgram implementation
+        let api_key = deepgram_api_key.unwrap_or_default();
+
+        match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
+            .await
+        {
+            Ok(transcription) => Ok(transcription),
+            Err(e) => {
+                error!(
+                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                    device, e
+                );
+                // Fallback to Whisper
+                process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
             }
-        } else {
-            // Existing Whisper implementation
-            process_with_whisper(whisper_model, audio, languages.clone()).await
-        };
+        }
+    } else {
+        // Existing Whisper implementation
+        process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
+    };
 
     transcription
 }
@@ -83,11 +126,11 @@ pub struct TranscriptionResult {
 
 impl TranscriptionResult {
     // TODO --optimize
-    pub fn cleanup_overlap(&mut self, previous_transcript: &str) -> Option<(String, String)> {
+    pub fn cleanup_overlap(&mut self, previous_transcript: String) -> Option<(String, String)> {
         if let Some(transcription) = &self.transcription {
             let transcription = transcription.to_string();
             if let Some((prev_idx, cur_idx)) =
-                longest_common_word_substring(previous_transcript, transcription.as_str())
+                longest_common_word_substring(previous_transcript.as_str(), transcription.as_str())
             {
                 // strip old transcript from prev_idx word pos
                 let new_prev = previous_transcript
@@ -113,13 +156,13 @@ pub async fn create_whisper_channel(
     output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
-    device_manager: Arc<DeviceManager>,
+    audio_devices_control: Option<Arc<DashMap<AudioDevice, DeviceControl>>>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
+    Arc<AtomicBool>, // Shutdown flag
 )> {
-    let whisper_model = WhisperModel::new(&audio_transcription_engine)?;
-    let whisper_model = Arc::new(Mutex::new(whisper_model));
+    let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
     let (input_sender, input_receiver): (
         crossbeam::channel::Sender<AudioInput>,
         crossbeam::channel::Receiver<AudioInput>,
@@ -134,6 +177,8 @@ pub async fn create_whisper_channel(
     };
     vad_engine.set_sensitivity(vad_sensitivity);
     let vad_engine = Arc::new(Mutex::new(vad_engine));
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let shutdown_flag_clone = shutdown_flag.clone();
     let output_path = output_path.to_path_buf();
 
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
@@ -145,20 +190,29 @@ pub async fn create_whisper_channel(
             .ok_or_else(|| anyhow!("Invalid embedding model path"))?,
     )?));
 
-    let embedding_manager = Arc::new(StdMutex::new(EmbeddingManager::new(25)));
+    let embedding_manager = EmbeddingManager::new(usize::MAX);
 
     tokio::spawn(async move {
         loop {
+            if shutdown_flag_clone.load(Ordering::Relaxed) {
+                info!("Whisper channel shutting down");
+                break;
+            }
+            debug!("Waiting for input from input_receiver");
+
             crossbeam::select! {
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
-                            // Check device state
-                            if let Some(device) = device_manager.get_active_devices().await.get(&audio.device.to_string()) {
-                                if !device.is_running {
+                            // Check if device should be recording
+                            if let Some(control) = audio_devices_control.as_ref().unwrap().get(&audio.device) {
+                                if !control.is_running {
                                     debug!("Skipping audio processing for stopped device: {}", audio.device);
                                     continue;
                                 }
+                            } else {
+                                debug!("Device not found in control list: {}", audio.device);
+                                continue;
                             }
 
                             debug!("Received input from input_receiver");
@@ -183,10 +237,10 @@ pub async fn create_whisper_channel(
                                 audio.data.as_ref().to_vec()
                             };
 
-                            audio.data = Arc::new(audio_data);
+                            audio.data = Arc::new(audio_data.clone());
                             audio.sample_rate = m::SAMPLE_RATE as u32;
 
-                            let mut segments = match prepare_segments(audio.data.clone(), vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
+                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
                                 Ok(segments) => segments,
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
@@ -195,7 +249,7 @@ pub async fn create_whisper_channel(
                             };
 
                             let path = match write_audio_to_file(
-                                audio.data.as_ref(),
+                                &audio.data.to_vec(),
                                 audio.sample_rate,
                                 &output_path,
                                 &audio.device.to_string(),
@@ -210,25 +264,20 @@ pub async fn create_whisper_channel(
 
                             while let Some(segment) = segments.recv().await {
                                 let path = path.clone();
-                                let device = audio.device.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
                                     #[cfg(target_os = "macos")]
                                     {
-                                        let whisper_model = whisper_model.clone();
-                                        let audio_transcription_engine = audio_transcription_engine.clone();
-                                        let deepgram_api_key = deepgram_api_key.clone();
-                                        let languages = languages.clone();
                                         let timestamp = timestamp + segment.start.round() as u64;
-                                        autoreleasepool(|| async move {
-                                            run_stt(segment, device.clone(), whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp).await
-                                        }).await
+                                        autoreleasepool(|| {
+                                            run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
+                                        })
                                     }
                                     #[cfg(not(target_os = "macos"))]
                                     {
                                         unreachable!("This code should not be reached on non-macOS platforms")
                                     }
                                 } else {
-                                    run_stt(segment, device, whisper_model.clone(), audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp).await
+                                    run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
                                 };
 
                                 if output_sender.send(transcription_result).is_err() {
@@ -238,23 +287,25 @@ pub async fn create_whisper_channel(
                         },
                         Err(e) => {
                             error!("Error receiving input: {:?}", e);
+                            // Depending on the error type, you might want to break the loop or continue
+                            // For now, we'll continue to the next iteration
                             break;
                         }
                     }
                 },
-                // default(Duration::from_millis(100)) => {}
             }
         }
+        // Cleanup code here (if needed)
     });
 
-    Ok((input_sender, output_receiver))
+    Ok((input_sender, output_receiver, shutdown_flag))
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn run_stt(
+pub fn run_stt(
     segment: SpeechSegment,
     device: Arc<AudioDevice>,
-    whisper_model: Arc<Mutex<WhisperModel>>,
+    whisper_model: &mut WhisperModel,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
@@ -263,17 +314,15 @@ pub async fn run_stt(
 ) -> TranscriptionResult {
     let audio = segment.samples.clone();
     let sample_rate = segment.sample_rate;
-    match stt(
+    match stt_sync(
         &audio,
         sample_rate,
         &device.to_string(),
         whisper_model,
-        audio_transcription_engine,
-        deepgram_api_key,
-        languages,
-    )
-    .await
-    {
+        audio_transcription_engine.clone(),
+        deepgram_api_key.clone(),
+        languages.clone(),
+    ) {
         Ok(transcription) => TranscriptionResult {
             input: AudioInput {
                 data: Arc::new(audio),
