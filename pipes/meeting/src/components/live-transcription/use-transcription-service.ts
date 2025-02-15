@@ -16,7 +16,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
     const { settings } = useSettings()
     
     // Force browser mode regardless of settings
-    const effectiveMode: TranscriptionMode = 'browser'
+    const effectiveMode: TranscriptionMode = 'browser' // hardcoring until i change SDK for rtt with speaker support
     const { chunks, setChunks, isLoading, fetchRecentChunks } = useRecentChunks()
     const { onNewChunk } = useMeetingContext()
     const { startTranscriptionScreenpipe, stopTranscriptionScreenpipe } = useTranscriptionStream(setChunks)
