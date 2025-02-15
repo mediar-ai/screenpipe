@@ -397,8 +397,6 @@ async fn record_audio(
                     let realtime_audio_devices_clone = realtime_audio_devices_clone.clone();
                     let languages_clone = languages_clone.clone();
                     let is_running_loop = is_running_loop.clone();
-                    let realtime_transcription_sender_clone =
-                        realtime_transcription_sender_clone.clone();
                     let live_transcription_handle = Some(tokio::spawn(async move {
                         if realtime_audio_enabled
                             && realtime_audio_devices_clone.contains(&audio_device_clone)
@@ -407,7 +405,6 @@ async fn record_audio(
                                 audio_stream_clone,
                                 languages_clone.clone(),
                                 is_running_loop.clone(),
-                                realtime_transcription_sender_clone.clone(),
                                 deepgram_api_key.clone(),
                             )
                             .await;

@@ -1,5 +1,5 @@
 use crate::audio_processing::audio_to_mono;
-use crate::realtime::{realtime_stt, RealtimeTranscriptionEvent};
+use crate::realtime::realtime_stt;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -201,14 +201,12 @@ pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
             audio_stream.clone(),
             languages.clone(),
-            realtime_transcription_sender.clone(),
             is_running.clone(),
             deepgram_api_key.clone(),
         )
