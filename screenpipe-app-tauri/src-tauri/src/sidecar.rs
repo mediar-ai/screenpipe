@@ -379,9 +379,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-realtime-audio-transcription");
     }
 
-    if use_all_monitors {
-        args.push("--use-all-monitors");
-    }
+    // if use_all_monitors {
+    //     args.push("--use-all-monitors");
+    // }
 
     let disable_vision = store
         .get("disableVision")

@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.32.16"
+version = "0.33.0"
 description = ""
 authors = ["you"]
 license = ""

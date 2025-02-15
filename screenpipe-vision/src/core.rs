@@ -185,6 +185,7 @@ pub async fn continuous_capture(
                 Ok(avg) => avg,
                 Err(e) => {
                     error!("Error comparing images: {}", e);
+                    previous_image = None;
                     0.0
                 }
             };
