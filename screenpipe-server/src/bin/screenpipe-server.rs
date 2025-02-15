@@ -1,27 +1,17 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
+use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
-use futures::StreamExt;
 use port_check::is_local_ipv4_port_free;
-use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
-    create_whisper_channel, default_input_device, default_output_device, list_audio_devices,
-    parse_audio_device, VadEngineEnum,
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+    AudioDevice, DeviceControl,
 };
-
-use screenpipe_audio::{AudioInput, TranscriptionResult};
-use screenpipe_core::DeviceControl;
-use screenpipe_core::DeviceType;
-use screenpipe_core::{find_ffmpeg_path, DeviceManager};
-use screenpipe_server::VisionDeviceControlRequest;
+use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{
-        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
-        PipeCommand, VisionCommand,
-    },
-    core::{AudioConfig, RecordingConfig, VisionConfig},
+    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -29,16 +19,15 @@ use screenpipe_server::{
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
 use screenpipe_vision::run_ui;
-use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     env, fs,
     io::Write,
     net::SocketAddr,
     ops::Deref,
     path::PathBuf,
-    sync::Arc,
+    sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
 use tokio::{runtime::Runtime, signal, sync::broadcast};
@@ -47,15 +36,16 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
 
-// Add this struct to handle the server response structure
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct ApiResponse<T> {
-    data: T,
-    success: bool,
+fn print_devices(devices: &[AudioDevice]) {
+    println!("available audio devices:");
+    for device in devices.iter() {
+        println!("  {}", device);
+    }
+
+    #[cfg(target_os = "macos")]
+    println!("on macos, it's not intuitive but output devices are your displays");
 }
 
 const DISPLAY: &str = r"
@@ -93,67 +83,48 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let make_env_filter = || {
-        let filter = EnvFilter::from_default_env()
-            .add_directive("tokio=debug".parse().unwrap())
-            .add_directive("runtime=debug".parse().unwrap())
-            .add_directive("info".parse().unwrap())
-            .add_directive("tokenizers=error".parse().unwrap())
-            .add_directive("rusty_tesseract=error".parse().unwrap())
-            .add_directive("symphonia=error".parse().unwrap())
-            .add_directive("hf_hub=error".parse().unwrap());
+    let env_filter = EnvFilter::from_default_env()
+        .add_directive("info".parse().unwrap())
+        .add_directive("tokenizers=error".parse().unwrap())
+        .add_directive("rusty_tesseract=error".parse().unwrap())
+        .add_directive("symphonia=error".parse().unwrap())
+        .add_directive("hf_hub=error".parse().unwrap());
 
-        // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
-        // which is noise
-        #[cfg(target_os = "windows")]
-        let filter = filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
+    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
+    // which is noise
+    #[cfg(target_os = "windows")]
+    let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
-        let filter = env::var("SCREENPIPE_LOG")
-            .unwrap_or_default()
-            .split(',')
-            .filter(|s| !s.is_empty())
-            .fold(filter, |filter, module_directive| {
-                match module_directive.parse() {
-                    Ok(directive) => filter.add_directive(directive),
-                    Err(e) => {
-                        eprintln!(
-                            "warning: invalid log directive '{}': {}",
-                            module_directive, e
-                        );
-                        filter
-                    }
+    let env_filter = env::var("SCREENPIPE_LOG")
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .fold(
+            env_filter,
+            |filter, module_directive| match module_directive.parse() {
+                Ok(directive) => filter.add_directive(directive),
+                Err(e) => {
+                    eprintln!(
+                        "warning: invalid log directive '{}': {}",
+                        module_directive, e
+                    );
+                    filter
                 }
-            });
-
-        if cli.debug {
-            filter.add_directive("screenpipe=debug".parse().unwrap())
-        } else {
-            filter
-        }
-    };
-
-    let tracing_registry = tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .with_writer(std::io::stdout)
-                .with_filter(make_env_filter()),
-        )
-        .with(
-            fmt::layer()
-                .with_writer(non_blocking)
-                .with_filter(make_env_filter()),
+            },
         );
 
-    #[cfg(feature = "debug-console")]
-    let tracing_registry = tracing_registry.with(
-        console_subscriber::spawn().with_filter(
-            EnvFilter::from_default_env()
-                .add_directive("tokio=trace".parse().unwrap())
-                .add_directive("runtime=trace".parse().unwrap()),
-        ),
-    );
+    let env_filter = if cli.debug {
+        env_filter.add_directive("screenpipe=debug".parse().unwrap())
+    } else {
+        env_filter
+    };
 
-    tracing_registry.init();
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(non_blocking))
+        .init();
+
     Ok(guard)
 }
 
@@ -186,7 +157,8 @@ async fn main() -> anyhow::Result<()> {
     let local_data_dir = get_base_dir(&cli.data_dir)?;
     let local_data_dir_clone = local_data_dir.clone();
 
-    match &cli.command {
+    // Only set up logging if we're not running a pipe command with JSON output
+    let should_log = match &cli.command {
         Some(Command::Pipe { subcommand }) => {
             matches!(
                 subcommand,
@@ -210,110 +182,24 @@ async fn main() -> anyhow::Result<()> {
             output: OutputFormat::Text,
             ..
         }) => true,
-        Some(Command::Doctor {
-            output: OutputFormat::Text,
-            ..
-        }) => true,
-        Some(Command::Vision { subcommand }) => {
-            matches!(
-                subcommand,
-                VisionCommand::List {
-                    output: OutputFormat::Text,
-                    ..
-                }
-            )
-        }
-        Some(Command::Audio { subcommand }) => {
-            matches!(
-                subcommand,
-                AudioCommand::List {
-                    output: OutputFormat::Text,
-                    ..
-                }
-            )
-        }
         _ => true,
     };
 
     // Store the guard in a variable that lives for the entire main function
-    let _log_guard = Some(setup_logging(&local_data_dir, &cli)?);
+    let _log_guard = if should_log {
+        Some(setup_logging(&local_data_dir, &cli)?)
+    } else {
+        None
+    };
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
 
-    if let Some(Command::Completions { shell }) = &cli.command {
-        cli.handle_completions(*shell)?;
-        return Ok(());
-    }
     if let Some(command) = cli.command {
         match command {
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
             }
-            Command::Vision { subcommand } => match subcommand {
-                VisionCommand::List { output } => {
-                    let monitors = list_monitors().await;
-                    match output {
-                        OutputFormat::Json => {
-                            println!(
-                                "{}",
-                                serde_json::to_string_pretty(&json!({
-                                    "data": monitors.iter().map(|m| {
-                                        json!({
-                                            "id": m.id(),
-                                            "name": m.name(),
-                                            "x": m.x(),
-                                            "y": m.y(),
-                                            "width": m.width(),
-                                            "height": m.height(),
-                                            "rotation": m.rotation(),
-                                            "scale_factor": m.scale_factor(),
-                                            "frequency": m.frequency(),
-                                            "is_primary": m.is_primary()
-                                        })
-                                    }).collect::<Vec<_>>(),
-                                    "success": true
-                                }))?
-                            );
-                        }
-                        OutputFormat::Text => {
-                            println!("available monitors:");
-                            for monitor in monitors.iter() {
-                                println!("  {}. {:?}", monitor.id(), monitor);
-                            }
-                        }
-                    }
-                    return Ok(());
-                }
-            },
-            Command::Audio { subcommand } => match subcommand {
-                AudioCommand::List { output } => {
-                    let devices = list_audio_devices().await?;
-                    match output {
-                        OutputFormat::Json => {
-                            println!(
-                                "{}",
-                                serde_json::to_string_pretty(&json!({
-                                    "data": devices.iter().map(|d| {
-                                        json!({
-                                            "name": d.name,
-                                            "device_type": d.device_type,
-                                        })
-                                    }).collect::<Vec<_>>(),
-                                    "success": true
-                                }))?
-                            );
-                        }
-                        OutputFormat::Text => {
-                            println!("available audio devices:");
-                            for device in devices.iter() {
-                                println!("  {:?}", device);
-                            }
-                        }
-                    }
-                    return Ok(());
-                }
-            },
             #[allow(unused_variables)]
             Command::Setup { enable_beta } => {
                 #[cfg(feature = "beta")]
@@ -445,37 +331,20 @@ async fn main() -> anyhow::Result<()> {
                 .await?;
                 return Ok(());
             }
-            Command::Doctor { output, fix } => {
-                handle_doctor_command(output, fix).await?;
-                return Ok(());
-            }
-            Command::AddToPath { yes } => {
-                if !yes {
-                    print!("add screenpipe to system PATH? [y/N] ");
-                    std::io::stdout().flush()?;
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input)?;
-                    if !input.trim().eq_ignore_ascii_case("y") {
-                        println!("operation cancelled");
-                        return Ok(());
-                    }
-                }
-
-                match ensure_screenpipe_in_path().await {
-                    Ok(_) => {
-                        println!("✓ screenpipe successfully added to PATH");
-                        println!("note: you may need to restart your terminal for changes to take effect");
-                    }
-                    Err(e) => {
-                        eprintln!("failed to add screenpipe to PATH: {}", e);
-                        return Err(e);
-                    }
-                }
-                return Ok(());
-            }
-            Command::Completions { .. } => todo!(),
         }
     }
+
+    // Check if Screenpipe is present in PATH
+    // TODO: likely should not force user to install in PATH (eg brew, powershell, or button in UI)
+    match ensure_screenpipe_in_path().await {
+        Ok(_) => info!("screenpipe is available and properly set in the PATH"),
+        Err(e) => {
+            warn!("screenpipe PATH check failed: {}", e);
+            warn!("please ensure screenpipe is installed correctly and is in your PATH");
+            // do not crash
+        }
+    }
+
     if find_ffmpeg_path().is_none() {
         eprintln!("ffmpeg not found. please install ffmpeg and ensure it is in your path.");
         std::process::exit(1);
@@ -490,16 +359,29 @@ async fn main() -> anyhow::Result<()> {
 
     let all_audio_devices = list_audio_devices().await?;
     let mut devices_status = HashMap::new();
+    if cli.list_audio_devices {
+        print_devices(&all_audio_devices);
+        return Ok(());
+    }
     let all_monitors = list_monitors().await;
+    if cli.list_monitors {
+        println!("available monitors:");
+        for monitor in all_monitors.iter() {
+            println!("  {}. {:?}", monitor.id(), monitor);
+        }
+        return Ok(());
+    }
 
     let mut audio_devices = Vec::new();
-    let device_manager = Arc::new(DeviceManager::default());
+
+    let audio_devices_control = Arc::new(DashMap::new());
+    let audio_devices_control_recording = audio_devices_control.clone();
+
     let mut realtime_audio_devices = Vec::new();
 
     // Add all available audio devices to the controls
     for device in &all_audio_devices {
         let device_control = DeviceControl {
-            device: screenpipe_core::DeviceType::Audio(device.clone()),
             is_running: false,
             is_paused: false,
         };
@@ -512,16 +394,16 @@ async fn main() -> anyhow::Result<()> {
             if let Ok(input_device) = default_input_device() {
                 audio_devices.push(Arc::new(input_device.clone()));
                 let device_control = DeviceControl {
-                    device: screenpipe_core::DeviceType::Audio(input_device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
                 devices_status.insert(input_device, device_control);
             }
+            // audio output only on macos <15.0 atm ?
+            // see https://github.com/mediar-ai/screenpipe/pull/106
             if let Ok(output_device) = default_output_device() {
                 audio_devices.push(Arc::new(output_device.clone()));
                 let device_control = DeviceControl {
-                    device: screenpipe_core::DeviceType::Audio(output_device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
@@ -533,7 +415,6 @@ async fn main() -> anyhow::Result<()> {
                 let device = parse_audio_device(d).expect("failed to parse audio device");
                 audio_devices.push(Arc::new(device.clone()));
                 let device_control = DeviceControl {
-                    device: screenpipe_core::DeviceType::Audio(device.clone()),
                     is_running: true,
                     is_paused: false,
                 };
@@ -544,29 +425,17 @@ async fn main() -> anyhow::Result<()> {
         if audio_devices.is_empty() {
             eprintln!("no audio devices available. audio recording will be disabled.");
         } else {
-            for (index, device) in audio_devices.iter().enumerate() {
-                if cli.disable_audio {
-                    break;
-                }
+            for device in &audio_devices {
+                let device_control = DeviceControl {
+                    is_running: true,
+                    is_paused: false,
+                };
                 let device_clone = device.deref().clone();
-                let sender_clone = device_manager.clone();
-                // send signal after everything started, with staggered delays
+                let sender_clone = audio_devices_control.clone();
+                // send signal after everything started
                 tokio::spawn(async move {
-                    // Base delay of 15s + 5s for each device index
-                    let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
-                    tokio::time::sleep(delay).await;
-                    info!(
-                        "initializing audio device control for device: {}",
-                        device_clone.name
-                    );
-
-                    let _ = sender_clone
-                        .update_device(DeviceControl {
-                            device: screenpipe_core::DeviceType::Audio(device_clone),
-                            is_running: true,
-                            is_paused: false,
-                        })
-                        .await;
+                    tokio::time::sleep(Duration::from_secs(15)).await;
+                    sender_clone.insert(device_clone, device_control);
                 });
             }
         }
@@ -575,15 +444,17 @@ async fn main() -> anyhow::Result<()> {
             if cli.realtime_audio_device.is_empty() {
                 // Use default devices
                 if let Ok(input_device) = default_input_device() {
-                    realtime_audio_devices.push(input_device.clone());
+                    realtime_audio_devices.push(Arc::new(input_device.clone()));
                 }
+                // audio output only on macos <15.0 atm ?
+                // see https://github.com/mediar-ai/screenpipe/pull/106
                 if let Ok(output_device) = default_output_device() {
-                    realtime_audio_devices.push(output_device.clone());
+                    realtime_audio_devices.push(Arc::new(output_device.clone()));
                 }
             } else {
                 for d in &cli.realtime_audio_device {
                     let device = parse_audio_device(d).expect("failed to parse audio device");
-                    realtime_audio_devices.push(device.clone());
+                    realtime_audio_devices.push(Arc::new(device.clone()));
                 }
             }
 
@@ -593,7 +464,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
+    let resource_monitor = ResourceMonitor::new();
     resource_monitor.start_monitoring(Duration::from_secs(10));
 
     let db = Arc::new(
@@ -607,6 +478,9 @@ async fn main() -> anyhow::Result<()> {
 
     let db_server = db.clone();
 
+    // Channel for controlling the recorder ! TODO RENAME SHIT
+    let vision_control = Arc::new(AtomicBool::new(true));
+
     let warning_ocr_engine_clone = cli.ocr_engine.clone();
     let warning_audio_transcription_engine_clone = cli.audio_transcription_engine.clone();
     let monitor_ids = if cli.monitor_id.is_empty() {
@@ -614,34 +488,6 @@ async fn main() -> anyhow::Result<()> {
     } else {
         cli.monitor_id.clone()
     };
-
-    // Initialize vision devices control based on user selected monitors
-    {
-        for (index, monitor_id) in monitor_ids.clone().into_iter().enumerate() {
-            if cli.disable_vision {
-                break;
-            }
-            let device_manager = device_manager.clone();
-            // Send signal after everything started
-            tokio::spawn(async move {
-                // Base delay of 15s + 5s for each monitor index
-                let delay = Duration::from_secs(15) + Duration::from_secs(5 * index as u64);
-                tokio::time::sleep(delay).await;
-                info!(
-                    "initializing vision device control for monitor: {}",
-                    monitor_id
-                );
-                let device_control = DeviceControl {
-                    device: DeviceType::Vision(monitor_id),
-                    is_running: true,
-                    is_paused: false,
-                };
-                if let Err(e) = device_manager.update_device(device_control).await {
-                    warn!("failed to initialize vision device control: {}", e);
-                }
-            });
-        }
-    }
 
     let languages = cli.unique_languages().unwrap();
     let languages_clone = languages.clone();
@@ -660,7 +506,9 @@ async fn main() -> anyhow::Result<()> {
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
+    let vision_control_clone = Arc::clone(&vision_control);
     let shutdown_tx_clone = shutdown_tx.clone();
+    let monitor_ids_clone = monitor_ids.clone();
     let ignored_windows_clone = cli.ignored_windows.clone();
     let included_windows_clone = cli.included_windows.clone();
     let realtime_audio_devices_clone = realtime_audio_devices.clone();
@@ -673,79 +521,45 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let dm_clone = device_manager.clone();
-    let device_manager_clone = device_manager.clone();
-    let device_manager_clone_2 = device_manager.clone();
-
-    let (whisper_sender, whisper_receiver) = if cli.disable_audio {
-        // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (
-            crossbeam::channel::Sender<AudioInput>,
-            crossbeam::channel::Receiver<AudioInput>,
-        ) = crossbeam::channel::bounded(100);
-        let (_, output_receiver): (
-            crossbeam::channel::Sender<TranscriptionResult>,
-            crossbeam::channel::Receiver<TranscriptionResult>,
-        ) = crossbeam::channel::bounded(100);
-        (input_sender, output_receiver)
-    } else {
-        create_whisper_channel(
-            Arc::new(cli.audio_transcription_engine.clone().into()),
-            VadEngineEnum::from(cli.vad_engine),
-            cli.deepgram_api_key.clone(),
-            &PathBuf::from(output_path_clone.as_ref()),
-            VadSensitivity::from(cli.vad_sensitivity.clone()),
-            languages.clone(),
-            device_manager.clone(),
-        )
-        .await?
-    };
-
+    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
+    let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
+    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
+    let realtime_vision_sender_clone = realtime_vision_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
+                let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-
-                // Create the configs
-                let recording_config = RecordingConfig {
-                    output_path: output_path_clone.clone(),
-                    fps,
-                    audio_chunk_duration,
-                    video_chunk_duration: Duration::from_secs(cli.video_chunk_duration),
-                    use_pii_removal: cli.use_pii_removal,
-                    capture_unfocused_windows: cli.capture_unfocused_windows,
-                    languages: Arc::from(languages.clone()),
-                };
-
-                let audio_config = AudioConfig {
-                    disabled: cli.disable_audio,
-                    transcription_engine: Arc::new(cli.audio_transcription_engine.clone().into()),
-                    vad_engine: vad_engine_clone,
-                    vad_sensitivity: cli.vad_sensitivity.clone(),
-                    deepgram_api_key: cli.deepgram_api_key.clone(),
-                    realtime_enabled: cli.enable_realtime_audio_transcription,
-                    realtime_devices: Arc::from(realtime_audio_devices.clone()),
-                    whisper_sender: whisper_sender.clone(),
-                    whisper_receiver: whisper_receiver.clone(),
-                };
-
-                let vision_config = VisionConfig {
-                    disabled: cli.disable_vision,
-                    ocr_engine: Arc::new(cli.ocr_engine.clone().into()),
-                    ignored_windows: Arc::from(cli.ignored_windows.clone()),
-                    include_windows: Arc::from(cli.included_windows.clone()),
-                };
-
+                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
-                    recording_config,
-                    audio_config,
-                    vision_config,
+                    output_path_clone.clone(),
+                    fps,
+                    audio_chunk_duration,
+                    Duration::from_secs(cli.video_chunk_duration),
+                    vision_control_clone.clone(),
+                    audio_devices_control_recording.clone(),
+                    cli.disable_audio,
+                    Arc::new(cli.audio_transcription_engine.clone().into()),
+                    Arc::new(cli.ocr_engine.clone().into()),
+                    monitor_ids_clone.clone(),
+                    cli.use_pii_removal,
+                    cli.disable_vision,
+                    vad_engine_clone,
                     &vision_handle,
                     &audio_handle,
-                    device_manager.clone(),
+                    &cli.ignored_windows,
+                    &cli.included_windows,
+                    cli.deepgram_api_key.clone(),
+                    cli.vad_sensitivity.clone(),
+                    languages.clone(),
+                    cli.capture_unfocused_windows,
+                    realtime_audio_devices.clone(),
+                    cli.enable_realtime_audio_transcription,
+                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
+                    realtime_vision_sender_clone,
                 );
 
                 let result = tokio::select! {
@@ -786,10 +600,13 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    let (audio_devices_tx, _) = broadcast::channel(100);
+
+    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
+    // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
-        dm_clone,
         local_data_dir_clone_2,
         pipe_manager.clone(),
         cli.disable_vision,
@@ -797,76 +614,43 @@ async fn main() -> anyhow::Result<()> {
         cli.enable_ui_monitoring,
     );
 
+    let mut rx = audio_devices_tx.subscribe();
+    let audio_devices_control_for_spawn = audio_devices_control.clone();
     tokio::spawn(async move {
-        // Watch for device changes using the new stream API
-        let mut device_changes = device_manager_clone.watch_devices().await;
-
-        while let Some(change) = device_changes.next().await {
-            // ignore if vision disabled and its a vision device
-            if cli.disable_vision && change.control.device.is_vision() {
-                continue;
-            }
-            if cli.disable_audio && change.control.device.is_audio() {
-                continue;
-            }
-            debug!("received device update: {:?}", change);
-            if let Err(e) = handle_device_update(
-                &change.control.device,
-                change.control.clone(),
-                &device_manager_clone,
-            )
-            .await
+        while let Ok((device, control)) = rx.recv().await {
+            if let Err(e) =
+                handle_device_update(&device, control, &audio_devices_control_for_spawn).await
             {
                 error!("Device update failed: {}", e);
                 continue;
             }
         }
-        info!("device control task stopped");
+        info!("Device monitoring task completed");
     });
 
     async fn handle_device_update(
-        device: &DeviceType,
+        device: &AudioDevice,
         control: DeviceControl,
-        devices_control: &Arc<DeviceManager>,
+        devices_control: &DashMap<AudioDevice, DeviceControl>,
     ) -> anyhow::Result<()> {
-        debug!("received device update");
-
-        match device {
-            DeviceType::Audio(device) => {
-                match list_audio_devices().await {
-                    Ok(available_devices) => {
-                        if !available_devices.contains(device) {
-                            warn!("attempted to control non-existent device: {}", device.name);
-                            return Err(anyhow::anyhow!(
-                                "attempted to control non-existent device: {}",
-                                device.name
-                            ));
-                        }
-
-                        // Update the device state using new DeviceManager API
-                        devices_control.update_device(control).await?;
-                        Ok(())
-                    }
-                    Err(e) => {
-                        warn!("failed to list audio devices: {}", e);
-                        Err(anyhow::anyhow!("failed to list audio devices: {}", e))
-                    }
-                }
-            }
-            DeviceType::Vision(monitor_id) => {
-                let monitors = list_monitors().await;
-                if !monitors.iter().any(|m| m.id() == *monitor_id) {
-                    warn!("attempted to control non-existent device: {}", monitor_id);
+        match list_audio_devices().await {
+            Ok(available_devices) => {
+                if !available_devices.contains(device) {
                     return Err(anyhow::anyhow!(
                         "attempted to control non-existent device: {}",
-                        monitor_id
+                        device.name
                     ));
                 }
 
-                // Update the device state using new DeviceManager API
-                devices_control.update_device(control).await?;
+                // Update the device state
+                devices_control.insert(device.clone(), control.clone());
+                info!(
+                    "Device state changed: {} - running: {}",
+                    device.name, control.is_running
+                );
                 Ok(())
             }
+            Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
         }
     }
 
@@ -946,7 +730,6 @@ async fn main() -> anyhow::Result<()> {
         "│ frame cache            │ {:<34} │",
         cli.enable_frame_cache
     );
-    println!("│ use all monitors       │ {:<34} │", cli.use_all_monitors);
 
     const VALUE_WIDTH: usize = 34;
 
@@ -1057,7 +840,7 @@ async fn main() -> anyhow::Result<()> {
             .enumerate()
             .take(MAX_ITEMS_TO_DISPLAY)
         {
-            let device_str = device.to_string();
+            let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 
             println!("│ {:<22} │ {:<34} │", "", formatted_device);
@@ -1165,7 +948,6 @@ async fn main() -> anyhow::Result<()> {
     if let Some(pid) = cli.auto_destruct_pid {
         info!("watching pid {} for auto-destruction", pid);
         let shutdown_tx_clone = shutdown_tx.clone();
-        let pipe_manager = pipe_manager.clone();
         tokio::spawn(async move {
             // sleep for 1 seconds
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1175,7 +957,6 @@ async fn main() -> anyhow::Result<()> {
                 // Get list of enabled pipes
                 let pipes = pipe_manager.list_pipes().await;
                 let enabled_pipes: Vec<_> = pipes.into_iter().filter(|p| p.enabled).collect();
-
                 // Stop all enabled pipes in parallel
                 let stop_futures = enabled_pipes.iter().map(|pipe| {
                     let pipe_manager = pipe_manager.clone();
@@ -1186,11 +967,9 @@ async fn main() -> anyhow::Result<()> {
                         }
                     })
                 });
-
                 // Wait for all pipes to stop with timeout
                 let timeout = tokio::time::sleep(Duration::from_secs(10));
                 tokio::pin!(timeout);
-
                 tokio::select! {
                     _ = futures::future::join_all(stop_futures) => {
                         info!("all pipes stopped successfully");
@@ -1199,7 +978,6 @@ async fn main() -> anyhow::Result<()> {
                         warn!("timeout waiting for pipes to stop");
                     }
                 }
-
                 let _ = shutdown_tx_clone.send(());
             }
         });
@@ -1243,7 +1021,7 @@ async fn main() -> anyhow::Result<()> {
 
             loop {
                 tokio::select! {
-                    result = run_ui() => {
+                    result = run_ui(realtime_vision_sender_clone.clone()) => {
                         match result {
                             Ok(_) => break,
                             Err(e) => {
@@ -1256,78 +1034,6 @@ async fn main() -> anyhow::Result<()> {
                     _ = shutdown_rx.recv() => {
                         info!("received shutdown signal, stopping ui monitoring");
                         break;
-                    }
-                }
-            }
-        });
-    }
-
-    if cli.use_all_monitors && !cli.disable_vision {
-        let client = reqwest::Client::new();
-        let port = cli.port;
-        let mut shutdown_rx = shutdown_tx.subscribe();
-
-        tokio::spawn(async move {
-            // wait 10 seconds
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            // Start all available monitors immediately
-            let initial_monitors: HashSet<u32> =
-                list_monitors().await.into_iter().map(|m| m.id()).collect();
-
-            for monitor_id in &initial_monitors {
-                info!("starting monitor: {}", monitor_id);
-                let _ = client
-                    .post(format!("http://127.0.0.1:{}/vision/start", port))
-                    .json(&VisionDeviceControlRequest::new(*monitor_id))
-                    .send()
-                    .await
-                    .map_err(|e| error!("failed to start monitor {}: {}", monitor_id, e));
-            }
-
-            let mut previous_monitors = initial_monitors;
-
-            loop {
-                tokio::select! {
-                    _ = shutdown_rx.recv() => {
-                        info!("stopping monitor polling due to shutdown signal");
-                        break;
-                    }
-                    _ = tokio::time::sleep(Duration::from_secs(5)) => {
-                        let current_monitors: HashSet<u32> = list_monitors()
-                            .await
-                            .into_iter()
-                            .map(|m| m.id())
-                            .collect();
-
-                        // Handle new monitors
-                        for monitor_id in current_monitors.difference(&previous_monitors) {
-                            info!("new monitor detected: {}", monitor_id);
-
-                            // Start recording the new monitor using the API
-                            let _ = client
-                                .post(format!("http://127.0.0.1:{}/vision/start", port))
-                                .json(&VisionDeviceControlRequest::new(*monitor_id))
-                                .send()
-                                .await
-                                .map_err(|e| error!("failed to start new monitor {}: {}", monitor_id, e));
-                        }
-
-                        // Handle removed monitors
-                        for monitor_id in previous_monitors.difference(&current_monitors) {
-                            info!("monitor removed: {}", monitor_id);
-
-                            // Stop recording the removed monitor using the API
-                            let _ = client
-                                .post(format!("http://127.0.0.1:{}/vision/stop", port))
-                                .json(&VisionDeviceControlRequest::new(*monitor_id))
-                                .send()
-                                .await
-                                .map_err(|e| {
-                                    error!("failed to stop removed monitor {}: {}", monitor_id, e)
-                                });
-                        }
-
-                        previous_monitors = current_monitors;
                     }
                 }
             }
@@ -1347,8 +1053,6 @@ async fn main() -> anyhow::Result<()> {
             let _ = shutdown_tx.send(());
         }
     }
-
-    device_manager_clone_2.shutdown().await;
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);
@@ -1466,24 +1170,24 @@ async fn handle_pipe_command(
         }
 
         PipeCommand::Info { id, output, port } => {
-            let info: ApiResponse<PipeInfo> = match client
+            let info = match client
                 .get(format!("{}:{}/pipes/info/{}", server_url, port, id))
                 .send()
                 .await
             {
                 Ok(response) if response.status().is_success() => response.json().await?,
-                _ => ApiResponse {
-                    data: pipe_manager
+                _ => {
+                    println!("note: server not running, showing pipe configuration");
+                    pipe_manager
                         .get_pipe_info(&id)
                         .await
-                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?,
-                    success: true,
-                },
+                        .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
+                }
             };
 
             match output {
-                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info.data)?),
-                OutputFormat::Text => println!("pipe info: {:?}", info.data),
+                OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&info)?),
+                OutputFormat::Text => println!("pipe info: {:?}", info),
             }
         }
         PipeCommand::Enable { id, port } => {
@@ -1757,96 +1461,6 @@ async fn check_ffmpeg() -> anyhow::Result<()> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(anyhow::anyhow!("FFmpeg check failed: {}", stderr));
-    }
-
-    Ok(())
-}
-
-async fn handle_doctor_command(output: OutputFormat, fix: bool) -> anyhow::Result<()> {
-    let mut checks = Vec::new();
-
-    // Check ffmpeg
-    let ffmpeg_status = match find_ffmpeg_path() {
-        Some(path) => ("ffmpeg", true, format!("found at {}", path.display())),
-        None => ("ffmpeg", false, "not found in PATH".to_string()),
-    };
-    checks.push(ffmpeg_status);
-
-    // Check data directory
-    let data_dir = get_base_dir(&None)?;
-    let data_dir_status = (
-        "data directory",
-        data_dir.exists(),
-        format!("{}", data_dir.display()),
-    );
-    checks.push(data_dir_status);
-
-    // Check database
-    let db_path = data_dir.join("db.sqlite");
-    let db_exists = db_path.exists();
-    let db_status = ("database", db_exists, format!("{}", db_path.display()));
-    checks.push(db_status);
-
-    // Check audio devices
-    let audio_devices = match list_audio_devices().await {
-        Ok(devices) => {
-            let count = devices.len();
-            (
-                "audio devices",
-                count > 0,
-                format!("{} devices found", count),
-            )
-        }
-        Err(e) => ("audio devices", false, format!("error: {}", e)),
-    };
-    checks.push(audio_devices);
-
-    // Check monitors
-    let monitors = list_monitors().await;
-    let monitor_status = (
-        "monitors",
-        !monitors.is_empty(),
-        format!("{} found", monitors.len()),
-    );
-    checks.push(monitor_status);
-
-    // Output results
-    match output {
-        OutputFormat::Json => {
-            let json = serde_json::json!({
-                "checks": checks.iter().map(|(name, status, msg)| {
-                    serde_json::json!({
-                        "name": name,
-                        "status": status,
-                        "message": msg,
-                    })
-                }).collect::<Vec<_>>(),
-                "healthy": checks.iter().all(|(_, status, _)| *status),
-            });
-            println!("{}", serde_json::to_string_pretty(&json)?);
-        }
-        OutputFormat::Text => {
-            println!("\n🔍 screenpipe system diagnostics\n");
-
-            for (name, status, msg) in &checks {
-                let symbol = if *status { "✅" } else { "❌" };
-                println!("{} {}: {}", symbol, name, msg);
-            }
-
-            if fix {
-                println!("\n🔧 attempting to fix issues...");
-                // Add auto-fix logic here if needed
-                let db = DatabaseManager::new(&db_path.to_string_lossy()).await?;
-                db.repair_database().await?;
-            }
-
-            let healthy = checks.iter().all(|(_, status, _)| *status);
-            println!(
-                "\n{} overall health: {}\n",
-                if healthy { "✅" } else { "❌" },
-                if healthy { "healthy" } else { "issues found" }
-            );
-        }
     }
 
     Ok(())

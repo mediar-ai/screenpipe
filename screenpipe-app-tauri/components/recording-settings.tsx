@@ -737,7 +737,7 @@ export function RecordingSettings() {
 
           {!settings.disableVision && (
             <>
-              <div className="flex items-center justify-between mb-4">
+              {/* <div className="flex items-center justify-between mb-4">
                 <div className="space-y-1">
                   <h4 className="font-medium">use all monitors</h4>
                   <p className="text-sm text-muted-foreground">
@@ -752,7 +752,7 @@ export function RecordingSettings() {
                     handleSettingsChange({ useAllMonitors: checked })
                   }
                 />
-              </div>
+              </div> */}
 
               <div className="flex flex-col space-y-6">
                 <div className="flex flex-col space-y-2">
@@ -1372,7 +1372,7 @@ export function RecordingSettings() {
 
         <div className="space-y-8 py-4">
           <div className="space-y-6">
-            <div className="flex flex-col space-y-2">
+            {/* <div className="flex flex-col space-y-2">
               <Label
                 htmlFor="restartInterval"
                 className="flex items-center space-x-2"
@@ -1413,7 +1413,7 @@ export function RecordingSettings() {
                   {settings.restartInterval || 0} min
                 </span>
               </div>
-            </div>
+            </div> */}
 
             <div className="flex items-center justify-between">
               <div className="space-y-1">

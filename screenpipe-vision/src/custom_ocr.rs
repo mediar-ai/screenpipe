@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use image::DynamicImage;
@@ -25,7 +23,7 @@ impl Default for CustomOcrConfig {
 
 pub async fn perform_ocr_custom(
     image: &DynamicImage,
-    languages: Arc<[Language]>,
+    languages: Vec<Language>,
     config: &CustomOcrConfig,
 ) -> Result<(String, String, Option<f64>)> {
     // Convert image to RGB before encoding to JPEG
