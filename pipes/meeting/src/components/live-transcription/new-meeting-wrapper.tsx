@@ -48,6 +48,11 @@ export function LiveTranscription() {
         return () => window.removeEventListener('resize', updateHeight)
     }, []) // Empty deps array since updateHeight is stable
 
+    useEffect(() => {
+        console.log('live transcription component mounted')
+        return () => console.log('live transcription component unmounted')
+    }, [])
+
     const handleTimeClick = (timestamp: Date) => {
         console.log('clicking time:', timestamp)
 
