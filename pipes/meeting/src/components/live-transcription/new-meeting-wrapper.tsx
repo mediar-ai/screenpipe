@@ -96,7 +96,7 @@ export function LiveTranscription() {
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={toggleRecording}
+                                onClick={() => toggleRecording()}
                                 className="absolute right-7 z-20 hover:bg-gray-100/80 transition-colors"
                                 title={isRecording ? "stop recording" : "start recording"}
                             >
