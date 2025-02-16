@@ -1,0 +1,5 @@
+Problem observation:
+1. Readme display issue: When loading the pipe in the application UI, the readme is not displayed within the card. This functionality should be enabled by default to increase user experience.
+2. Open button functionality: The "Open" button is currently clicking, even when the build process is not complete. The UI should provide proper feedback to users, indicating that they cannot proceed until the build is finished.
+3. Update button functionality: Explanation on the fact is whether the update button intends.
+4. Settings firmness: It is important that user settings are retained during updates to prevent the loss of configuration.
