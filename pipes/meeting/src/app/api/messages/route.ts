@@ -76,6 +76,18 @@ async function discordRequest(endpoint: string, options: RequestInit = {}) {
   }
 }
 
+// Add interface for transformed message
+interface TransformedMessage {
+  id: string
+  content: string
+  fromUser: boolean
+  timestamp: string
+  author?: {
+    id: string
+    username: string
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { message, sessionId, userAgent } = await req.json()
@@ -243,13 +255,13 @@ export async function GET(req: Request) {
         author: msg.author,
       }
     })
-    .filter(Boolean) // Remove null messages
+    .filter(Boolean) as TransformedMessage[] // Type assertion here
     
     console.log('transformed messages:', transformedMessages)
     
     // Update session with latest messages
     await updateChatSession(sessionId, {
-      messages: transformedMessages.map(msg => ({
+      messages: transformedMessages.map((msg: TransformedMessage) => ({
         id: msg.id,
         content: msg.content,
         fromUser: msg.fromUser,
