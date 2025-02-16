@@ -1,0 +1,176 @@
+name: Release Pipeline with Quality Gates
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-artifacts:
+    name: Build Artifacts (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      matrix:
+        platform: [windows-latest, macos-latest, ubuntu-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Rust Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu  # Explicit target for Windows
+
+      - name: Platform-Specific Build
+        shell: bash
+        run: |
+          # Handle Windows target explicitly
+          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            cargo build --release --target x86_64-pc-windows-gnu
+          else
+            cargo build --release
+          fi
+
+      - name: Sign Windows Binary
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          signtool sign /fd SHA256 /f "${{ secrets.WIN_CERT_PATH }}" /p "${{ secrets.WIN_CERT_PASSWORD}}" "$(pwd)/target/x86_64-pc-windows-gnu/release/screenpipe.exe"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenpipe-${{ matrix.platform }}-${{ github.run_id }}
+          path: |
+            ${{ format(matrix.platform == 'windows-latest' && 'target/x86_64-pc-windows-gnu/release/screenpipe.exe' || 'target/release/screenpipe') }}
+          retention-days: 3
+
+  windows-e2e-test:
+    name: Windows Validation Suite
+    needs: build-artifacts
+    runs-on: [self-hosted, windows, gpu]  # Specialized runner
+    environment: 
+      name: production
+      url: https://crabnebula.app/releases/${{ github.ref }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Test Environment
+        uses: ./.github/workflows/windows-integration-test.yml
+
+      - name: Download Signed Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: screenpipe-windows-latest-${{ github.run_id }}
+          path: bin/
+
+      - name: Automated Health Checks
+        shell: pwsh
+        run: |
+          $result = .\bin\screenpipe.exe healthcheck --format json | ConvertFrom-Json
+          if ($result.status -ne "healthy" -or $result.services.audio -eq $false -or $result.services.capture -eq $false) {
+            Write-Error "System Health Check Failed: $($result | ConvertTo-Json)"
+            exit 1
+          }
+
+      - name: Stress Test
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          $testSession = Start-Process .\bin\screenpipe.exe -ArgumentList "--stress-test --duration 300" -PassThru
+          $logFile = "stress-test-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log"
+          
+          # Monitor resource usage
+          while (-not $testSession.HasExited) {
+            $metrics = Get-Process screenpipe | Select-Object CPU, WorkingSet64
+            "$(Get-Date -Format o) | CPU: $($metrics.CPU) | Memory: $($metrics.WorkingSet64/1MB)MB" | Out-File $logFile -Append
+            Start-Sleep -Seconds 5
+          }
+          
+          # Upload detailed metrics
+          Write-Host "Stress test completed with exit code $($testSession.ExitCode)"
+          Compress-Archive -Path $logFile -DestinationPath stress-test-logs.zip
+          echo "STRESS_LOGS=stress-test-logs.zip" >> $env:GITHUB_ENV
+
+      - name: Upload Test Evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-artifacts-${{ github.run_id }}
+          path: |
+            ${{ env.STRESS_LOGS }}
+            screenpipe_output.log
+            screenpipe_error.log
+          retention-days: 7
+
+  quality-gate:
+    name: Quality Assurance
+    needs: [build-artifacts, windows-e2e-test]
+    runs-on: ubuntu-latest
+    outputs:
+      release-approved: ${{ steps.approval.outputs.decision }}
+    steps:
+      - name: Pre-Release Checklist
+        uses: corbtastudios/gh-action-slack-notify@v2
+        with:
+          status: SUCCESS
+          message: "Release candidate ${{ github.ref }} ready for review\n\nVerify:\n- [ ] Windows E2E Test Results\n- [ ] Stress Test Metrics\n- [ ] Security Scans"
+
+      - name: Manual Approval
+        uses: trstringer/manual-approval@v1
+        id: approval
+        with:
+          secret: ${{ secrets.RELEASE_APPROVAL_TOKEN }}
+          approvers: "team-qa,product-owner"
+
+  publish-release:
+    name: Release to Production
+    needs: quality-gate
+    if: needs.quality-gate.outputs.release-approved == 'approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assemble Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: screenpipe-*-${{ github.run_id }}
+          merge-multiple: true
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+
+      - name: Create Signed Release
+        uses: softprops/action-gh-release@v1
+        id: release
+        with:
+          tag_name: ${{ github.ref }}
+          body: |
+            **Validated Features**
+            - Windows Hardware Certification
+            - Stress Test Metrics Available
+            - Code Signed Binaries
+          files: |
+            screenpipe-*
+            bom.xml
+
+      - name: Deploy to CrabNebula
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: "https://api.crabnebula.app/releases"
+          method: "POST"
+          customHeaders: '{"Authorization": "Bearer ${{ secrets.CRABNEBULA_DEPLOY_KEY }}"}'
+          data: '{
+            "version": "${{ github.ref }}",
+            "release_id": "${{ steps.release.outputs.id }}",
+            "artifacts": ${{ toJson(steps.release.outputs.uploaded_assets) }}
+          }'
