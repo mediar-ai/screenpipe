@@ -203,7 +203,7 @@ pub async fn capture_all_visible_windows(
             let app_name = window.app_name().to_string();
             let title = window.title().to_string();
             let is_focused = window.is_focused();
-            
+
             // Capture image immediately while we have access to the window
             match window.capture_image() {
                 Ok(buffer) => Some((app_name, title, is_focused, buffer)),
@@ -220,18 +220,14 @@ pub async fn capture_all_visible_windows(
     for (app_name, window_name, is_focused, buffer) in windows_data {
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(
-            image::ImageBuffer::from_raw(
-                buffer.width(),
-                buffer.height(),
-                buffer.into_raw(),
-            )
-            .unwrap(),
+            image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())
+                .unwrap(),
         );
 
         // Apply filters
-        let is_valid = !SKIP_APPS.contains(app_name.as_str()) 
+        let is_valid = !SKIP_APPS.contains(app_name.as_str())
             && !SKIP_TITLES.contains(window_name.as_str())
-            && (!capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
+            && (capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
             && window_filters.is_valid(&app_name, &window_name);
 
         if is_valid {
@@ -245,29 +241,4 @@ pub async fn capture_all_visible_windows(
     }
 
     Ok(all_captured_images)
-}
-
-pub fn is_valid_window(
-    window: &Window,
-    monitor: &SafeMonitor,
-    filters: &WindowFilters,
-    capture_unfocused_windows: bool,
-) -> bool {
-    if !capture_unfocused_windows {
-        let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
-
-        if !is_focused {
-            return false;
-        }
-    }
-
-    // Fast O(1) lookups using HashSet
-    let app_name = window.app_name();
-    let title = window.title();
-
-    if SKIP_APPS.contains(app_name) || SKIP_TITLES.contains(title) {
-        return false;
-    }
-
-    filters.is_valid(app_name, title)
 }
