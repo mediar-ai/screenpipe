@@ -102,8 +102,10 @@ https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
 
 # why?
 
-1. context is the dark matter of intelligence
-2. every second you are not recording is a missing context for AGI
+- ai models are commoditized 
+- ai is as good as its context
+- the most valuable context is all contained in your screen
+
 
 ## get started
 
