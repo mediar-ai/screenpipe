@@ -195,26 +195,36 @@ pub async fn capture_all_visible_windows(
 ) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
     let mut all_captured_images = Vec::new();
 
-    // Execute the window capture on the current thread
-    let windows = tokio::task::spawn_blocking(Window::all).await??;
+    // Get windows and immediately extract the data we need
+    let windows_data = tokio::task::spawn_blocking(|| {
+        Window::all().map(|windows| {
+            windows
+                .into_iter()
+                .map(|window| {
+                    (
+                        window.app_name().to_string(),
+                        window.title().to_string(),
+                        window.is_focused(),
+                        window,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    })
+    .await??;
 
-    if windows.is_empty() {
+    if windows_data.is_empty() {
         return Err(Box::new(CaptureError::NoWindows));
     }
 
-    for window in windows {
+    for (app_name, window_name, is_focused, window) in windows_data {
         let is_valid = is_valid_window(&window, monitor, window_filters, capture_unfocused_windows);
 
         if !is_valid {
             continue;
         }
 
-        // Store these before moving window
-        let app_name = window.app_name().to_string();
-        let window_name = window.title().to_string();
-        let is_focused = window.is_focused();
-
-        // Now we can move window
+        // Capture image in blocking context
         match tokio::task::spawn_blocking(move || window.capture_image()).await? {
             Ok(buffer) => {
                 let image = DynamicImage::ImageRgba8(
