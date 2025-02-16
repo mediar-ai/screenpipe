@@ -90,8 +90,8 @@ interface TransformedMessage {
 
 export async function POST(req: Request) {
   try {
-    const { message, sessionId, userAgent } = await req.json()
-    console.log('received message request:', { sessionId, messageLength: message.length })
+    const { message, sessionId, userAgent, type } = await req.json()
+    console.log('received message request:', { sessionId, messageLength: message.length, type })
     
     // Get or create chat session
     let session = await getChatSession(sessionId)
@@ -110,24 +110,31 @@ export async function POST(req: Request) {
       console.log('created thread and session:', { threadId: thread.id, sessionId })
     }
 
+    // Format message based on type
+    const messageContent = type === 'system' 
+      ? `System: ${message}\n\nContext: ${userAgent}`
+      : `User: ${message}\n\nContext: ${userAgent}`
+
     // Send message to thread
     console.log('sending message to thread:', session.threadId)
     const discordMsg = await discordRequest(`/channels/${session.threadId}/messages`, {
       method: 'POST',
       body: JSON.stringify({
-        content: `User: ${message}\n\nContext: ${userAgent}`
+        content: messageContent
       })
     })
     
-    // Update session with new message
-    await updateChatSession(sessionId, {
-      messages: [...session.messages, {
-        id: discordMsg.id,
-        content: message,
-        fromUser: true,
-        timestamp: new Date().toISOString()
-      }]
-    })
+    // Don't store system messages in chat history
+    if (type !== 'system') {
+      await updateChatSession(sessionId, {
+        messages: [...session.messages, {
+          id: discordMsg.id,
+          content: message,
+          fromUser: true,
+          timestamp: new Date().toISOString()
+        }]
+      })
+    }
     
     return NextResponse.json({ success: true })
   } catch (error) {
