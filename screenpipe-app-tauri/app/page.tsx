@@ -24,7 +24,7 @@ import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 export default function Home() {
-  const { settings, updateSettings, loadUser } = useSettings();
+  const { settings, updateSettings, loadUser, reloadStore } = useSettings();
   const { setActiveProfile } = useProfiles();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
@@ -213,6 +213,17 @@ export default function Home() {
 
     checkScreenPermissionRestart();
   }, [setShowOnboarding]);
+
+  useEffect(() => {
+    const unlisten = listen("cli-login", async (event) => {
+      console.log("received cli-login event:", event);
+      await reloadStore();
+    });
+
+    return () => {
+      unlisten.then((unlistenFn) => unlistenFn());
+    };
+  }, []);
 
   return (
     <div className="flex flex-col items-center flex-1">

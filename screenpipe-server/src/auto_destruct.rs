@@ -67,6 +67,8 @@ pub async fn watch_pid(pid: u32) -> bool {
             let pid_alive = String::from_utf8_lossy(&pid_output.stdout).contains(&pid.to_string());
             let app_alive = !String::from_utf8_lossy(&app_output.stdout).is_empty();
 
+            info!("pid alive: {}, app alive: {}", pid_alive, app_alive);
+
             if !pid_alive || !app_alive {
                 return true;
             }

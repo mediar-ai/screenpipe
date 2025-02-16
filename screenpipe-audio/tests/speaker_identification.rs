@@ -37,7 +37,7 @@ mod tests {
                     .ok_or_else(|| anyhow::anyhow!("Invalid embedding model path"))
                     .unwrap(),
             )
-            .unwrap(),
+            .unwrap()
         ));
         let embedding_manager =
             screenpipe_audio::pyannote::identify::EmbeddingManager::new(usize::MAX);
@@ -76,7 +76,7 @@ mod tests {
             16000,
             &segmentation_model_path,
             embedding_extractor,
-            Arc::new(Mutex::new(embedding_manager)),
+            embedding_manager.clone(),
         )
         .unwrap()
         .collect::<Vec<_>>();

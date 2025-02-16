@@ -4,14 +4,10 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
-use std::time::Duration;
-use tokio::time;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::{Monitor, Window, XCapError};
+use xcap::{Window, XCapError};
 
-#[cfg(not(target_os = "macos"))]
-use xcap::{Monitor, Window, XCapError};
+use crate::monitor::SafeMonitor;
 
 #[derive(Debug)]
 enum CaptureError {
@@ -193,37 +189,43 @@ impl WindowFilters {
 }
 
 pub async fn capture_all_visible_windows(
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     window_filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
     let mut all_captured_images = Vec::new();
 
-    let windows = retry_with_backoff(
-        || {
-            let windows = Window::all()?;
-            if windows.is_empty() {
-                Err(CaptureError::NoWindows)
-            } else {
-                Ok(windows)
-            }
-        },
-        3,
-        Duration::from_millis(500),
-    )
-    .await?;
+    // Get windows and immediately extract the data we need
+    let windows_data = tokio::task::spawn_blocking(|| {
+        Window::all().map(|windows| {
+            windows
+                .into_iter()
+                .map(|window| {
+                    (
+                        window.app_name().to_string(),
+                        window.title().to_string(),
+                        window.is_focused(),
+                        window,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    })
+    .await??;
 
-    for window in &windows {
-        let is_valid = is_valid_window(window, monitor, window_filters, capture_unfocused_windows);
+    if windows_data.is_empty() {
+        return Err(Box::new(CaptureError::NoWindows));
+    }
+
+    for (app_name, window_name, is_focused, window) in windows_data {
+        let is_valid = is_valid_window(&window, monitor, window_filters, capture_unfocused_windows);
 
         if !is_valid {
             continue;
         }
 
-        let app_name = window.app_name();
-        let window_name = window.title();
-
-        match window.capture_image() {
+        // Capture image in blocking context
+        match tokio::task::spawn_blocking(move || window.capture_image()).await? {
             Ok(buffer) => {
                 let image = DynamicImage::ImageRgba8(
                     image::ImageBuffer::from_raw(
@@ -236,15 +238,15 @@ pub async fn capture_all_visible_windows(
 
                 all_captured_images.push(CapturedWindow {
                     image,
-                    app_name: app_name.to_string(),
-                    window_name: window_name.to_string(),
-                    is_focused: is_valid,
+                    app_name,
+                    window_name,
+                    is_focused,
                 });
             }
             Err(e) => error!(
                 "Failed to capture image for window {} on monitor {}: {}",
                 window_name,
-                monitor.name(),
+                monitor.inner().await.name(),
                 e
             ),
         }
@@ -255,17 +257,12 @@ pub async fn capture_all_visible_windows(
 
 pub fn is_valid_window(
     window: &Window,
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> bool {
     if !capture_unfocused_windows {
-        // Early returns for simple checks
-        #[cfg(target_os = "macos")]
         let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
-
-        #[cfg(not(target_os = "macos"))]
-        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
 
         if !is_focused {
             return false;
@@ -281,35 +278,4 @@ pub fn is_valid_window(
     }
 
     filters.is_valid(app_name, title)
-}
-
-async fn retry_with_backoff<F, T, E>(
-    mut f: F,
-    max_retries: u32,
-    initial_delay: Duration,
-) -> Result<T, E>
-where
-    F: FnMut() -> Result<T, E>,
-    E: Error + 'static,
-{
-    let mut delay = initial_delay;
-    for attempt in 1..=max_retries {
-        // info!("Attempt {} to execute function", attempt);
-        match f() {
-            Ok(result) => {
-                // info!("Function executed successfully on attempt {}", attempt);
-                return Ok(result);
-            }
-            Err(e) => {
-                if attempt == max_retries {
-                    error!("All {} attempts failed. Last error: {}", max_retries, e);
-                    return Err(e);
-                }
-                // warn!("Attempt {} failed: {}. Retrying in {:?}", attempt, e, delay);
-                time::sleep(delay).await;
-                delay *= 2;
-            }
-        }
-    }
-    unreachable!()
 }

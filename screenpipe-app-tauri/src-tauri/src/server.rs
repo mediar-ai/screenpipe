@@ -264,10 +264,10 @@ async fn handle_auth(
 
         info!("saving auth data: {:?}", auth_data);
 
-        store.set("auth_data", serde_json::to_value(Some(auth_data)).unwrap());
+        store.set("user", serde_json::to_value(Some(auth_data)).unwrap());
     } else {
         store.set(
-            "auth_data",
+            "user",
             serde_json::to_value::<Option<AuthData>>(None).unwrap(),
         );
     }
@@ -279,6 +279,8 @@ async fn handle_auth(
             "failed to save auth data".to_string(),
         ));
     }
+
+    state.app_handle.emit("cli-login", ()).unwrap();
 
     Ok(Json(ApiResponse {
         success: true,

@@ -6,9 +6,8 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use screenpipe_core::AudioDevice;
-    use screenpipe_core::AudioDeviceType;
-    use screenpipe_core::DeviceManager;
+    use lru::LruCache;
+    use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;
@@ -18,8 +17,10 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -32,7 +33,6 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            device_manager: Arc::new(DeviceManager::default()),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -42,7 +42,9 @@ mod tests {
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
             ui_monitoring_enabled: false,
-            frame_image_cache: None,
+            frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(100).unwrap(),
+            )))),
         });
 
         let router = create_router();
@@ -67,7 +69,7 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -81,7 +83,7 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test2".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -203,7 +205,7 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -216,7 +218,7 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test2".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -352,7 +354,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // FIX ME
     async fn test_search_with_time_constraints() {
         let (_, state) = setup_test_app().await;
         let db = &state.db;
@@ -397,7 +398,7 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -532,7 +533,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(audio_count, 1); // TODO fail here ?
+        assert_eq!(audio_count, 1);
     }
 
     #[tokio::test]
@@ -655,16 +656,11 @@ mod tests {
     async fn test_recent_tasks_no_bleeding_production_db() {
         // Get home directory safely
         let home = std::env::var("HOME").expect("HOME environment variable not set");
-        let source_db_path = format!("{}/.screenpipe/db.sqlite", home);
+        let db_path = format!("{}/.screenpipe/db.sqlite", home);
 
-        // Create temporary directory and copy database
-        let temp_dir = tempfile::tempdir().unwrap();
-        let temp_db_path = temp_dir.path().join("temp_db.sqlite");
-        std::fs::copy(&source_db_path, &temp_db_path).unwrap();
-
-        // Open temporary database copy
+        // Open database in read-only mode for safety
         let db = Arc::new(
-            DatabaseManager::new(&format!("sqlite:{}", temp_db_path.display()))
+            DatabaseManager::new(&format!("sqlite:{}?mode=ro", db_path))
                 .await
                 .unwrap(),
         );
