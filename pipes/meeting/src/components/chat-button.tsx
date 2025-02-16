@@ -391,7 +391,7 @@ export function ChatButton() {
               className="absolute -top-2 -right-2 flex items-center gap-1 bg-black/80 rounded-full px-2 py-0.5"
             >
               <div className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-xs text-white font-medium">LIVE</span>
+              <span className="text-xs text-white font-medium">online</span>
             </motion.div>
           </div>
         )}
