@@ -222,19 +222,19 @@ async fn main() -> anyhow::Result<()> {
                         OutputFormat::Json => println!(
                             "{}",
                             serde_json::to_string_pretty(&json!({
-                                "data": futures::future::join_all(monitors.iter().map(|m| async move {
+                                "data": monitors.iter().map(|m| {
                                     json!({
                                         "id": m.id(),
-                                        "name": m.inner().await.name()
+                                        "name": m.name()
                                     })
-                                })).await,
+                                }).collect::<Vec<_>>(),
                                 "success": true
                             }))?
                         ),
                         OutputFormat::Text => {
                             println!("available monitors:");
                             for monitor in monitors.iter() {
-                                println!("  {}. {:?}", monitor.id(), monitor.inner().await.name());
+                                println!("  {}. {:?}", monitor.id(), monitor.name());
                             }
                         }
                     }
@@ -624,7 +624,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (audio_devices_tx, _) = broadcast::channel(100);
 
-    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
+    let _realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,

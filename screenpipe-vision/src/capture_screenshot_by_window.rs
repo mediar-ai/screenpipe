@@ -196,59 +196,51 @@ pub async fn capture_all_visible_windows(
     let mut all_captured_images = Vec::new();
 
     // Get windows and immediately extract the data we need
-    let windows_data = tokio::task::spawn_blocking(|| {
-        Window::all().map(|windows| {
-            windows
-                .into_iter()
-                .map(|window| {
-                    (
-                        window.app_name().to_string(),
-                        window.title().to_string(),
-                        window.is_focused(),
-                        window,
-                    )
-                })
-                .collect::<Vec<_>>()
+    let windows_data = Window::all()?
+        .into_iter()
+        .filter_map(|window| {
+            // Extract all necessary data from the window while in the main thread
+            let app_name = window.app_name().to_string();
+            let title = window.title().to_string();
+            let is_focused = window.is_focused();
+            
+            // Capture image immediately while we have access to the window
+            match window.capture_image() {
+                Ok(buffer) => Some((app_name, title, is_focused, buffer)),
+                Err(_) => None,
+            }
         })
-    })
-    .await??;
+        .collect::<Vec<_>>();
 
     if windows_data.is_empty() {
         return Err(Box::new(CaptureError::NoWindows));
     }
 
-    for (app_name, window_name, is_focused, window) in windows_data {
-        let is_valid = is_valid_window(&window, monitor, window_filters, capture_unfocused_windows);
+    // Process the captured data
+    for (app_name, window_name, is_focused, buffer) in windows_data {
+        // Convert to DynamicImage
+        let image = DynamicImage::ImageRgba8(
+            image::ImageBuffer::from_raw(
+                buffer.width(),
+                buffer.height(),
+                buffer.into_raw(),
+            )
+            .unwrap(),
+        );
 
-        if !is_valid {
-            continue;
-        }
+        // Apply filters
+        let is_valid = !SKIP_APPS.contains(app_name.as_str()) 
+            && !SKIP_TITLES.contains(window_name.as_str())
+            && (!capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
+            && window_filters.is_valid(&app_name, &window_name);
 
-        // Capture image in blocking context
-        match tokio::task::spawn_blocking(move || window.capture_image()).await? {
-            Ok(buffer) => {
-                let image = DynamicImage::ImageRgba8(
-                    image::ImageBuffer::from_raw(
-                        buffer.width(),
-                        buffer.height(),
-                        buffer.into_raw(),
-                    )
-                    .unwrap(),
-                );
-
-                all_captured_images.push(CapturedWindow {
-                    image,
-                    app_name,
-                    window_name,
-                    is_focused,
-                });
-            }
-            Err(e) => error!(
-                "Failed to capture image for window {} on monitor {}: {}",
+        if is_valid {
+            all_captured_images.push(CapturedWindow {
+                image,
+                app_name,
                 window_name,
-                monitor.inner().await.name(),
-                e
-            ),
+                is_focused,
+            });
         }
     }
 
