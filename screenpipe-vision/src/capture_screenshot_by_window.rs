@@ -7,7 +7,9 @@ use std::fmt;
 use std::time::Duration;
 use tokio::time;
 
-use xcap::{Monitor, Window, XCapError};
+use xcap::{Window, XCapError};
+
+use crate::monitor::SafeMonitor;
 
 #[derive(Debug)]
 enum CaptureError {
@@ -189,7 +191,7 @@ impl WindowFilters {
 }
 
 pub async fn capture_all_visible_windows(
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     window_filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
@@ -240,7 +242,7 @@ pub async fn capture_all_visible_windows(
             Err(e) => error!(
                 "Failed to capture image for window {} on monitor {}: {}",
                 window_name,
-                monitor.name(),
+                monitor.inner().await.name(),
                 e
             ),
         }
@@ -251,7 +253,7 @@ pub async fn capture_all_visible_windows(
 
 pub fn is_valid_window(
     window: &Window,
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> bool {

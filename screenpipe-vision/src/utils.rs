@@ -3,13 +3,12 @@ use crate::capture_screenshot_by_window::{
 };
 use crate::core::MaxAverageFrame;
 use crate::custom_ocr::CustomOcrConfig;
+use crate::monitor::SafeMonitor;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error, warn};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
-
-use xcap::Monitor;
 
 #[derive(Clone, Debug, Default)]
 pub enum OcrEngine {
@@ -47,17 +46,16 @@ pub fn compare_images_ssim(image1: &DynamicImage, image2: &DynamicImage) -> f64 
 }
 
 pub async fn capture_screenshot(
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     window_filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> Result<(DynamicImage, Vec<CapturedWindow>, u64, Duration), anyhow::Error> {
     // info!("Starting screenshot capture for monitor: {:?}", monitor);
     let capture_start = Instant::now();
-    let buffer = monitor.capture_image().map_err(|e| {
+    let image = monitor.capture_image().await.map_err(|e| {
         error!("Failed to capture monitor image: {}", e);
         anyhow::anyhow!("Monitor capture failed")
     })?;
-    let image = DynamicImage::ImageRgba8(buffer);
     let image_hash = calculate_hash(&image);
     let capture_duration = capture_start.elapsed();
 

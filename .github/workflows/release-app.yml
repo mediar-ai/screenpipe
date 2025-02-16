@@ -134,11 +134,11 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin --features metal,beta"
+            args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
             tauri-args: "--target aarch64-apple-darwin --config src-tauri/tauri.conf.prod.json"
           - platform: "macos-latest"
-            args: "--target x86_64-apple-darwin --features metal,beta"
+            args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
             tauri-args: "--target x86_64-apple-darwin --config src-tauri/tauri.conf.prod.json"
           - platform: ${{ needs.check_runner.outputs.runner_type }}

@@ -147,10 +147,6 @@ pub struct Cli {
     #[arg(short = 'r', long)]
     pub realtime_audio_device: Vec<String>,
 
-    /// List available audio devices
-    #[arg(long)]
-    pub list_audio_devices: bool,
-
     /// Data directory. Default to $HOME/.screenpipe
     #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
@@ -189,10 +185,6 @@ pub struct Cli {
         arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::Tesseract)
     )]
     pub ocr_engine: CliOcrEngine,
-
-    /// List available monitors, then you can use --monitor-id to select one (with the ID)
-    #[arg(long)]
-    pub list_monitors: bool,
 
     /// Monitor IDs to use, these will be used to select the monitors to record
     #[arg(short = 'm', long)]
@@ -292,6 +284,16 @@ impl Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Audio device management commands
+    Audio {
+        #[command(subcommand)]
+        subcommand: AudioCommand,
+    },
+    /// Vision device management commands
+    Vision {
+        #[command(subcommand)]
+        subcommand: VisionCommand,
+    },
     /// Pipe management commands
     Pipe {
         #[command(subcommand)]
@@ -342,6 +344,25 @@ pub enum Command {
     },
 }
 
+#[derive(Subcommand)]
+pub enum AudioCommand {
+    /// List available audio devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum VisionCommand {
+    /// List available monitors and vision devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+    },
+}
 
 #[derive(Subcommand)]
 pub enum PipeCommand {

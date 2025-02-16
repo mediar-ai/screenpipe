@@ -11,7 +11,10 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    cli::{
+        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
+        PipeCommand, VisionCommand,
+    },
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -37,16 +40,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-
-fn print_devices(devices: &[AudioDevice]) {
-    println!("available audio devices:");
-    for device in devices.iter() {
-        println!("  {}", device);
-    }
-
-    #[cfg(target_os = "macos")]
-    println!("on macos, it's not intuitive but output devices are your displays");
-}
 
 const DISPLAY: &str = r"
                                             _          
@@ -199,6 +192,55 @@ async fn main() -> anyhow::Result<()> {
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
     if let Some(ref command) = cli.command {
         match command {
+            Command::Audio { subcommand } => match subcommand {
+                AudioCommand::List { output } => {
+                    let devices = list_audio_devices().await?;
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": devices,
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("available audio devices:");
+                            for device in devices.iter() {
+                                println!("  {}", device);
+                            }
+                            #[cfg(target_os = "macos")]
+                            println!("note: on macos, output devices are your displays");
+                        }
+                    }
+                    return Ok(());
+                }
+            },
+            Command::Vision { subcommand } => match subcommand {
+                VisionCommand::List { output } => {
+                    let monitors = list_monitors().await;
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": futures::future::join_all(monitors.iter().map(|m| async move {
+                                    json!({
+                                        "id": m.id(),
+                                        "name": m.inner().await.name()
+                                    })
+                                })).await,
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("available monitors:");
+                            for monitor in monitors.iter() {
+                                println!("  {}. {:?}", monitor.id(), monitor.inner().await.name());
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
             Command::Completions { shell } => {
                 cli.handle_completions(shell.clone())?;
                 return Ok(());
@@ -346,6 +388,8 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
+    let mut devices_status = HashMap::new();
+
     if !is_local_ipv4_port_free(cli.port) {
         error!(
             "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
@@ -354,19 +398,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let all_audio_devices = list_audio_devices().await?;
-    let mut devices_status = HashMap::new();
-    if cli.list_audio_devices {
-        print_devices(&all_audio_devices);
-        return Ok(());
-    }
+
     let all_monitors = list_monitors().await;
-    if cli.list_monitors {
-        println!("available monitors:");
-        for monitor in all_monitors.iter() {
-            println!("  {}. {:?}", monitor.id(), monitor);
-        }
-        return Ok(());
-    }
 
     let mut audio_devices = Vec::new();
 

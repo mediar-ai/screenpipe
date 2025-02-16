@@ -33,7 +33,9 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType};
+use screenpipe_audio::{
+    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+};
 use tracing::{debug, error, info};
 
 use screenpipe_vision::monitor::list_monitors;
@@ -68,7 +70,6 @@ use screenpipe_audio::LAST_AUDIO_CAPTURE;
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
-
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -463,16 +464,17 @@ pub(crate) async fn api_list_audio_devices(
 pub async fn api_list_monitors(
 ) -> Result<JsonResponse<Vec<MonitorInfo>>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let monitors = list_monitors().await;
-    let monitor_info: Vec<MonitorInfo> = monitors
-        .into_iter()
-        .map(|monitor| MonitorInfo {
+    let monitor_info = futures::future::join_all(monitors.into_iter().map(|monitor| async move {
+        let monitor = monitor.inner().await;
+        MonitorInfo {
             id: monitor.id(),
             name: monitor.name().to_string(),
             width: monitor.width(),
             height: monitor.height(),
             is_default: monitor.is_primary(),
-        })
-        .collect();
+        }
+    }))
+    .await;
 
     if monitor_info.is_empty() {
         Err((
