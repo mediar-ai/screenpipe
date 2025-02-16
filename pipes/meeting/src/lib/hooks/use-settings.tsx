@@ -3,6 +3,7 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from "react";
 import type { Settings } from "@screenpipe/browser";
 import { getDefaultSettings } from "@screenpipe/browser";
+import { isEqual } from 'lodash'
 
 interface SettingsContextType {
   settings: Settings;
@@ -42,12 +43,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         const response = await fetch("/api/settings");
         if (!response.ok) {
           console.log("using default settings (web mode)")
-          setSettings(initialSettings); // Use initialSettings instead of defaultSettings
-          return;
+          return; // Don't update if using defaults
         }
         const data = await response.json();
-        // Preserve our hardcoded token when merging settings
-        setSettings({ 
+        
+        // Only update settings if they've actually changed
+        const newSettings = { 
           ...initialSettings, 
           ...data,
           aiProviderType: "screenpipe-cloud",
@@ -61,10 +62,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           },
           aiUrl: initialSettings.aiUrl,
           aiModel: initialSettings.aiModel
-        });
+        };
+
+        // Only update if settings actually changed
+        setSettings(prev => isEqual(prev, newSettings) ? prev : newSettings);
       } catch (err) {
         console.log("failed to load settings, using defaults:", err)
-        setSettings(initialSettings); // Use initialSettings instead of defaultSettings
       } finally {
         setLoading(false);
       }
