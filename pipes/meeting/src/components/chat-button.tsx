@@ -52,6 +52,9 @@ export function ChatButton() {
   const [isWebsocketConnected, setIsWebsocketConnected] = React.useState(false)
   const [wsError, setWsError] = React.useState<string | null>(null)
   
+  // Add loading state
+  const [isLoadingWebcam, setIsLoadingWebcam] = React.useState(true)
+  
   // Generate unique session ID when chat opens
   React.useEffect(() => {
     if (showChat) {
@@ -122,6 +125,7 @@ export function ChatButton() {
     }
 
     let ws: WebSocket | null = null
+    setIsLoadingWebcam(true) // Reset loading state when connecting
     
     try {
       ws = new WebSocket(`wss://${wsHost}`)
@@ -139,6 +143,7 @@ export function ChatButton() {
             if (!imgRef.current) return resolve(null)
             imgRef.current.onload = () => {
               URL.revokeObjectURL(url)
+              setIsLoadingWebcam(false) // Disable loading once first frame arrives
               resolve(null)
             }
             imgRef.current.src = url
@@ -216,9 +221,24 @@ export function ChatButton() {
     }
   }
 
-  const closeChat = () => {
+  const closeChat = async () => {
     setShowWebcam(false)
-    console.log('closing founder chat')
+    console.log('closing founder chat webcam')
+    
+    try {
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: '👋 User closed founder chat webcam',
+          sessionId: crypto.randomUUID(),
+          userAgent: window.navigator.userAgent,
+          isSystem: true
+        })
+      })
+    } catch (error) {
+      console.error('failed to notify about webcam close:', error)
+    }
   }
   
   const sendMessage = async (text: string) => {
@@ -257,6 +277,31 @@ export function ChatButton() {
     }
   }
   
+  const openChat = async () => {
+    try {
+      // Send notification first
+      await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: '👋 User opened founder chat',
+          sessionId: crypto.randomUUID(),
+          userAgent: window.navigator.userAgent,
+          isSystem: true
+        })
+      })
+      
+      // Then show chat and webcam
+      setShowChat(true)
+      setShowWebcam(true)
+    } catch (error) {
+      console.error('failed to notify about chat open:', error)
+      // Still open chat even if notification fails
+      setShowChat(true)
+      setShowWebcam(true)
+    }
+  }
+  
   // Don't render button in Tauri environment
   // const isTauri = typeof window !== 'undefined' && (
   //   window.__TAURI__ || 
@@ -289,16 +334,26 @@ export function ChatButton() {
               onClick={closeChat}
               size="sm"
               variant="outline" 
-              className="absolute top-2 right-2 h-6 w-6 rounded-full p-0 bg-black/80 text-white hover:bg-black/90"
+              className="absolute top-2 right-2 h-6 w-6 rounded-full p-0 bg-black/80 text-white hover:bg-black/90 z-10"
             >
               ×
             </Button>
+            
+            {isLoadingWebcam && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/90 rounded-lg z-0">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  <span className="text-xs text-white/80">connecting...</span>
+                </div>
+              </div>
+            )}
+            
             <img 
               ref={imgRef}
               className="w-48 h-36 rounded-lg shadow-lg object-cover"
               alt="founder webcam"
             />
-            <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/80 rounded-full px-2 py-1 group cursor-help">
+            <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/80 rounded-full px-2 py-1 group cursor-help z-10">
               <VideoOff className="h-3 w-3 text-white" />
               <MicOff className="h-3 w-3 text-white" />
               <span className="absolute left-0 -bottom-8 hidden group-hover:block text-xs text-white bg-black/80 px-2 py-1 rounded-full whitespace-nowrap">
@@ -314,10 +369,7 @@ export function ChatButton() {
               whileTap={{ scale: 0.95 }}
             >
               <Button
-                onClick={() => {
-                  setShowChat(true)
-                  setShowWebcam(true)
-                }}
+                onClick={openChat}
                 size="sm"
                 variant="outline"
                 className="rounded-full shadow-lg bg-black text-white hover:bg-black/90 hover:text-white"
@@ -352,7 +404,22 @@ export function ChatButton() {
             <div className="flex justify-between items-center mb-3">
               <span className="text-white text-sm">Chat with Matt</span>
               <Button
-                onClick={() => setShowChat(false)}
+                onClick={() => {
+                  setShowChat(false)
+                  // Send notification when closing chat
+                  fetch('/api/messages', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                      message: '👋 User closed founder chat',
+                      sessionId: crypto.randomUUID(),
+                      userAgent: window.navigator.userAgent,
+                      isSystem: true
+                    })
+                  }).catch(error => {
+                    console.error('failed to notify about chat close:', error)
+                  })
+                }}
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 rounded-full p-0 text-white hover:bg-white/20"
