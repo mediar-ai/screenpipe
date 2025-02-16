@@ -2,9 +2,8 @@ import { format } from "date-fns";
 import { useEffect, useRef, useMemo, useState } from "react";
 import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
-import { cn, queryParser } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { throttle } from "lodash";
-import { useQueryStates } from "nuqs";
 import { Loader2 } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
@@ -19,7 +18,6 @@ export const ImageGrid = ({
 	const [{ start_time, end_time, query }] = useKeywordParams();
 	const { searchResults, isSearching } = useKeywordSearchStore();
 
-	// Add a function to check scroll position and fetch more results
 	const checkScrollAndFetch = useMemo(
 		() =>
 			throttle(() => {
@@ -27,14 +25,12 @@ export const ImageGrid = ({
 				if (!container) return;
 				if (searchResults.length === 0) return;
 
-				const scrollPosition = container.scrollLeft;
+				const scrollPosition = Math.abs(container.scrollLeft);
 				const scrollWidth = container.scrollWidth;
 				const clientWidth = container.clientWidth;
 
-				// Calculate scroll percentage (0 to 1)
-				const scrollPercentage = (scrollPosition + clientWidth) / scrollWidth;
+				const scrollPercentage = scrollPosition / (scrollWidth - clientWidth);
 
-				// If we've scrolled past 60%, fetch more results
 				if (scrollPercentage > 0.6) {
 					searchKeywords(query ?? "", {
 						offset: searchResult.length,
@@ -47,7 +43,6 @@ export const ImageGrid = ({
 		[searchResult.length, searchKeywords, query, start_time, end_time],
 	);
 
-	// Add scroll event listener
 	useEffect(() => {
 		const container = containerRef.current;
 		if (container) {
@@ -69,15 +64,13 @@ export const ImageGrid = ({
 						e.target instanceof Node &&
 						document.getElementById("ai-response")?.contains(e.target);
 
-					if (isWithinAiPanel) {
-						return;
-					}
+					if (isWithinAiPanel) return;
 
 					e.preventDefault();
 					e.stopPropagation();
 
 					const scrollIntensity = Math.abs(e.deltaY);
-					const direction = -Math.sign(e.deltaY);
+					const direction = Math.sign(e.deltaY);
 					const limitIndexChange = 5;
 
 					const indexChange =
@@ -98,8 +91,9 @@ export const ImageGrid = ({
 				16,
 				{ leading: true, trailing: false },
 			),
-		[searchResult.length, currentResultIndex],
+		[searchResult.length, currentResultIndex, setCurrentResultIndex],
 	);
+
 	useEffect(() => {
 		const preventScroll = (e: WheelEvent) => {
 			e.preventDefault();
@@ -133,73 +127,83 @@ export const ImageGrid = ({
 
 		if (!currentElement) return;
 
-		currentElement.scrollIntoView({
-			behavior: "smooth",
-			block: "nearest",
-			inline: "center",
+		requestAnimationFrame(() => {
+			const containerWidth = container.clientWidth;
+			const elementWidth = (currentElement as HTMLElement).offsetWidth;
+			const elementOffsetRight =
+				container.scrollWidth -
+				((currentElement as HTMLElement).offsetLeft + elementWidth);
+
+			const centerPosition =
+				elementOffsetRight - (containerWidth - elementWidth) / 2;
+
+			container.scrollTo({
+				left: container.scrollWidth - containerWidth - centerPosition,
+				behavior: "smooth",
+			});
 		});
-	}, [currentResultIndex, searchResult.length]);
+	}, [currentResultIndex, searchResult]);
 
 	return (
-		<div
-			ref={containerRef}
-			className={cn(
-				"flex gap-4 w-full h-60 p-8 overflow-x-auto overflow-y-hidden select-none scrollbar-hide",
-				{
-					"px-[calc(100%/2)]": searchResults.length,
-				},
-			)}
-		>
-			{searchResult.map((result, index) => (
-				<div
-					key={result.frame_id}
-					data-timestamp={result.timestamp}
-					className={cn(
-						"group flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 hover:shadow-md snap-center cursor-pointer",
-						currentResultIndex === index && "ring-2 ring-blue-500",
-					)}
-					onClick={() => setCurrentResultIndex(index)}
-				>
-					<div className="aspect-video overflow-hidden flex-1">
-						<img
-							src={`http://localhost:3030/frames/${result.frame_id}`}
-							alt={`${result.app_name} - ${result.window_name}`}
-							className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-							loading="lazy"
-							draggable={false}
-						/>
-					</div>
-					<div className="p-3 space-y-1">
-						<p className="text-sm font-medium text-neutral-900 truncate">
-							{result.app_name}
-						</p>
-						<p className="text-xs text-neutral-500 truncate">
-							{result.window_name}
-						</p>
-						<p className="text-xs text-neutral-400">
-							{format(new Date(result.timestamp), "PPp")}
-						</p>
+		<div className="relative w-full h-full">
+			<div
+				ref={containerRef}
+				className="sticky inset-0 w-full overflow-x-auto overflow-y-hidden select-none scrollbar-hide"
+				style={{ direction: "rtl" }}
+			>
+				<div className="inline-flex min-w-full px-[50vw]">
+					<div className="flex flex-row gap-4 p-8" style={{ direction: "rtl" }}>
+						{searchResult.map((result, index) => (
+							<div
+								key={result.frame_id}
+								data-timestamp={result.timestamp}
+								className={cn(
+									"group flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm transition-all duration-300 hover:shadow-md snap-center cursor-pointer",
+									currentResultIndex === index && "ring-2 ring-blue-500",
+								)}
+								onClick={() => setCurrentResultIndex(index)}
+							>
+								<div className="aspect-video overflow-hidden flex-1">
+									<img
+										src={`http://localhost:3030/frames/${result.frame_id}`}
+										alt={`${result.app_name} - ${result.window_name}`}
+										className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+										loading="lazy"
+										draggable={false}
+									/>
+								</div>
+								<div className="p-3 space-y-1">
+									<p className="text-sm font-medium text-neutral-900 truncate">
+										{result.app_name}
+									</p>
+									<p className="text-xs text-neutral-500 truncate">
+										{result.window_name}
+									</p>
+									<p className="text-xs text-neutral-400">
+										{format(new Date(result.timestamp), "PPp")}
+									</p>
+								</div>
+							</div>
+						))}
 					</div>
 				</div>
-			))}
-			{isSearching ? (
-				<div className="h-64 w-96 mx-auto flex items-center justify-center">
-					<div className="flex flex-col items-center gap-2">
-						<Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+				{isSearching ? (
+					<div className="h-64 w-96 mx-auto flex items-center justify-center">
+						<div className="flex flex-col items-center gap-2">
+							<Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+							<p className="text-sm text-gray-500">
+								Searching through your history...
+							</p>
+						</div>
+					</div>
+				) : searchResults.length === 0 && query ? (
+					<div className="h-64 w-96 flex mx-auto items-center justify-center">
 						<p className="text-sm text-gray-500">
-							Searching through your history...
+							No results found for "{query}"
 						</p>
 					</div>
-				</div>
-			) : searchResults.length === 0 && query ? (
-				<div className="h-64 w-96 flex mx-auto items-center justify-center">
-					<p className="text-sm text-gray-500">
-						No results found for "{query}"
-					</p>
-				</div>
-			) : (
-				<></>
-			)}
+				) : null}
+			</div>
 		</div>
 	);
 };
@@ -282,35 +286,33 @@ export const MainImage = () => {
 				className="h-full w-full object-contain max-h-[50vh]"
 				draggable={false}
 			/>
-			{
-				//     imageRect && (
-				//	<div className="absolute inset-0 pointer-events-none">
-				//		{currentFrame.text_positions?.map(
-				//			(position: TextPosition, index: number) => {
-				//				const coords = convertVisionCoordinates(
-				//					position.bounds,
-				//					imageRect.height,
-				//				);
-				//				if (!coords) return null;
-				//
-				//				return (
-				//					<div
-				//						key={index}
-				//						className="absolute bg-yellow-300/40 border border-yellow-500/50"
-				//						style={{
-				//							left: `${coords.left}px`,
-				//							top: `${coords.top}px`,
-				//							width: `${coords.width}px`,
-				//							height: `${coords.height}px`,
-				//						}}
-				//						title={position.text}
-				//					/>
-				//				);
-				//			},
-				//         )}
-				//	</div>
-				//)
-			}
+			{imageRect && (
+				<div className="absolute inset-0 pointer-events-none">
+					{currentFrame.text_positions?.map(
+						(position: TextPosition, index: number) => {
+							const coords = convertVisionCoordinates(
+								position.bounds,
+								imageRect.height,
+							);
+							if (!coords) return null;
+
+							return (
+								<div
+									key={index}
+									className="absolute bg-yellow-300/40 border border-yellow-500/50"
+									style={{
+										left: `${coords.left}px`,
+										top: `${coords.top}px`,
+										width: `${coords.width}px`,
+										height: `${coords.height}px`,
+									}}
+									title={position.text}
+								/>
+							);
+						},
+					)}
+				</div>
+			)}
 		</div>
 	);
 };
