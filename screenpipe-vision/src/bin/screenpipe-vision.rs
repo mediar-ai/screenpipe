@@ -1,12 +1,14 @@
 use clap::Parser;
 use screenpipe_core::Language;
 use screenpipe_vision::{
-    capture_screenshot_by_window::WindowFilters, continuous_capture, monitor::get_default_monitor,
+    capture_screenshot_by_window::WindowFilters, 
+    continuous_capture,
     OcrEngine,
 };
 use std::{sync::Arc, time::Duration};
 use tokio::sync::mpsc::channel;
 use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
+use xcap::Monitor;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -32,25 +34,31 @@ async fn main() {
     let cli = Cli::parse();
 
     let (result_tx, mut result_rx) = channel(512);
-
     let languages = cli.language;
 
-    let monitor = get_default_monitor().await;
-    let id = monitor.id();
-    let window_filters = WindowFilters::new(&[], &[]);
+    // Get monitor ID before spawning the task
+    let monitor_id = tokio::task::spawn_blocking(|| {
+        Monitor::all()
+            .unwrap()
+            .first()
+            .unwrap()
+            .id()
+    })
+    .await
+    .unwrap();
 
-    tokio::spawn(async move {
-        continuous_capture(
-            result_tx,
-            Duration::from_secs_f32(1.0 / cli.fps),
-            OcrEngine::AppleNative,
-            id,
-            Arc::new(window_filters),
-            languages.clone(),
-            false,
-        )
-        .await
-    });
+    let window_filters = Arc::new(WindowFilters::new(&[], &[]));
+
+    continuous_capture(
+        result_tx,
+        Duration::from_secs_f32(1.0 / cli.fps),
+        OcrEngine::AppleNative,
+        monitor_id,
+        window_filters,
+        languages.clone(),
+        false,
+    )
+    .await;
 
     // Example: Process results for 10 seconds, then pause for 5 seconds, then stop
     loop {
