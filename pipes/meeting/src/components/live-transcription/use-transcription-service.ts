@@ -26,58 +26,42 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
     const mountedRef = useRef(true)
     const isTransitioningRef = useRef(false)
 
+    // Add ref to track if we want to keep recording
+    const keepRecordingRef = useRef(false)
+
     // Handle cleanup on unmount
     useEffect(() => {
+        console.log('transcription service mounted')
+        mountedRef.current = true
         return () => {
+            console.log('transcription service unmounting, keepRecording:', keepRecordingRef.current)
             mountedRef.current = false
-            if (modeRef.current === 'browser') {
-                stopTranscriptionBrowser()
-            } else {
-                stopTranscriptionScreenpipe()
+            // Only cleanup if we don't want to keep recording
+            if (!keepRecordingRef.current) {
+                isTransitioningRef.current = true
+                if (modeRef.current === 'browser') {
+                    stopTranscriptionBrowser()
+                } else {
+                    stopTranscriptionScreenpipe()
+                }
+                GLOBAL_STATE.isInitialized = false
+                console.log('transcription service cleanup complete')
             }
-            GLOBAL_STATE.isInitialized = false
-            console.log('transcription service unmounted, cleaned up global state')
         }
     }, [stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
-    // Handle visibility change
+    // Remove or modify the visibilitychange listener to keep transcription active
     useEffect(() => {
         const handleVisibilityChange = () => {
-            console.log('visibility changed:', {
-                state: document.visibilityState,
-                isInitialized: GLOBAL_STATE.isInitialized,
-                currentMode: modeRef.current
-            })
-
-            if (document.visibilityState === 'visible') {
-                // Only restart if we were previously initialized but not currently running
-                if (!GLOBAL_STATE.isInitialized && isRecording) {
-                    console.log('restarting transcription after visibility change')
-                    if (modeRef.current === 'browser') {
-                        startTranscriptionBrowser()
-                    } else {
-                        startTranscriptionScreenpipe()
-                    }
-                    GLOBAL_STATE.isInitialized = true
-                }
-            } else {
-                // Clean up when hidden
-                if (GLOBAL_STATE.isInitialized) {
-                    console.log('stopping transcription on visibility change')
-                    if (modeRef.current === 'browser') {
-                        stopTranscriptionBrowser()
-                    } else {
-                        stopTranscriptionScreenpipe()
-                    }
-                    GLOBAL_STATE.isInitialized = false
-                }
-            }
+            console.log('visibility changed, keeping transcription active:', {
+                state: document.visibilityState
+            });
+            // No action is taken on tab hidden/visible
         }
 
-        document.addEventListener('visibilitychange', handleVisibilityChange)
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, 
-        stopTranscriptionBrowser, stopTranscriptionScreenpipe])
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, []);
 
     // Initialize transcription on mount only if not already initialized
     useEffect(() => {
@@ -122,17 +106,24 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
     }, [effectiveMode, startTranscriptionBrowser, startTranscriptionScreenpipe, 
         stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
-    const toggleRecording = useCallback(() => {
-        const newState = !isRecording
-        console.log('toggling recording:', {
-            newState,
-            currentMode: modeRef.current,
-            isInitialized: GLOBAL_STATE.isInitialized
+    const toggleRecording = useCallback(async (newState?: boolean) => {
+        const nextState = newState ?? !isRecording
+        console.log('toggling recording:', { 
+            current: isRecording, 
+            next: nextState,
+            mode: effectiveMode
         })
 
-        if (newState) {
+        // Set keepRecording based on whether we're starting or stopping
+        keepRecordingRef.current = nextState
+
+        if (nextState) {
             if (!GLOBAL_STATE.isInitialized) {
-                if (modeRef.current === 'browser') {
+                console.log('initializing transcription:', {
+                    mode: effectiveMode
+                })
+                modeRef.current = effectiveMode
+                if (effectiveMode === 'browser') {
                     startTranscriptionBrowser()
                 } else {
                     startTranscriptionScreenpipe()
@@ -149,7 +140,7 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
                 GLOBAL_STATE.isInitialized = false
             }
         }
-        setIsRecording(newState)
+        setIsRecording(nextState)
     }, [isRecording, startTranscriptionBrowser, startTranscriptionScreenpipe, 
         stopTranscriptionBrowser, stopTranscriptionScreenpipe])
 
