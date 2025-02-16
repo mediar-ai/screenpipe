@@ -46,7 +46,6 @@ serde = "1.0.200"
 xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
 
 once_cell = { workspace = true }
-chrono = { version = "0.4.39", features = ["serde"] }
 base64 = "0.22.1"
 
 reqwest = { workspace = true }

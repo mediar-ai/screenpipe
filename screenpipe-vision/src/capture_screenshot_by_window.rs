@@ -4,8 +4,6 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
-use std::time::Duration;
-use tokio::time;
 
 use xcap::{Window, XCapError};
 
@@ -197,31 +195,27 @@ pub async fn capture_all_visible_windows(
 ) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
     let mut all_captured_images = Vec::new();
 
-    let windows = retry_with_backoff(
-        || {
-            let windows = Window::all()?;
-            if windows.is_empty() {
-                Err(CaptureError::NoWindows)
-            } else {
-                Ok(windows)
-            }
-        },
-        3,
-        Duration::from_millis(500),
-    )
-    .await?;
+    // Execute the window capture on the current thread
+    let windows = tokio::task::spawn_blocking(Window::all).await??;
 
-    for window in &windows {
-        let is_valid = is_valid_window(window, monitor, window_filters, capture_unfocused_windows);
+    if windows.is_empty() {
+        return Err(Box::new(CaptureError::NoWindows));
+    }
+
+    for window in windows {
+        let is_valid = is_valid_window(&window, monitor, window_filters, capture_unfocused_windows);
 
         if !is_valid {
             continue;
         }
 
-        let app_name = window.app_name();
-        let window_name = window.title();
+        // Store these before moving window
+        let app_name = window.app_name().to_string();
+        let window_name = window.title().to_string();
+        let is_focused = window.is_focused();
 
-        match window.capture_image() {
+        // Now we can move window
+        match tokio::task::spawn_blocking(move || window.capture_image()).await? {
             Ok(buffer) => {
                 let image = DynamicImage::ImageRgba8(
                     image::ImageBuffer::from_raw(
@@ -234,9 +228,9 @@ pub async fn capture_all_visible_windows(
 
                 all_captured_images.push(CapturedWindow {
                     image,
-                    app_name: app_name.to_string(),
-                    window_name: window_name.to_string(),
-                    is_focused: window.is_focused(),
+                    app_name,
+                    window_name,
+                    is_focused,
                 });
             }
             Err(e) => error!(
@@ -274,35 +268,4 @@ pub fn is_valid_window(
     }
 
     filters.is_valid(app_name, title)
-}
-
-async fn retry_with_backoff<F, T, E>(
-    mut f: F,
-    max_retries: u32,
-    initial_delay: Duration,
-) -> Result<T, E>
-where
-    F: FnMut() -> Result<T, E>,
-    E: Error + 'static,
-{
-    let mut delay = initial_delay;
-    for attempt in 1..=max_retries {
-        // info!("Attempt {} to execute function", attempt);
-        match f() {
-            Ok(result) => {
-                // info!("Function executed successfully on attempt {}", attempt);
-                return Ok(result);
-            }
-            Err(e) => {
-                if attempt == max_retries {
-                    error!("All {} attempts failed. Last error: {}", max_retries, e);
-                    return Err(e);
-                }
-                // warn!("Attempt {} failed: {}. Retrying in {:?}", attempt, e, delay);
-                time::sleep(delay).await;
-                delay *= 2;
-            }
-        }
-    }
-    unreachable!()
 }

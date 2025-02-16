@@ -156,7 +156,7 @@ path = "src/bin/screenpipe-server.rs"
 
 
 [package.metadata.cargo-machete]
-ignored = ["url"]
+ignored = ["url", "console-subscriber"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }
