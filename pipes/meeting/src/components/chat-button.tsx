@@ -42,8 +42,7 @@ export function ChatButton() {
   // Update sound hook with base64 beep
   const [playMessageSound] = useSound('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH6PhYR0TkZXcoyarKyvoJKYmY+AmH2FmZSHhpGVkZJ/gYGEkIqEhoyNlZmJb4J6c4iFjqCfkH+GhYKJg4OMiYSFjYyLkZSPlI2Oi4mJiouJhIeKi4qFhomA', { 
     volume: 0.5,
-    // Add error handling
-    onplayerror: (id, err) => {
+    onplayerror: (id: number, err: Error) => {
       console.log('failed to play sound:', err)
     }
   })
