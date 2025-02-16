@@ -54,11 +54,22 @@
 
 <p align="center">
    
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/26b2986d-01aa-43de-acf0-375a72752894" />
-<img width="1312" alt="Screenshot 2024-12-16 at 2 39 32 PM" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
 
-<img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/08f1d8bd-803e-4cc5-8b8f-ad33bfebfd7e" />
+<img width="1312" alt="Screenshot 2025-02-15 at 7 51 18 PM" src="https://github.com/user-attachments/assets/5a9f29ce-69ae-463f-b338-186b8cdb2d12" />
+
+![image](https://github.com/user-attachments/assets/dec2e07c-b3d5-46dd-9f36-c0c26a82c9fb)
+
+
+
+https://github.com/user-attachments/assets/628c6c01-a580-4b21-bce9-3e7b186914a4
+
+
+
+
+https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
+
+
+
 
 
 
@@ -73,7 +84,6 @@
 - [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
 - [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] we released Apple & Windows Native OCR.
-- [2024/07] 🎁 screenpipe won Friends (the AI necklace) hackathon at AGI House (integrations soon)
 - [2024/07] **we just launched the desktop app! [Download now!](https://screenpi.pe)**
 
 ---
