@@ -24,6 +24,10 @@ const nextConfig: NextConfig = {
                 "wss://*.posthog.com " +
                 "https://*.posthog.com " +
                 "http://localhost:* " +
+                "ws://localhost:* " +
+                "wss://*.ngrok-free.app " +
+                "ws://*.ngrok-free.app " +
+                "https://*.ngrok-free.app " +
                 "ipc:* " +
                 "ipc://localhost/* " +
                 "https://ai-proxy.i-f9f.workers.dev " +
