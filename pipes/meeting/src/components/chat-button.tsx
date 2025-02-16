@@ -10,9 +10,17 @@ declare global {
 }
 
 import { Button } from "@/components/ui/button"
-import { MessageCircle } from "lucide-react"
+import { MessageCircle, VideoOff, MicOff } from "lucide-react"
 import { motion } from "framer-motion"
 import React from "react"
+import { useSound } from 'use-sound'
+
+type Message = {
+  id: string
+  content: string
+  fromUser: boolean
+  timestamp: string
+}
 
 export function ChatButton() {
   const supportLink = "https://wa.me/16507961489"
@@ -20,36 +28,171 @@ export function ChatButton() {
   // Add ref for the image element
   const imgRef = React.useRef<HTMLImageElement>(null)
   
+  // Add state to control webcam visibility
+  const [showWebcam, setShowWebcam] = React.useState(false)
+  const [messages, setMessages] = React.useState<Message[]>([])
+  const [message, setMessage] = React.useState('')
+  const [isSending, setIsSending] = React.useState(false)
+  const [showChat, setShowChat] = React.useState(false)
+  const [sessionId, setSessionId] = React.useState('')
+  
+  // Add ref for message container
+  const messagesEndRef = React.useRef<HTMLDivElement>(null)
+  
+  // Update sound hook with base64 beep
+  const [playMessageSound] = useSound('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH6PhYR0TkZXcoyarKyvoJKYmY+AmH2FmZSHhpGVkZJ/gYGEkIqEhoyNlZmJb4J6c4iFjqCfkH+GhYKJg4OMiYSFjYyLkZSPlI2Oi4mJiouJhIeKi4qFhomA', { 
+    volume: 0.5,
+    // Add error handling
+    onplayerror: (id, err) => {
+      console.log('failed to play sound:', err)
+    }
+  })
+  const lastMessageCountRef = React.useRef(messages.length)
+  
+  // Add state for WebSocket connection status
+  const [isWebsocketConnected, setIsWebsocketConnected] = React.useState(false)
+  const [wsError, setWsError] = React.useState<string | null>(null)
+  
+  // Generate unique session ID when chat opens
   React.useEffect(() => {
-    const wsHost = '8c0c-2601-645-c600-3270-7cf2-1da9-cc03-33b7.ngrok-free.app'
-    const ws = new WebSocket(`wss://${wsHost}`)
+    if (showChat) {
+      setSessionId(crypto.randomUUID())
+    }
+  }, [showChat])
+  
+  // Poll for new messages
+  React.useEffect(() => {
+    if (!showChat || !sessionId) return
     
-    console.log('attempting connection to:', `wss://${wsHost}`)
+    const seenMessageIds = new Set<string>()
+    const M13V_ID = '974812370868269098' // Your actual Discord ID from the response
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/messages?sessionId=${sessionId}`)
+        const data = await response.json()
+        console.log('received raw data:', data)
+        
+        if (data.messages) {
+          const transformedMessages = data.messages.map((msg: any) => {
+            if (!msg) {
+              console.log('skipping null message')
+              return null
+            }
 
-    ws.onmessage = (event) => {
-      console.log('received frame:', event.data.length, 'bytes')
-      if (imgRef.current) {
-        const blob = new Blob([event.data], { type: 'image/jpeg' })
-        imgRef.current.src = URL.createObjectURL(blob)
+            console.log('processing message:', msg)
+            
+            // Skip already seen messages
+            if (seenMessageIds.has(msg.id)) {
+              console.log('skipping duplicate message:', msg.id)
+              return null
+            }
+            
+            seenMessageIds.add(msg.id)
+            
+            return {
+              id: msg.id,
+              content: msg.content || '[empty message]',
+              // Messages from m13v_ (974812370868269098) are not fromUser
+              fromUser: msg.author?.id !== M13V_ID,
+              timestamp: msg.timestamp
+            }
+          }).filter(Boolean)
+
+          console.log('transformed messages:', transformedMessages)
+          
+          if (transformedMessages.length > 0) {
+            setMessages(prev => [...prev, ...transformedMessages])
+          }
+        }
+      } catch (error) {
+        console.error('failed to fetch messages:', error)
+      }
+    }, 3000)
+    
+    return () => clearInterval(pollInterval)
+  }, [showChat, sessionId])
+
+  React.useEffect(() => {
+    if (!showWebcam) return
+
+    const wsHost = process.env.NEXT_PUBLIC_FOUNDER_WEBSOCKET_URL
+    if (!wsHost) {
+      setShowWebcam(false)
+      return
+    }
+
+    let ws: WebSocket | null = null
+    
+    try {
+      ws = new WebSocket(`wss://${wsHost}`)
+      let processingFrame = false
+
+      ws.onmessage = async (event) => {
+        if (processingFrame || !event.data || !imgRef.current) return
+        processingFrame = true
+        
+        try {
+          const blob = new Blob([event.data], { type: 'image/jpeg' })
+          const url = URL.createObjectURL(blob)
+          
+          await new Promise((resolve) => {
+            if (!imgRef.current) return resolve(null)
+            imgRef.current.onload = () => {
+              URL.revokeObjectURL(url)
+              resolve(null)
+            }
+            imgRef.current.src = url
+          })
+        } finally {
+          processingFrame = false
+        }
+      }
+
+      ws.onopen = () => setIsWebsocketConnected(true)
+      ws.onclose = () => {
+        setIsWebsocketConnected(false)
+        setShowWebcam(false)
+      }
+      ws.onerror = () => {
+        setIsWebsocketConnected(false)
+        setShowWebcam(false)
+      }
+    } catch {
+      setShowWebcam(false)
+    }
+
+    return () => {
+      if (ws) {
+        ws.close()
       }
     }
-
-    ws.onerror = (error) => {
-      console.error('websocket error:', error)
-    }
-
-    ws.onopen = () => {
-      console.log('websocket connected successfully')
-    }
-
-    ws.onclose = (event) => {
-      console.log('websocket closed:', event.code, event.reason)
-    }
-
-    return () => ws.close()
-  }, [])
+  }, [showWebcam])
   
+  // Play sound when new messages arrive
+  React.useEffect(() => {
+    if (messages.length > lastMessageCountRef.current) {
+      // Only play for messages from Matt (not from user)
+      const lastMessage = messages[messages.length - 1]
+      if (!lastMessage.fromUser) {
+        playMessageSound()
+      }
+    }
+    lastMessageCountRef.current = messages.length
+  }, [messages, playMessageSound])
+
+  // Add scroll to bottom function
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+  
+  // Scroll when messages update
+  React.useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
   const openLink = async () => {
+    setShowWebcam(true) // Show webcam on click
     try {
       console.log('opening link:', supportLink)
       
@@ -71,6 +214,47 @@ export function ChatButton() {
       }
     } catch (error) {
       console.error('failed to open link:', error)
+    }
+  }
+
+  const closeChat = () => {
+    setShowWebcam(false)
+    console.log('closing founder chat')
+  }
+  
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || !sessionId) return
+    
+    setIsSending(true)
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: text,
+          sessionId,
+          userAgent: window.navigator.userAgent,
+        })
+      })
+      
+      const data = await response.json()
+      console.log('message response:', data)
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+      
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(),
+        content: text,
+        fromUser: true,
+        timestamp: new Date().toISOString()
+      }])
+      setMessage('')
+    } catch (error) {
+      console.error('failed to send message:', error)
+    } finally {
+      setIsSending(false)
     }
   }
   
@@ -95,19 +279,134 @@ export function ChatButton() {
       whileHover={{ scale: 1.05 }}
     >
       <div className="flex flex-col items-end gap-2">
-        <img 
-          ref={imgRef}
-          className="w-48 h-36 rounded-lg shadow-lg object-cover"
-          alt="founder webcam"
-        />
-        <Button
-          onClick={openLink}
-          size="sm"
-          className="rounded-full shadow-lg"
-        >
-          <MessageCircle className="mr-1 h-4 w-4" />
-          talk to founder
-        </Button>
+        {showWebcam && isWebsocketConnected && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="relative"
+          >
+            <Button
+              onClick={closeChat}
+              size="sm"
+              variant="outline" 
+              className="absolute top-2 right-2 h-6 w-6 rounded-full p-0 bg-black/80 text-white hover:bg-black/90"
+            >
+              ×
+            </Button>
+            <img 
+              ref={imgRef}
+              className="w-48 h-36 rounded-lg shadow-lg object-cover"
+              alt="founder webcam"
+            />
+            <div className="absolute top-2 left-2 flex items-center gap-2 bg-black/80 rounded-full px-2 py-1 group cursor-help">
+              <VideoOff className="h-3 w-3 text-white" />
+              <MicOff className="h-3 w-3 text-white" />
+              <span className="absolute left-0 -bottom-8 hidden group-hover:block text-xs text-white bg-black/80 px-2 py-1 rounded-full whitespace-nowrap">
+                viewing only - your camera is off
+              </span>
+            </div>
+          </motion.div>
+        )}
+        {!showChat && (
+          <div className="relative">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Button
+                onClick={() => {
+                  setShowChat(true)
+                  setShowWebcam(true)
+                }}
+                size="sm"
+                variant="outline"
+                className="rounded-full shadow-lg bg-black text-white hover:bg-black/90 hover:text-white"
+              >
+                <MessageCircle className="mr-1 h-4 w-4" />
+                talk to founder
+              </Button>
+            </motion.div>
+            <motion.div
+              animate={{
+                scale: [1, 1.2, 1],
+                opacity: [1, 0.7, 1]
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              className="absolute -top-2 -right-2 flex items-center gap-1 bg-black/80 rounded-full px-2 py-0.5"
+            >
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="text-xs text-white font-medium">LIVE</span>
+            </motion.div>
+          </div>
+        )}
+        {showChat && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-black/90 p-4 rounded-lg shadow-lg w-80 max-h-[500px] flex flex-col"
+          >
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-white text-sm">Chat with Matt</span>
+              <Button
+                onClick={() => setShowChat(false)}
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 rounded-full p-0 text-white hover:bg-white/20"
+              >
+                ×
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto mb-3 space-y-2">
+              {messages.map(msg => (
+                <div 
+                  key={msg.id}
+                  className={`flex ${msg.fromUser ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`
+                    max-w-[80%] rounded-lg px-3 py-2 text-sm
+                    ${msg.fromUser 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-white/10 text-white'}
+                  `}>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+              {/* Add div ref for scrolling */}
+              <div ref={messagesEndRef} />
+            </div>
+            
+            <div className="flex gap-2">
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="flex-1 bg-white/10 text-white rounded p-2 text-sm"
+                placeholder="Type your message..."
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    sendMessage(message)
+                  }
+                }}
+              />
+              <Button
+                onClick={() => sendMessage(message)}
+                disabled={isSending || !message.trim()}
+                size="sm"
+                className="bg-white text-black hover:bg-white/90"
+              >
+                Send
+              </Button>
+            </div>
+          </motion.div>
+        )}
       </div>
     </motion.div>
   )
