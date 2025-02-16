@@ -18,7 +18,7 @@
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
    <p align="center">AI app store powered by 24/7 desktop history</p>
-   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic, keyboard recording</p>
+   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic recording</p>
 </p>
 
 <!-- Slogan -->
