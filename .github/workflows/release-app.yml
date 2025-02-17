@@ -149,7 +149,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Enable Git long paths on Windows
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           Write-Host "Enabling git core.longpaths..."
@@ -191,20 +191,20 @@ jobs:
           node-version: 20
 
       - name: Set up Rust
-        if: matrix.tauri-args != '--target x86_64-pc-windows-msvc'
+        if: !contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Install Rust
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
 
       - name: setup rust path
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
@@ -290,17 +290,17 @@ jobs:
         run: bun install
 
       - name: Install vcpkg
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install 7zip
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           $7zipUrl = "https://7-zip.org/a/7z2301-x64.exe"
@@ -314,7 +314,7 @@ jobs:
           & "C:\Program Files\7-Zip\7z.exe" i
 
       - name: Cache LLVM
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         id: cache-llvm
         uses: actions/cache@v4
         with:
@@ -324,7 +324,7 @@ jobs:
           key: llvm-10.0-windows-${{ hashFiles('.github/workflows/release-app.yml') }}
 
       - name: Install LLVM and Clang
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' && steps.cache-llvm.outputs.cache-hit != 'true'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && steps.cache-llvm.outputs.cache-hit != 'true'
         shell: powershell
         run: |
           # Create LLVM directory with proper permissions
@@ -356,7 +356,7 @@ jobs:
           Write-Host "LLVM installation completed successfully"
 
       - name: Install wget on Windows
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         env:
           SKIP_SCREENPIPE_SETUP: true
@@ -404,7 +404,7 @@ jobs:
           cargo build --release -p screenpipe-server ${{ matrix.args }}
 
       - name: Build CLI on Windows
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         env:
           CARGO_PROFILE_RELEASE_STRIP: symbols
@@ -419,12 +419,12 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - uses: actions/setup-python@v5
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         with:
           python-version: '3.13'
 
       - name: Copy library for MKL
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           # Create target directory
@@ -455,7 +455,7 @@ jobs:
           Remove-Item -Path $temp_dir -Recurse -Force
 
       - name: Copy library for vcredist
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           # Create target directory
@@ -495,18 +495,18 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'thin' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '2' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '16' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+          CARGO_INCREMENTAL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'true' || 'false' }}
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
-          RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'false' || 'true' }}
+          RUSTFLAGS: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
-          KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
+          KNF_STATIC_CRT: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
@@ -514,7 +514,7 @@ jobs:
           retryAttempts: 3
 
       - name: Download and Run CLI Manually (Windows)
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         env:
           CN_API_KEY: ${{ secrets.CN_API_KEY }}
@@ -619,7 +619,7 @@ jobs:
           node-version: 20
 
       - name: Install Rust
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         run: |
           Invoke-WebRequest https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-gnu/rustup-init.exe -OutFile rustup-init.exe
           .\rustup-init.exe -y
@@ -667,17 +667,17 @@ jobs:
         run: bun install
 
       - name: Install vcpkg
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: "7adc2e4d49e8d0efc07a369079faa6bc3dbb90f3"
 
       - name: Set up MSVC
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install 7zip
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           $7zipUrl = "https://7-zip.org/a/7z2301-x64.exe"
@@ -691,7 +691,7 @@ jobs:
           & "C:\Program Files\7-Zip\7z.exe" i
 
       - name: Cache LLVM
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         id: cache-llvm
         uses: actions/cache@v4
         with:
@@ -701,7 +701,7 @@ jobs:
           key: llvm-10.0-windows-${{ hashFiles('.github/workflows/release-app.yml') }}
 
       - name: Install LLVM and Clang
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc' && steps.cache-llvm.outputs.cache-hit != 'true'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && steps.cache-llvm.outputs.cache-hit != 'true'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "10.0"
@@ -714,7 +714,7 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Build CLI on Windows
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: pwsh
         env:
           CARGO_PROFILE_RELEASE_STRIP: symbols
@@ -729,13 +729,13 @@ jobs:
         working-directory: ./screenpipe-app-tauri
 
       - name: Install pip
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Copy library for MKL
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: pwsh
         run: |
           # Install pip first
@@ -749,7 +749,7 @@ jobs:
           ls -Path ./omp -Recurse -Filter *.dll | cp -Destination screenpipe-app-tauri/src-tauri/mkl/
 
       - name: Copy library for vcredist
-        if: matrix.tauri-args == '--target x86_64-pc-windows-msvc'
+        if: contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc')
         shell: powershell
         run: |
           # Create target directory
@@ -792,18 +792,18 @@ jobs:
           # https://tauri.app/v1/guides/distribution/sign-macos
           CI: true
           # Optimize for build speed on Windows
-          CARGO_PROFILE_RELEASE_LTO: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'thin' || 'false' }}
-          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '2' || '3' }}
-          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '16' || '16' }}
+          CARGO_PROFILE_RELEASE_LTO: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'thin' || 'false' }}
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '2' || '3' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '16' || '16' }}
           # Enable incremental compilation for Windows
-          CARGO_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'true' || 'false' }}
+          CARGO_INCREMENTAL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'true' || 'false' }}
           # Windows specific optimizations (only applied when building for Windows)
-          CARGO_PROFILE_RELEASE_STRIP: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'symbols' || 'none' }}
-          CARGO_PROFILE_RELEASE_PANIC: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'abort' || 'unwind' }}
-          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && 'false' || 'true' }}
-          RUSTFLAGS: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
+          CARGO_PROFILE_RELEASE_STRIP: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'symbols' || 'none' }}
+          CARGO_PROFILE_RELEASE_PANIC: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'abort' || 'unwind' }}
+          CARGO_PROFILE_RELEASE_INCREMENTAL: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && 'false' || 'true' }}
+          RUSTFLAGS: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '-C target-feature=+crt-static -C link-arg=/LTCG' || '' }}
           VCPKG_STATIC_LINKAGE: "true"
-          KNF_STATIC_CRT: ${{ matrix.tauri-args == '--target x86_64-pc-windows-msvc' && '1' || '' }}
+          KNF_STATIC_CRT: ${{ contains(matrix.tauri-args, '--target x86_64-pc-windows-msvc') && '1' || '' }}
         with:
           args: ${{ matrix.tauri-args }}
           projectPath: "./screenpipe-app-tauri"
