@@ -116,7 +116,7 @@ while ($true) {{
                 Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
                 Write-Host "Stopped process: $processId"
             }} catch {{
-                Write-Host "Process $child_pid already terminated"
+                Write-Host "Process $processId already terminated"
             }}
         }}
         Stop-Process -Id $PID -Force       
