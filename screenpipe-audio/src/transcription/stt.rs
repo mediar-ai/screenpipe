@@ -1,15 +1,18 @@
-use crate::audio_processing::write_audio_to_file;
-use crate::deepgram::transcribe_with_deepgram;
-use crate::pyannote::models::{get_or_download_model, PyannoteModel};
-use crate::pyannote::segment::SpeechSegment;
-pub use crate::segments::prepare_segments;
-use crate::{
-    pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
-    vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
-    whisper::{process_with_whisper, WhisperModel},
-    AudioDevice, AudioTranscriptionEngine,
-};
-use crate::{resample, DeviceControl};
+use crate::core::device::{AudioDevice, DeviceControl};
+use crate::core::engine::AudioTranscriptionEngine;
+use crate::speaker::embedding::EmbeddingExtractor;
+use crate::speaker::embedding_manager::EmbeddingManager;
+use crate::speaker::models::{get_or_download_model, PyannoteModel};
+use crate::speaker::prepare_segments;
+use crate::speaker::segment::SpeechSegment;
+use crate::transcription::deepgram::batch::transcribe_with_deepgram;
+use crate::transcription::whisper::batch::process_with_whisper;
+use crate::transcription::whisper::model::WhisperModel;
+use crate::utils::audio::resample;
+use crate::utils::ffmpeg::write_audio_to_file;
+use crate::vad::silero::SileroVad;
+use crate::vad::webrtc::WebRtcVad;
+use crate::vad::{VadEngine, VadEngineEnum, VadSensitivity};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
 use dashmap::DashMap;
@@ -25,6 +28,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
+
+use super::{AudioInput, TranscriptionResult};
 
 pub fn stt_sync(
     audio: &[f32],
@@ -70,8 +75,8 @@ pub async fn stt(
 
     debug!("Loading mel filters");
     let mel_bytes = match model.config().num_mel_bins {
-        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
-        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
+        80 => include_bytes!("../../models/whisper/melfilters.bytes").as_slice(),
+        128 => include_bytes!("../../models/whisper/melfilters128.bytes").as_slice(),
         nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
     };
     let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
@@ -102,26 +107,6 @@ pub async fn stt(
     };
 
     transcription
-}
-
-#[derive(Debug, Clone)]
-pub struct AudioInput {
-    pub data: Arc<Vec<f32>>,
-    pub sample_rate: u32,
-    pub channels: u16,
-    pub device: Arc<AudioDevice>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TranscriptionResult {
-    pub path: String,
-    pub input: AudioInput,
-    pub speaker_embedding: Vec<f32>,
-    pub transcription: Option<String>,
-    pub timestamp: u64,
-    pub error: Option<String>,
-    pub start_time: f64,
-    pub end_time: f64,
 }
 
 impl TranscriptionResult {

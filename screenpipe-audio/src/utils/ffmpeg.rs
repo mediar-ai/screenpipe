@@ -1,12 +1,17 @@
+use anyhow::Result;
+use chrono::Utc;
+// TODO: switch all log imports to tracing
+use log::debug;
 use screenpipe_core::find_ffmpeg_path;
 use std::io::Write;
+use std::path::PathBuf;
 use std::{
     path::Path,
     process::{Command, Stdio},
 };
-use tracing::{debug, error};
+use tracing::error;
 
-pub fn encode_single_audio(
+fn encode_single_audio(
     data: &[u8],
     sample_rate: u32,
     channels: u16,
@@ -72,4 +77,31 @@ pub fn encode_single_audio(
     }
 
     Ok(())
+}
+
+pub fn write_audio_to_file(
+    audio: &[f32],
+    sample_rate: u32,
+    output_path: &PathBuf,
+    device: &str,
+    skip_encoding: bool,
+) -> Result<String> {
+    let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let sanitized_device_name = device.replace(['/', '\\'], "_");
+    let file_path = PathBuf::from(output_path)
+        .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
+        .to_str()
+        .expect("Failed to create valid path")
+        .to_string();
+    let file_path_clone = file_path.clone();
+    // Run FFmpeg in a separate task
+    if !skip_encoding {
+        encode_single_audio(
+            bytemuck::cast_slice(audio),
+            sample_rate,
+            1,
+            &PathBuf::from(file_path),
+        )?;
+    }
+    Ok(file_path_clone)
 }

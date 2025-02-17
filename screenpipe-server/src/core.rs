@@ -4,12 +4,12 @@ use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::future::join_all;
-use screenpipe_audio::vad_engine::VadSensitivity;
-use screenpipe_audio::{
-    create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
-    AudioInput, AudioTranscriptionEngine, DeviceControl, TranscriptionResult,
-};
-use screenpipe_audio::{start_realtime_recording, AudioStream};
+use screenpipe_audio::core::device::{AudioDevice, DeviceControl};
+use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+use screenpipe_audio::core::stream::AudioStream;
+use screenpipe_audio::core::{record_and_transcribe, start_realtime_recording};
+use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
+use screenpipe_audio::{create_whisper_channel, AudioInput, TranscriptionResult};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_events::{poll_meetings_events, send_event};

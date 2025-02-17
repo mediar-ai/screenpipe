@@ -3,7 +3,7 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
-    use screenpipe_audio::{AudioDevice, DeviceType};
+    use screenpipe_audio::core::device::{AudioDevice, DeviceType};
     use screenpipe_server::{
         db_types::{ContentType, Frame, SearchResult},
         DatabaseManager,

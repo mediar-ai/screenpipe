@@ -2,7 +2,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
-use screenpipe_audio::AudioDevice;
+use screenpipe_audio::core::device::AudioDevice;
 use screenpipe_server::{db_types::ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
@@ -17,17 +17,17 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, None, None, false)
+            .await
+            .unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
         db.insert_ocr_text(
             frame_id,
             &ocr_text,
             &text_json,
-            "test_app",
-            "test_window",
             Arc::new(OcrEngine::default()), // Assuming a default implementation
-            false,
         )
         .await
         .unwrap();
@@ -41,7 +41,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             "test_engine",
             &AudioDevice::new(
                 "test_device".to_string(),
-                screenpipe_audio::DeviceType::Input,
+                screenpipe_audio::core::device::DeviceType::Input,
             ),
             None,
             None,
@@ -78,6 +78,8 @@ fn bench_search(c: &mut Criterion) {
                                 content_type.clone(),
                                 100,
                                 0,
+                                None,
+                                None,
                                 None,
                                 None,
                                 None,

@@ -1,8 +1,6 @@
-use super::Segment;
-use crate::{
-    multilingual,
-    whisper::{Decoder, WhisperModel},
-};
+use super::decoder::{Decoder, Segment};
+use super::detect_language;
+use super::model::WhisperModel;
 use anyhow::Result;
 use candle::Tensor;
 use candle_transformers::models::whisper::audio;
@@ -42,12 +40,7 @@ pub fn process_with_whisper(
     )?;
 
     debug!("detecting language");
-    let language_token = Some(multilingual::detect_language(
-        model,
-        tokenizer,
-        &mel,
-        languages.clone(),
-    )?);
+    let language_token = Some(detect_language(model, tokenizer, &mel, languages.clone())?);
 
     debug!("initializing decoder");
     let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;

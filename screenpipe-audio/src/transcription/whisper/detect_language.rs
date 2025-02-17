@@ -1,4 +1,5 @@
-use crate::whisper::{token_id, Model};
+use super::decoder::token_id;
+use super::model::Model;
 use candle::IndexOp;
 use candle::{Result, Tensor, D};
 use candle_transformers::models::whisper::SOT_TOKEN;

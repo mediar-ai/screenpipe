@@ -1,4 +1,3 @@
-use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::Array2;
 use ort::Session;
@@ -11,7 +10,7 @@ pub struct EmbeddingExtractor {
 
 impl EmbeddingExtractor {
     pub fn new<P: AsRef<Path>>(model_path: P) -> Result<Self> {
-        let session = session::create_session(model_path.as_ref())?;
+        let session = super::create_session(model_path.as_ref())?;
         Ok(Self { session })
     }
     pub fn compute(&mut self, samples: &[f32]) -> Result<impl Iterator<Item = f32>> {

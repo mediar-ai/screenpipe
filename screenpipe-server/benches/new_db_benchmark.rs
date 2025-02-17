@@ -36,22 +36,11 @@ fn bench_insert_ocr_text(c: &mut Criterion) {
                 let text = black_box(i);
                 let text_json =
                     black_box(format!("{{\"text\": \"{}\"}}", text.replace("\"", "\\\"")));
-                let app_name = black_box("BenchmarkApp");
-                let window_name = black_box("BenchmarkWindow");
                 let ocr_engine = black_box(OcrEngine::AppleNative);
-                let focused = black_box(true);
 
-                db.insert_ocr_text(
-                    frame_id,
-                    text,
-                    &text_json,
-                    app_name,
-                    window_name,
-                    std::sync::Arc::new(ocr_engine),
-                    focused,
-                )
-                .await
-                .unwrap();
+                db.insert_ocr_text(frame_id, text, &text_json, std::sync::Arc::new(ocr_engine))
+                    .await
+                    .unwrap();
             })
         });
     }

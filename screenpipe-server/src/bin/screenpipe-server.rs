@@ -6,8 +6,12 @@ use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+    core::device::{
+        default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+        trigger_audio_permission, AudioDevice, DeviceControl,
+    },
+    transcription::whisper::model::WhisperModel,
+    vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
@@ -266,9 +270,6 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             Command::Setup {} => {
-                use screenpipe_audio::{
-                    trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel,
-                };
                 use screenpipe_vision::core::trigger_screen_capture_permission;
 
                 // Trigger audio permission request

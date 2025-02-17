@@ -6,7 +6,7 @@ use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
 
-use crate::deepgram::{CUSTOM_DEEPGRAM_API_TOKEN, DEEPGRAM_API_URL};
+use crate::transcription::deepgram::{CUSTOM_DEEPGRAM_API_TOKEN, DEEPGRAM_API_URL};
 
 pub async fn transcribe_with_deepgram(
     api_key: &str,

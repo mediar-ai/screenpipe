@@ -1,9 +1,8 @@
-use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
 
-use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
+use super::{embedding::EmbeddingExtractor, embedding_manager::EmbeddingManager};
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -114,7 +113,7 @@ impl SegmentIterator {
         embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
         embedding_manager: EmbeddingManager,
     ) -> Result<Self> {
-        let session = session::create_session(model_path.as_ref())?;
+        let session = super::create_session(model_path.as_ref())?;
         let window_size = (sample_rate * 10) as usize;
 
         let padded_samples = {

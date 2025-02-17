@@ -1,4 +1,4 @@
-use crate::whisper::Model;
+use super::model::Model;
 use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;

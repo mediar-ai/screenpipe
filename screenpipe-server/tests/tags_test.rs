@@ -5,7 +5,7 @@ use axum::{
 };
 use chrono::Utc;
 use lru::LruCache;
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_audio::core::device::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
 use std::{num::NonZeroUsize, path::PathBuf, sync::Arc};
