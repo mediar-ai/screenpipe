@@ -1,6 +1,5 @@
 use anyhow::Result;
 use log::{debug, error, info, warn};
-use screenpipe_events::send_event;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -14,9 +13,12 @@ use tokio::signal;
 use tokio::time::{sleep, timeout, Duration};
 use which::which;
 
+use crate::core::RealtimeVisionEvent;
 use crate::UIFrame;
 
-pub async fn run_ui() -> Result<()> {
+pub async fn run_ui(
+    realtime_vision_sender: Arc<tokio::sync::broadcast::Sender<RealtimeVisionEvent>>,
+) -> Result<()> {
     info!("starting ui monitoring service...");
 
     let binary_name = "ui_monitor";
@@ -131,7 +133,7 @@ pub async fn run_ui() -> Result<()> {
                 frame = UIFrame::read_from_pipe(&mut reader) => {
                     match frame {
                         Ok(frame) => {
-                            let _ = send_event("ui_frame", frame);
+                            let _ = realtime_vision_sender.send(RealtimeVisionEvent::Ui(frame));
                         }
                         Err(e) => {
                             if let Some(io_err) = e.downcast_ref::<io::Error>() {

@@ -78,7 +78,7 @@ fn request_av_permission(media_type: nokhwa_bindings_macos::AVMediaType) {
     };
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum OSPermissionStatus {
     // This platform does not require this permission

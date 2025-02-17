@@ -13,6 +13,8 @@ use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, error, info};
+use crate::permissions::OSPermissionStatus;
+use crate::permissions::do_permissions_check;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -379,9 +381,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-realtime-audio-transcription");
     }
 
-    if use_all_monitors {
-        args.push("--use-all-monitors");
-    }
+    // if use_all_monitors {
+    //     args.push("--use-all-monitors");
+    // }
 
     let disable_vision = store
         .get("disableVision")
@@ -513,45 +515,69 @@ impl SidecarManager {
         }
     }
 
+    pub fn assert_permissions(&mut self) -> Result<(), String> {
+         // check for permissions before spawning
+         let permissions = do_permissions_check(true);
+
+         if permissions.screen_recording != OSPermissionStatus::Granted {
+             return Err("Screen recording permission denied".to_string());
+         }
+         if permissions.microphone != OSPermissionStatus::Granted {
+             return Err("Microphone permission denied".to_string());
+         }
+         if permissions.camera != OSPermissionStatus::Granted {
+            return Err("Camera permission denied".to_string());
+        }
+
+        Ok(())
+    }
+
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
         self.update_settings(app).await?;
 
+        // check for permissions before spawning
+        #[cfg(target_os = "macos")]
+        {
+            self.assert_permissions()?;
+        }
+
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
-        self.last_restart = Instant::now();
-        debug!("last_restart: {:?}", self.last_restart);
+        // self.last_restart = Instant::now();
+        // info!("last restart: {:?}", self.last_restart);
 
-        // kill previous task if any
-        if let Some(task) = self.restart_task.take() {
-            task.abort();
-        }
+        // // kill previous task if any
+        // if let Some(task) = self.restart_task.take() {
+        //     task.abort();
+        // }
 
-        let restart_interval = self.restart_interval.clone();
-        // Add this function outside the SidecarManager impl
-        async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
-            let state = app_handle.state::<SidecarState>();
-            let mut manager = state.0.lock().await;
-            if let Some(manager) = manager.as_mut() {
-                manager.check_and_restart(app_handle).await
-            } else {
-                Ok(())
-            }
-        }
+        // let restart_interval = self.restart_interval.clone();
+        // info!("restart_interval: {:?}", restart_interval);
+        // // Add this function outside the SidecarManager impl
+        // async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
+        //     let state = app_handle.state::<SidecarState>();
+        //     let mut manager = state.0.lock().await;
+        //     if let Some(manager) = manager.as_mut() {
+        //         manager.check_and_restart(app_handle).await
+        //     } else {
+        //         Ok(())
+        //     }
+        // }
 
-        // In the spawn method
-        let app_handle = app.app_handle().clone();
-        self.restart_task = Some(tauri::async_runtime::spawn(async move {
-            loop {
-                let interval = *restart_interval.lock().await;
-                debug!("interval: {}", interval.as_secs());
-                if let Err(e) = check_and_restart_sidecar(&app_handle).await {
-                    error!("Failed to check and restart sidecar: {}", e);
-                }
-                sleep(Duration::from_secs(60)).await;
-            }
-        }));
+        // // In the spawn method
+        // let app_handle = app.app_handle().clone();
+        // self.restart_task = Some(tauri::async_runtime::spawn(async move {
+        //     loop {
+        //         let interval = *restart_interval.lock().await;
+        //         info!("interval: {}", interval.as_secs());
+        //         if let Err(e) = check_and_restart_sidecar(&app_handle).await {
+        //             error!("Failed to check and restart sidecar: {}", e);
+        //         }
+        //         sleep(Duration::from_secs(60)).await;
+        //     }
+        // }));
 
         Ok(())
     }
@@ -582,20 +608,42 @@ impl SidecarManager {
     pub async fn check_and_restart(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let interval = *self.restart_interval.lock().await;
         let dev_mode = *self.dev_mode.lock().await;
-        debug!("interval: {}", interval.as_secs());
-        debug!("last_restart: {:?}", self.last_restart);
-        debug!("elapsed: {:?}", self.last_restart.elapsed());
+        info!("interval: {}", interval.as_secs());
+        info!("last_restart: {:?}", self.last_restart);
+        info!("elapsed: {:?}", self.last_restart.elapsed());
+
         if interval.as_secs() > 0 && self.last_restart.elapsed() >= interval && !dev_mode {
-            debug!("Restarting sidecar due to restart interval");
+            info!("attempting to restart sidecar due to restart interval");
+            
+            // Safely kill the existing sidecar
             if let Some(child) = self.child.take() {
-                let _ = child.kill();
+                match child.kill() {
+                    Ok(_) => info!("successfully killed previous sidecar"),
+                    Err(e) => {
+                        error!("failed to kill previous sidecar: {}", e);
+                        // Continue anyway as the process might have already died
+                    }
+                }
             }
-            // sleep for 5 seconds
+
+            // Wait for process cleanup
             sleep(Duration::from_secs(5)).await;
-            let child = spawn_sidecar(app)?;
-            self.child = Some(child);
-            self.last_restart = Instant::now();
+
+            // Try to spawn new sidecar
+            match spawn_sidecar(app) {
+                Ok(new_child) => {
+                    info!("successfully spawned new sidecar");
+                    self.child = Some(new_child);
+                    self.last_restart = Instant::now();
+                }
+                Err(e) => {
+                    error!("failed to spawn new sidecar: {}", e);
+                    // Don't propagate error - let the app continue running
+                    // The next check interval will try again
+                }
+            }
         }
+        
         Ok(())
     }
 }

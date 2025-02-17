@@ -44,91 +44,95 @@ async function sendAuthData(authPayload: AuthPayload) {
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 
 export async function cliLogin() {
-    // create localhost server for our page to call back to
-    const server = http.createServer();
-    const { port } = await listen(server, 0, "127.0.0.1");
-    
-    logger.info(`server listening on http://127.0.0.1:${port}`);
+  // create localhost server for our page to call back to
+  const server = http.createServer();
+  const { port } = await listen(server, 0, "127.0.0.1");
 
-    // set up HTTP server that waits for a request containing an API key
-    const authPromise = new Promise<AuthPayload>((resolve, reject) => {
-        server.on("request", (req, res) => {
-        
-        // Set CORS headers for all responses
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  logger.info(`server listening on http://127.0.0.1:${port}`);
 
-        if (req.method === "OPTIONS") {
-            res.writeHead(200);
-            res.end();
-        } else if (req.method === "GET") {
-            const parsedUrl = url.parse(req.url as string, true);
-            const queryParams = parsedUrl.query;
-            
-            if (queryParams.cancelled) {
-                res.writeHead(200);
-                res.end("Cancelled");
-                reject(new UserCancellationError("Login process cancelled by user."));
-            } else {
-                res.writeHead(200);
-                res.end("Success");
-                
-                const authData = authPayload.parse(queryParams);
+  // set up HTTP server that waits for a request containing an API key
+  const authPromise = new Promise<AuthPayload>((resolve, reject) => {
+    server.on("request", (req, res) => {
+      // Set CORS headers for all responses
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization"
+      );
 
-                if (!authData) {
-                    reject(new Error("invalid response from server"));
-                }
+      if (req.method === "OPTIONS") {
+        res.writeHead(200);
+        res.end();
+      } else if (req.method === "GET") {
+        const parsedUrl = url.parse(req.url as string, true);
+        const queryParams = parsedUrl.query;
 
-                resolve(authData);
-            }
+        if (queryParams.cancelled) {
+          res.writeHead(200);
+          res.end("Cancelled");
+          reject(new UserCancellationError("Login process cancelled by user."));
         } else {
-            res.writeHead(405);
-            res.end("Method not allowed");
+          res.writeHead(200);
+          res.end("Success");
+
+          const authData = authPayload.parse(queryParams);
+
+          if (!authData) {
+            reject(new Error("invalid response from server"));
+          }
+
+          resolve(authData);
         }
-        });
+      } else {
+        res.writeHead(405);
+        res.end("Method not allowed");
+      }
     });
+  });
 
-    const redirect = `http://127.0.0.1:${port}`;
+  const redirect = `http://127.0.0.1:${port}`;
 
-    const code = nanoid();
-    const confirmationUrl = new URL(
-        process.env.NODE_ENV === "development" 
-            ? "http://localhost:3001/login"
-            : "http://screenpi.pe/login"
-    );
-    confirmationUrl.searchParams.append("code", code);
-    confirmationUrl.searchParams.append("redirect", redirect);
-    logger.log(`confirmation code: ${colors.bold(code)}\n`);
-    logger.log(
-        `if something goes wrong, copy and paste this url into your browser: ${
-            colors.bold(confirmationUrl.toString())
-        }\n`,
-    );
+  const code = nanoid();
+  // This does not work on my computer (in prod), so hardcoding to screenpi.pe
+  // const confirmationUrl = new URL(
+  //     process.env.NODE_ENV === "development"
+  //         ? "http://localhost:3001/login"
+  //         : "http://screenpi.pe/login"
+  // );
+  const confirmationUrl = new URL("http://screenpi.pe/login");
+  confirmationUrl.searchParams.append("code", code);
+  confirmationUrl.searchParams.append("redirect", redirect);
+  logger.log(`confirmation code: ${colors.bold(code)}\n`);
+  logger.log(
+    `if something goes wrong, copy and paste this url into your browser: ${colors.bold(
+      confirmationUrl.toString()
+    )}\n`
+  );
 
-    spawn("open", [confirmationUrl.toString()]);
+  spawn("open", [confirmationUrl.toString()]);
 
-    const loadingSpinner = spinner("waiting for authentication...");
+  const loadingSpinner = spinner("waiting for authentication...");
 
-    try {
-        loadingSpinner.start();
-        const authData = await authPromise;
-        await sendAuthData(authData);
+  try {
+    loadingSpinner.start();
+    const authData = await authPromise;
+    await sendAuthData(authData);
 
-        loadingSpinner.succeed("authentication successful");
-        server.close();
-    } catch (error) {
-        if (error instanceof UserCancellationError) {
-            server.close();
-            logger.log("\n")
-            logger.error("authentication cancelled.\n");
-            process.exit(0);
-        } else {
-            server.close();
-            handleError(`authentication failed: + ${error}`);
-        }
-    } finally {
-        server.close();
-        process.exit(0);
+    loadingSpinner.succeed("authentication successful");
+    server.close();
+  } catch (error) {
+    if (error instanceof UserCancellationError) {
+      server.close();
+      logger.log("\n");
+      logger.error("authentication cancelled.\n");
+      process.exit(0);
+    } else {
+      server.close();
+      handleError(`authentication failed: + ${error}`);
     }
+  } finally {
+    server.close();
+    process.exit(0);
+  }
 }

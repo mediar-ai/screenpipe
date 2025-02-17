@@ -15,14 +15,14 @@ use tokio::sync::Mutex;
 use vad_rs::VadStatus;
 
 pub async fn prepare_segments(
-    audio_data: Arc<Vec<f32>>,
+    audio_data: &[f32],
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     segmentation_model_path: &PathBuf,
-    embedding_manager: Arc<StdMutex<EmbeddingManager>>,
+    embedding_manager: EmbeddingManager,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
 ) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
-    let audio_data = normalize_v2(audio_data.as_ref());
+    let audio_data = normalize_v2(audio_data);
 
     let frame_size = 1600;
     let vad_engine = vad_engine.clone();

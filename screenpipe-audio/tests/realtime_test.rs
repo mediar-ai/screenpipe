@@ -1,8 +1,7 @@
 use futures::StreamExt;
-use screenpipe_audio::deepgram::start_deepgram_stream;
-use screenpipe_audio::pcm_decode;
 use screenpipe_audio::realtime::RealtimeTranscriptionEvent;
-use screenpipe_core::{AudioDevice, AudioDeviceType};
+use screenpipe_audio::{deepgram::start_deepgram_stream, AudioDevice};
+use screenpipe_audio::{pcm_decode, DeviceType};
 use screenpipe_events::subscribe_to_event;
 use std::{
     sync::{atomic::AtomicBool, Arc},
@@ -22,7 +21,7 @@ async fn test_realtime_transcription() {
     });
 
     let (stream_tx, stream_rx) = broadcast::channel(sample_rate as usize * 3);
-    let device = AudioDevice::new("test".to_string(), AudioDeviceType::Output);
+    let device = AudioDevice::new("test".to_string(), DeviceType::Output);
     let is_running = Arc::new(AtomicBool::new(true));
 
     let deepgram_api_key = std::env::var("CUSTOM_DEEPGRAM_API_KEY").unwrap();
@@ -35,7 +34,6 @@ async fn test_realtime_transcription() {
             Arc::new(device),
             sample_rate,
             is_running_clone,
-            Arc::new([].to_vec()),
             Some(deepgram_api_key),
         )
         .await;

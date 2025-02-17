@@ -11244,7 +11244,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     csibm863: "cp863",
     cp864: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$٪&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~°·∙√▒─│┼┤┬├┴┐┌└┘β∞φ±½¼≈«»ﻷﻸ��ﻻﻼ� ­ﺂ£¤ﺄ��ﺎﺏﺕﺙ،ﺝﺡﺥ٠١٢٣٤٥٦٧٨٩ﻑ؛ﺱﺵﺹ؟¢ﺀﺁﺃﺅﻊﺋﺍﺑﺓﺗﺛﺟﺣﺧﺩﺫﺭﺯﺳﺷﺻﺿﻁﻅﻋﻏ¦¬÷×ﻉـﻓﻗﻛﻟﻣﻧﻫﻭﻯﻳﺽﻌﻎﻍﻡﹽّﻥﻩﻬﻰﻲﻐﻕﻵﻶﻝﻙﻱ■�`
     },
     ibm864: "cp864",
@@ -11383,7 +11383,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     tcvn: {
       type: "_sbcs",
-      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b	
+      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b\t
 \v\f\r\x0E\x0F\x10ỨỰỲỶỸÝỴ\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ÀẢÃÁẠẶẬÈẺẼÉẸỆÌỈĨÍỊÒỎÕÓỌỘỜỞỠỚỢÙỦŨ ĂÂÊÔƠƯĐăâêôơưđẶ̀̀̉̃́àảãáạẲằẳẵắẴẮẦẨẪẤỀặầẩẫấậèỂẻẽéẹềểễếệìỉỄẾỒĩíịòỔỏõóọồổỗốộờởỡớợùỖủũúụừửữứựỳỷỹýỵỐ`
     },
     georgianacademy: {
@@ -11400,17 +11400,17 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     viscii: {
       type: "_sbcs",
-      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b	
+      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b\t
 \v\f\r\x0E\x0F\x10\x11\x12\x13Ỷ\x15\x16\x17\x18Ỹ\x1A\x1B\x1C\x1DỴ\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ẠẮẰẶẤẦẨẬẼẸẾỀỂỄỆỐỒỔỖỘỢỚỜỞỊỎỌỈỦŨỤỲÕắằặấầẩậẽẹếềểễệốồổỗỠƠộờởịỰỨỪỬơớƯÀÁÂÃẢĂẳẵÈÉÊẺÌÍĨỳĐứÒÓÔạỷừửÙÚỹỵÝỡưàáâãảăữẫèéêẻìíĩỉđựòóôõỏọụùúũủýợỮ`
     },
     iso646cn: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#¥%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     iso646jp: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     hproman8: {
@@ -57963,7 +57963,7 @@ async function cliLogin() {
   });
   const redirect = `http://127.0.0.1:${port}`;
   const code = nanoid();
-  const confirmationUrl = new URL("http://localhost:3001/login");
+  const confirmationUrl = new URL("http://screenpi.pe/login");
   confirmationUrl.searchParams.append("code", code);
   confirmationUrl.searchParams.append("redirect", redirect);
   logger.log(`confirmation code: ${colors8.bold(code)}
@@ -64361,8 +64361,8 @@ var throwOnStrictDeadlockError = (isSubprocess) => {
 This can be fixed by both sending a message and listening to incoming messages at the same time:
 
 const [receivedMessage] = await Promise.all([
-	${getMethodName("getOneMessage", isSubprocess)},
-	${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
+\t${getMethodName("getOneMessage", isSubprocess)},
+\t${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
 ]);`);
 };
 var getStrictResponseError = (error, isSubprocess) => new Error(`${getMethodName("sendMessage", isSubprocess)} failed when sending an acknowledgment response to the ${getOtherProcessName(isSubprocess)}.`, { cause: error });
