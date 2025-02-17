@@ -9,7 +9,7 @@ use crate::transcription::deepgram::batch::transcribe_with_deepgram;
 use crate::transcription::whisper::batch::process_with_whisper;
 use crate::transcription::whisper::model::WhisperModel;
 use crate::utils::audio::resample;
-use crate::utils::ffmpeg::write_audio_to_file;
+use crate::utils::ffmpeg::{get_new_file_path, write_audio_to_file};
 use crate::vad::silero::SileroVad;
 use crate::vad::webrtc::WebRtcVad;
 use crate::vad::{VadEngine, VadEngineEnum, VadSensitivity};
@@ -20,6 +20,7 @@ use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     path::Path,
@@ -237,22 +238,20 @@ pub async fn create_whisper_channel(
                                 continue;
                             }
 
-                            let path = match write_audio_to_file(
+
+                            let new_file_path = get_new_file_path(&audio.device.to_string(), &output_path);
+
+                            if let Err(e) = write_audio_to_file(
                                 &audio.data.to_vec(),
                                 audio.sample_rate,
-                                &output_path,
-                                &audio.device.to_string(),
+                                &PathBuf::from(new_file_path.clone()),
                                 false,
                             ) {
-                                Ok(file_path) => file_path,
-                                Err(e) => {
-                                    error!("Error writing audio to file: {:?}", e);
-                                    "".to_string()
-                                }
+                                error!("Error writing audio to file: {:?}", e);
                             };
 
                             while let Some(segment) = segments.recv().await {
-                                let path = path.clone();
+                                let path = new_file_path.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
                                     #[cfg(target_os = "macos")]
                                     {

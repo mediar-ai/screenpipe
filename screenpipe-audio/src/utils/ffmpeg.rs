@@ -79,29 +79,30 @@ fn encode_single_audio(
     Ok(())
 }
 
-pub fn write_audio_to_file(
-    audio: &[f32],
-    sample_rate: u32,
-    output_path: &PathBuf,
-    device: &str,
-    skip_encoding: bool,
-) -> Result<String> {
+pub fn get_new_file_path(device: &str, output_path: &PathBuf) -> String {
     let new_file_name = Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
     let sanitized_device_name = device.replace(['/', '\\'], "_");
-    let file_path = PathBuf::from(output_path)
+    PathBuf::from(output_path)
         .join(format!("{}_{}.mp4", sanitized_device_name, new_file_name))
         .to_str()
         .expect("Failed to create valid path")
-        .to_string();
-    let file_path_clone = file_path.clone();
+        .to_string()
+}
+
+pub fn write_audio_to_file(
+    audio: &[f32],
+    sample_rate: u32,
+    path: &PathBuf,
+    skip_encoding: bool,
+) -> Result<()> {
     // Run FFmpeg in a separate task
     if !skip_encoding {
         encode_single_audio(
             bytemuck::cast_slice(audio),
             sample_rate,
             1,
-            &PathBuf::from(file_path),
+            &PathBuf::from(path),
         )?;
     }
-    Ok(file_path_clone)
+    Ok(())
 }
