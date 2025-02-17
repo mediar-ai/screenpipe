@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::StreamError;
-use log::{error, info, warn};
+use tracing::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;

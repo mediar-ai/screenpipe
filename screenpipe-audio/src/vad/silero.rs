@@ -1,6 +1,6 @@
 use anyhow;
 use dirs;
-use log::debug;
+use tracing::debug;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use tracing::info;

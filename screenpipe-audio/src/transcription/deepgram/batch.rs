@@ -1,10 +1,10 @@
 use anyhow::Result;
 use hound::{WavSpec, WavWriter};
-use log::{debug, error, info};
 use reqwest::Client;
 use screenpipe_core::Language;
 use serde_json::Value;
 use std::io::Cursor;
+use tracing::{debug, error, info};
 
 use crate::transcription::deepgram::{CUSTOM_DEEPGRAM_API_TOKEN, DEEPGRAM_API_URL};
 

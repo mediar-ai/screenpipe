@@ -6,12 +6,12 @@ use crate::transcription::deepgram::streaming::stream_transcription_deepgram;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn};
 use screenpipe_core::Language;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use stream::AudioStream;
+use tracing::{debug, error, info, warn};
 
 lazy_static! {
     pub static ref LAST_AUDIO_CAPTURE: AtomicU64 = AtomicU64::new(

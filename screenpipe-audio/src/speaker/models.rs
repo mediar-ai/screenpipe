@@ -1,6 +1,6 @@
 use anyhow::Result;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use tracing::{debug, info};
 use std::path::PathBuf;
 use std::sync::Once;
 use tokio::sync::Mutex;
