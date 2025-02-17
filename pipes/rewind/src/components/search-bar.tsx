@@ -11,11 +11,11 @@ export const SearchBar = ({
 	disabled?: boolean;
 }) => {
 	return (
-		<div className="relative w-full max-w-2xl">
+		<div className="relative w-full">
 			<Input
 				type="input"
 				placeholder="Search..."
-				className="pl-10 h-12 bg-white/80 backdrop-blur-sm border border-neutral-200 rounded-lg shadow-sm transition-all duration-200 focus:shadow-md"
+				className="pl-10 h-full bg-white/80 backdrop-blur-sm border border-neutral-200 rounded-lg shadow-sm transition-all duration-200 focus:shadow-md"
 				value={search || ""}
 				onChange={(e) => {
 					onSearchChange(e.target.value);

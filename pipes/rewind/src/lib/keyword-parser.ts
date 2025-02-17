@@ -223,11 +223,8 @@ class KeywordParser {
 			...this.additionalStopWords,
 		]);
 
-		// Filter out single characters and numbers
-		keywords = keywords.filter((word) => {
-			const isJustNumber = /^\d+$/.test(word);
-			return word.length > 1 && !isJustNumber;
-		});
+		// Filter out single characters only
+		keywords = keywords.filter((word) => word.length > 1);
 
 		// Remove duplicates
 		const uniqueKeywords = Array.from(new Set(keywords));

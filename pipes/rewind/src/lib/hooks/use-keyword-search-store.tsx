@@ -28,6 +28,7 @@ export interface SearchRequest {
 		end_time?: string;
 		fuzzy_match?: boolean;
 		order?: "ascending" | "descending";
+		app_names?: string[];
 	};
 }
 
@@ -51,6 +52,7 @@ export interface KeywordSearchState {
 			end_time?: Date;
 			fuzzy_match?: boolean;
 			order?: "ascending" | "descending";
+			app_names?: string[];
 		},
 		signal?: AbortSignal,
 	) => Promise<void>;
@@ -84,6 +86,7 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 			end_time: options.end_time?.toISOString(),
 			fuzzy_match: options.fuzzy_match ?? fuzzy_default,
 			order: options.order ?? "descending",
+			app_names: options.app_names ?? [],
 		});
 
 		const { lastRequest } = get();
@@ -145,6 +148,7 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 				end_time: options.end_time?.toISOString(),
 				fuzzy_match: options.fuzzy_match ?? fuzzy_default,
 				order: options.order ?? "descending",
+				app_names: options.app_names ?? [],
 			},
 		};
 
@@ -155,6 +159,10 @@ export const useKeywordSearchStore = create<KeywordSearchState>((set, get) => ({
 				include_context: (options.include_context ?? false).toString(),
 				fuzzy_match: (options.fuzzy_match ?? fuzzy_default).toString(),
 			});
+
+			if (options.app_names) {
+				params.append("app_names", options.app_names.join(","));
+			}
 
 			if (options.start_time) {
 				params.append("start_time", options.start_time.toISOString());

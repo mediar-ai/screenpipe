@@ -27,7 +27,7 @@ export function DatePickerWithRange({
 	disabled?: boolean | undefined;
 }) {
 	return (
-		<div className={cn("grid gap-2", className)}>
+		<div className={cn("grid gap-2 w-full h-full", className)}>
 			<Popover>
 				<PopoverTrigger asChild>
 					<Button
@@ -35,7 +35,7 @@ export function DatePickerWithRange({
 						disabled={disabled}
 						variant={"outline"}
 						className={cn(
-							"w-[300px] justify-start text-left font-normal",
+							"w-full h-full justify-start text-left font-normal",
 							!start_time && "text-muted-foreground",
 						)}
 					>
@@ -50,7 +50,7 @@ export function DatePickerWithRange({
 								format(start_time, "LLL dd, y")
 							)
 						) : (
-							<span>Pick a date</span>
+							<span>Filter by Date</span>
 						)}
 					</Button>
 				</PopoverTrigger>

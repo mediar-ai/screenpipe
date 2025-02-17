@@ -1,13 +1,7 @@
 import React, { useState } from "react";
 
 // Third-party component imports
-import {
-	Check,
-	ChevronsUpDown,
-	ListFilter,
-	LoaderCircle,
-	X,
-} from "lucide-react";
+import { Check, ChevronsUpDown, LoaderCircle, X } from "lucide-react";
 
 // Local UI component imports
 import {
@@ -137,15 +131,17 @@ export const MultiSelectCombobox = <T extends BaseOption>({
 						/>
 					)}
 
-					{value.length > 0 && (
-						<span className="text-muted-foreground">{label}</span>
-					)}
+					{
+						//       value.length > 0 && (
+						//	<span className="text-muted-foreground">{label}</span>
+						//)
+					}
 
 					{/* Selected items display */}
-					<div className="flex-1 overflow-hidden">
+					<div className="flex-1 overflow-hidden h-full text-muted-foreground">
 						{value.length > 0
 							? renderSelectedItem(value)
-							: `Select ${label}...`}
+							: `Filter by ${label}...`}
 					</div>
 
 					{/* Control buttons */}
@@ -187,16 +183,23 @@ export const MultiSelectCombobox = <T extends BaseOption>({
 									value={option.label}
 									onSelect={() => handleChange(option.value)}
 									aria-selected={value.includes(option.value)}
+									className={cn({
+										"bg-accent text-accent-foreground": value.includes(
+											option.value,
+										),
+									})}
 								>
-									<Check
-										className={cn(
-											"mr-2 h-4 w-4",
-											value.includes(option.value)
-												? "opacity-100"
-												: "opacity-0",
-										)}
-										aria-hidden="true"
-									/>
+									{
+										//<Check
+										//	className={cn(
+										//		"mr-2 h-4 w-4",
+										//		value.includes(option.value)
+										//			? "opacity-100"
+										//			: "opacity-0",
+										//	)}
+										//	aria-hidden="true"
+										///>
+									}
 									{renderItem(option)}
 								</CommandItem>
 							))}

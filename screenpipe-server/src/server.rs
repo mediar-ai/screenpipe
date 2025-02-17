@@ -2059,6 +2059,7 @@ async fn keyword_search_handler(
             query.end_time,
             query.fuzzy_match,
             query.order,
+            query.app_names,
         )
         .await
         .map_err(|e| {
@@ -2069,6 +2070,14 @@ async fn keyword_search_handler(
         })?;
 
     Ok(JsonResponse(matches))
+}
+
+fn from_comma_separated_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    Ok(s.map(|s| s.split(',').map(String::from).collect()))
 }
 
 #[derive(Deserialize)]
@@ -2086,6 +2095,9 @@ pub struct KeywordSearchRequest {
     fuzzy_match: bool,
     #[serde(default)]
     order: Order,
+    #[serde(default)]
+    #[serde(deserialize_with = "from_comma_separated_string")]
+    app_names: Option<Vec<String>>,
 }
 
 pub async fn get_frame_data(

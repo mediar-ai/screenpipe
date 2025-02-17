@@ -2146,14 +2146,26 @@ impl DatabaseManager {
         end_time: Option<DateTime<Utc>>,
         fuzzy_match: bool,
         order: Order,
+        app_names: Option<Vec<String>>,
     ) -> Result<Vec<SearchMatch>, sqlx::Error> {
         let mut conditions = Vec::new();
+        let mut owned_conditions = Vec::new();
 
         if start_time.is_some() {
             conditions.push("f.timestamp >= ?");
         }
         if end_time.is_some() {
             conditions.push("f.timestamp <= ?");
+        }
+
+        // Add app names condition if provided
+        if let Some(apps) = &app_names {
+            if !apps.is_empty() {
+                let placeholders = vec!["?"; apps.len()].join(",");
+                let app_condition = format!("o.app_name IN ({})", placeholders);
+                owned_conditions.push(app_condition);
+                conditions.push(owned_conditions.last().unwrap().as_str());
+            }
         }
 
         // Create an indexed subquery for FTS matching
@@ -2211,6 +2223,15 @@ LIMIT ? OFFSET ?
             query_builder = query_builder.bind(end);
         }
 
+        // Bind app names if provided
+        if let Some(apps) = app_names {
+            if !apps.is_empty() {
+                for app in apps {
+                    query_builder = query_builder.bind(app);
+                }
+            }
+        }
+
         // Bind search condition if query is not empty
         if !query.is_empty() {
             query_builder = query_builder.bind(&search_condition);
@@ -2248,12 +2269,18 @@ LIMIT ? OFFSET ?
 
 pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<TextPosition> {
     let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
 
     blocks
         .iter()
         .filter_map(|block| {
             let text_lower = block.text.to_lowercase();
-            if text_lower.contains(&query_lower) {
+
+            // Check for exact match or any word match
+            let matches = text_lower.contains(&query_lower)
+                || query_words.iter().any(|&word| text_lower.contains(word));
+
+            if matches {
                 Some(TextPosition {
                     text: block.text.clone(),
                     confidence: block.conf.parse::<f32>().unwrap_or(0.0),

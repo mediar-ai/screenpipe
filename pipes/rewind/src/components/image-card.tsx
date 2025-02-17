@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { useEffect, useRef, useMemo, useState } from "react";
+import { useEffect, useRef, useMemo, useState, RefObject } from "react";
 import { SearchMatch } from "@/lib/hooks/use-keyword-search-store";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { cn } from "@/lib/utils";
@@ -9,13 +9,15 @@ import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
 export const ImageGrid = ({
 	searchResult,
+	pageRef,
 }: {
 	searchResult: SearchMatch[];
+	pageRef: RefObject<HTMLDivElement | null>;
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const { setCurrentResultIndex, currentResultIndex, searchKeywords } =
 		useKeywordSearchStore();
-	const [{ start_time, end_time, query }] = useKeywordParams();
+	const [{ start_time, end_time, query, apps }] = useKeywordParams();
 	const { searchResults, isSearching } = useKeywordSearchStore();
 
 	const checkScrollAndFetch = useMemo(
@@ -37,10 +39,11 @@ export const ImageGrid = ({
 						limit: 20,
 						...(start_time && { start_time }),
 						...(end_time && { end_time }),
+						...(apps?.length && { app_names: apps }),
 					});
 				}
 			}, 400),
-		[searchResult.length, searchKeywords, query, start_time, end_time],
+		[searchResult.length, searchKeywords, query, start_time, end_time, apps],
 	);
 
 	useEffect(() => {
@@ -105,13 +108,15 @@ export const ImageGrid = ({
 
 	useEffect(() => {
 		const container = containerRef.current;
-		if (container) {
-			document.addEventListener("wheel", handleScroll, { passive: false });
+		if (container && pageRef.current) {
+			pageRef.current.addEventListener("wheel", handleScroll, {
+				passive: false,
+			});
 		}
 
 		return () => {
-			if (container) {
-				document.removeEventListener("wheel", handleScroll);
+			if (container && pageRef.current) {
+				pageRef.current.removeEventListener("wheel", handleScroll);
 			}
 		};
 	}, [handleScroll]);
@@ -162,6 +167,7 @@ export const ImageGrid = ({
 									currentResultIndex === index && "ring-2 ring-blue-500",
 								)}
 								onClick={() => setCurrentResultIndex(index)}
+								style={{ direction: "ltr" }}
 							>
 								<div className="aspect-video overflow-hidden flex-1">
 									<img
@@ -279,40 +285,48 @@ export const MainImage = () => {
 			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
 		>
 			<div className="bg-neutral-200" />
-			<img
-				ref={imageRef}
-				src={`http://localhost:3030/frames/${currentFrame.frame_id}`}
-				alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
-				className="h-full w-full object-contain max-h-[50vh]"
-				draggable={false}
-			/>
-			{imageRect && (
-				<div className="absolute inset-0 pointer-events-none">
-					{currentFrame.text_positions?.map(
-						(position: TextPosition, index: number) => {
-							const coords = convertVisionCoordinates(
-								position.bounds,
-								imageRect.height,
-							);
-							if (!coords) return null;
+			<div className="relative">
+				<img
+					ref={imageRef}
+					src={`http://localhost:3030/frames/${currentFrame.frame_id}`}
+					alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
+					className="h-full w-full object-contain max-h-[75vh]"
+					draggable={false}
+				/>
 
-							return (
-								<div
-									key={index}
-									className="absolute bg-yellow-300/40 border border-yellow-500/50"
-									style={{
-										left: `${coords.left}px`,
-										top: `${coords.top}px`,
-										width: `${coords.width}px`,
-										height: `${coords.height}px`,
-									}}
-									title={position.text}
-								/>
-							);
-						},
-					)}
-				</div>
-			)}
+				{imageRect && (
+					<div
+						className="absolute inset-0 pointer-events-none"
+						style={{
+							width: imageRect.width,
+						}}
+					>
+						{currentFrame.text_positions?.map(
+							(position: TextPosition, index: number) => {
+								const coords = convertVisionCoordinates(
+									position.bounds,
+									imageRect.height,
+								);
+								if (!coords) return null;
+
+								return (
+									<div
+										key={index}
+										className="absolute bg-yellow-300/40 border border-yellow-500/50"
+										style={{
+											left: `${coords.left}px`,
+											top: `${coords.top}px`,
+											width: `${coords.width}px`,
+											height: `${coords.height}px`,
+										}}
+										title={position.text}
+									/>
+								);
+							},
+						)}
+					</div>
+				)}
+			</div>
 		</div>
 	);
 };
