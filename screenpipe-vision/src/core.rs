@@ -286,7 +286,7 @@ pub async fn process_ocr_task(
 
     for captured_window in window_images {
         let app_name = captured_window.app_name.clone();
-        let browser_url = if captured_window.is_focused && 
+        let browser_url = if cfg!(target_os = "macos") && captured_window.is_focused && 
             BROWSER_NAMES.iter().any(|&browser| app_name.to_lowercase().contains(browser)) {
             match tokio::task::spawn_blocking(move || get_active_browser_url_sync(&app_name)).await {
                 Ok(Ok(url)) => Some(url),
