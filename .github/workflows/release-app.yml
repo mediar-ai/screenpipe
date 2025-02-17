@@ -459,7 +459,7 @@ jobs:
         shell: powershell
         run: |
           # Create target directory
-          $vcredist_dir = "screenpipe-app-tauri/src-tauri/vcredist"
+          $vcredist_dir = "screenpipe-app-tauri/src-tauri/"
           New-Item -ItemType Directory -Force -Path $vcredist_dir | Out-Null
 
           # Install and copy VcRedist
