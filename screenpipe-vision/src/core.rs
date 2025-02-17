@@ -285,9 +285,10 @@ pub async fn process_ocr_task(
     let mut window_count = 0;
 
     for captured_window in window_images {
+        let app_name = captured_window.app_name.clone();
         let browser_url = if captured_window.is_focused && 
-            BROWSER_NAMES.iter().any(|&browser| captured_window.app_name.to_lowercase().contains(browser)) {
-            match tokio::task::spawn_blocking(get_active_browser_url_sync).await {
+            BROWSER_NAMES.iter().any(|&browser| app_name.to_lowercase().contains(browser)) {
+            match tokio::task::spawn_blocking(move || get_active_browser_url_sync(&app_name)).await {
                 Ok(Ok(url)) => Some(url),
                 Ok(Err(e)) => {
                     error!("Failed to get browser URL: {}", e);
@@ -464,41 +465,68 @@ impl UIFrame {
     }
 }
 
-fn get_active_browser_url_sync() -> Result<String, std::io::Error> {
-    // Save original clipboard content
-    let mut clipboard = arboard::Clipboard::new()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    let original_content = clipboard.get_text()
-        .unwrap_or_default();
-
-    let mut enigo = Enigo::new(&Settings::default()).unwrap();
-    
-    let command_key = if cfg!(target_os = "macos") {
-        Key::Meta
+fn get_active_browser_url_sync(app_name: &str) -> Result<String, std::io::Error> {
+    // Normalize browser name to match AppleScript expectations
+    let browser_name = app_name.to_lowercase();
+    let applescript_name = if browser_name.contains("chrome") {
+        "Google Chrome"
+    } else if browser_name.contains("safari") {
+        "Safari"
+    } else if browser_name.contains("arc") {
+        "Arc"
+    } else if browser_name.contains("brave") {
+        "Brave Browser"
+    } else if browser_name.contains("edge") {
+        "Microsoft Edge"
+    } else if browser_name.contains("opera") {
+        "Opera"
+    } else if browser_name.contains("vivaldi") {
+        "Vivaldi"
     } else {
-        Key::Control
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Unsupported browser: {}", app_name),
+        ));
     };
 
-    // Focus address bar
-    enigo.key(command_key, Press).unwrap();
-    enigo.key(Key::Unicode('l'), Press).unwrap();
-    enigo.key(command_key, Release).unwrap();
-    // Copy URL to clipboard
-    enigo.key(command_key, Press).unwrap();
-    enigo.key(Key::Unicode('c'), Click).unwrap();
-    enigo.key(command_key, Release).unwrap();
+    // Generate appropriate AppleScript based on browser type
+    let script = if applescript_name == "Safari" {
+        format!(
+            r#"
+            tell application "Safari"
+                return URL of front document
+            end tell
+            "#
+        )
+    } else {
+        format!(
+            r#"
+            tell application "{}"
+                return URL of active tab of front window
+            end tell
+            "#,
+            applescript_name
+        )
+    };
 
-    // Press Esc to unfocus address bar
-    enigo.key(Key::Escape, Click).unwrap();
+    // Execute AppleScript and get output
+    let output = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+        .map_err(|e| std::io::Error::new(
+            std::io::ErrorKind::Other, 
+            format!("Failed to execute AppleScript: {}", e)
+        ))?;
 
-    // Get URL from clipboard
-    let url = clipboard.get_text()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-    // Restore original clipboard content
-    if let Err(e) = clipboard.set_text(&original_content) {
-        error!("Failed to restore clipboard: {}", e);
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("AppleScript failed: {}", error),
+        ));
     }
 
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(url)
 }
