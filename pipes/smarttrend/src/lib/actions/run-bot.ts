@@ -52,7 +52,7 @@ export async function runBot(
 
   browser = await puppeteer.launch({ headless: true });
 
-  const model = await getModel(settings)
+  const model = await getModel(settings);
   if (!model) {
     return false;
   }
@@ -161,7 +161,9 @@ async function profileProcess(
     await page.waitForSelector('a[aria-label="Profile"]');
 
     const profileUrl = await page.evaluate(() => {
-      const profileLink: HTMLLinkElement | null = document.querySelector('a[aria-label="Profile"]');
+      const profileLink: HTMLLinkElement | null = document.querySelector(
+        'a[aria-label="Profile"]',
+      );
       return profileLink ? profileLink.href : null;
     });
 
@@ -179,7 +181,9 @@ async function profileProcess(
       const nameElement: HTMLSpanElement | null = document.querySelector(
         'div[data-testid="UserName"] span',
       );
-      const handleElement: HTMLDivElement | null = document.querySelector('div[data-testid="UserId"]');
+      const handleElement: HTMLDivElement | null = document.querySelector(
+        'div[data-testid="UserId"]',
+      );
       const bioElement: HTMLDivElement | null = document.querySelector(
         'div[data-testid="UserDescription"]',
       );
@@ -263,11 +267,11 @@ async function ocrProcess(model: LanguageModel): Promise<void> {
     console.log("Analyzing OCR data...");
 
     const res = await pipe.queryScreenpipe({
-        contentType: "ocr",
-        limit: 10,
-        startTime: lastCheck ? lastCheck.toISOString() : undefined,
+      contentType: "ocr",
+      limit: 10,
+      startTime: lastCheck ? lastCheck.toISOString() : undefined,
     });
-    const context = res?.data.map((e) => e.content)
+    const context = res?.data.map((e) => e.content);
     eventEmitter.emit("updateProgress", { process: 1, value: 50 });
 
     const { text } = await generateText({
@@ -438,7 +442,7 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
       }
 
       process.env.OPENAI_API_KEY = settings.openaiApiKey;
-      return openai("gpt-4o") as LanguageModel;
+      return openai(settings.aiModel) as LanguageModel;
     case "native-ollama":
       try {
         const response = await fetch("http://localhost:11434/api/tags");
@@ -448,7 +452,7 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
         return null;
       }
 
-      return ollama("deepseek-r1") as LanguageModel;
+      return ollama(settings.aiModel) as LanguageModel;
     case "screenpipe-cloud":
       if (!settings.user?.token) {
         if (browser) await browser.close();
@@ -456,7 +460,7 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
       }
 
       process.env.OPENAI_API_KEY = settings.user.token;
-      return openai("gpt-4o") as LanguageModel;
+      return openai(settings.aiModel) as LanguageModel;
     case "custom":
       if (!settings.openaiApiKey) {
         if (browser) await browser.close();
@@ -464,7 +468,7 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
       }
 
       process.env.OPENAI_API_KEY = settings.openaiApiKey;
-      return openai("gpt-4o") as LanguageModel;
+      return openai(settings.aiModel) as LanguageModel;
   }
   return null;
 }
@@ -473,14 +477,20 @@ async function scrapeTweets(page: Page): Promise<Tweet[]> {
   return await page.evaluate(() => {
     const tweetElements = document.querySelectorAll("article");
     return Array.from(tweetElements).map((tweet) => {
-      const textElement: HTMLDivElement | null = tweet.querySelector("div[lang]");
-      const linkElement: HTMLLinkElement | null = tweet.querySelector("a[role='link']");
-      const userElement: HTMLSpanElement | null = tweet.querySelector("a[role='link'] span");
-      const timestampElement: HTMLTimeElement | null = tweet.querySelector("time");
-      const tweetLink: HTMLLinkElement | null = tweet.querySelector("a[role='link'][href*='/status/']");
-      const engagementElements: NodeListOf<HTMLSpanElement> = tweet.querySelectorAll(
-        "div[role='group'] span",
+      const textElement: HTMLDivElement | null =
+        tweet.querySelector("div[lang]");
+      const linkElement: HTMLLinkElement | null =
+        tweet.querySelector("a[role='link']");
+      const userElement: HTMLSpanElement | null = tweet.querySelector(
+        "a[role='link'] span",
       );
+      const timestampElement: HTMLTimeElement | null =
+        tweet.querySelector("time");
+      const tweetLink: HTMLLinkElement | null = tweet.querySelector(
+        "a[role='link'][href*='/status/']",
+      );
+      const engagementElements: NodeListOf<HTMLSpanElement> =
+        tweet.querySelectorAll("div[role='group'] span");
 
       const extractNumber = (text: string | undefined) =>
         text ? parseInt(text.replace(/\D/g, ""), 10) || 0 : 0;
