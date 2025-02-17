@@ -87,42 +87,43 @@ mod pipes {
     async fn create_watchdog_script(parent_pid: u32, child_pid: u32) -> Result<PathBuf> {
         let script_content = if cfg!(windows) {
             format!(
-                r#"
-$parentPid = {parent_pid}
+                r#"$parentPid = {parent_pid}
 $childPid = {child_pid}
 
-function Get-ChildProcesses($ProcessId) {{
-    Get-WmiObject Win32_Process | Where-Object {{ $_.ParentProcessId -eq $ProcessId }} | ForEach-Object {{
+function Get-ChildProcesses($ProcessId) {
+    Get-WmiObject Win32_Process | Where-Object { $_.ParentProcessId -eq $ProcessId } | ForEach-Object {
         $_.ProcessId
         Get-ChildProcesses $_.ProcessId
-    }}
-}}
+    }
+}
 
-while ($true) {{
-    try {{
-        $parent = Get-Process -Id $parentPid -ErrorAction Stop
-        Start-Sleep -Seconds 1
-    }} catch {{
-        Write-Host "Parent process ($parentPid) not found, terminating child processes"
-        
+while ($true) {
+    # Check if parent process is running
+    if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) {
+        Write-Host "Parent process ($parentPid) not found. Terminating child processes."
+
         # Get all child processes recursively
         $children = Get-ChildProcesses $childPid
-        
-        # Add the main process to the list
+
+        # Add the main child process to the list
         $allProcesses = @($childPid) + $children
-        
-        foreach ($pid in $allProcesses) {{
-            try {{
+
+        foreach ($pid in $allProcesses) {
+            try {
                 Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
                 Write-Host "Stopped process: $pid"
-            }} catch {{
-                Write-Host "Process $pid already terminated"
-            }}
-        }}
-        
+            } catch {
+                Write-Host "Process $pid already terminated or inaccessible."
+            }
+        }
+
+        Write-Host "All child processes stopped. Exiting script."
         exit
-    }}
-}}
+    }
+
+    # Sleep for a short period before checking again
+    Start-Sleep -Seconds 1
+}
 "#
             )
         } else {
