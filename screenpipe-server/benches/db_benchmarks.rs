@@ -26,6 +26,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             &text_json,
             "test_app",
             "test_window",
+            None,
             Arc::new(OcrEngine::default()), // Assuming a default implementation
             false,
         )

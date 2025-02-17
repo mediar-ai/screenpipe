@@ -11,6 +11,10 @@ use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
+use enigo::{
+    Direction::{Click, Press, Release},
+    Enigo, Key, Keyboard, Settings,
+};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use log::{debug, error};
@@ -116,6 +120,7 @@ pub struct WindowOcrResult {
     pub text_json: Vec<HashMap<String, String>>, // Change this line
     pub focused: bool,
     pub confidence: f64,
+    pub browser_url: Option<String>,
 }
 
 pub struct OcrTaskData {
@@ -125,6 +130,8 @@ pub struct OcrTaskData {
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
 }
+
+const BROWSER_NAMES: [&str; 9] = ["chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera"];
 
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
@@ -278,6 +285,23 @@ pub async fn process_ocr_task(
     let mut window_count = 0;
 
     for captured_window in window_images {
+        let browser_url = if captured_window.is_focused && 
+            BROWSER_NAMES.iter().any(|&browser| captured_window.app_name.to_lowercase().contains(browser)) {
+            match tokio::task::spawn_blocking(get_active_browser_url_sync).await {
+                Ok(Ok(url)) => Some(url),
+                Ok(Err(e)) => {
+                    error!("Failed to get browser URL: {}", e);
+                    None
+                }
+                Err(e) => {
+                    error!("Failed to spawn blocking task: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let (window_text, window_json_output, confidence) = match ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
                 .await
@@ -317,6 +341,7 @@ pub async fn process_ocr_task(
             text_json: parse_json_output(&window_json_output),
             focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
+            browser_url: browser_url.clone(),
         });
     }
 
@@ -437,4 +462,43 @@ impl UIFrame {
             }
         }
     }
+}
+
+fn get_active_browser_url_sync() -> Result<String, std::io::Error> {
+    // Save original clipboard content
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let original_content = clipboard.get_text()
+        .unwrap_or_default();
+
+    let mut enigo = Enigo::new(&Settings::default()).unwrap();
+    
+    let command_key = if cfg!(target_os = "macos") {
+        Key::Meta
+    } else {
+        Key::Control
+    };
+
+    // Focus address bar
+    enigo.key(command_key, Press).unwrap();
+    enigo.key(Key::Unicode('l'), Press).unwrap();
+    enigo.key(command_key, Release).unwrap();
+    // Copy URL to clipboard
+    enigo.key(command_key, Press).unwrap();
+    enigo.key(Key::Unicode('c'), Click).unwrap();
+    enigo.key(command_key, Release).unwrap();
+
+    // Press Esc to unfocus address bar
+    enigo.key(Key::Escape, Click).unwrap();
+
+    // Get URL from clipboard
+    let url = clipboard.get_text()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Restore original clipboard content
+    if let Err(e) = clipboard.set_text(&original_content) {
+        error!("Failed to restore clipboard: {}", e);
+    }
+
+    Ok(url)
 }

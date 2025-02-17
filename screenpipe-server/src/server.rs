@@ -1117,6 +1117,7 @@ async fn add_frame_to_db(
                 ocr.text_json.as_deref().unwrap_or(""),
                 frame.app_name.as_deref().unwrap_or(""),
                 frame.window_name.as_deref().unwrap_or(""),
+                None,
                 Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
                 false,
             )

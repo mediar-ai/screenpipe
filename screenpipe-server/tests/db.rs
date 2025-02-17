@@ -28,6 +28,7 @@ mod tests {
             "",
             "test",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -207,6 +208,7 @@ mod tests {
             "",
             "app",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -297,6 +299,7 @@ mod tests {
             "",
             "",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -334,6 +337,7 @@ mod tests {
             "",
             "",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -484,6 +488,7 @@ mod tests {
             "",
             "",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -519,6 +524,7 @@ mod tests {
             "",
             "",
             "",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -927,6 +933,7 @@ mod tests {
             "",
             "test_app",
             "test_window",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -941,6 +948,7 @@ mod tests {
             "",
             "test_app",
             "test_window",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )

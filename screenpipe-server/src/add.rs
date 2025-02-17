@@ -227,6 +227,7 @@ pub async fn handle_index_command(
                     "{}", // empty json
                     "",   // no app name
                     "",   // no window name
+                    None, // no browser url
                     engine_arc.clone(),
                     true, // focused
                 )

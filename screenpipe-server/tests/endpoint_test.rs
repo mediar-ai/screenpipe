@@ -180,6 +180,7 @@ mod tests {
             "",
             "TestApp",
             "TestWindow",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -191,6 +192,7 @@ mod tests {
             "",
             "TestApp2",
             "TestWindow2",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -386,6 +388,7 @@ mod tests {
             "",
             "testapp",
             "testwindow",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -581,6 +584,7 @@ mod tests {
             "",
             "vscode",
             "tasks.md",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -593,6 +597,7 @@ mod tests {
             "",
             "vscode",
             "tasks.md",
+            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )

@@ -353,6 +353,7 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
+        browser_url: Option<&str>,
         ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
@@ -368,6 +369,7 @@ impl DatabaseManager {
                     text_json,
                     app_name,
                     window_name,
+                    browser_url,
                     Arc::clone(&ocr_engine),
                     focused,
                 ),
@@ -400,7 +402,7 @@ impl DatabaseManager {
                     "Failed to insert OCR text for frame_id: {} after {} attempts",
                     frame_id, MAX_RETRIES
                 );
-                return Err(sqlx::Error::PoolTimedOut); // Return error after max retries
+                return Err(sqlx::Error::PoolTimedOut);
             }
         }
 
@@ -419,6 +421,7 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
+        browser_url: Option<&str>,
         ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
@@ -440,13 +443,14 @@ impl DatabaseManager {
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, browser_url, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(app_name)
             .bind(format!("{:?}", *ocr_engine))
             .bind(window_name)
+            .bind(browser_url.map(|s| s.to_string()))
             .bind(focused)
             .bind(text_length)
             .execute(&mut *tx)
