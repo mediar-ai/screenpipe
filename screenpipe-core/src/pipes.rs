@@ -111,15 +111,15 @@ while ($true) {{
         # Add the main process to the list
         $allProcesses = @($childPid) + $children
         
-        foreach ($pid in $allProcesses) {{
+        foreach ($processId in $allProcesses) {{
             try {{
-                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process: $pid"
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                Write-Host "Stopped process: $processId"
             }} catch {{
-                Write-Host "Process $pid already terminated"
+                Write-Host "Process $child_pid already terminated"
             }}
         }}
-        
+        Stop-Process -Id $PID -Force       
         exit
     }}
 }}
@@ -504,7 +504,10 @@ done
                         "failed to install dependencies for next.js pipe: {}",
                         err_msg
                     );
-                    sentry::capture_error(&err.source().unwrap());
+                    // prevent panicking on `None`
+                    if let Some(source) = err.source() {
+                        sentry::capture_error(source);
+                    }
                     anyhow::bail!(err);
                 }
                 info!(
