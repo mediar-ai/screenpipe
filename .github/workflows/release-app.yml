@@ -136,17 +136,17 @@ jobs:
           - platform: "macos-latest"
             args: "--target aarch64-apple-darwin --features metal"
             target: aarch64-apple-darwin
-            tauri-args: "--target aarch64-apple-darwin --config src-tauri/tauri.conf.prod.json"
+            tauri-args: "--target aarch64-apple-darwin --config screenpipe-app-tauri/src-tauri/tauri.conf.prod.json"
             os_type: "macos"
           - platform: "macos-latest"
             args: "--target x86_64-apple-darwin --features metal"
             target: x86_64-apple-darwin
-            tauri-args: "--target x86_64-apple-darwin --config src-tauri/tauri.conf.prod.json"
+            tauri-args: "--target x86_64-apple-darwin --config screenpipe-app-tauri/src-tauri/tauri.conf.prod.json"
             os_type: "macos"
           - platform: ${{ needs.check_runner.outputs.runner_type }}
             args: "--target x86_64-pc-windows-msvc --features mkl"
             pre-build-args: ""
-            tauri-args: "--target x86_64-pc-windows-msvc --config src-tauri/tauri.conf.prod.json"
+            tauri-args: "--target x86_64-pc-windows-msvc --config screenpipe-app-tauri/src-tauri/tauri.conf.prod.json"
             os_type: "windows"
 
     runs-on: ${{ matrix.platform }}
