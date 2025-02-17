@@ -36,6 +36,7 @@ pub struct OCRResultRaw {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Option<String>,
+    pub device_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub struct OCRResult {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub device_name: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone)]
