@@ -1,5 +1,4 @@
 use anyhow::Result;
-use dirs;
 use lazy_static::lazy_static;
 use log::{debug, info};
 use std::path::PathBuf;

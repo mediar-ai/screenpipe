@@ -7,7 +7,7 @@ mod tests {
     use chrono::DateTime;
     use chrono::{Duration, Utc};
     use lru::LruCache;
-    use screenpipe_audio::{AudioDevice, DeviceType};
+    use screenpipe_audio::core::device::{AudioDevice, DeviceType};
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;

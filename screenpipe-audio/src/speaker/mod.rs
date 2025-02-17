@@ -1,3 +1,5 @@
+pub mod embedding;
+
 use std::path::Path;
 
 use anyhow::Result;
@@ -11,3 +13,8 @@ pub fn create_session<P: AsRef<Path>>(path: P) -> Result<Session> {
         .commit_from_file(path.as_ref())?;
     Ok(session)
 }
+pub mod embedding_manager;
+pub mod models;
+mod prepare_segments;
+pub use prepare_segments::prepare_segments;
+pub mod segment;

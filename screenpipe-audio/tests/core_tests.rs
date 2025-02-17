@@ -3,16 +3,18 @@ mod tests {
     use anyhow::anyhow;
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
-    use screenpipe_audio::pyannote::identify::EmbeddingManager;
-    use screenpipe_audio::stt::{prepare_segments, stt};
-    use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
-    use screenpipe_audio::whisper::WhisperModel;
-    use screenpipe_audio::{
-        default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioStream,
-        AudioTranscriptionEngine,
+    use screenpipe_audio::core::device::{
+        default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     };
-    use screenpipe_audio::{parse_audio_device, record_and_transcribe};
+    use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+    use screenpipe_audio::core::record_and_transcribe;
+    use screenpipe_audio::core::stream::AudioStream;
+    use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
+    use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
+    use screenpipe_audio::speaker::prepare_segments;
+    use screenpipe_audio::transcription::whisper::model::WhisperModel;
+    use screenpipe_audio::vad::{silero::SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
+    use screenpipe_audio::{create_whisper_channel, pcm_decode, stt, AudioInput};
     use screenpipe_core::Language;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -195,7 +197,6 @@ mod tests {
     #[ignore]
     async fn test_audio_transcription() {
         setup();
-        use screenpipe_audio::{create_whisper_channel, record_and_transcribe};
         use std::sync::Arc;
         use std::time::Duration;
         use tokio::time::timeout;
@@ -305,7 +306,7 @@ mod tests {
             data: Arc::new(audio_data.0),
             sample_rate: 44100, // hardcoded based on test data sample rate
             channels: 1,
-            device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
+            device: Arc::new(default_input_device().unwrap()),
         };
 
         // Create the missing parameters

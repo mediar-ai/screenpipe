@@ -1,17 +1,15 @@
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use log::info;
+use screenpipe_audio::core::device::{
+    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+    AudioDevice,
+};
+use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+use screenpipe_audio::core::record_and_transcribe;
+use screenpipe_audio::core::stream::AudioStream;
 use screenpipe_audio::create_whisper_channel;
-use screenpipe_audio::default_input_device;
-use screenpipe_audio::default_output_device;
-use screenpipe_audio::list_audio_devices;
-use screenpipe_audio::parse_audio_device;
-use screenpipe_audio::record_and_transcribe;
-use screenpipe_audio::vad_engine::VadSensitivity;
-use screenpipe_audio::AudioDevice;
-use screenpipe_audio::AudioStream;
-use screenpipe_audio::AudioTranscriptionEngine;
-use screenpipe_audio::VadEngineEnum;
+use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;

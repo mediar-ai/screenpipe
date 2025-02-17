@@ -33,12 +33,12 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use screenpipe_audio::{
+use screenpipe_audio::core::device::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
 };
 use tracing::{debug, error, info};
 
-use screenpipe_vision::monitor::{list_monitors, get_monitor_by_id};
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -64,9 +64,6 @@ use tower_http::{cors::CorsLayer, trace::DefaultMakeSpan};
 // At the top of the file, add:
 #[cfg(feature = "experimental")]
 use enigo::{Enigo, Key, Settings};
-
-use screenpipe_audio::LAST_AUDIO_CAPTURE;
-
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
@@ -560,7 +557,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     let app_uptime = (now as i64) - (state.app_start_time.timestamp());
     let grace_period = 120; // 2 minutes in seconds
 
-    let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
+    let last_capture = screenpipe_audio::core::LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
     let audio_active = if app_uptime < grace_period {
         true // Consider active during grace period
     } else {
@@ -2532,4 +2529,3 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
-

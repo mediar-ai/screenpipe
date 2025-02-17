@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use chrono::NaiveDateTime;
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
+
 use screenpipe_core::find_ffmpeg_path;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

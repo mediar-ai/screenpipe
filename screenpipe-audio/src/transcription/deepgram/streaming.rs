@@ -1,12 +1,9 @@
-use crate::{
-    deepgram::CUSTOM_DEEPGRAM_API_TOKEN, deepgram::DEEPGRAM_WEBSOCKET_URL,
-    realtime::RealtimeTranscriptionEvent, AudioStream,
-};
-use crate::{AudioDevice, DeviceType};
 use anyhow::Result;
 use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
+use chrono::DateTime;
+use chrono::Utc;
 use crossbeam::channel::RecvError;
 use deepgram::common::options::Encoding;
 use deepgram::common::stream_response::StreamResponse;
@@ -14,11 +11,28 @@ use futures::channel::mpsc::{self, Receiver as FuturesReceiver};
 use futures::{SinkExt, TryStreamExt};
 use screenpipe_core::Language;
 use screenpipe_events::send_event;
+use serde::{Deserialize, Serialize};
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
 use tracing::info;
+
+use crate::core::device::AudioDevice;
+use crate::core::device::DeviceType;
+use crate::core::stream::AudioStream;
+use crate::transcription::deepgram::CUSTOM_DEEPGRAM_API_TOKEN;
+use crate::transcription::deepgram::DEEPGRAM_WEBSOCKET_URL;
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RealtimeTranscriptionEvent {
+    pub timestamp: DateTime<Utc>,
+    pub device: String,
+    pub transcription: String,
+    pub is_final: bool,
+    pub is_input: bool,
+}
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,

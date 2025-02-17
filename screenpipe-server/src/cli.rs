@@ -3,10 +3,9 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
 use clap::CommandFactory;
-use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
+use screenpipe_audio::{vad::{VadSensitivity, VadEngineEnum}, core::engine::AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
-use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]

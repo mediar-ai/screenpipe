@@ -6,6 +6,8 @@ use hf_hub::{api::sync::Api, Repo, RepoType};
 use log::{debug, info};
 use tokenizers::Tokenizer;
 
+use crate::core::engine::AudioTranscriptionEngine;
+
 #[derive(Clone)]
 pub struct WhisperModel {
     pub model: Model,
@@ -14,7 +16,7 @@ pub struct WhisperModel {
 }
 
 impl WhisperModel {
-    pub fn new(engine: &crate::AudioTranscriptionEngine) -> Result<Self> {
+    pub fn new(engine: &AudioTranscriptionEngine) -> Result<Self> {
         debug!("Initializing WhisperModel");
         let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
         info!("device = {:?}", device);
@@ -23,17 +25,17 @@ impl WhisperModel {
         let (config_filename, tokenizer_filename, weights_filename) = {
             let api = Api::new()?;
             let repo = match engine {
-                crate::AudioTranscriptionEngine::WhisperTiny => Repo::with_revision(
+                AudioTranscriptionEngine::WhisperTiny => Repo::with_revision(
                     "openai/whisper-tiny".to_string(),
                     RepoType::Model,
                     "main".to_string(),
                 ),
-                crate::AudioTranscriptionEngine::WhisperDistilLargeV3 => Repo::with_revision(
+                AudioTranscriptionEngine::WhisperDistilLargeV3 => Repo::with_revision(
                     "distil-whisper/distil-large-v3".to_string(),
                     RepoType::Model,
                     "main".to_string(),
                 ),
-                crate::AudioTranscriptionEngine::WhisperLargeV3Turbo => Repo::with_revision(
+                AudioTranscriptionEngine::WhisperLargeV3Turbo => Repo::with_revision(
                     "openai/whisper-large-v3-turbo".to_string(),
                     RepoType::Model,
                     "main".to_string(),

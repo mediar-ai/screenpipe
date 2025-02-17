@@ -1,18 +1,17 @@
-use crate::audio_processing::{average_noise_spectrum, spectral_subtraction};
+use super::segment::get_segments;
 use crate::{
-    audio_processing::normalize_v2,
-    pyannote::{
-        embedding::EmbeddingExtractor,
-        identify::EmbeddingManager,
-        segment::{get_segments, SpeechSegment},
-    },
-    vad_engine::VadEngine,
+    utils::audio::{average_noise_spectrum, normalize_v2, spectral_subtraction},
+    vad::VadEngine,
 };
 use anyhow::Result;
 use log::{error, info};
 use std::{path::PathBuf, sync::Arc, sync::Mutex as StdMutex};
 use tokio::sync::Mutex;
 use vad_rs::VadStatus;
+
+use super::{
+    embedding::EmbeddingExtractor, embedding_manager::EmbeddingManager, segment::SpeechSegment,
+};
 
 pub async fn prepare_segments(
     audio_data: &[f32],

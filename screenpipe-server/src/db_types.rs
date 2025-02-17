@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use screenpipe_audio::DeviceType;
+use screenpipe_audio::core::device::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;

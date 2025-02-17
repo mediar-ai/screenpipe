@@ -1,11 +1,13 @@
 use candle_transformers::models::whisper;
 use futures::future::join_all;
-use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
-use screenpipe_audio::pyannote::identify::EmbeddingManager;
-use screenpipe_audio::stt::{prepare_segments, stt};
-use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
-use screenpipe_audio::whisper::WhisperModel;
-use screenpipe_audio::{resample, AudioInput, AudioTranscriptionEngine};
+use screenpipe_audio::core::device::default_input_device;
+use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
+use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
+use screenpipe_audio::speaker::prepare_segments;
+use screenpipe_audio::transcription::whisper::model::WhisperModel;
+use screenpipe_audio::vad::{silero::SileroVad, VadEngine};
+use screenpipe_audio::{resample, stt, AudioInput};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -88,7 +90,7 @@ async fn test_transcription_accuracy() {
                 data: Arc::new(audio_data.0),
                 sample_rate: 44100, // hardcoded based on test data sample rate
                 channels: 1,
-                device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
+                device: Arc::new(default_input_device().unwrap()),
             };
 
             let audio_data = if audio_input.sample_rate != whisper::SAMPLE_RATE as u32 {
