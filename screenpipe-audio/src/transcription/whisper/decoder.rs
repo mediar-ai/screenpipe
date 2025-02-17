@@ -3,9 +3,9 @@ use anyhow::{Error as E, Result};
 use candle::{Device, IndexOp, Tensor};
 use candle_nn::ops::softmax;
 use candle_transformers::models::whisper as m;
-use log::{debug, error, info};
 use rand::{distributions::Distribution, SeedableRng};
 use tokenizers::Tokenizer;
+use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct DecodingResult {

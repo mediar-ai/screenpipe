@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::debug;
+use tracing::debug;
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };

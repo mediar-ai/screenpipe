@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-// TODO: switch all log imports to tracing
-use log::debug;
+use tracing::debug;
 use screenpipe_core::find_ffmpeg_path;
 use std::io::Write;
 use std::path::PathBuf;

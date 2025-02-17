@@ -4,9 +4,9 @@ use crate::{
     vad::VadEngine,
 };
 use anyhow::Result;
-use log::{error, info};
 use std::{path::PathBuf, sync::Arc, sync::Mutex as StdMutex};
 use tokio::sync::Mutex;
+use tracing::{error, info};
 use vad_rs::VadStatus;
 
 use super::{

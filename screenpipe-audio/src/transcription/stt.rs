@@ -16,7 +16,6 @@ use crate::vad::{VadEngine, VadEngineEnum, VadSensitivity};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
 use dashmap::DashMap;
-use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
@@ -29,6 +28,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 use super::{AudioInput, TranscriptionResult};
 

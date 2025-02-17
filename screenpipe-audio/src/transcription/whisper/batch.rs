@@ -5,10 +5,10 @@ use anyhow::Result;
 use candle::Tensor;
 use candle_transformers::models::whisper::audio;
 use lazy_static::lazy_static;
-use log::debug;
 use regex::Regex;
 use screenpipe_core::Language;
 use std::collections::HashSet;
+use tracing::debug;
 
 lazy_static! {
     static ref TOKEN_REGEX: Regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>").unwrap();

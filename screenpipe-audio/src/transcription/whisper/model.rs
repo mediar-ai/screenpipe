@@ -3,8 +3,8 @@ use candle::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::whisper::{self as m, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
-use log::{debug, info};
 use tokenizers::Tokenizer;
+use tracing::{debug, info};
 
 use crate::core::engine::AudioTranscriptionEngine;
 
