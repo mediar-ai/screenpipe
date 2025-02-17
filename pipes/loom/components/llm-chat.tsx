@@ -2,7 +2,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Loader2, Send, Square } from "lucide-react";
-import { OpenAI } from "openai";
+import { createChatStream } from "@/lib/actions/chat-stream";
 import { useToast } from "@/lib/use-toast";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -12,7 +12,6 @@ import { spinner } from "@/components/spinner";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { log } from "console";
 
 interface RawInfo {
   frame_id: number;
@@ -55,15 +54,8 @@ export function LLMChat({ data, className }: LLMChatProps) {
 
   const MAX_CONTENT_LENGTH = settings.aiMaxContextChars;
 
-  const [similarityThreshold, setSimilarityThreshold] = useState(1);
-
-
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const debouncedThreshold = useDebounce(similarityThreshold, 300);
-
-
 
   useEffect(() => {
     const handleScroll = () => {
@@ -166,65 +158,15 @@ export function LLMChat({ data, className }: LLMChatProps) {
     setIsAiLoading(true);
 
     try {
-      const openai = new OpenAI({
-        apiKey:
-          settings.aiProviderType === "screenpipe-cloud"
-            ? settings.user.token
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-      });
-      console.log("API settings", settings.openaiApiKey, settings.aiUrl);
-
-
-      // - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
-      const model = settings.aiModel;
-      const customPrompt = settings.customPrompt || "";
-      const context = removeDuplicateLines(data.map(item => item.content.text))
-      const messages = [
-        {
-          role: "system" as const,
-          content: `You are a helpful assistant specialized as a "${ AGENT.name }". ${AGENT.systemPrompt }
-            Rules:
-            - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
-            - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
-            - User timezone offset: ${new Date().getTimezoneOffset()}
-            - ${customPrompt ? `Custom prompt: ${customPrompt}` : ""}
-            - A same lines can be repeat multiple times, you can ignore the duplicate lines
-            - You can ignore the context if user's question is differnet from context as an example user says "hi"
-            `,
-        },
-        ...chatMessages.map((msg) => ({
-          role: msg.role as "user" | "assistant" | "system",
-          content: msg.content,
-        })),
-        {
-          role: "user" as const,
-          content: `Context data: ${context}
-          User query: ${floatingInput}`,
-        },
-      ];
-      console.log("Messages:", messages);
-
-      abortControllerRef.current = new AbortController();
-      setIsStreaming(true);
-
-      const stream = await openai.chat.completions.create(
-        {
-          model: model,
-          messages: messages,
-          stream: true,
-        },
-        {
-          signal: abortControllerRef.current.signal,
-          // headers: {
-          //   Authorization: `Bearer ${settings.user?.token}`,
-          // },
-        }
+      const stream = await createChatStream(
+        settings,
+        chatMessages,
+        floatingInput,
+        data,
+        abortControllerRef,
       );
 
       let fullResponse = "";
-      // @ts-ignore
       setChatMessages((prevMessages) => [
         ...prevMessages.slice(0, -1),
         { id: generateId(), role: "assistant", content: fullResponse },
@@ -235,16 +177,15 @@ export function LLMChat({ data, className }: LLMChatProps) {
       scrollToBottom();
 
       for await (const chunk of stream) {
-        console.log("chunk", chunk);
         const content = chunk.choices[0]?.delta?.content || "";
         fullResponse += content;
-        // @ts-ignore
         setChatMessages((prevMessages) => [
           ...prevMessages.slice(0, -1),
           { id: generateId(), role: "assistant", content: fullResponse },
         ]);
         scrollToBottom();
       }
+
     } catch (error: any) {
       if (error.toString().includes("unauthorized")) {
         toast({
