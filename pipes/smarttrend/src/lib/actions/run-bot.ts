@@ -249,7 +249,7 @@ ${JSON.stringify(tweetArray, null, 2)}
   await page.close();
 }
 
-let lastCheck = null;
+let lastCheck: Date | null = null;
 
 async function ocrProcess(model: LanguageModel): Promise<void> {
   if (!browser || !browser.connected) {
@@ -267,7 +267,7 @@ async function ocrProcess(model: LanguageModel): Promise<void> {
         limit: 10,
         startTime: lastCheck ? lastCheck.toISOString() : undefined,
     });
-    const context = res.data.map((e) => e.content)
+    const context = res?.data.map((e) => e.content)
     eventEmitter.emit("updateProgress", { process: 1, value: 50 });
 
     const { text } = await generateText({
@@ -291,7 +291,7 @@ ${JSON.stringify(context, null, 2)}
     });
     summaries.push(text);
 
-    lastCheck = Date.now();
+    lastCheck = new Date();
     console.log("Analyzed OCR data.");
   } catch (e) {
     console.error("Error in OCR process:", e);
