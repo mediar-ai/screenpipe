@@ -32,6 +32,7 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
 use xcap::Monitor;
+use crate::browser_utils::create_url_detector;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -284,7 +285,7 @@ pub async fn process_ocr_task(
         let app_name = captured_window.app_name.clone();
         let browser_url = if cfg!(target_os = "macos") && captured_window.is_focused && 
             BROWSER_NAMES.iter().any(|&browser| app_name.to_lowercase().contains(browser)) {
-            match tokio::task::spawn_blocking(move || get_active_browser_url_sync(&app_name)).await {
+            match tokio::task::spawn_blocking(move || get_active_browser_url_sync(&app_name, captured_window.process_id)).await {
                 Ok(Ok(url)) => Some(url),
                 Ok(Err(e)) => {
                     error!("Failed to get browser URL: {}", e);
@@ -461,68 +462,17 @@ impl UIFrame {
     }
 }
 
-fn get_active_browser_url_sync(app_name: &str) -> Result<String, std::io::Error> {
-    // Normalize browser name to match AppleScript expectations
-    let browser_name = app_name.to_lowercase();
-    let applescript_name = if browser_name.contains("chrome") {
-        "Google Chrome"
-    } else if browser_name.contains("safari") {
-        "Safari"
-    } else if browser_name.contains("arc") {
-        "Arc"
-    } else if browser_name.contains("brave") {
-        "Brave Browser"
-    } else if browser_name.contains("edge") {
-        "Microsoft Edge"
-    } else if browser_name.contains("opera") {
-        "Opera"
-    } else if browser_name.contains("vivaldi") {
-        "Vivaldi"
-    } else {
-        return Err(std::io::Error::new(
+fn get_active_browser_url_sync(app_name: &str, process_id: i32) -> Result<String, std::io::Error> {
+    let detector = create_url_detector();
+    match detector.get_active_url(app_name, process_id) {
+        Ok(Some(url)) => Ok(url),
+        Ok(None) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("Unsupported browser: {}", app_name),
-        ));
-    };
-
-    // Generate appropriate AppleScript based on browser type
-    let script = if applescript_name == "Safari" {
-        format!(
-            r#"
-            tell application "Safari"
-                return URL of front document
-            end tell
-            "#
-        )
-    } else {
-        format!(
-            r#"
-            tell application "{}"
-                return URL of active tab of front window
-            end tell
-            "#,
-            applescript_name
-        )
-    };
-
-    // Execute AppleScript and get output
-    let output = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .output()
-        .map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::Other, 
-            format!("Failed to execute AppleScript: {}", e)
-        ))?;
-
-    if !output.status.success() {
-        let error = String::from_utf8_lossy(&output.stderr);
-        return Err(std::io::Error::new(
+            "Failed to get browser URL"
+        )),
+        Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("AppleScript failed: {}", error),
-        ));
+            format!("Error getting browser URL: {}", e)
+        )),
     }
-
-    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(url)
 }
