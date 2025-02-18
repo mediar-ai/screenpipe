@@ -11,10 +11,6 @@ use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
-use enigo::{
-    Direction::{Click, Press, Release},
-    Enigo, Key, Keyboard, Settings,
-};
 use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use log::{debug, error};

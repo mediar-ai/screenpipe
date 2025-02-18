@@ -21,14 +21,13 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
             "",
             "test",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -201,14 +200,13 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
             "",
             "app",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -292,14 +290,13 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
             "",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -330,14 +327,13 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
             "",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -481,14 +477,13 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
             "",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -517,14 +512,13 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
             "",
             "",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -926,14 +920,13 @@ mod tests {
             .unwrap();
 
         // Insert first frame with OCR
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from frame 1",
             "",
             "test_app",
             "test_window",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )
@@ -941,14 +934,13 @@ mod tests {
         .unwrap();
 
         // Insert second frame with OCR
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from frame 2",
             "",
             "test_app",
             "test_window",
-            None,
             Arc::new(OcrEngine::Tesseract),
             false,
         )

@@ -365,7 +365,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         .unwrap();
 
     // Insert test frame
-    let frame_id = db.insert_frame("test_device", None).await.unwrap();
+    let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
     // Insert test OCR data
     db.insert_ocr_text(
@@ -374,7 +374,6 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "{'text': 'Test OCR text', 'confidence': 0.9}",
         "test_app",
         "test_window",
-        None,
         Arc::new(OcrEngine::Tesseract),
         true,
     )

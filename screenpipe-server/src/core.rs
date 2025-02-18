@@ -228,7 +228,7 @@ async fn record_video(
     while is_running.load(Ordering::SeqCst) {
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
-                match db.insert_frame(&device_name, None).await {
+                match db.insert_frame(&device_name, None, window_result.browser_url.as_deref()).await {
                     Ok(frame_id) => {
                         let text_json =
                             serde_json::to_string(&window_result.text_json).unwrap_or_default();
@@ -256,7 +256,6 @@ async fn record_video(
                                 &text_json,
                                 &window_result.app_name,
                                 &window_result.window_name,
-                                window_result.browser_url.as_deref(),
                                 Arc::clone(&ocr_engine),
                                 window_result.focused, // Add this line
                             )

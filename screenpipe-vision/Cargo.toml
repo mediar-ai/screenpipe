@@ -45,8 +45,6 @@ serde = "1.0.200"
 # TO-DO: use a released version. Done for now to avoid waiting xcap release.
 xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
 
-enigo = "0.3.0"
-arboard = "3.4.1"
 once_cell = { workspace = true }
 base64 = "0.22.1"
 

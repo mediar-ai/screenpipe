@@ -1106,7 +1106,7 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)), None)
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -1117,7 +1117,6 @@ async fn add_frame_to_db(
                 ocr.text_json.as_deref().unwrap_or(""),
                 frame.app_name.as_deref().unwrap_or(""),
                 frame.window_name.as_deref().unwrap_or(""),
-                None,
                 Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
                 false,
             )

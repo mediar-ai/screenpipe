@@ -292,6 +292,7 @@ impl DatabaseManager {
         &self,
         device_name: &str,
         timestamp: Option<DateTime<Utc>>,
+        browser_url: Option<&str>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -328,12 +329,13 @@ impl DatabaseManager {
 
         // Insert the new frame with file_path as name
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url) VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(timestamp)
         .bind(file_path)
+        .bind(browser_url.map(|s| s.to_string()))
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -353,7 +355,6 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        browser_url: Option<&str>,
         ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
@@ -369,7 +370,6 @@ impl DatabaseManager {
                     text_json,
                     app_name,
                     window_name,
-                    browser_url,
                     Arc::clone(&ocr_engine),
                     focused,
                 ),
@@ -421,7 +421,6 @@ impl DatabaseManager {
         text_json: &str,
         app_name: &str,
         window_name: &str,
-        browser_url: Option<&str>,
         ocr_engine: Arc<OcrEngine>,
         focused: bool,
     ) -> Result<(), sqlx::Error> {
@@ -443,14 +442,13 @@ impl DatabaseManager {
         );
 
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, browser_url, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
             .bind(app_name)
             .bind(format!("{:?}", *ocr_engine))
             .bind(window_name)
-            .bind(browser_url.map(|s| s.to_string()))
             .bind(focused)
             .bind(text_length)
             .execute(&mut *tx)

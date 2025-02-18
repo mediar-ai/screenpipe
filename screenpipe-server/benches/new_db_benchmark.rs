@@ -47,7 +47,6 @@ fn bench_insert_ocr_text(c: &mut Criterion) {
                     &text_json,
                     app_name,
                     window_name,
-                    None,
                     std::sync::Arc::new(ocr_engine),
                     focused,
                 )
