@@ -214,8 +214,8 @@ export function createDefaultSettingsObject(): Settings {
       currentPlatform === "macos"
         ? "apple-native"
         : currentPlatform === "windows"
-        ? "windows-native"
-        : "tesseract";
+          ? "windows-native"
+          : "tesseract";
 
     defaultSettings.ocrEngine = ocrModel;
     defaultSettings.fps = currentPlatform === "macos" ? 0.5 : 1;
@@ -265,7 +265,7 @@ const tauriStorage: PersistStorage = {
     const tauriStore = await getStore();
     const allKeys = await tauriStore.keys();
     const values: Record<string, any> = {};
-    
+
     for (const k of allKeys) {
       values[k] = await tauriStore.get(k);
     }
@@ -275,11 +275,17 @@ const tauriStorage: PersistStorage = {
   setItem: async (_key: string, value: any) => {
     const tauriStore = await getStore();
 
+    delete value.settings.customSettings;
     const flattenedValue = flattenObject(value.settings);
 
     // Delete all existing keys first
-    const existingKeys = await tauriStore.keys();
-    for (const key of existingKeys) {
+    //const existingKeys = await tauriStore.keys();
+    //for (const key of existingKeys) {
+    //	await tauriStore.delete(key);
+    //}
+
+    // Only delete keys that are present in the new settings
+    for (const key of Object.keys(flattenedValue)) {
       await tauriStore.delete(key);
     }
 
@@ -321,15 +327,15 @@ export const store = createContextStore<StoreModel>(
     {
       storage: tauriStorage,
       mergeStrategy: "mergeDeep",
-    }
-  )
+    },
+  ),
 );
 
 export function useSettings() {
   const settings = store.useStoreState((state) => state.settings);
   const setSettings = store.useStoreActions((actions) => actions.setSettings);
   const resetSettings = store.useStoreActions(
-    (actions) => actions.resetSettings
+    (actions) => actions.resetSettings,
   );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
@@ -365,7 +371,7 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
-  const loadUser = async (token: string) => { 
+  const loadUser = async (token: string) => {
     try {
       const response = await fetch(`https://screenpi.pe/api/user`, {
         method: "POST",

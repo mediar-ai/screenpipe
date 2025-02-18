@@ -31,10 +31,6 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
-
-#[cfg(not(target_os = "macos"))]
 use xcap::Monitor;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>

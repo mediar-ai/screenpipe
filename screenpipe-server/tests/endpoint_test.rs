@@ -6,6 +6,7 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
+    use lru::LruCache;
     use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
@@ -16,10 +17,10 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
-    use std::collections::HashMap;
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -32,9 +33,6 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_tx: Arc::new(tokio::sync::broadcast::channel(1000).0),
-            devices_status: HashMap::new(),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -44,9 +42,9 @@ mod tests {
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
             ui_monitoring_enabled: false,
-            realtime_transcription_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
-            realtime_transcription_enabled: false,
-            realtime_vision_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
+            frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(100).unwrap(),
+            )))),
         });
 
         let router = create_router();
