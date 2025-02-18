@@ -1,7 +1,4 @@
 use anyhow::Result;
-use killport::cli::Mode;
-use killport::killport::{Killport, KillportOperations};
-use killport::signal::KillportSignal;
 use screenpipe_core::{download_pipe, download_pipe_private, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -314,26 +311,70 @@ impl PipeManager {
 
             match handle.state {
                 PipeState::Port(port) => {
-                    tokio::task::spawn_blocking(move || {
-                        let killport = Killport;
-                        let signal: KillportSignal = "SIGKILL".parse().unwrap();
-
-                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                    tokio::task::spawn(async move {
+                        // killport doesn't seems working on windows, sometimes :(
+                        #[cfg(unix)]
                         {
-                            Ok(killed_services) => {
-                                if killed_services.is_empty() {
-                                    debug!("no services found using port {}", port);
-                                } else {
-                                    for (killable_type, name) in killed_services {
-                                        debug!(
-                                            "successfully killed {} '{}' listening on port {}",
-                                            killable_type, name, port
-                                        );
+                            use killport::cli::Mode;
+                            use killport::killport::{Killport, KillportOperations};
+                            use killport::signal::KillportSignal;
+
+                            let killport = Killport;
+                            let signal: KillportSignal = "SIGKILL".parse().unwrap();
+
+                            match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                            {
+                                Ok(killed_services) => {
+                                    if killed_services.is_empty() {
+                                        debug!("no services found using port {}", port);
+                                    } else {
+                                        for (killable_type, name) in killed_services {
+                                            debug!(
+                                                "successfully killed {} '{}' listening on port {}",
+                                                killable_type, name, port
+                                            );
+                                        }
                                     }
                                 }
+                                Err(e) => {
+                                    warn!("error killing port {}: {}", port, e);
+                                }
                             }
-                            Err(e) => {
-                                warn!("error killing port {}: {}", port, e);
+                        }
+                        #[cfg(windows)] 
+                        {
+                            const CREATE_NO_WINDOW: u32 = 0x08000000;
+                            let output = tokio::process::Command::new("netstat")
+                                .args(&["-ano"])
+                                .creation_flags(CREATE_NO_WINDOW)
+                                .output()
+                                .await
+                                .expect("failed to execute netstat");
+
+                            let output_str = std::str::from_utf8(&output.stdout)
+                                .expect("failed to convert output to string");
+
+                            for line in output_str.lines() {
+                                // parts
+                                let parts: Vec<&str> = line.split_whitespace().collect();
+                                if parts.len() >= 5 {
+                                // only kill local address
+                                    let local_address = parts[1];
+                                    if local_address.ends_with(&format!(":{}", port)) {
+                                        // extract pid
+                                        if let Ok(pid) = parts[4].parse::<u32>() {
+                                            let kill_result = tokio::process::Command::new("taskkill.exe")
+                                                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                                                .creation_flags(CREATE_NO_WINDOW)
+                                                .output()
+                                                .await
+                                                .expect("failed to execute taskkill");
+                                            if kill_result.status.success() {
+                                                info!("successfully stopped pipe running on port: {}", port);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     })
@@ -350,17 +391,15 @@ impl PipeManager {
                     }
                     #[cfg(windows)]
                     {
-                        use windows::Win32::System::Threading::{
-                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                        };
-                        unsafe {
-                            if let Ok(h_process) = OpenProcess(
-                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                                false,
-                                pid as u32,
-                            ) {
-                                let _ = TerminateProcess(h_process, 1);
-                            }
+                        const CREATE_NO_WINDOW: u32 = 0x08000000;
+                        let kill_result = tokio::process::Command::new("taskkill")
+                            .args(&["/F", "/T", "/PID", &pid.to_string()])
+                            .creation_flags(CREATE_NO_WINDOW)
+                            .output()
+                            .await
+                            .expect("failed to execute taskkill");
+                        if kill_result.status.success() {
+                            info!("successfully stopped pipe pid: {}", pid.to_string());
                         }
                     }
                 }
