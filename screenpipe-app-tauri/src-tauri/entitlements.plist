@@ -16,15 +16,5 @@
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
 
-    <!-- Add these for UI monitor -->
-    <key>com.apple.security.automation.apple-events</key>
-    <true/>
-    <key>com.apple.security.get-task-allow</key>
-    <true/>
-    <key>com.apple.security.temporary-exception.apple-events</key>
-    <array>
-        <string>com.apple.systemuiserver</string>
-        <string>com.apple.dock</string>
-    </array>
 </dict>
 </plist>
