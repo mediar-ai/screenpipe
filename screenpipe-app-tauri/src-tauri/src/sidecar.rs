@@ -537,47 +537,15 @@ impl SidecarManager {
         self.update_settings(app).await?;
 
         // check for permissions before spawning
-        #[cfg(target_os = "macos")]
-        {
-            self.assert_permissions()?;
-        }
+        // #[cfg(target_os = "macos")]
+        // {
+        //     self.assert_permissions()?;
+        // }
 
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
-        // self.last_restart = Instant::now();
-        // info!("last restart: {:?}", self.last_restart);
-
-        // // kill previous task if any
-        // if let Some(task) = self.restart_task.take() {
-        //     task.abort();
-        // }
-
-        // let restart_interval = self.restart_interval.clone();
-        // info!("restart_interval: {:?}", restart_interval);
-        // // Add this function outside the SidecarManager impl
-        // async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
-        //     let state = app_handle.state::<SidecarState>();
-        //     let mut manager = state.0.lock().await;
-        //     if let Some(manager) = manager.as_mut() {
-        //         manager.check_and_restart(app_handle).await
-        //     } else {
-        //         Ok(())
-        //     }
-        // }
-
-        // // In the spawn method
-        // let app_handle = app.app_handle().clone();
-        // self.restart_task = Some(tauri::async_runtime::spawn(async move {
-        //     loop {
-        //         let interval = *restart_interval.lock().await;
-        //         info!("interval: {}", interval.as_secs());
-        //         if let Err(e) = check_and_restart_sidecar(&app_handle).await {
-        //             error!("Failed to check and restart sidecar: {}", e);
-        //         }
-        //         sleep(Duration::from_secs(60)).await;
-        //     }
-        // }));
+        
 
         Ok(())
     }
