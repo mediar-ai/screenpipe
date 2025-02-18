@@ -520,14 +520,14 @@ impl SidecarManager {
          let permissions = do_permissions_check(true);
 
          if permissions.screen_recording != OSPermissionStatus::Granted {
-             return Err("Screen recording permission denied".to_string());
+            return Err("Screen recording permission denied".to_string());
          }
          if permissions.microphone != OSPermissionStatus::Granted {
-             return Err("Microphone permission denied".to_string());
+            return Err("Microphone permission denied".to_string());
          }
-         if permissions.camera != OSPermissionStatus::Granted {
-            return Err("Camera permission denied".to_string());
-        }
+         if permission.accessibility != OSPermissionsCheck::Granted {
+            return Err("Accessibility permission denied".to_string());
+         }
 
         Ok(())
     }
