@@ -309,6 +309,21 @@ impl PipeManager {
             // Wait a bit for the process to actually terminate
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
+            #[cfg(unix)]
+            {
+                // try with id first
+                let command = format!(
+                    "ps axuw | grep {} | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                    &id.to_string()
+                );
+
+                let _ = tokio::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(command)
+                    .output()
+                    .await;
+            }
+
             match handle.state {
                 PipeState::Port(port) => {
                     tokio::task::spawn(async move {
