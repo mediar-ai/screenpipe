@@ -88,41 +88,47 @@ mod pipes {
         let script_content = if cfg!(windows) {
             format!(
                 r#"
-$parentPid={parent_pid}
-$childPid={child_pid}
-function Get-ChildProcesses($ProcessId) {{
-    Get-WmiObject Win32_Process | Where-Object {{ $_.ParentProcessId -eq $ProcessId }} | ForEach-Object {{
-        $_.ProcessId
-        Get-ChildProcesses $_.ProcessId
-            }}
+$parentPid = {{parent_pid}}
+$targetPort = 3030
+
+function Get-ProcessesUsingPort($port) {{
+    $processes = @()
+    $netstatOutput = netstat -ano | Select-String ":$port\s+.*LISTENING|:$port\s+.*ESTABLISHED"
+    
+    foreach ($line in $netstatOutput) {{
+        $columns = $line -split "\s+"
+        $pid = $columns[-1]
+        if ($pid -match "^\d+$") {{
+            $processes += $pid
+        }}
+    }}
+
+    return $processes | Select-Object -Unique
 }}
+
 while ($true) {{
-    # Check if parent process is running
+    # Check if the parent process is running
     if (-not (Get-Process -Id $parentPid -ErrorAction SilentlyContinue)) {{
-        Write-Host "Parent process ($parentPid) not found. Terminating child processes."
+        Write-Host "Parent process ($parentPid) not running. Checking for processes using port $targetPort."
 
-        # Get all child processes recursively
-        $children = Get-ChildProcesses $childPid
+        # Get all processes using port 3030
+        $processesToKill = Get-ProcessesUsingPort $targetPort
 
-        # Add the main child process to the list
-        $allProcesses = @($childPid) + $children
-
-        foreach ($pid in $allProcesses) {{
+        foreach ($pid in $processesToKill) {{
             try {{
-                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process: $pid"
+                Write-Host "Killing process $pid and its child processes..."
+                Start-Process -NoNewWindow -FilePath "taskkill" -ArgumentList "/PID $pid /T /F" -Wait -ErrorAction SilentlyContinue
             }} catch {{
-                Write-Host "Process $pid already terminated or inaccessible."
+                Write-Host "Failed to kill process $pid. Ignoring error."
             }}
         }}
 
-        Write-Host "All child processes stopped. Exiting script."
+        Write-Host "All processes using port $targetPort have been terminated. Exiting script."
         exit
-    }}
+            }}
 
-    # Sleep for a short period before checking again
     Start-Sleep -Seconds 1
-}}
+            }}
 "#
             )
         } else {
