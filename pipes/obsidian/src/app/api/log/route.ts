@@ -6,84 +6,19 @@ import { ContentItem } from "@screenpipe/js";
 import { pipe } from "@screenpipe/js";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { extractLinkedContent } from "@/lib/actions/obsidian";
 
 const workLog = z.object({
   title: z.string(),
   description: z.string(),
   tags: z.array(z.string()),
+  mediaLinks: z.array(z.string()).optional(),
 });
 
 type WorkLog = z.infer<typeof workLog> & {
   startTime: string;
   endTime: string;
 };
-
-async function readObsidianFile(filePath: string): Promise<string> {
-  try {
-    const content = await fs.readFile(filePath, "utf8");
-    return content;
-  } catch (err) {
-    console.error(`failed to read file ${filePath}:`, err);
-    return "";
-  }
-}
-
-async function findVaultRoot(startPath: string): Promise<string> {
-  let currentPath = startPath;
-
-  while (currentPath !== "/" && currentPath !== ".") {
-    try {
-      // Check if .obsidian exists in current directory
-      await fs.access(path.join(currentPath, ".obsidian"));
-      return currentPath; // Found the vault root
-    } catch {
-      // Move up one directory
-      currentPath = path.dirname(currentPath);
-    }
-  }
-  throw new Error("could not find obsidian vault root (.obsidian folder)");
-}
-
-async function extractLinkedContent(
-  prompt: string,
-  basePath: string
-): Promise<string> {
-  try {
-    // Find the vault root first
-    const vaultRoot = await findVaultRoot(basePath);
-
-    // Match @[[file]] or @[[folder/file]] patterns
-    const linkRegex = /@\[\[(.*?)\]\]/g;
-    const matches = [...prompt.matchAll(linkRegex)];
-
-    let enrichedPrompt = prompt;
-
-    for (const match of matches) {
-      const relativePath = match[1];
-      // Handle .md extension if not present
-      const fullPath = path.join(
-        vaultRoot,
-        relativePath.endsWith(".md") ? relativePath : `${relativePath}.md`
-      );
-
-      try {
-        const content = await readObsidianFile(fullPath);
-        // Replace the @[[link]] with actual content
-        enrichedPrompt = enrichedPrompt.replace(
-          match[0],
-          `\n--- Content of ${relativePath} ---\n${content}\n---\n`
-        );
-      } catch (err) {
-        console.error(`failed to process link ${relativePath}:`, err);
-      }
-    }
-
-    return enrichedPrompt;
-  } catch (err) {
-    console.error("failed to find vault root:", err);
-    return prompt; // Return original prompt if we can't process links
-  }
-}
 
 async function generateWorkLog(
   screenData: ContentItem[],
@@ -99,24 +34,34 @@ async function generateWorkLog(
     enrichedPrompt = await extractLinkedContent(customPrompt, obsidianPath);
   }
 
-  const defaultPrompt = `Based on the following screen data, generate a concise work activity log entry.
-    Rules:
-    - use the screen data to generate the log entry
-    - focus on describing the activity and tags
-    - use the following context to better understand the user's goals and priorities:
-    
-    ${enrichedPrompt}
-    
-    Screen data: ${JSON.stringify(screenData)}
+  const defaultPrompt = `You are analyzing screen recording data from Screenpipe, a desktop app that records screens & mics 24/7 to provide context to AI systems.
+    The data includes OCR text, audio transcriptions, and media files from the user's desktop activity.
 
+    Based on the following screen data, generate a concise work activity log entry.
+
+    Here are some user instructions:
+    ${enrichedPrompt}
+
+    Screen data: ${JSON.stringify(screenData)}
+    
+    Rules:
+    - analyze the screen data carefully to understand the user's work context and activities
+    - generate a clear, specific title that reflects the main activity
+    - write a concise but informative description focusing on what was accomplished
+    - add relevant tags based on detected applications, websites, and content types
+    - properly format media files as HTML video elements in table cell:
+      - video: <video src="file://PATH_TO_VIDEO.mp4" controls></video>
+    - include all relevant media file paths in the mediaLinks array
+    - maintain user privacy by excluding sensitive/personal information
+    - ensure description and content are properly escaped for markdown table cells (use <br> for newlines)
+    
     Return a JSON object with:
     {
-        "title": "Brief title of the activity",
-        "description": "Concise description of what was done",
-        "tags": ["#tag1", "#tag2", "#tag3"]
+        "title": "Brief, specific title describing the main activity",
+        "description": "Clear description of what was accomplished, focusing on concrete outcomes",
+        "tags": ["#relevant-tool", "#activity-type", "#project-context"],
+        "mediaLinks": ["<video src=\"file:///absolute/path/to/video.mp4\" controls></video>"]
     }`;
-
-  console.log("enrichedPrompt prompt:", enrichedPrompt);
 
   const provider = ollama(model);
   const response = await generateObject({
@@ -125,6 +70,7 @@ async function generateWorkLog(
     schema: workLog,
   });
 
+  console.log("response:", response.object);
   const formatDate = (date: Date) => {
     return date.toLocaleString("en-US", {
       year: "numeric",
@@ -158,20 +104,59 @@ async function syncLogToObsidian(
 
   const vaultName = path.basename(path.resolve(normalizedPath));
 
-  const tableRow = `| ${logEntry.title} | ${
-    logEntry.description
-  } | ${logEntry.tags.join(", ")} | ${logEntry.startTime} | ${
+  const escapeTableCell = (content: string) => {
+    return content.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+  };
+
+  const timeRange = `${escapeTableCell(logEntry.startTime)} - ${escapeTableCell(
     logEntry.endTime
+  )}`;
+
+  // Combine title with timestamp and description with tags
+  const titleWithTime = `${escapeTableCell(logEntry.title)}<br>${timeRange}`;
+  const descriptionWithTags = `${escapeTableCell(
+    logEntry.description
+  )}<br>${escapeTableCell(logEntry.tags.join("<br>"))}`;
+
+  const tableHeaders = `| Title | Description | Media |\n|-------|-------------|--------|\n`;
+  const tableRow = `| ${titleWithTime} | ${descriptionWithTags} | ${
+    logEntry.mediaLinks?.map((link) => escapeTableCell(link)).join("<br>") || ""
   } |\n`;
 
   try {
-    await fs.access(filePath);
-    await fs.appendFile(filePath, tableRow, "utf8");
-  } catch {
-    const content = `| Title | Description | Tags | Start Time | End Time |\n|-------|-------------|------|------------|------------|\n${tableRow}`;
-    await fs.writeFile(filePath, content, "utf8");
+    let existingContent = "";
+    try {
+      existingContent = await fs.readFile(filePath, "utf8");
+    } catch {
+      // File doesn't exist yet, create new with headers
+      await fs.writeFile(filePath, tableHeaders + tableRow, "utf8");
+      return getObsidianUrl(vaultName, filename);
+    }
+
+    if (!existingContent.trim()) {
+      // Empty file - write headers and new row
+      await fs.writeFile(filePath, tableHeaders + tableRow, "utf8");
+    } else if (!existingContent.includes("| Title | Description |")) {
+      // No headers - prepend headers and add new row while keeping existing content
+      await fs.writeFile(
+        filePath,
+        tableHeaders + existingContent + tableRow,
+        "utf8"
+      );
+    } else {
+      // Headers exist - append new row while preserving existing content
+      await fs.appendFile(filePath, tableRow, "utf8");
+    }
+  } catch (error) {
+    console.error("Error writing to file:", error);
+    throw error;
   }
 
+  return getObsidianUrl(vaultName, filename);
+}
+
+// Helper function to generate Obsidian URL
+function getObsidianUrl(vaultName: string, filename: string): string {
   return `obsidian://open?vault=${encodeURIComponent(
     vaultName
   )}&file=${encodeURIComponent(filename)}`;
@@ -181,11 +166,12 @@ export async function GET() {
   try {
     const settings = await pipe.settings.getAll();
     console.log("settings:", settings);
-    const interval = settings.customSettings?.obsidian?.interval || 3600000;
+    const interval =
+      settings.customSettings?.obsidian?.logTimeWindow || 3600000;
     const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
     const customPrompt = settings.customSettings?.obsidian?.prompt;
-    const pageSize = settings.customSettings?.obsidian?.pageSize || 100;
-    const model = settings.customSettings?.obsidian?.aiModel;
+    const pageSize = settings.customSettings?.obsidian?.logPageSize || 100;
+    const model = settings.customSettings?.obsidian?.logModel;
 
     if (!obsidianPath) {
       return NextResponse.json(
