@@ -525,7 +525,7 @@ impl SidecarManager {
          if permissions.microphone != OSPermissionStatus::Granted {
             return Err("Microphone permission denied".to_string());
          }
-         if permission.accessibility != OSPermissionsCheck::Granted {
+         if permissions.accessibility != OSPermissionStatus::Granted {
             return Err("Accessibility permission denied".to_string());
          }
 
