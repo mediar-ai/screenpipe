@@ -46,7 +46,6 @@ serde = "1.0.200"
 xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
 accessibility-sys = "0.1.3"
 core-foundation = "0.9.4"
-accessibility = "0.1.6"
 url = "2.5.0"
 
 once_cell = { workspace = true }
