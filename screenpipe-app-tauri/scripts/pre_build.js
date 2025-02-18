@@ -373,6 +373,10 @@ if (platform == 'macos') {
 			// Compile directly to the final destination
 			await $`swiftc -O -whole-module-optimization -enforce-exclusivity=unchecked -num-threads 8 -target ${arch}-apple-macos11.0 -o ${outputPath} ${swiftSrc} -framework Cocoa -framework ApplicationServices -framework Foundation`;
 
+			// Sign with ad-hoc signature first - this ensures the binary is at least signed
+			// Tauri will re-sign it later with the proper identity
+			await $`codesign --force --sign - ${outputPath}`;
+
 			console.log(`Swift UI monitor for ${arch} compiled successfully`);
 			await fs.chmod(outputPath, 0o755);
 		}
