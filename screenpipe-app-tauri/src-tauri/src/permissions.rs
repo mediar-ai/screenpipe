@@ -12,7 +12,6 @@ extern "C" {
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
-    Camera,
     Microphone,
     Accessibility,
 }
@@ -102,7 +101,6 @@ impl OSPermissionStatus {
 pub struct OSPermissionsCheck {
     pub screen_recording: OSPermissionStatus,
     pub microphone: OSPermissionStatus,
-    pub camera: OSPermissionStatus,
     pub accessibility: OSPermissionStatus,
 }
 
