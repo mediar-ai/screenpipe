@@ -312,33 +312,55 @@ impl PipeManager {
             match handle.state {
                 PipeState::Port(port) => {
                     tokio::task::spawn(async move {
-                        // killport doesn't seems working on windows, sometimes :(
+                        // killport doesn't seems working
                         #[cfg(unix)]
                         {
-                            use killport::cli::Mode;
-                            use killport::killport::{Killport, KillportOperations};
-                            use killport::signal::KillportSignal;
+                            // soft kill
+                            let command = format!(
+                                "lsof -i :{} | grep -E 'bun|node' | awk 'NR>1 {{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                                port
+                            );
 
-                            let killport = Killport;
-                            let signal: KillportSignal = "SIGKILL".parse().unwrap();
+                            let output = tokio::process::Command::new("sh")
+                                .arg("-c")
+                                .arg(command)
+                                .output()
+                                .await
+                                .expect("failed to execute sh command");
 
-                            match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
-                            {
-                                Ok(killed_services) => {
-                                    if killed_services.is_empty() {
-                                        debug!("no services found using port {}", port);
-                                    } else {
-                                        for (killable_type, name) in killed_services {
-                                            debug!(
-                                                "successfully killed {} '{}' listening on port {}",
-                                                killable_type, name, port
-                                            );
+                            if !output.status.success() {
+                                // keep killport in fallback
+                                use killport::cli::Mode;
+                                use killport::killport::{Killport, KillportOperations};
+                                use killport::signal::KillportSignal;
+
+                                let killport = Killport;
+                                let signal: KillportSignal = "SIGKILL".parse().unwrap();
+
+                                match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                                {
+                                    Ok(killed_services) => {
+                                        if killed_services.is_empty() {
+                                            debug!("no services found using port {}", port);
+                                        } else {
+                                            for (killable_type, name) in killed_services {
+                                                debug!(
+                                                    "successfully killed {} '{}' listening on port {}",
+                                                    killable_type, name, port
+                                                );
+                                            }
                                         }
                                     }
+                                    Err(e) => {
+                                        warn!("error killing port {}: {}", port, e);
+                                    }
                                 }
-                                Err(e) => {
-                                    warn!("error killing port {}: {}", port, e);
-                                }
+
+                            } else {
+                                debug!(
+                                    "successfully killed listening on port {}",
+                                    port
+                                );
                             }
                         }
                         #[cfg(windows)] 
