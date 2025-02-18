@@ -2,8 +2,8 @@
 
 import cron from "node-cron";
 import { pipe, Settings } from "@screenpipe/js";
-import puppeteer from "puppeteer";
-import type { Browser, CookieParam, Page } from "puppeteer";
+import puppeteer from "puppeteer-core";
+import type { Browser, CookieParam, Page } from "puppeteer-core";
 import { generateText, streamObject, type LanguageModel } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { ollama } from "ollama-ai-provider";
@@ -46,11 +46,12 @@ let suggestionJob: any = null;
 
 export async function runBot(
   settings: Settings,
+  executablePath: string,
   cookies: CookieParam[],
 ): Promise<boolean> {
   await stopBot();
 
-  browser = await puppeteer.launch({ headless: true });
+  browser = await puppeteer.launch({ executablePath, headless: true });
 
   const model = await getModel(settings);
   if (!model) {

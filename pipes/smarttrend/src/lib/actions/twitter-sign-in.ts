@@ -1,9 +1,11 @@
 "use server";
 
-import puppeteer, { type CookieParam } from "puppeteer";
+import puppeteer, { type CookieParam } from "puppeteer-core";
 
-export async function signInToTwitter(): Promise<CookieParam[]> {
-  const browser = await puppeteer.launch({ headless: false });
+export async function signInToTwitter(
+  executablePath: string,
+): Promise<CookieParam[]> {
+  const browser = await puppeteer.launch({ executablePath, headless: false });
   const page = await browser.newPage();
 
   await page.goto("https://x.com/login", { waitUntil: "networkidle2" });

@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { TwitterTweetEmbed } from "react-twitter-embed";
 import TextareaAutosize from "react-textarea-autosize";
 import { postReply, type Suggestion } from "@/lib/actions/run-bot";
-import type { CookieParam } from "puppeteer";
+import type { CookieParam } from "puppeteer-core";
 
 interface Props {
   cookies: CookieParam[];

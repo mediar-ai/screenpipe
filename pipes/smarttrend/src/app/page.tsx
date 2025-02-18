@@ -6,9 +6,10 @@ import { ConnectionPanel } from "@/components/connection-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { SuggestionList } from "@/components/suggestion-list";
 import type { ProgressUpdate } from "@/lib/actions/run-bot";
-import type { CookieParam } from "puppeteer";
+import type { CookieParam } from "puppeteer-core";
 
 export default function Page() {
+  const [executablePath, setExecutablePath] = useState<string | null>(null);
   const [cookies, setCookies] = useState<CookieParam[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [progresses, setProgresses] = useState<number[]>([100, 100, 100, 100]);
@@ -45,15 +46,21 @@ export default function Page() {
     return () => {
       eventSource.close();
     };
-  }, []);
+  });
 
   return (
     <div className="flex flex-col lg:h-screen lg:overflow-y-hidden">
       <h1 className="my-12 text-2xl text-center font-bold">SmartTrend</h1>
       <div className="flex flex-col gap-8 lg:flex-row xl:gap-16 h-full px-8 lg:px-16">
         <div className="flex flex-col gap-8 h-full">
-          <ConnectionPanel isConnected={isConnected} setCookies={setCookies} />
+          <ConnectionPanel
+            executablePath={executablePath}
+            setExecutablePath={setExecutablePath}
+            setCookies={setCookies}
+            isConnected={isConnected}
+          />
           <ControlPanel
+            executablePath={executablePath}
             cookies={cookies}
             isConnected={isConnected}
             isRunning={isRunning}
