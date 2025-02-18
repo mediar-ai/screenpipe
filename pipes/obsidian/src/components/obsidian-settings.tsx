@@ -12,6 +12,7 @@ import {
   Clock,
   ExternalLink,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OllamaModelsList } from "./ollama-models-list";
@@ -567,6 +568,30 @@ export function ObsidianSettings() {
                     >
                       <Brain className="h-4 w-4" />
                       log generation model
+                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                        ollama run{" "}
+                        {settings?.logModel || "llama3.2:3b-instruct-q4_K_M"}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              `ollama run ${
+                                settings?.logModel ||
+                                "llama3.2:3b-instruct-q4_K_M"
+                              }`
+                            );
+                            toast({
+                              title: "copied to clipboard",
+                              duration: 1000,
+                            });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </code>
                     </Label>
                     <OllamaModelsList
                       disabled={!pathValidation.isValid}
@@ -626,6 +651,31 @@ export function ObsidianSettings() {
                     >
                       <Brain className="h-4 w-4" />
                       analysis model
+                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                        ollama run{" "}
+                        {settings?.analysisModel ||
+                          "deepseek-r1:7b-qwen-distill-q4_K_M"}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              `ollama run ${
+                                settings?.analysisModel ||
+                                "deepseek-r1:7b-qwen-distill-q4_K_M"
+                              }`
+                            );
+                            toast({
+                              title: "copied to clipboard",
+                              duration: 1000,
+                            });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </code>
                     </Label>
                     <OllamaModelsList
                       disabled={!pathValidation.isValid}

@@ -98,7 +98,21 @@ Generate a structured analysis following the above format.`;
     maxRetries: 5,
   });
 
-  return response.text;
+  // Transform <think> tags into Obsidian foldable callouts
+  let transformedText = response.text.replace(
+    /<think>([\s\S]*?)<\/think>/g,
+    (_, content) =>
+      `> [!note]- Thinking Process\n${content
+        .split("\n")
+        .map((line: string) => `> ${line}`)
+        .join("\n")}`
+  );
+
+  // Transform <video> tags to just 'video'
+  transformedText = transformedText.replace(/<video>/g, "video");
+  transformedText = transformedText.replace(/<\/video>/g, "");
+
+  return transformedText;
 }
 
 async function saveMarkdown(
