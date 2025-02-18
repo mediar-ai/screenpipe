@@ -142,7 +142,6 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
                 }
             },
             microphone: check_av_permission(AVMediaType::Audio),
-            camera: check_av_permission(AVMediaType::Video),
             accessibility: { check_accessibility_permission() },
         }
     }
@@ -152,7 +151,6 @@ pub fn do_permissions_check(initial_check: bool) -> OSPermissionsCheck {
         OSPermissionsCheck {
             screen_recording: OSPermissionStatus::NotNeeded,
             microphone: OSPermissionStatus::NotNeeded,
-            camera: OSPermissionStatus::NotNeeded,
             accessibility: OSPermissionStatus::NotNeeded,
         }
     }
