@@ -525,9 +525,6 @@ impl SidecarManager {
          if permissions.microphone != OSPermissionStatus::Granted {
              return Err("Microphone permission denied".to_string());
          }
-         if permissions.camera != OSPermissionStatus::Granted {
-            return Err("Camera permission denied".to_string());
-        }
 
         Ok(())
     }
