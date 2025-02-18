@@ -375,7 +375,7 @@ if (platform == 'macos') {
 
 			// Sign with ad-hoc signature first - this ensures the binary is at least signed
 			// Tauri will re-sign it later with the proper identity
-			await $`codesign --force --sign - ${outputPath}`;
+			await $`codesign --force --sign "${process.env.APPLE_SIGNING_IDENTITY}" --timestamp ${outputPath}`;
 
 			console.log(`Swift UI monitor for ${arch} compiled successfully`);
 			await fs.chmod(outputPath, 0o755);
