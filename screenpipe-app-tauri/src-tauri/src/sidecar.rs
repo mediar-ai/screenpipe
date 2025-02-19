@@ -3,18 +3,13 @@ use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tauri::async_runtime::JoinHandle;
 use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 use tracing::{debug, error, info};
-use crate::permissions::OSPermissionStatus;
-use crate::permissions::do_permissions_check;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -255,7 +250,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let use_all_monitors = store
+    let _use_all_monitors = store
         .get("useAllMonitors")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
@@ -498,9 +493,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 }
 pub struct SidecarManager {
     child: Option<CommandChild>,
-    last_restart: Instant,
-    restart_interval: Arc<Mutex<Duration>>,
-    restart_task: Option<JoinHandle<()>>,
     dev_mode: Arc<Mutex<bool>>,
 }
 
@@ -508,39 +500,15 @@ impl SidecarManager {
     pub fn new() -> Self {
         Self {
             child: None,
-            last_restart: Instant::now(),
-            restart_interval: Arc::new(Mutex::new(Duration::from_secs(0))),
-            restart_task: None,
             dev_mode: Arc::new(Mutex::new(false)),
         }
     }
 
-    pub fn assert_permissions(&mut self) -> Result<(), String> {
-         // check for permissions before spawning
-         let permissions = do_permissions_check(true);
-
-         if permissions.screen_recording != OSPermissionStatus::Granted {
-            return Err("Screen recording permission denied".to_string());
-         }
-         if permissions.microphone != OSPermissionStatus::Granted {
-            return Err("Microphone permission denied".to_string());
-         }
-         if permissions.accessibility != OSPermissionStatus::Granted {
-            return Err("Accessibility permission denied".to_string());
-         }
-
-        Ok(())
-    }
+    
 
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
         self.update_settings(app).await?;
-
-        // check for permissions before spawning
-        // #[cfg(target_os = "macos")]
-        // {
-        //     self.assert_permissions()?;
-        // }
 
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
@@ -553,13 +521,6 @@ impl SidecarManager {
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let store = get_store(app, None).unwrap();
 
-        let restart_interval = store
-            .get("restartInterval")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        debug!("restart_interval: {}", restart_interval);
-
         let dev_mode = store
             .get("devMode")
             .and_then(|v| v.as_bool())
@@ -567,51 +528,9 @@ impl SidecarManager {
 
         debug!("dev_mode: {}", dev_mode);
 
-        *self.restart_interval.lock().await = Duration::from_secs(restart_interval * 60);
         *self.dev_mode.lock().await = dev_mode;
 
         Ok(())
     }
 
-    pub async fn check_and_restart(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let interval = *self.restart_interval.lock().await;
-        let dev_mode = *self.dev_mode.lock().await;
-        info!("interval: {}", interval.as_secs());
-        info!("last_restart: {:?}", self.last_restart);
-        info!("elapsed: {:?}", self.last_restart.elapsed());
-
-        if interval.as_secs() > 0 && self.last_restart.elapsed() >= interval && !dev_mode {
-            info!("attempting to restart sidecar due to restart interval");
-            
-            // Safely kill the existing sidecar
-            if let Some(child) = self.child.take() {
-                match child.kill() {
-                    Ok(_) => info!("successfully killed previous sidecar"),
-                    Err(e) => {
-                        error!("failed to kill previous sidecar: {}", e);
-                        // Continue anyway as the process might have already died
-                    }
-                }
-            }
-
-            // Wait for process cleanup
-            sleep(Duration::from_secs(5)).await;
-
-            // Try to spawn new sidecar
-            match spawn_sidecar(app) {
-                Ok(new_child) => {
-                    info!("successfully spawned new sidecar");
-                    self.child = Some(new_child);
-                    self.last_restart = Instant::now();
-                }
-                Err(e) => {
-                    error!("failed to spawn new sidecar: {}", e);
-                    // Don't propagate error - let the app continue running
-                    // The next check interval will try again
-                }
-            }
-        }
-        
-        Ok(())
-    }
 }
