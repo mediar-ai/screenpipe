@@ -7,7 +7,7 @@ import { Status } from "@/components/status";
 import { SuggestionList } from "@/components/suggestion-list";
 import { useToast } from "@/hooks/use-toast";
 import * as store from "@/lib/store";
-import type { Error } from "@/app/api/errors";
+import type { Error } from "@/app/api/errors/route";
 import type { CookieParam } from "puppeteer-core";
 
 export default function Page() {

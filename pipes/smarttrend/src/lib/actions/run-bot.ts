@@ -388,7 +388,9 @@ async function timelineProcess(
     }
 
     // Convert set back to JSON array
-    const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
+    const tweetArray = Array.from(tweets).map(
+      (s: string) => JSON.parse(s) as Tweet,
+    );
     console.log(`Collected ${tweetArray.length} tweets.`);
 
     await store.pushTweets(tweetArray);

@@ -1,74 +1,79 @@
 "use server";
 
 import path from "path";
-import { open } from "lmdb";
+import fs from "fs";
 import type { Tweet, Suggestion } from "@/lib/actions/run-bot";
 import type { CookieParam } from "puppeteer-core";
 
-const db = open({
-  path: path.join(process.cwd(), "store"),
-  compression: true,
-});
+const DIR = path.join(process.cwd(), "store");
 
-const summaries: string[] = [];
-const timeline: Tweet[] = [];
-const suggestions: Suggestion[] = [];
+function getData(file: string): any {
+  try {
+    const data = fs.readFileSync(path.join(DIR, file), { encoding: "utf8" });
+    return JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
+}
 
-export async function getCookies(): CookieParam[] {
-  const cookies = await db.get("cookies");
-  return cookies || [];
+function putData(file: string, data: any) {
+  if (!fs.existsSync(DIR)) {
+    fs.mkdirSync(DIR);
+  }
+  fs.writeFileSync(path.join(DIR, file), JSON.stringify(data));
+}
+
+export async function getCookies(): Promise<CookieParam[]> {
+  return getData("cookies.json") || [];
 }
 
 export async function putCookies(cookies: CookieParam[]) {
-  await db.put("cookies", cookies);
+  putData("cookies.json", cookies);
 }
 
-export async function getSummaries(): string[] {
-  const summaries = await db.get("summaries");
-  return summaries || [];
+export async function getSummaries(): Promise<string[]> {
+  return getData("summaries.json") || [];
 }
 
 export async function pushSummary(summary: string) {
-  const summaries = await getSummaries();
-  await db.put("summaries", [...summaries, summary]);
+  const summaries = getData("summaries.json") || [];
+  putData("summaries.json", [...summaries, summary]);
 }
 
 export async function compileSummaries(compiled: string) {
-  await db.put("summaries", [compiled]);
+  putData("summaries.json", [compiled]);
 }
 
-export async function getTweets(): Tweet[] {
-  const tweets = await db.get("tweets");
-  return tweets || [];
+export async function getTweets(): Promise<Tweet[]> {
+  return getData("tweets.json") || [];
 }
 
-export async function pushTweets(newTweets: Tweet) {
-  const tweets = await getTweets();
-  await db.put("tweets", [...tweets, ...newTweets]);
+export async function pushTweets(newTweets: Tweet[]) {
+  const tweets = getData("tweets.json") || [];
+  putData("tweets.json", [...tweets, ...newTweets]);
 }
 
 export async function removeTweets(count: number) {
-  const tweets = await db.get("tweets");
-  await db.put("tweets", tweets.slice(count));
+  const tweets = getData("tweets.json") || [];
+  putData("tweets.json", tweets.slice(count));
 }
 
-export async function getSuggestions(): Suggestion[] {
-  const suggestions = await db.get("suggestions");
-  return suggestions || [];
+export async function getSuggestions(): Promise<Suggestion[]> {
+  return getData("suggestions.json") || [];
 }
 
 export async function pushSuggestion(suggestion: Suggestion) {
-  const suggestions = await getSuggestions();
+  const suggestions: Suggestion[] = getData("suggestions.json") || [];
   const ids = new Set(suggestions.map((s) => s.tweetId));
   if (!ids.has(suggestion.tweetId)) {
-    await db.put("suggestions", [...suggestions, suggestion]);
+    putData("suggestions.json", [...suggestions, suggestion]);
   }
 }
 
 export async function deleteSuggestion(i: number) {
-  const suggestions = await getSuggestions();
-  await db.put(
-    "suggestions",
+  const suggestions: Suggestion[] = getData("suggestions.json") || [];
+  putData(
+    "suggestions.json",
     suggestions.filter((_, i2) => i !== i2),
   );
 }
