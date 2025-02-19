@@ -148,7 +148,7 @@ jobs:
             pre-build-args: ""
             tauri-args: "--target x86_64-pc-windows-msvc --config src-tauri/tauri.conf.prod.json"
             os_type: "windows"
-          - platform: "ubuntu-latest"
+          - platform: "ubuntu-22.04"
             args: "--target x86_64-unknown-linux-gnu --features mkl"
             target: x86_64-unknown-linux-gnu
             tauri-args: "--target x86_64-unknown-linux-gnu --config src-tauri/tauri.conf.prod.json"
@@ -296,8 +296,38 @@ jobs:
         if: matrix.os_type == 'linux'
         shell: bash
         run: |
-          sudo apt install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
-          sudo apt install -y intel-mkl
+          sudo apt update && sudo apt install -y \
+            g++ \
+            ffmpeg \
+            tesseract-ocr \
+            cmake \
+            libavformat-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libssl-dev \
+            libtesseract-dev \
+            libxdo-dev \
+            libsdl2-dev \
+            libclang-dev \
+            libxtst-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            curl \
+            pkg-config \
+            libsqlite3-dev \
+            libbz2-dev \
+            zlib1g-dev \
+            libonig-dev \
+            libayatana-appindicator3-dev \
+            libsamplerate-dev \
+            libwebrtc-audio-processing-dev
           curl -fsSL https://bun.sh/install | bash
 
       - name: Install frontend dependencies
