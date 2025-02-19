@@ -618,22 +618,6 @@ export const PipeStore: React.FC = () => {
       const pp = installedPipes?.find((p) => p.config.id === pipe.id);
       const port = pp?.config.port;
 
-      setPipes((prevPipes) =>
-        prevPipes.map((p) =>
-          p.id === pipe.id
-            ? {
-                ...p,
-                installed_config: {
-                  ...p.installed_config,
-                  buildStatus: "in_progress",
-                  is_nextjs: p.installed_config?.is_nextjs ?? false,
-                  source: p.installed_config?.source ?? "",
-                },
-              }
-            : p,
-        ),
-      );
-
       setSelectedPipe((prev) => {
         if (!prev) return prev;
         return {
