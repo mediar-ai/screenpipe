@@ -120,7 +120,7 @@ export async function GET(request: Request) {
     }
 
     const settings = await settingsManager.getAll();
-    const initialPath = settings.customSettings?.obsidian?.path;
+    const initialPath = settings.customSettings?.obsidian?.vaultPath;
 
     if (!initialPath) {
       return NextResponse.json({ files: [] });

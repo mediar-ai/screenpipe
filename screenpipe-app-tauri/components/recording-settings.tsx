@@ -786,7 +786,7 @@ export function RecordingSettings() {
                     variant="default"
                     modalPopover={true}
                     animation={2}
-                    disabled={settings.useAllMonitors}
+                    // disabled={settings.useAllMonitors}
                   />
                 </div>
 

@@ -12,7 +12,6 @@ extern "C" {
 #[serde(rename_all = "camelCase")]
 pub enum OSPermission {
     ScreenRecording,
-    Camera,
     Microphone,
     Accessibility,
 }
@@ -30,10 +29,6 @@ pub fn open_permission_settings(permission: OSPermission) {
                 )
                 .spawn()
                 .expect("Failed to open Screen Recording settings"),
-            OSPermission::Camera => Command::new("open")
-                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
-                .spawn()
-                .expect("Failed to open Camera settings"),
             OSPermission::Microphone => Command::new("open")
                 .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
                 .spawn()
@@ -57,7 +52,6 @@ pub async fn request_permission(permission: OSPermission) {
             OSPermission::ScreenRecording => {
                 scap::request_permission();
             }
-            OSPermission::Camera => request_av_permission(AVMediaType::Video),
             OSPermission::Microphone => request_av_permission(AVMediaType::Audio),
             OSPermission::Accessibility => request_accessibility_permission(),
         }
@@ -102,7 +96,6 @@ impl OSPermissionStatus {
 pub struct OSPermissionsCheck {
     pub screen_recording: OSPermissionStatus,
     pub microphone: OSPermissionStatus,
-    pub camera: OSPermissionStatus,
     pub accessibility: OSPermissionStatus,
 }
 
