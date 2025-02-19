@@ -381,6 +381,7 @@ class BrowserPipeImpl implements BrowserPipe {
                 timestamp: chunk.timestamp,
                 device: chunk.device,
                 isInput: chunk.is_input,
+                speaker: chunk.speaker,
               },
             };
           }
