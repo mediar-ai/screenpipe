@@ -10,7 +10,6 @@ import { runBot, stopBot } from "@/lib/actions/run-bot";
 import type { CookieParam } from "puppeteer-core";
 
 interface Props {
-  executablePath: string;
   cookies: CookieParam[];
   isConnected: boolean;
   isRunning: boolean;
@@ -18,7 +17,6 @@ interface Props {
 }
 
 export function ControlPanel({
-  executablePath,
   cookies,
   isConnected,
   isRunning,
@@ -27,7 +25,7 @@ export function ControlPanel({
   const { settings } = useSettings();
 
   const start = async () => {
-    const success = await runBot(settings, executablePath, cookies);
+    const success = await runBot(settings, cookies);
     if (success) {
       setIsRunning(true);
     }

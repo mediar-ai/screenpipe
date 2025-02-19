@@ -6,6 +6,7 @@ import { IconShare, IconTrash } from "@/components/ui/icons";
 import { Separator } from "@/components/ui/separator";
 import { TwitterTweetEmbed } from "react-twitter-embed";
 import TextareaAutosize from "react-textarea-autosize";
+import * as store from "@/lib/store";
 import { postReply, type Suggestion } from "@/lib/actions/run-bot";
 import type { CookieParam } from "puppeteer-core";
 
@@ -17,6 +18,10 @@ interface Props {
 
 export function SuggestionList({ cookies, isConnected, isRunning }: Props) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+
+  useEffect(() => {
+    store.getSuggestions().then(setSuggestions);
+  }, []);
 
   useEffect(() => {
     const eventSource = new EventSource("/api/suggestions");
@@ -55,11 +60,12 @@ export function SuggestionList({ cookies, isConnected, isRunning }: Props) {
 
   const post = async (i: number) => {
     const success = await postReply(cookies, suggestions[i]);
-    if (success) remove(i);
+    if (success) await remove(i);
   };
 
   const remove = async (i: number) => {
-    setSuggestions((prev) => prev.filter((_, i2) => i2 !== i));
+    await store.deleteSuggestion(i);
+    setSuggestions((prev) => prev.filter((_, i2) => i !== i2));
   };
 
   return (

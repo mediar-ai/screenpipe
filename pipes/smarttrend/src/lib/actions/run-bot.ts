@@ -4,11 +4,13 @@ import cron from "node-cron";
 import { pipe, Settings } from "@screenpipe/js";
 import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
-import { generateText, streamObject, type LanguageModel } from "ai";
+import { streamText, streamObject, type LanguageModel } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
+import * as store from "@/lib/store";
 import { eventEmitter } from "@/lib/events";
+import { getBrowserWSEndpoint } from "@/lib/actions/connect-browser";
 
 export interface Tweet {
   tweetId: string | null;
@@ -34,24 +36,21 @@ export interface ProgressUpdate {
   value: number;
 }
 
-const summaries: string[] = [];
-const timeline: Tweet[] = [];
-const suggestions: Suggestion[] = [];
-
 let browser: Browser | null = null;
 let profileJob: any = null;
 let ocrJob: any = null;
 let timelineJob: any = null;
+let summaryJob: any = null;
 let suggestionJob: any = null;
 
 export async function runBot(
   settings: Settings,
-  executablePath: string,
   cookies: CookieParam[],
 ): Promise<boolean> {
   await stopBot();
 
-  browser = await puppeteer.launch({ executablePath, headless: true });
+  const browserWSEndpoint = await getBrowserWSEndpoint();
+  browser = await puppeteer.connect({ browserWSEndpoint });
 
   const model = await getModel(settings);
   if (!model) {
@@ -76,12 +75,16 @@ export async function stopBot(): Promise<void> {
     timelineJob.stop();
     timelineJob = null;
   }
+  if (summaryJob) {
+    summaryJob.stop();
+    summaryJob = null;
+  }
   if (suggestionJob) {
     suggestionJob.stop();
     suggestionJob = null;
   }
   if (browser) {
-    await browser.close();
+    await browser.disconnect();
     browser = null;
   }
 }
@@ -132,11 +135,14 @@ async function launchProcesses(
     ocrProcess(model),
     timelineProcess(cookies),
   ]);
-  await suggestionProcess(model);
+  await Promise.all([summaryProcess(model), suggestionProcess(model)]);
 
-  profileJob = cron.schedule("0 * * * *", () => profileProcess(cookies, model));
+  profileJob = cron.schedule("*/30 * * * *", () =>
+    profileProcess(cookies, model),
+  );
   ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
   timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
+  summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
   suggestionJob = cron.schedule("*/5 * * * *", () => suggestionProcess(model));
 }
 
@@ -210,7 +216,7 @@ async function profileProcess(
 
       eventEmitter.emit("updateProgress", {
         process: 0,
-        value: ((i + 1) / scrollLimit) * 100,
+        value: ((i + 1) / scrollLimit) * 50,
       });
 
       // Scroll down and wait for new content to load
@@ -222,7 +228,7 @@ async function profileProcess(
 
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
-    const { text } = await generateText({
+    const { textStream } = await streamText({
       model,
       prompt: `
 You are an AI assistant analyzing a Twitter user's profile and engagement patterns to generate a concise summary.
@@ -245,13 +251,29 @@ ${JSON.stringify(tweetArray, null, 2)}
 \`\`\`
             `,
     });
-    summaries.push(text);
+
+    let summary = "";
+    let i = 0;
+    for await (const textPart of textStream) {
+      summary += textPart;
+
+      if (i < 99) {
+        eventEmitter.emit("updateProgress", {
+          process: 0,
+          value: 50 + (i + 1) / 2,
+        });
+      }
+
+      i += 1;
+    }
+
+    await store.pushSummary(summary);
   } catch (e) {
     console.error("Error in profile process:", e);
   }
 
-  eventEmitter.emit("updateProgress", { process: 0, value: 100 });
   await page.close();
+  eventEmitter.emit("updateProgress", { process: 0, value: 100 });
 }
 
 let lastCheck: Date | null = null;
@@ -273,16 +295,15 @@ async function ocrProcess(model: LanguageModel): Promise<void> {
       startTime: lastCheck ? lastCheck.toISOString() : undefined,
     });
     const context = res?.data.map((e) => e.content);
-    eventEmitter.emit("updateProgress", { process: 1, value: 50 });
 
-    const { text } = await generateText({
+    const { textStream } = await streamText({
       model,
       prompt: `
 You are an AI assistant analyzing OCR-extracted text to identify key insights, trends, and relevant topics.
 
 ### **Instructions:**
-- Summarize the main topics detected in the extracted text.  
-- Identify recurring themes or keywords and their context.  
+- Summarize the main topics detected in the extracted text.
+- Identify recurring themes or keywords and their context.
 - Determine if the content relates to a specific niche, such as technology, politics, finance, gaming, or another domain.  
 - Analyze tone and intent (e.g., is the text informative, promotional, opinion-based, or casual?).  
 - Extract any actionable insights, such as trending discussions, important facts, or engagement opportunities.  
@@ -294,9 +315,22 @@ ${JSON.stringify(context, null, 2)}
 \`\`\`
             `,
     });
-    summaries.push(text);
 
+    let summary = "";
+    let i = 0;
+    for await (const textPart of textStream) {
+      summary += textPart;
+
+      if (i < 99) {
+        eventEmitter.emit("updateProgress", { process: 1, value: i + 1 });
+      }
+
+      i += 1;
+    }
+
+    await store.pushSummary(summary);
     lastCheck = new Date();
+
     console.log("Analyzed OCR data.");
   } catch (e) {
     console.error("Error in OCR process:", e);
@@ -350,7 +384,7 @@ async function timelineProcess(
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
     console.log(`Collected ${tweetArray.length} tweets.`);
 
-    timeline.push(...tweetArray);
+    await store.pushTweets(tweetArray);
   } catch (e) {
     console.error("Error in timeline process:", e);
   }
@@ -359,7 +393,7 @@ async function timelineProcess(
   await page.close();
 }
 
-async function suggestionProcess(model: LanguageModel): Promise<void> {
+async function summaryProcess(model: LanguageModel): Promise<void> {
   if (!browser || !browser.connected) {
     await stopBot();
     return;
@@ -368,7 +402,62 @@ async function suggestionProcess(model: LanguageModel): Promise<void> {
   eventEmitter.emit("updateProgress", { process: 3, value: 0 });
 
   try {
+    console.log("Summarizing data...");
+
+    const summaries = await store.getSummaries();
+
+    const { textStream } = await streamText({
+      model,
+      prompt: `
+You are an AI assistant creating a concise and well-structured summary based on multiple previous summaries.
+
+### **Instructions:**
+- Analyze the provided summaries to identify common themes, key insights, and recurring topics.
+- Eliminate redundant or overly specific details while preserving the most important information.
+- Ensure the final summary is clear, engaging, and captures the essence of the original summaries.
+
+### **User Summaries**
+\`\`\`json
+${JSON.stringify(summaries, null, 2)}
+\`\`\`
+            `,
+    });
+
+    let summary = "";
+    let i = 0;
+    for await (const textPart of textStream) {
+      summary += textPart;
+
+      if (i < 99) {
+        eventEmitter.emit("updateProgress", { process: 3, value: i + 1 });
+      }
+
+      i += 1;
+    }
+
+    await store.compileSummaries(summary);
+
+    console.log("Summarized data.");
+  } catch (e) {
+    console.error("Error in summary process:", e);
+  }
+
+  eventEmitter.emit("updateProgress", { process: 3, value: 100 });
+}
+
+async function suggestionProcess(model: LanguageModel): Promise<void> {
+  if (!browser || !browser.connected) {
+    await stopBot();
+    return;
+  }
+
+  eventEmitter.emit("updateProgress", { process: 4, value: 0 });
+
+  try {
     console.log("Creating suggestions...");
+
+    const summaries = await store.getSummaries();
+    const tweets = (await store.getTweets()).slice(0, 10);
 
     const schema = z.object({
       tweetId: z.string(),
@@ -404,7 +493,7 @@ ${JSON.stringify(summaries, null, 2)}
 
 ### **Tweets To Analyze:**
 \`\`\`json
-${JSON.stringify(timeline, null, 2)}
+${JSON.stringify(tweets, null, 2)}
 \`\`\`
             `,
       temperature: 0.7,
@@ -412,11 +501,12 @@ ${JSON.stringify(timeline, null, 2)}
 
     let i = 0;
     for await (const suggestion of elementStream) {
+      store.pushSuggestion(suggestion);
       eventEmitter.emit("addSuggestion", suggestion);
 
       if (i < 5) {
         eventEmitter.emit("updateProgress", {
-          process: 3,
+          process: 4,
           value: (i + 1) * 20 - 1,
         });
       }
@@ -424,14 +514,14 @@ ${JSON.stringify(timeline, null, 2)}
       i += 1;
     }
 
-    timeline.length = 0;
+    await store.removeTweets(tweets.length);
 
     console.log("Created suggestions.");
   } catch (e) {
     console.error("Error in suggestion process:", e);
   }
 
-  eventEmitter.emit("updateProgress", { process: 3, value: 100 });
+  eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
 async function getModel(settings: Settings): Promise<LanguageModel | null> {
