@@ -19,6 +19,8 @@ use std::time::Duration;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
 use tracing::info;
+use serde::{Serialize, Deserialize};
+use chrono::{DateTime, Utc};
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
@@ -81,6 +83,7 @@ pub async fn start_deepgram_stream(
             deepgram::common::options::OptionsBuilder::new()
                 .model(deepgram::common::options::Model::Nova2)
                 .smart_format(true)
+                .diarize(true)
                 .build(),
         )
         .keep_alive()
@@ -142,6 +145,8 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
         let is_input = device.device_type == DeviceType::Input;
+        
+        let speaker = res.words.first().and_then(|w| w.speaker.clone());
 
         if !text.is_empty() {
             let _ = send_event(
@@ -152,6 +157,7 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
                     transcription: text.to_string(),
                     is_final,
                     is_input,
+                    speaker,
                 },
             );
         }
