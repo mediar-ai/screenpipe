@@ -256,19 +256,19 @@ export const MainImage = () => {
 		};
 	}, [currentFrame]);
 
-	const convertVisionCoordinates = (
-		bounds: TextBounds,
-		imageHeight: number,
-	) => {
-		if (!imageRect) return null;
-
-		return {
-			left: bounds.left * imageRect.width,
-			top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
-			width: bounds.width * imageRect.width,
-			height: bounds.height * imageHeight,
-		};
-	};
+	//const convertVisionCoordinates = (
+	//	bounds: TextBounds,
+	//	imageHeight: number,
+	//) => {
+	//	if (!imageRect) return null;
+	//
+	//	return {
+	//		left: bounds.left * imageRect.width,
+	//		top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
+	//		width: bounds.width * imageRect.width,
+	//		height: bounds.height * imageHeight,
+	//	};
+	//};
 
 	if (!currentFrame) {
 		return (
@@ -301,29 +301,31 @@ export const MainImage = () => {
 							width: imageRect.width,
 						}}
 					>
-						{currentFrame.text_positions?.map(
-							(position: TextPosition, index: number) => {
-								const coords = convertVisionCoordinates(
-									position.bounds,
-									imageRect.height,
-								);
-								if (!coords) return null;
-
-								return (
-									<div
-										key={index}
-										className="absolute bg-yellow-300/40 border border-yellow-500/50"
-										style={{
-											left: `${coords.left}px`,
-											top: `${coords.top}px`,
-											width: `${coords.width}px`,
-											height: `${coords.height}px`,
-										}}
-										title={position.text}
-									/>
-								);
-							},
-						)}
+						{
+							//        currentFrame.text_positions?.map(
+							//	(position: TextPosition, index: number) => {
+							//		const coords = convertVisionCoordinates(
+							//			position.bounds,
+							//			imageRect.height,
+							//		);
+							//		if (!coords) return null;
+							//
+							//		return (
+							//			<div
+							//				key={index}
+							//				className="absolute bg-yellow-300/40 border border-yellow-500/50"
+							//				style={{
+							//					left: `${coords.left}px`,
+							//					top: `${coords.top}px`,
+							//					width: `${coords.width}px`,
+							//					height: `${coords.height}px`,
+							//				}}
+							//				title={position.text}
+							//			/>
+							//		);
+							//	},
+							//)
+						}
 					</div>
 				)}
 			</div>
