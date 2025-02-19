@@ -5,17 +5,44 @@ import { ConnectionPanel } from "@/components/connection-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { Status } from "@/components/status";
 import { SuggestionList } from "@/components/suggestion-list";
+import { useToast } from "@/hooks/use-toast";
 import * as store from "@/lib/store";
+import type { Error } from "@/app/api/errors";
 import type { CookieParam } from "puppeteer-core";
 
 export default function Page() {
   const [cookies, setCookies] = useState<CookieParam[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const { toast } = useToast();
 
   const isConnected = useMemo(() => cookies.length > 0, [cookies]);
 
   useEffect(() => {
     store.getCookies().then(setCookies);
+
+    const eventSource = new EventSource("/api/errors");
+
+    eventSource.onmessage = (event) => {
+      try {
+        const e: Error = JSON.parse(event.data);
+        toast({
+          title: e.title,
+          description: e.description,
+          variant: "destructive",
+        });
+      } catch (e) {
+        console.error("Failed to capture errors:", e);
+      }
+    };
+
+    eventSource.onerror = (e) => {
+      console.error("Failed to capture errors:", e);
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   return (

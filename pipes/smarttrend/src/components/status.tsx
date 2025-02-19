@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
-import type { ProgressUpdate } from "@/lib/actions/run-bot";
+import type { ProgressUpdate } from "@/app/api/progress";
 
 const STATUSES = [
   "Reading your profile...",

@@ -31,11 +31,6 @@ export interface Suggestion {
   reply: string;
 }
 
-export interface ProgressUpdate {
-  process: number;
-  value: number;
-}
-
 let browser: Browser | null = null;
 let profileJob: any = null;
 let ocrJob: any = null;
@@ -50,6 +45,10 @@ export async function runBot(
   await stopBot();
 
   const browserWSEndpoint = await getBrowserWSEndpoint();
+  if (!browserWSEndpoint) {
+    return false;
+  }
+
   browser = await puppeteer.connect({ browserWSEndpoint });
 
   const model = await getModel(settings);
@@ -270,6 +269,10 @@ ${JSON.stringify(tweetArray, null, 2)}
     await store.pushSummary(summary);
   } catch (e) {
     console.error("Error in profile process:", e);
+    eventEmitter.emit("catchError", {
+      title: "Error analyzing profile.",
+      description: "Issue with AI model or browser instance.",
+    });
   }
 
   await page.close();
@@ -334,6 +337,10 @@ ${JSON.stringify(context, null, 2)}
     console.log("Analyzed OCR data.");
   } catch (e) {
     console.error("Error in OCR process:", e);
+    eventEmitter.emit("catchError", {
+      title: "Error analyzing OCR data.",
+      description: "AI model failed to generate a response.",
+    });
   }
 
   eventEmitter.emit("updateProgress", { process: 1, value: 100 });
@@ -387,6 +394,10 @@ async function timelineProcess(
     await store.pushTweets(tweetArray);
   } catch (e) {
     console.error("Error in timeline process:", e);
+    eventEmitter.emit("catchError", {
+      title: "Error reading timeline.",
+      description: "Could not access browser instance.",
+    });
   }
 
   eventEmitter.emit("updateProgress", { process: 2, value: 100 });
@@ -440,6 +451,10 @@ ${JSON.stringify(summaries, null, 2)}
     console.log("Summarized data.");
   } catch (e) {
     console.error("Error in summary process:", e);
+    eventEmitter.emit("catchError", {
+      title: "Error summarizing data.",
+      description: "AI model failed to generate a response.",
+    });
   }
 
   eventEmitter.emit("updateProgress", { process: 3, value: 100 });
@@ -519,6 +534,10 @@ ${JSON.stringify(tweets, null, 2)}
     console.log("Created suggestions.");
   } catch (e) {
     console.error("Error in suggestion process:", e);
+    eventEmitter.emit("catchError", {
+      title: "Error creating suggestions.",
+      description: "AI model failed to generate a response.",
+    });
   }
 
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });

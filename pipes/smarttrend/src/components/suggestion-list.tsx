@@ -21,9 +21,7 @@ export function SuggestionList({ cookies, isConnected, isRunning }: Props) {
 
   useEffect(() => {
     store.getSuggestions().then(setSuggestions);
-  }, []);
 
-  useEffect(() => {
     const eventSource = new EventSource("/api/suggestions");
 
     eventSource.onmessage = (event) => {

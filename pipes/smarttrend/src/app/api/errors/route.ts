@@ -1,27 +1,27 @@
 import { NextRequest } from "next/server";
 import { eventEmitter } from "@/lib/events";
 
-export interface ProgressUpdate {
-  process: number;
-  value: number;
+export interface Error {
+  title: string;
+  description: string;
 }
 
 export async function GET(req: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
-      const sendData = (data: ProgressUpdate) => {
+      const sendData = (data: Error) => {
         controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
       };
 
-      eventEmitter.on("updateProgress", sendData);
+      eventEmitter.on("catchError", sendData);
 
       const keepAliveInterval = setInterval(() => {
         controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
       }, 30_000);
 
       req.signal.addEventListener("abort", () => {
-        console.log("/api/progress: Connection Closed");
-        eventEmitter.off("updateProgress", sendData);
+        console.log("/api/errors: Connection Closed");
+        eventEmitter.off("catchError", sendData);
         clearInterval(keepAliveInterval);
         controller.close();
       });
