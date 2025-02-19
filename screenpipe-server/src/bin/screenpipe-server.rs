@@ -11,7 +11,10 @@ use screenpipe_audio::{
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_server::{
-    cli::{Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat, PipeCommand},
+    cli::{
+        AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
+        PipeCommand, VisionCommand,
+    },
     handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
@@ -37,16 +40,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
-
-fn print_devices(devices: &[AudioDevice]) {
-    println!("available audio devices:");
-    for device in devices.iter() {
-        println!("  {}", device);
-    }
-
-    #[cfg(target_os = "macos")]
-    println!("on macos, it's not intuitive but output devices are your displays");
-}
 
 const DISPLAY: &str = r"
                                             _          
@@ -90,8 +83,6 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("symphonia=error".parse().unwrap())
         .add_directive("hf_hub=error".parse().unwrap());
 
-    // filtering out xcap::platform::impl_window - Access is denied. (0x80070005)
-    // which is noise
     #[cfg(target_os = "windows")]
     let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
 
@@ -119,27 +110,33 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         env_filter
     };
 
-    tracing_subscriber::registry()
+    let registry = tracing_subscriber::registry()
         .with(env_filter)
         .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking))
-        .init();
+        .with(fmt::layer().with_writer(non_blocking));
+
+    // Build the final registry with conditional Sentry layer
+    if !cli.disable_telemetry {
+        registry.with(sentry::integrations::tracing::layer()).init();
+    } else {
+        registry.init();
+    };
 
     Ok(guard)
 }
 
 #[tokio::main]
+#[tracing::instrument]
 async fn main() -> anyhow::Result<()> {
     debug!("starting screenpipe server");
     let cli = Cli::parse();
 
     // Initialize Sentry only if telemetry is enabled
     let _sentry_guard = if !cli.disable_telemetry {
-        // check if SENTRY_RELEASE_NAME_APPEND is set
         let sentry_release_name_append = env::var("SENTRY_RELEASE_NAME_APPEND").unwrap_or_default();
         let release_name = format!(
-            "{:?}{}",
-            sentry::release_name!(),
+            "{}{}",
+            sentry::release_name!().unwrap_or_default(),
             sentry_release_name_append
         );
         Some(sentry::init((
@@ -193,9 +190,61 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let pipe_manager = Arc::new(PipeManager::new(local_data_dir_clone.clone()));
-
-    if let Some(command) = cli.command {
+    if let Some(ref command) = cli.command {
         match command {
+            Command::Audio { subcommand } => match subcommand {
+                AudioCommand::List { output } => {
+                    let devices = list_audio_devices().await?;
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": devices,
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("available audio devices:");
+                            for device in devices.iter() {
+                                println!("  {}", device);
+                            }
+                            #[cfg(target_os = "macos")]
+                            println!("note: on macos, output devices are your displays");
+                        }
+                    }
+                    return Ok(());
+                }
+            },
+            Command::Vision { subcommand } => match subcommand {
+                VisionCommand::List { output } => {
+                    let monitors = list_monitors().await;
+                    match output {
+                        OutputFormat::Json => println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "data": monitors.iter().map(|m| {
+                                    json!({
+                                        "id": m.id(),
+                                        "name": m.name()
+                                    })
+                                }).collect::<Vec<_>>(),
+                                "success": true
+                            }))?
+                        ),
+                        OutputFormat::Text => {
+                            println!("available monitors:");
+                            for monitor in monitors.iter() {
+                                println!("  {}. {:?}", monitor.id(), monitor.name());
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            },
+            Command::Completions { shell } => {
+                cli.handle_completions(shell.clone())?;
+                return Ok(());
+            }
             Command::Pipe { subcommand } => {
                 handle_pipe_command(subcommand, &pipe_manager).await?;
                 return Ok(());
@@ -293,7 +342,7 @@ async fn main() -> anyhow::Result<()> {
                 let local_data_dir = get_base_dir(&data_dir)?;
 
                 // Update logging filter if debug is enabled
-                if debug {
+                if *debug {
                     tracing::subscriber::set_global_default(
                         tracing_subscriber::registry()
                             .with(
@@ -319,14 +368,14 @@ async fn main() -> anyhow::Result<()> {
                 );
                 handle_index_command(
                     local_data_dir,
-                    path,
-                    pattern,
+                    path.to_string(),
+                    pattern.clone(),
                     db,
-                    output,
-                    ocr_engine,
-                    metadata_override,
-                    copy_videos,
-                    use_embedding,
+                    output.clone(),
+                    ocr_engine.clone(),
+                    metadata_override.clone(),
+                    *copy_videos,
+                    *use_embedding,
                 )
                 .await?;
                 return Ok(());
@@ -339,6 +388,8 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
+    let mut devices_status = HashMap::new();
+
     if !is_local_ipv4_port_free(cli.port) {
         error!(
             "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
@@ -347,19 +398,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let all_audio_devices = list_audio_devices().await?;
-    let mut devices_status = HashMap::new();
-    if cli.list_audio_devices {
-        print_devices(&all_audio_devices);
-        return Ok(());
-    }
+
     let all_monitors = list_monitors().await;
-    if cli.list_monitors {
-        println!("available monitors:");
-        for monitor in all_monitors.iter() {
-            println!("  {}. {:?}", monitor.id(), monitor);
-        }
-        return Ok(());
-    }
 
     let mut audio_devices = Vec::new();
 
@@ -506,7 +546,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_transcription_sender, _) = tokio::sync::broadcast::channel(1000);
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
@@ -517,7 +556,6 @@ async fn main() -> anyhow::Result<()> {
                 let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
-                let realtime_transcription_sender_clone = realtime_transcription_sender.clone();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
@@ -543,7 +581,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    Arc::new(realtime_transcription_sender_clone), // Use the cloned sender
                     realtime_vision_sender_clone,
                 );
 
@@ -587,7 +624,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (audio_devices_tx, _) = broadcast::channel(100);
 
-    let realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
+    let _realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
@@ -1050,7 +1087,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn handle_pipe_command(
-    command: PipeCommand,
+    command: &PipeCommand,
     pipe_manager: &Arc<PipeManager>,
 ) -> anyhow::Result<()> {
     let client = reqwest::Client::new();

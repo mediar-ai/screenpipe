@@ -10,44 +10,23 @@
     <true/>
 
     <!-- DENO -->
+    <!-- DEAD CODE? -->
     <key>com.apple.security.cs.allow-jit</key>
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-    <!-- <key>com.apple.developer.persistent-content-capture</key>
-    <true/> -->
-    <!-- <key>com.apple.security.device.audio-input</key>
-    <true/>
-    <key>com.apple.security.temporary-exception.audio-unit-host</key>
-    <true/> -->
-    <!-- <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-    <array>
-        <string>com.apple.audio.coreaudiod</string>
-        <string>com.apple.audio.audiohald</string>
-    </array> -->
-    <!-- <key>com.apple.security.device.camera</key>
-    <true/>
-    <key>com.apple.security.device.microphone</key>
-    <true/>
-    
-    
-    <key>com.apple.developer.persistent-content-capture</key>
-    <true/> -->
-    <!-- <key>com.apple.developer.sustained-execution</key>
-    <true/> -->
-    <!-- <key>com.apple.security.temporary-exception.sbpl</key>
-    <string>(allow mach-lookup (global-name-regex #"^com.apple.coreservices.launchservicesd$"))</string>
 
-    <key>com.apple.security.cs.allow-jit</key>
+    <!-- Add these for UI monitor -->
+    <key>com.apple.security.automation.apple-events</key>
     <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <key>com.apple.security.get-task-allow</key>
     <true/>
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
-    <key>com.apple.security.cs.disable-library-validation</key>
-    <true/>
-    <key>com.apple.security.automation.apple-events</key> -->
+    <key>com.apple.security.temporary-exception.apple-events</key>
+    <array>
+        <string>com.apple.systemuiserver</string>
+        <string>com.apple.dock</string>
+    </array>
 </dict>
 </plist>

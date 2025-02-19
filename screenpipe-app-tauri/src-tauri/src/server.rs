@@ -127,6 +127,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         if let Ok(event) = res {
             if event.kind.is_modify() {
                 if let Ok(store) = get_store(&app_handle_clone, None) {
+                    let _ = store.reload();
                     if let Ok(settings) = serde_json::to_string(&store.entries()) {
                         let _ = settings_tx_clone.send(settings);
                     }
@@ -359,12 +360,14 @@ async fn start_sidecar(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
     info!("received request to start sidecar");
-    
+
     let app_handle = state.app_handle.clone();
     match crate::sidecar::spawn_screenpipe(
         app_handle.clone().state::<crate::SidecarState>(),
         app_handle,
-    ).await {
+    )
+    .await
+    {
         Ok(_) => Ok(Json(ApiResponse {
             success: true,
             message: "sidecar started successfully".to_string(),
@@ -383,12 +386,14 @@ async fn stop_sidecar(
     State(state): State<ServerState>,
 ) -> Result<Json<ApiResponse>, (StatusCode, String)> {
     info!("received request to stop sidecar");
-    
+
     let app_handle = state.app_handle.clone();
     match crate::sidecar::stop_screenpipe(
         app_handle.clone().state::<crate::SidecarState>(),
         app_handle,
-    ).await {
+    )
+    .await
+    {
         Ok(_) => Ok(Json(ApiResponse {
             success: true,
             message: "sidecar stopped successfully".to_string(),

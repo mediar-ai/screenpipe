@@ -33,10 +33,12 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
-use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType};
+use screenpipe_audio::{
+    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+};
 use tracing::{debug, error, info};
 
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::monitor::{list_monitors, get_monitor_by_id};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -68,7 +70,6 @@ use screenpipe_audio::LAST_AUDIO_CAPTURE;
 use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
-
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
@@ -226,11 +227,11 @@ pub(crate) struct ListDeviceResponse {
 
 #[derive(Serialize)]
 pub struct MonitorInfo {
-    id: u32,
-    name: String,
-    width: u32,
-    height: u32,
-    is_default: bool,
+    pub id: u32,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub is_default: bool,
 }
 
 #[derive(Deserialize)]
@@ -463,16 +464,26 @@ pub(crate) async fn api_list_audio_devices(
 pub async fn api_list_monitors(
 ) -> Result<JsonResponse<Vec<MonitorInfo>>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let monitors = list_monitors().await;
-    let monitor_info: Vec<MonitorInfo> = monitors
-        .into_iter()
-        .map(|monitor| MonitorInfo {
-            id: monitor.id(),
-            name: monitor.name().to_string(),
-            width: monitor.width(),
-            height: monitor.height(),
-            is_default: monitor.is_primary(),
-        })
-        .collect();
+    let monitor_info = futures::future::join_all(monitors.into_iter().map(|monitor| async move {
+        let monitor_id = monitor.id();
+        match get_monitor_by_id(monitor_id).await {
+            Some(monitor) => MonitorInfo {
+                id: monitor.id(),
+                name: monitor.name().to_string(),
+                width: monitor.width(),
+                height: monitor.height(),
+                is_default: monitor.is_primary(),
+            },
+            None => MonitorInfo {
+                id: monitor_id,
+                name: "Unknown".to_string(),
+                width: 0,
+                height: 0,
+                is_default: false,
+            },
+        }
+    }))
+    .await;
 
     if monitor_info.is_empty() {
         Err((
@@ -2470,7 +2481,6 @@ pub struct RestartVisionDevicesResponse {
     message: String,
     restarted_devices: Vec<u32>,
 }
-
 // async fn restart_vision_devices(
 //     State(state): State<Arc<AppState>>,
 // ) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
@@ -2522,3 +2532,4 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
+
