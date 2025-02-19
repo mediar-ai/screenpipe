@@ -966,6 +966,8 @@ async fn main() -> anyhow::Result<()> {
     let server_future = server.start(api_plugin, cli.enable_frame_cache);
     pin_mut!(server_future);
 
+    let pipe_manager_clone = pipe_manager.clone();
+
     // Add auto-destruct watcher
     if let Some(pid) = cli.auto_destruct_pid {
         info!("watching pid {} for auto-destruction", pid);
@@ -1075,6 +1077,10 @@ async fn main() -> anyhow::Result<()> {
             let _ = shutdown_tx.send(());
         }
     }
+
+    info!("stopping all pipes");
+    let _ = pipe_manager_clone.stop_all_pipes().await;
+    info!("all pipes stopped");
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);

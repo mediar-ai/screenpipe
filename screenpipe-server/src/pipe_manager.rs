@@ -298,6 +298,16 @@ impl PipeManager {
         }
     }
 
+    pub async  fn stop_all_pipes(&self) -> Result<()> {
+        let pipes = self.list_pipes().await;
+        for pipe in pipes {
+            if pipe.enabled {
+                self.stop_pipe(&pipe.id).await;
+            }
+        }
+        Ok(())
+    }
+
     pub async fn stop_pipe(&self, id: &str) -> Result<()> {
         let mut pipes = self.running_pipes.write().await;
         if let Some(handle) = pipes.remove(id) {
