@@ -12,6 +12,7 @@ import type {
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+import { PipesManager } from "../../common/PipesManager";
 
 type Result<T> = { success: true; data: T } | { success: false; error: any };
 
@@ -201,12 +202,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return true;
     } catch (error) {
-      await this.captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-        distinct_id: userId,
-        email: email,
-      });
       return false;
     }
   }
@@ -259,12 +254,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-        distinct_id: userId,
-        email: email,
-      });
       console.error("error querying screenpipe:", error);
       return null;
     }
@@ -539,7 +528,9 @@ class BrowserPipeImpl implements BrowserPipe {
 }
 
 const pipeImpl = new BrowserPipeImpl();
+const pipeManager = new PipesManager();
 export const pipe = pipeImpl;
+pipeImpl.pipes = pipeManager;
 
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";

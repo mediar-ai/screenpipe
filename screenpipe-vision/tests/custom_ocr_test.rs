@@ -70,6 +70,7 @@ mod tests {
     use std::sync::Arc;
 
     #[tokio::test]
+    #[ignore] // need to run server
     async fn test_custom_ocr() {
         println!("Starting custom OCR test...");
 
@@ -118,6 +119,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // need to run server
     async fn test_custom_ocr_chinese() {
         println!("Starting custom OCR Chinese test...");
 

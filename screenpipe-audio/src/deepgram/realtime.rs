@@ -23,7 +23,7 @@ use tracing::info;
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
-    languages: Arc<Vec<Language>>,
+    languages: Arc<[Language]>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
@@ -45,7 +45,7 @@ pub async fn start_deepgram_stream(
     device: Arc<AudioDevice>,
     sample_rate: u32,
     is_running: Arc<AtomicBool>,
-    _languages: Arc<Vec<Language>>,
+    _languages: Arc<[Language]>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     let api_key = deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string());

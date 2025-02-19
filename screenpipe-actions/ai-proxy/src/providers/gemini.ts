@@ -13,8 +13,23 @@ export class GeminiProvider implements AIProvider {
 		this.client = new GoogleGenerativeAI(apiKey);
 	}
 
+	private createGenerationConfig(body: RequestBody) {
+		const config: any = {
+		  temperature: body.temperature,
+		};
+	
+		if (body.response_format?.type === 'json_schema' && body.response_format.schema) {
+		  config.responseMimeType = 'application/json';
+		  config.responseSchema = body.response_format.schema;
+		} else if (body.response_format?.type === 'json_object') {
+		  config.responseMimeType = 'application/json';
+		}
+	
+		return config;
+	  }
+
 	async createCompletion(body: RequestBody): Promise<Response> {
-		this.model = this.client.getGenerativeModel({ model: body.model });
+		this.model = this.client.getGenerativeModel({ model: body.model, generationConfig: this.createGenerationConfig(body) });
 
 		const chat = this.model.startChat({
 			history: this.formatMessages(body.messages),

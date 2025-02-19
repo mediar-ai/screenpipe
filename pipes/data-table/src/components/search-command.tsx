@@ -83,6 +83,7 @@ export function SearchCommand() {
           - Return results ordered by timestamp DESC
           - Limit results to 100 rows by default
           - Use JOIN operations to correlate data across different sources
+          - Do not add \`\`\`sql to the beginning or end of the query, we'll execute your query directly
 
           Core Tables:
 
@@ -140,6 +141,7 @@ export function SearchCommand() {
           - Full-text search: Using _fts tables with MATCH
           - App/window context: Filtering by app_name/window_name
           - Tagged content: JOIN with tags tables
+          - Join audio transcriptions with speakers to get the speaker name
           `,
         },
         {
@@ -156,7 +158,7 @@ export function SearchCommand() {
 
       let sql = completion.choices[0].message.content!;
       // Remove SQL code fence markers if present
-      sql = sql.replace(/```sql\n?|\n?```/g, "").trim();
+      sql = sql.trim().replace(/```sql\n?|\n?```/g, "").trim();
       setSqlQuery(sql);
 
       // Here you would execute the SQL query

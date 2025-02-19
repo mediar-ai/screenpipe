@@ -28,29 +28,25 @@ export function PipeStoreMarkdown({
         remarkPlugins={[remarkGfm, remarkMath]}
         components={{
           p({ children }) {
-            return <p className="mb-2 last:mb-0">{children}</p>;
+            return <span className="mb-2 last:mb-0">{children}</span>;
           },
           code({ node, className, children, ...props }) {
             const content = String(children).replace(/\n$/, "");
             const match = /language-(\w+)/.exec(className || "");
 
             return match ? (
-              <div className="relative group">
-                <CodeBlock
-                  key={Math.random()}
-                  language={(match && match[1]) || ""}
-                  value={content}
-                  {...props}
-                />
-              </div>
+              <CodeBlock
+                key={Math.random()}
+                language={(match && match[1]) || ""}
+                value={content}
+                {...props}
+              />
             ) : (
-              <span className="relative group inline-block">
-                <code
-                  className="py-0.5 px-1 rounded-sm font-mono text-sm  text-grey-900"
-                  {...props}
-                >
-                  {content}
-                </code>
+              <code
+                className="relative group py-0.5 px-1 rounded-sm font-mono text-sm text-grey-900 inline-block"
+                {...props}
+              >
+                {content}
                 <Button
                   size="icon"
                   variant="ghost"
@@ -63,7 +59,7 @@ export function PipeStoreMarkdown({
                     <Copy className="h-3 w-3" />
                   )}
                 </Button>
-              </span>
+              </code>
             );
           },
           a({ href, children }) {
@@ -74,22 +70,28 @@ export function PipeStoreMarkdown({
               /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?(.+)/
             );
 
-            if (isDirectVideo) {
+            if (isDirectVideo || youtubeMatch) {
               return (
-                <RetryableVideo src={href} maxRetries={3} retryDelay={1000} />
-              );
-            } else if (youtubeMatch) {
-              return (
-                <iframe
-                  width="100%"
-                  height="315"
-                  src={`https://www.youtube.com/embed/${youtubeMatch[1]}`}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="max-w-full"
-                  style={{ maxHeight: "400px" }}
-                />
+                <span className="block">
+                  {isDirectVideo ? (
+                    <RetryableVideo
+                      src={href}
+                      maxRetries={3}
+                      retryDelay={1000}
+                    />
+                  ) : (
+                    <iframe
+                      width="100%"
+                      height="315"
+                      src={`https://www.youtube.com/embed/${youtubeMatch![1]}`}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="max-w-full"
+                      style={{ maxHeight: "400px" }}
+                    />
+                  )}
+                </span>
               );
             }
 

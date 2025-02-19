@@ -1,5 +1,5 @@
 import { AIProvider } from './base';
-import { Message, RequestBody, Tool, AnthropicTool } from '../types';
+import { Message, RequestBody, Tool, AnthropicTool, ResponseFormat } from '../types';
 import Anthropic from '@anthropic-ai/sdk';
 import type {
 	MessageParam,
@@ -28,7 +28,7 @@ export class AnthropicProvider implements AIProvider {
 			model: body.model,
 			max_tokens: 4096,
 			temperature: body.temperature,
-			system: body.response_format?.type === 'json_object' ? 'Respond with valid JSON only.' : undefined,
+			system: this.createSystemPrompt(body.response_format),
 			tools: body.tools ? this.formatTools(body.tools) : undefined,
 		});
 
@@ -36,6 +36,23 @@ export class AnthropicProvider implements AIProvider {
 			headers: { 'Content-Type': 'application/json' },
 		});
 	}
+
+	private createSystemPrompt(responseFormat?: ResponseFormat): string | undefined {
+		if (!responseFormat) return undefined;
+	
+		switch (responseFormat.type) {
+		  case 'json_object':
+			return 'Respond with valid JSON only.';
+		  case 'json_schema':
+			if (!responseFormat.schema) return undefined;
+			
+			return `Respond with valid JSON that strictly follows this schema:
+	${JSON.stringify(responseFormat.schema, null, 2)}
+	Do not include any explanatory text - output valid JSON only.`;
+		  default:
+			return undefined;
+		}
+	  }
 
 	async createStreamingCompletion(body: RequestBody): Promise<ReadableStream> {
 		const stream = await this.client.messages.create({
@@ -73,14 +90,7 @@ export class AnthropicProvider implements AIProvider {
 		return tools.map((tool) => ({
 			name: tool.function.name,
 			description: tool.function.description,
-			input_schema: {
-				type: 'object',
-				properties: tool.function.parameters.properties,
-				required: tool.function.parameters.required,
-				...Object.entries(tool.function.parameters)
-					.filter(([key]) => !['type', 'properties', 'required'].includes(key))
-					.reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {}),
-			},
+			input_schema: tool.function.parameters,
 		}));
 	}
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
 import { Settings } from "@/lib/hooks/use-settings";
 import { getCliPath } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { platform } from "@tauri-apps/plugin-os";
 
 interface CliCommandDialogProps {
   settings: Settings;
@@ -23,10 +25,21 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const { toast } = useToast();
+  const [isWindows, setIsWindows] = useState(false);
+
+  useEffect(() => {
+    const p = platform();
+    setIsWindows(p === "windows");
+  }, []);
 
   const generateCliCommand = () => {
     const cliPath = getCliPath();
+    let envVars = [];
     let args = [];
+
+    if (settings.useChineseMirror) {
+      envVars.push('HF_ENDPOINT="https://hf-mirror.com"');
+    }
 
     if (settings.audioTranscriptionEngine !== "default") {
       // TBD hard coded for now
@@ -101,7 +114,8 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-realtime-audio-transcription");
     }
 
-    return `${cliPath} ${args.join(" ")}`;
+    const envVarsStr = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
+    return `${envVarsStr}${cliPath} ${args.join(" ")}`;
   };
 
   const handleCopyCliCommand = () => {
@@ -128,7 +142,25 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-x-auto">
-            <CodeBlock language="bash" value={generateCliCommand()} />
+            {isWindows ? (
+              <Tabs defaultValue="cmd">
+                <TabsList>
+                  <TabsTrigger value="cmd">cmd</TabsTrigger>
+                  <TabsTrigger value="powershell">powershell</TabsTrigger>
+                </TabsList>
+                <TabsContent value="cmd">
+                  <CodeBlock language="bash" value={generateCliCommand()} />
+                </TabsContent>
+                <TabsContent value="powershell">
+                  <CodeBlock
+                    language="powershell"
+                    value={generateCliCommand()}
+                  />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <CodeBlock language="bash" value={generateCliCommand()} />
+            )}
           </div>
           <DialogFooter>
             <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>

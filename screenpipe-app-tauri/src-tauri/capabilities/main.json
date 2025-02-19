@@ -44,6 +44,7 @@
     "global-shortcut:allow-unregister-all",
     "global-shortcut:default",
     "sentry:default",
+    "opener:allow-open-url",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -319,6 +320,8 @@
           "path": "$APPLOCALDATA/**"
         }
       ]
-    }
+    },
+    "opener:default",
+    "opener:default"
   ]
 }

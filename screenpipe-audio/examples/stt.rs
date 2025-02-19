@@ -8,6 +8,7 @@ use screenpipe_audio::{AudioInput, AudioTranscriptionEngine};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
@@ -90,16 +91,15 @@ async fn main() {
             };
 
             let mut segments = prepare_segments(
-                &audio_input.data,
+                audio_input.data,
                 vad_engine.clone(),
                 &segmentation_model_path,
-                embedding_manager,
+                Arc::new(StdMutex::new(embedding_manager)),
                 embedding_extractor,
                 &audio_input.device.to_string(),
             )
             .await
             .unwrap();
-            let mut whisper_model_guard = whisper_model.lock().await;
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
@@ -107,7 +107,7 @@ async fn main() {
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
-                    &mut whisper_model_guard,
+                    whisper_model.clone(),
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
                     vec![Language::English],
@@ -117,7 +117,6 @@ async fn main() {
 
                 transcription.push_str(&transcript);
             }
-            drop(whisper_model_guard);
 
             let distance = levenshtein(expected_transcription, &transcription.to_lowercase());
             let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);

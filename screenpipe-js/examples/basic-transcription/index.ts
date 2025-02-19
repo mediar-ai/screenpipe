@@ -1,4 +1,4 @@
-import { pipe } from "@screenpipe/js";
+import { pipe } from "@screenpipe/browser";
 
 async function monitorTranscriptions() {
   console.log("starting transcription monitor...");

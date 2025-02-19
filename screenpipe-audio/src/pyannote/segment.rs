@@ -1,9 +1,14 @@
 use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
+use ort::Session;
 use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
 
 use super::{embedding::EmbeddingExtractor, identify::EmbeddingManager};
+
+lazy_static::lazy_static! {
+    static ref SEGMENTATION_SESSION: Mutex<Option<Session>> = Mutex::new(None);
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -36,7 +41,7 @@ fn create_speech_segment(
     samples: &[f32],
     padded_samples: &[f32],
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: &mut EmbeddingManager,
+    embedding_manager: Arc<Mutex<EmbeddingManager>>,
 ) -> Result<SpeechSegment> {
     let start = start_offset / sample_rate as f64;
     let end = offset as f64 / sample_rate as f64;
@@ -93,9 +98,8 @@ fn handle_new_segment(
 pub struct SegmentIterator {
     samples: Vec<f32>,
     sample_rate: u32,
-    session: ort::Session,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: EmbeddingManager,
+    embedding_manager: Arc<Mutex<EmbeddingManager>>,
     current_position: usize,
     frame_size: i32,
     window_size: usize,
@@ -112,9 +116,12 @@ impl SegmentIterator {
         sample_rate: u32,
         model_path: P,
         embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-        embedding_manager: EmbeddingManager,
+        embedding_manager: Arc<Mutex<EmbeddingManager>>,
     ) -> Result<Self> {
-        let session = session::create_session(model_path.as_ref())?;
+        let mut session = SEGMENTATION_SESSION.lock().unwrap();
+        if session.is_none() {
+            *session = Some(session::create_session(model_path, true)?);
+        }
         let window_size = (sample_rate * 10) as usize;
 
         let padded_samples = {
@@ -126,7 +133,6 @@ impl SegmentIterator {
         Ok(Self {
             samples,
             sample_rate,
-            session,
             embedding_extractor,
             embedding_manager,
             current_position: 0,
@@ -149,10 +155,9 @@ impl SegmentIterator {
             .to_owned();
 
         let inputs = ort::inputs![array].context("Failed to prepare inputs")?;
-        let ort_outs = self
-            .session
-            .run(inputs)
-            .context("Failed to run the session")?;
+        let session = SEGMENTATION_SESSION.lock().unwrap();
+        let session = session.as_ref().unwrap();
+        let ort_outs = session.run(inputs).context("Failed to run the session")?;
         let ort_out = ort_outs.get("output").context("Output tensor not found")?;
 
         let ort_out = ort_out
@@ -178,7 +183,7 @@ impl SegmentIterator {
                         &self.samples,
                         &self.padded_samples,
                         self.embedding_extractor.clone(),
-                        &mut self.embedding_manager,
+                        self.embedding_manager.clone(),
                     ) {
                         Ok(segment) => segment,
                         Err(_) => {
@@ -249,7 +254,7 @@ pub fn get_segments<P: AsRef<Path>>(
     sample_rate: u32,
     model_path: P,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: EmbeddingManager,
+    embedding_manager: Arc<Mutex<EmbeddingManager>>,
 ) -> Result<SegmentIterator> {
     SegmentIterator::new(
         samples.to_vec(),
@@ -271,14 +276,21 @@ fn get_speaker_embedding(
 }
 
 pub fn get_speaker_from_embedding(
-    embedding_manager: &mut EmbeddingManager,
+    embedding_manager: Arc<Mutex<EmbeddingManager>>,
     embedding: Vec<f32>,
 ) -> String {
     let search_threshold = 0.5;
 
     embedding_manager
+        .lock()
+        .unwrap()
         .search_speaker(embedding.clone(), search_threshold)
-        .ok_or_else(|| embedding_manager.search_speaker(embedding, 0.0)) // Ensure always to return speaker
+        .ok_or_else(|| {
+            embedding_manager
+                .lock()
+                .unwrap()
+                .search_speaker(embedding, 0.0)
+        }) // Ensure always to return speaker
         .map(|r| r.to_string())
         .unwrap_or("?".into())
 }

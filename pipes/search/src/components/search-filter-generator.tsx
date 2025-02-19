@@ -16,10 +16,9 @@ import {
 import { toast } from "@/lib/use-toast";
 import { SheetTitle } from "./ui/sheet";
 import { motion } from "framer-motion";
-import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 
 interface SearchFilters {
   query: string;
@@ -37,22 +36,8 @@ interface SearchFilterGeneratorProps {
 
 interface SearchFilterVariant {
   filters: Partial<SearchFilters>;
-  description: string;
   title: string;
 }
-
-const SearchFilterSchema = z.object({
-  title: z.string(),
-  query: z.string().optional(),
-  contentType: z
-    .enum(["all", "ocr", "audio", "ui", "audio+ui", "ocr+ui", "audio+ocr"])
-    .optional(),
-  appName: z.string().optional(),
-  windowName: z.string().optional(),
-  startDate: z.string().optional(), // ISO date string
-  endDate: z.string().optional(), // ISO date string
-  limit: z.number().optional(),
-});
 
 export function SearchFilterGenerator({
   onApplyFilters,
@@ -65,6 +50,8 @@ export function SearchFilterGenerator({
     []
   );
   const { settings } = useSettings();
+  const { items: appStats } = useSqlAutocomplete("app");
+  const { items: windowStats } = useSqlAutocomplete("window");
 
   React.useEffect(() => {
     setIsMac(navigator.userAgent.includes("Mac"));
@@ -81,12 +68,22 @@ export function SearchFilterGenerator({
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  const handleGenerateFilters = async () => {
+  const handleGenerateFilters = React.useCallback(async () => {
     if (!prompt.trim()) return;
     setIsLoading(true);
     setFilterVariants([]);
 
     try {
+      // Format top apps and windows for the prompt
+      const topApps = appStats
+        .slice(0, 5)
+        .map((app) => `${app.name} (${app.count} occurrences)`)
+        .join(", ");
+      const topWindows = windowStats
+        .slice(0, 5)
+        .map((win) => `${win.name} (${win.count} occurrences)`)
+        .join(", ");
+
       const openai = new OpenAI({
         apiKey:
           settings.aiProviderType === "screenpipe-cloud"
@@ -98,117 +95,112 @@ export function SearchFilterGenerator({
 
       const currentDate = new Date().toISOString();
 
-      const completion = await openai.beta.chat.completions.parse({
+      const completion = await openai.chat.completions.create({
         model: settings.aiModel,
         messages: [
           {
             role: "system",
-            content: `You are a search filter generator for Screenpipe's 24/7 recording context database. Generate 3 different search filter interpretations based on the user's natural language query. The current date and time is ${currentDate}. Use this as reference when interpreting relative time expressions like "today", "last week", etc.
+            content: `you are a search filter generator for screenpipe's 24/7 recording context database. your task is to generate exactly 3 search filter variations in json format.
 
-Key Database Tables & Content Types:
+common apps in user's database:
+${topApps}
 
-1. Screen Recording (OCR):
-- Captures all visible text from screens via OCR
-- Includes app_name, window_name, timestamp
-- Full text search via ocr_text_fts table
-- Best for finding: code snippets, documentation, browser content, chat messages, emails
+common window titles:
+${topWindows}
 
-2. Audio Recording:
-- Transcribed speech from microphone input
-- Includes speaker identification, device info
-- Full text search via audio_transcriptions_fts
-- Best for finding: meetings, calls, voice notes, spoken commands
-- Can filter by specific speakers or devices
-
-3. UI Monitoring:
-- App and window state/focus tracking
-- Includes app_name, window_name, timestamps
-- Full text search via ui_monitoring_fts
-- Best for: productivity analysis, app usage patterns, window switching behavior
-
-Common Query Types & Examples:
-
-1. Meeting & Communication:
+required output format:
 {
-  query: "meet",
-  contentType: "audio",
-  startDate: "2024-03-20T09:00:00Z",
-  endDate: "2024-03-20T12:00:00Z",
-  limit: 120
+  "variants": [
+    {
+      "title": string,
+      "filters": {
+        "query": string | undefined,
+        "contentType": "all" | "ocr" | "audio",
+        "appName": string | undefined,
+        "windowName": string | undefined,
+        "startDate": ISO date string | undefined,
+        "endDate": ISO date string | undefined,
+        "limit": number | undefined
+      }
+    },
+    // exactly 2 more variations required
+  ]
 }
 
-2. Email & Messages:
-{
-  query: "john",
-  contentType: "ocr",
-  windowName: "Gmail",
-  startDate: "2024-03-13T00:00:00Z",
-  endDate: "2024-03-20T23:59:59Z",
-  limit: 25
-}
+database content types:
+1. screen recording (ocr)
+   - all visible text from screens (may contain OCR errors)
+   - includes app_name, window_name
+   - best for: names, emails, urls, code, docs, chat messages
+   - IMPORTANT: names/people are found in OCR (chat windows, emails, docs)
+   - prefer empty query + app filters (e.g., Slack, Gmail, Chrome)
 
-3. Code & Development:
-{
-  query: "transformers",
-  contentType: "ocr",
-  windowName: "Visual Studio Code",
-  limit: 50
-}
+2. audio recording
+   - transcribed speech from mic
+   - best for: spoken discussions, meeting topics, action items
+   - use query for single keywords only (no spaces!)
+   - example: "roadmap" (good), "project timeline" (bad)
+   - example: "sprint" (good), "daily standup" (bad)
 
-4. Productivity Analysis:
-{
-  query: "",
-  contentType: "ui",
-  windowName: "Twitter",  // Single window name, not pipe-separated
-  startDate: "2024-03-19T00:00:00Z",
-  endDate: "2024-03-19T23:59:59Z",
-  limit: 100
-}
+key guidelines:
+- CRITICAL: query must be single word without spaces
+- current time is ${currentDate} - use for relative dates
+- names/identifiers → use OCR content type (no query, just app filters)
+- spoken topics → use audio content type with single-word query
+- app/window names must be exact (e.g., "Chrome", "Gmail", "Slack")
+- no wildcards or partial matches
+- limit should be reasonable (10-200)
+- dates must be valid ISO strings
 
-5. Research & Documentation:
-{
-  query: "papers",
-  contentType: "ocr+audio",
-  windowName: "arXiv.org",  // Exact window name
-  limit: 30
-}
+search patterns:
+- finding person "john" → use OCR type + apps like Slack/Gmail/Chrome (no query)
+- meeting about roadmap → use audio type + query="roadmap"
+- code review → use OCR type + app filter for IDE (no query)
+- email from sarah → use OCR type + Gmail app filter (no query)
+- slack chat → use OCR type + Slack app filter (no query)
 
-Search Filter Parameters:
-- query: Text to search for across content types
-- contentType: "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
-- startDate & endDate: ISO timestamp for time range
-- appName: Exact application name (e.g., "Chrome", "Code")
-- windowName: Exact window title (e.g., "Gmail", "arXiv.org", or browser tab name)
-- limit: Max number of results (default 100)
-- speakerIds: Filter audio by specific speakers
+generate these 3 variations:
+1. broad: 
+   - wider time range
+   - multiple content types
+   - minimal filtering
+   - empty query for OCR content
+   
+2. focused:
+   - specific content type
+   - exact app/window names
+   - narrower time range
+   - single-word query only if audio
+   
+3. balanced:
+   - medium scope
+   - optimal filter combination
+   - most likely to match user intent
+   - remember: single-word queries only
 
-Generation Strategy:
-1. Analyze the user's query for:
-   - Keywords (e.g., "meeting", "code", "email", do not use spaces or multiple words). Have a bias for no keywords to prevent filtering out all content.
-   - Time context (today, last week, specific date)
-   - Content type hints (meeting → audio, code → ocr)
-   - App/window context (exact names, no wildcards, do not use spaces, keep empty if wants to select all)
-   - Length requirements (short snippets vs full content)
+validation:
+- must return exactly 3 variations
+- query must be single word without spaces
+- all dates must be valid ISO strings
+- content types must match allowed values
+- app/window names should be realistic
+- limits should be reasonable numbers
 
-2. Generate 3 variations:
-   - Broad: Wider time range, multiple content types
-   - Focused: Specific content type, exact window/app name
-   - Balanced: Medium scope with optimal filters
-
-Return exactly 3 JSON objects in an array with no additional text.`,
+do not include any explanation or additional text in the response - only the json object.`,
           },
           {
             role: "user",
             content: prompt,
           },
         ],
-        response_format: zodResponseFormat(
-          z.array(SearchFilterSchema).length(3),
-          "search_filters"
-        ),
+        response_format: { type: "json_object" },
       });
 
-      const variants = completion.choices[0].message.parsed;
+      console.log(completion.choices[0].message.content);
+
+      const { variants } = JSON.parse(
+        completion.choices[0].message.content || "[]"
+      ) as { variants: SearchFilterVariant[] };
       if (variants) {
         const now = new Date();
         const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -216,17 +208,23 @@ Return exactly 3 JSON objects in an array with no additional text.`,
         setFilterVariants(
           variants.map((filters, i) => ({
             filters: {
-              ...filters,
-              startDate: filters.startDate
-                ? new Date(filters.startDate).toString() === "Invalid Date"
+              query: filters.filters.query || "",
+              contentType: filters.filters.contentType || "all",
+              appName: filters.filters.appName || "",
+              windowName: filters.filters.windowName || "",
+              startDate: filters.filters.startDate
+                ? new Date(filters.filters.startDate).toString() ===
+                  "Invalid Date"
                   ? yesterday
-                  : new Date(filters.startDate)
+                  : new Date(filters.filters.startDate)
                 : undefined,
-              endDate: filters.endDate
-                ? new Date(filters.endDate).toString() === "Invalid Date"
+              endDate: filters.filters.endDate
+                ? new Date(filters.filters.endDate).toString() ===
+                  "Invalid Date"
                   ? now
-                  : new Date(filters.endDate)
+                  : new Date(filters.filters.endDate)
                 : undefined,
+              limit: filters.filters.limit || 100,
             },
             description: `variant ${i + 1}`,
             title: filters.title || `variant ${i + 1}`,
@@ -234,7 +232,7 @@ Return exactly 3 JSON objects in an array with no additional text.`,
         );
       }
     } catch (error: any) {
-      console.error("error generating filters:", error);
+      console.warn("error generating filters:", error);
       toast({
         title: "error",
         description: "failed to generate search filters",
@@ -243,7 +241,21 @@ Return exactly 3 JSON objects in an array with no additional text.`,
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [prompt, settings]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !isLoading) {
+        e.preventDefault();
+        handleGenerateFilters();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, isLoading, handleGenerateFilters]);
 
   return (
     <>
@@ -291,34 +303,36 @@ Return exactly 3 JSON objects in an array with no additional text.`,
       <CommandDialog open={open} onOpenChange={setOpen}>
         <SheetTitle></SheetTitle>
         <motion.div
-          className="flex items-center justify-center gap-2 p-4"
+          className="flex flex-col items-center justify-center gap-2 p-4"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
         >
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <Bot className="h-4 w-4 text-muted-foreground" />
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p className="text-xs">using {settings.aiModel}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <CommandInput
-            className="w-full max-w-xl"
-            placeholder="describe what you want to search for..."
-            value={prompt}
-            onValueChange={setPrompt}
-            disabled={isLoading}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !isLoading) {
-                e.preventDefault();
-                handleGenerateFilters();
-              }
-            }}
-          />
+          <div className="flex items-center justify-center gap-2 w-full">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p className="text-xs">using {settings.aiModel}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <CommandInput
+              className="w-full max-w-xl"
+              placeholder="describe what you want to search for..."
+              value={prompt}
+              onValueChange={setPrompt}
+              disabled={isLoading}
+            />
+          </div>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+              enter
+            </kbd>
+            <span>to generate filters</span>
+          </div>
         </motion.div>
 
         {!isLoading && filterVariants.length === 0 && (
@@ -341,7 +355,9 @@ Return exactly 3 JSON objects in an array with no additional text.`,
                 <Badge
                   variant="secondary"
                   className="cursor-pointer hover:bg-muted"
-                  onClick={() => setPrompt("what did i discuss with john recently?")}
+                  onClick={() =>
+                    setPrompt("what did i discuss with john recently?")
+                  }
                 >
                   what did i discuss with john recently?
                 </Badge>
@@ -434,6 +450,10 @@ Return exactly 3 JSON objects in an array with no additional text.`,
             ))}
           </div>
         )}
+
+        <div className="p-4 text-xs text-center text-muted-foreground mt-auto">
+          usually only works with openai model - check your ai settings
+        </div>
       </CommandDialog>
     </>
   );

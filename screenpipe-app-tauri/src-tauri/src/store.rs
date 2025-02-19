@@ -2,7 +2,7 @@ use super::get_base_dir;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreBuilder;
-use tracing::info;
+use tracing::debug;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProfilesConfig {
@@ -48,7 +48,7 @@ pub fn get_store(
         "default".to_string()
     };
 
-    info!("Using settings profile: {}", profile);
+    debug!("Using settings profile: {}", profile);
 
     // Determine store file path based on profile
     let store_path = if profile == "default" {

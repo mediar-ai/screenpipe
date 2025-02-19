@@ -1,7 +1,7 @@
 'use client'
 
 import { Note } from '../meeting-history/types'
-import { RefObject, UIEvent, useState } from 'react'
+import { RefObject, UIEvent, useState, useRef, useEffect } from 'react'
 import { MeetingAnalysis } from './hooks/ai-create-all-notes'
 import { ChunkOverlay } from './floating-container-buttons'
 import { useSettings } from "@/lib/hooks/use-settings"
@@ -30,6 +30,28 @@ export function TextEditor({
   const { settings } = useSettings()
   const { title, segments } = useMeetingContext()
 
+  // Add local state for text content
+  const [localText, setLocalText] = useState('')
+  const textDebounceRef = useRef<NodeJS.Timeout>()
+  const initializedRef = useRef(false)
+  
+  // Initialize only once when component mounts
+  useEffect(() => {
+    // Initialize localText only when notes are available and the editor has not been initialized yet
+    if (!initializedRef.current && notes.length > 0) {
+      console.log('text-editor: initializing localText from updated notes', { notesCount: notes.length });
+      const text = notes
+        .map(note => {
+          const text = note.text || '';
+          // Use bullet point if the note text starts with "- "
+          return text.startsWith('- ') ? '• ' + text.slice(2) : text;
+        })
+        .join('\n');
+      setLocalText(text);
+      initializedRef.current = true;
+    }
+  }, [notes]); // dependency updated to react on changes to `notes`
+
   const handleMouseMove = (e: React.MouseEvent, noteId: string) => {
     const rect = e.currentTarget.getBoundingClientRect()
     setHoverX(e.clientX - rect.left)
@@ -56,13 +78,8 @@ export function TextEditor({
           '**' + text.slice(selectionStart, selectionEnd) + '**' + 
           text.slice(selectionEnd)
 
-        const newNotes = newText.split('\n').map(text => ({
-          id: crypto.randomUUID(),
-          text,
-          timestamp: new Date(),
-          isInput: true,
-          device: 'keyboard'
-        }))
+        setLocalText(newText)
+        const newNotes = newText.split('\n').map(createNote)
         setNotes(newNotes)
 
         // Maintain selection including the markdown syntax
@@ -90,28 +107,14 @@ export function TextEditor({
       // If current line is empty and has bullet, remove the bullet
       if (currentLine.trim() === '•' || currentLine.trim() === '-') {
         const newText = text.slice(0, lastNewLine + 1) + text.slice(selectionStart)
-        const newNotes = newText.split('\n').map(text => ({
-          id: crypto.randomUUID(),
-          text,
-          timestamp: new Date(),
-          isInput: true,
-          device: 'keyboard'
-        }))
-        setNotes(newNotes)
+        setLocalText(newText)
         return
       }
 
       // Add new line with bullet if current line has bullet
       const insertion = isList ? '\n• ' : '\n'
       const newText = text.slice(0, selectionStart) + insertion + text.slice(selectionStart)
-      const newNotes = newText.split('\n').map(text => ({
-        id: crypto.randomUUID(),
-        text: text.startsWith('- ') ? '• ' + text.slice(2) : text,
-        timestamp: new Date(),
-        isInput: true,
-        device: 'keyboard'
-      }))
-      setNotes(newNotes)
+      setLocalText(newText)
       
       // Move cursor after the bullet
       setTimeout(() => {
@@ -120,9 +123,14 @@ export function TextEditor({
     }
   }
 
-  const combinedText = notes
-    .map(note => note.text.startsWith('- ') ? '• ' + note.text.slice(2) : note.text)
-    .join('\n')
+  const createNote = (text: string): Note => ({
+    id: crypto.randomUUID(),
+    text: text.startsWith('• ') ? '- ' + text.slice(2) : text,
+    timestamp: new Date(),
+    isInput: true,
+    device: 'keyboard',
+    editedAt: undefined
+  })
 
   return (
     <div 
@@ -131,16 +139,36 @@ export function TextEditor({
       className="flex flex-col h-full"
     >
       <textarea
-        value={combinedText}
+        value={localText}
         onChange={(e) => {
-          const newNotes = e.target.value.split('\n').map(text => ({
-            id: crypto.randomUUID(),
-            text: text.startsWith('• ') ? '- ' + text.slice(2) : text,
-            timestamp: new Date(),
-            isInput: true,
-            device: 'keyboard'
-          }))
-          setNotes(newNotes)
+          const newValue = e.target.value
+          setLocalText(newValue)
+          
+          if (textDebounceRef.current) {
+            clearTimeout(textDebounceRef.current)
+          }
+          
+          textDebounceRef.current = setTimeout(() => {
+            const newNotes = newValue.split('\n')
+                .filter(text => text.trim())
+                .map(createNote)
+            console.log('creating new notes:', {
+                oldLength: notes.length,
+                newLength: newNotes.length,
+                sample: newNotes[0]?.text?.slice(0, 50)
+            })
+            setNotes(newNotes)
+          }, 500)
+        }}
+        onBlur={() => {
+          const currentNotes = notes.map(n => n.text).join('\n')
+          if (localText.trim() !== currentNotes.trim()) {
+            console.log('committing text on blur')
+            const newNotes = localText.split('\n')
+                .filter(text => text.trim())
+                .map(createNote)
+            setNotes(newNotes)
+          }
         }}
         onKeyDown={handleKeyDown}
         className="flex-1 w-full p-3 resize-none focus:outline-none bg-transparent overflow-y-auto"
