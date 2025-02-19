@@ -38,7 +38,7 @@ use screenpipe_audio::{
 };
 use tracing::{debug, error, info};
 
-use screenpipe_vision::monitor::{list_monitors, get_monitor_by_id};
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -189,6 +189,7 @@ pub struct OCRContent {
     pub tags: Vec<String>,
     pub frame: Option<String>,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -217,6 +218,7 @@ pub struct UiContent {
     pub file_path: String,
     pub offset_index: i64,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -352,6 +354,7 @@ pub(crate) async fn search(
                 tags: ocr.tags.clone(),
                 frame: None,
                 frame_name: Some(ocr.frame_name.clone()),
+                browser_url: ocr.browser_url.clone(),
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -376,6 +379,7 @@ pub(crate) async fn search(
                 file_path: ui.file_path.clone(),
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
+                browser_url: ui.browser_url.clone(),
             }),
         })
         .collect();
@@ -1106,7 +1110,11 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)), None)
+        .insert_frame(
+            device_name,
+            Some(frame.timestamp.unwrap_or_else(Utc::now)),
+            None,
+        )
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -2532,4 +2540,3 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
-

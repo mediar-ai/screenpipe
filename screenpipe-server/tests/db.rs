@@ -11,7 +11,15 @@ mod tests {
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
-        DatabaseManager::new("sqlite::memory:").await.unwrap()
+        let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
+
+        // Run all migrations
+        sqlx::migrate!("./src/migrations")
+            .run(&db.pool)
+            .await
+            .unwrap();
+
+        db
     }
 
     #[tokio::test]

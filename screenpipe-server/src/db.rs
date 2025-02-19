@@ -753,7 +753,8 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
-                GROUP_CONCAT(tags.name, ',') as tags
+                GROUP_CONCAT(tags.name, ',') as tags,
+                frames.browser_url
             FROM {}
             JOIN frames ON ocr_text.frame_id = frames.id
             JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
@@ -805,6 +806,7 @@ impl DatabaseManager {
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
+                browser_url: raw.browser_url,
             })
             .collect())
     }
@@ -1550,7 +1552,8 @@ impl DatabaseManager {
                 ui_monitoring.window,
                 ui_monitoring.initial_traversal_at,
                 video_chunks.file_path,
-                frames.offset_index
+                frames.offset_index,
+                frames.browser_url
             FROM {}
             LEFT JOIN frames ON
                 frames.timestamp BETWEEN
@@ -1989,7 +1992,8 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
-                GROUP_CONCAT(tags.name, ',') as tags
+                GROUP_CONCAT(tags.name, ',') as tags,
+                frames.browser_url
             FROM embedding_matches
             JOIN ocr_text ON embedding_matches.frame_id = ocr_text.frame_id
             JOIN frames ON ocr_text.frame_id = frames.id
@@ -2026,6 +2030,7 @@ impl DatabaseManager {
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
+                browser_url: raw.browser_url,
             })
             .collect())
     }
