@@ -118,6 +118,8 @@ regex = "1.10.0"
 
 lru = "0.13.0"
 tokio-util = { version = "0.7", features = ["io"] }
+
+dashmap = "6.1.0"
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
@@ -154,7 +156,7 @@ path = "src/bin/screenpipe-server.rs"
 
 
 [package.metadata.cargo-machete]
-ignored = ["url"]
+ignored = ["url", "console-subscriber"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }

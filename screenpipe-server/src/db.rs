@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
-use screenpipe_core::{AudioDevice, AudioDeviceType};
+use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
@@ -148,7 +148,7 @@ impl DatabaseManager {
         .bind(Utc::now())
         .bind(transcription_engine)
         .bind(&device.name)
-        .bind(device.device_type == AudioDeviceType::Input)
+        .bind(device.device_type == DeviceType::Input)
         .bind(speaker_id)
         .bind(start_time)
         .bind(end_time)
@@ -907,9 +907,9 @@ impl DatabaseManager {
                     .unwrap_or_default(),
                 device_name: raw.device_name,
                 device_type: if raw.is_input_device {
-                    AudioDeviceType::Input
+                    DeviceType::Input
                 } else {
-                    AudioDeviceType::Output
+                    DeviceType::Output
                 },
                 speaker,
                 start_time: raw.start_time,
@@ -953,16 +953,6 @@ impl DatabaseManager {
         speaker_ids: Option<Vec<i64>>,
         frame_name: Option<&str>,
     ) -> Result<usize, sqlx::Error> {
-        // binding order:
-        // ?1 = query
-        // ?2 = start_time
-        // ?3 = end_time
-        // ?4 = app_name
-        // ?5 = window_name
-        // ?6 = frame_name (for OCR only)
-        // ?7 = min_length (for text/transcription length)
-        // ?8 = max_length (for text/transcription length)
-        // ?9 = json array for speaker_ids (for audio only)
         let json_array = if let Some(ids) = speaker_ids {
             if !ids.is_empty() {
                 serde_json::to_string(&ids).unwrap_or_default()
@@ -1009,9 +999,9 @@ impl DatabaseManager {
                     WHERE {match_condition}
                         AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
                         AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                        AND (?6 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?6)
-                        AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
-                        AND (json_array_length(?8) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?8)))
+                        AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
+                        AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
                     "#,
                     table = if query.is_empty() {
                         "audio_transcriptions"
@@ -1066,7 +1056,6 @@ impl DatabaseManager {
                             AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?6)
                             AND (?7 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?7)
                             AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
-                            AND ocr_text.text != 'No text found'
                         UNION ALL
                         -- Audio part
                         SELECT DISTINCT audio_transcriptions.id
@@ -1126,19 +1115,35 @@ impl DatabaseManager {
             _ => return Ok(0),
         };
 
-        let count: (i64,) = sqlx::query_as(&sql)
-            .bind(query) // ?1
-            .bind(start_time) // ?2
-            .bind(end_time) // ?3
-            .bind(app_name) // ?4
-            .bind(window_name) // ?5
-            .bind(frame_name) // ?6
-            .bind(min_length.map(|l| l as i64)) // ?7
-            .bind(max_length.map(|l| l as i64)) // ?8
-            .bind(json_array) // ?9
-            .fetch_one(&self.pool)
-            .await?;
-        Ok(count.0 as usize)
+        let count: i64 = match content_type {
+            ContentType::Audio => {
+                sqlx::query_scalar(&sql)
+                    .bind(query)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(min_length.map(|l| l as i64))
+                    .bind(max_length.map(|l| l as i64))
+                    .bind(json_array)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            _ => {
+                sqlx::query_scalar(&sql)
+                    .bind(query)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(app_name)
+                    .bind(window_name)
+                    .bind(frame_name)
+                    .bind(min_length.map(|l| l as i64))
+                    .bind(max_length.map(|l| l as i64))
+                    .bind(json_array)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+        };
+
+        Ok(count as usize)
     }
 
     pub async fn get_latest_timestamps(

@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use image::GenericImageView;
 use memory_stats::memory_stats;
 use screenpipe_vision::perform_ocr_apple;
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 fn bytes_to_mb(bytes: usize) -> f64 {
     bytes as f64 / (1024.0 * 1024.0)
@@ -38,7 +38,7 @@ fn apple_ocr_benchmark(c: &mut Criterion) {
                     }
                 }
 
-                let result = perform_ocr_apple(&image, Arc::new(vec![]));
+                let result = perform_ocr_apple(&image, &[]);
                 assert!(
                     result.0.contains("receiver_count"),
                     "OCR failed: {:?}",

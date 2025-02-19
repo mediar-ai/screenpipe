@@ -39,6 +39,10 @@ mod pipes {
     use std::collections::HashSet;
     use std::str::FromStr;
 
+    // Add at top of file with other imports
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
     #[derive(Clone, Debug, Copy)]
     pub enum PipeState {
         Port(u16),
@@ -229,16 +233,25 @@ done
         let log_path =
             std::env::temp_dir().join(format!("watchdog_{}_{}.log", parent_pid, child_pid));
 
-        let child = if cfg!(windows) {
+        #[cfg(windows)]
+        let child = {
             Command::new("powershell")
                 .arg("-ExecutionPolicy")
                 .arg("Bypass")
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-WindowStyle")
+                .arg("Hidden")
                 .arg("-File")
                 .arg(&script_path)
+                .creation_flags(0x08000000)
                 .stdout(std::fs::File::create(&log_path)?)
                 .stderr(std::fs::File::create(&log_path)?)
                 .spawn()?
-        } else {
+        };
+
+        #[cfg(not(windows))]
+        let child = {
             Command::new("bash")
                 .arg(&script_path)
                 .stdout(std::fs::File::create(&log_path)?)
@@ -249,25 +262,56 @@ done
         if let Some(id) = child.id() {
             info!("Watchdog process spawned with PID: {}", id);
 
-            // Verify the watchdog is running
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                let output = Command::new("ps")
-                    .args(["-p", &id.to_string()])
-                    .output()
-                    .await;
+            // Modify verification for Windows
+            #[cfg(windows)]
+            {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let output = Command::new("powershell")
+                        .arg("-NoProfile")
+                        .arg("-NonInteractive")
+                        .arg("-Command")
+                        .arg(format!(
+                            "Get-Process -Id {} -ErrorAction SilentlyContinue",
+                            id
+                        ))
+                        .output()
+                        .await;
 
-                match output {
-                    Ok(output) => {
-                        if output.status.success() {
-                            info!("Watchdog process verified running with PID: {}", id);
-                        } else {
-                            error!("Watchdog process not found after spawn! PID: {}", id);
+                    match output {
+                        Ok(output) => {
+                            if output.status.success() {
+                                info!("Watchdog process verified running with PID: {}", id);
+                            } else {
+                                error!("Watchdog process not found after spawn! PID: {}", id);
+                            }
                         }
+                        Err(e) => error!("Failed to verify watchdog process: {}", e),
                     }
-                    Err(e) => error!("Failed to verify watchdog process: {}", e),
-                }
-            });
+                });
+            }
+
+            #[cfg(not(windows))]
+            {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let output = Command::new("ps")
+                        .args(["-p", &id.to_string()])
+                        .output()
+                        .await;
+
+                    match output {
+                        Ok(output) => {
+                            if output.status.success() {
+                                info!("Watchdog process verified running with PID: {}", id);
+                            } else {
+                                error!("Watchdog process not found after spawn! PID: {}", id);
+                            }
+                        }
+                        Err(e) => error!("Failed to verify watchdog process: {}", e),
+                    }
+                });
+            }
         }
 
         // Clean up script after a delay

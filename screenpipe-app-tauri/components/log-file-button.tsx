@@ -99,7 +99,6 @@ export const LogFileButton = ({
 }) => {
   const { toast } = useToast();
   const { copyToClipboard } = useCopyToClipboard({ timeout: 3000 });
-  const { settings } = useSettings();
 
   const [isOpen, setIsOpen] = useState(false);
   const [logPath, setLogPath] = useState("");

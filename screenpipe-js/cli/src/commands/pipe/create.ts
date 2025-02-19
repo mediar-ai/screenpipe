@@ -6,9 +6,8 @@ import fs from "fs-extra";
 import path from "path";
 import { input } from "@inquirer/prompts";
 import chalk from "chalk";
-import ora from "ora";
 import { Command } from "commander";
-import { logger } from "../components/commands/add/utils/logger";
+import { logger, spinner } from "../components/commands/add/utils/logger";
 import simpleGit from "simple-git";
 import { handleError } from "../components/commands/add/utils/handle-error";
 
@@ -65,7 +64,7 @@ export const createPipeCommand = new Command()
       handleError(error);
     }
 
-    const spinner = ora("creating your pipe...").start();
+    const loadingSpinner = spinner("creating your pipe...");
 
     try {
       // Download and extract the appropriate template
@@ -90,7 +89,7 @@ export const createPipeCommand = new Command()
 
       await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 
-      spinner.succeed(chalk.green("pipe created successfully! 🎉"));
+      loadingSpinner.succeed(chalk.green("pipe created successfully! 🎉"));
 
       console.log("\nto get started:");
       console.log(chalk.cyan(`cd ${directory}`));
@@ -105,7 +104,7 @@ export const createPipeCommand = new Command()
         "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
       );
     } catch (error) {
-      spinner.fail("failed to create pipe");
+      loadingSpinner.fail("failed to create pipe");
       handleError(error);
     }
   })

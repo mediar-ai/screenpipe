@@ -107,15 +107,16 @@ async fn test_transcription_accuracy() {
             };
 
             let mut segments = prepare_segments(
-                Arc::new(audio_data),
+                &audio_data,
                 vad_engine.clone(),
                 &segmentation_model_path,
-                Arc::new(std::sync::Mutex::new(embedding_manager)),
+                embedding_manager,
                 embedding_extractor,
                 &audio_input.device.name,
             )
             .await
             .unwrap();
+            let mut whisper_model_guard = whisper_model.lock().await;
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
@@ -123,7 +124,7 @@ async fn test_transcription_accuracy() {
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
-                    whisper_model.clone(),
+                    &mut whisper_model_guard,
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
                     vec![Language::English],
@@ -133,6 +134,7 @@ async fn test_transcription_accuracy() {
 
                 transcription.push_str(&transcript);
             }
+            drop(whisper_model_guard);
 
             let distance = levenshtein(expected_transcription, &transcription.to_lowercase());
             let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);

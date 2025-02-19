@@ -16,7 +16,7 @@ import { validateCredentials } from "@/lib/notion/notion";
 import { toast } from "@/hooks/use-toast";
 import { useNotionSettings } from "@/lib/hooks/use-pipe-settings";
 import { ChevronDown, Loader2 } from "lucide-react";
-import { NotionCredentials, Settings } from "@/lib/types";
+import { Settings } from "@/lib/types";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
 import { FileSuggestTextarea } from "./file-suggest-textarea";
 import {
@@ -41,9 +41,8 @@ export function NotionSettings() {
   const [testingLog, setTestingLog] = useState(false);
   const [testingIntelligence, setTestingIntelligence] = useState(false);
   const [localSettings, setLocalSettings] = useState<Partial<Settings> | null>(
-    {}
+    {},
   );
-
 
   useEffect(() => {
     setLocalSettings({
@@ -346,7 +345,9 @@ export function NotionSettings() {
                   setLocalSettings({
                     ...localSettings!,
                     notion: {
-                      ...localSettings?.notion!,
+                      databaseId: localSettings?.notion?.databaseId || "",
+                      intelligenceDbId:
+                        localSettings?.notion?.intelligenceDbId || "",
                       accessToken: e.target.value,
                     },
                   })
@@ -372,7 +373,12 @@ export function NotionSettings() {
                 onChange={(value) =>
                   setLocalSettings({
                     ...localSettings!,
-                    notion: { ...localSettings?.notion!, databaseId: value },
+                    notion: {
+                      accessToken: localSettings?.notion?.accessToken || "",
+                      intelligenceDbId:
+                        localSettings?.notion?.intelligenceDbId || "",
+                      databaseId: value,
+                    },
                   })
                 }
                 dialogTitle="Extract Database ID from URL"
@@ -386,7 +392,8 @@ export function NotionSettings() {
                   setLocalSettings({
                     ...localSettings!,
                     notion: {
-                      ...localSettings?.notion!,
+                      accessToken: localSettings?.notion?.accessToken || "",
+                      databaseId: localSettings?.notion?.databaseId || "",
                       intelligenceDbId: value,
                     },
                   })
