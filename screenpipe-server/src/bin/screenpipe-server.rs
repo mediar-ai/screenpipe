@@ -84,7 +84,9 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("hf_hub=error".parse().unwrap());
 
     #[cfg(target_os = "windows")]
-    let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
+    let env_filter = env_filter
+        .add_directive("xcap::platform::impl_window=off".parse().unwrap())
+        .add_directive("xcap::platform::impl_monitor=off".parse().unwrap());
 
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()

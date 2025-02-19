@@ -42,9 +42,6 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-# TO-DO: use a released version. Done for now to avoid waiting xcap release.
-xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
-
 once_cell = { workspace = true }
 base64 = "0.22.1"
 
@@ -90,6 +87,8 @@ harness = false
 name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
 
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+xcap = "0.3.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
@@ -98,6 +97,9 @@ windows = { version = "0.58", features = [
   "Storage",
   "Storage_Streams",
 ] }
+# version 0.3.2 on Windows is broken
+# see https://github.com/nashaofu/xcap/issues/194
+xcap = "0.2.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
