@@ -106,7 +106,7 @@ pub async fn stop_screenpipe(
         #[cfg(target_os = "windows")]
         {
             const CREATE_NO_WINDOW: u32 = 0x08000000;
-            sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
             tokio::process::Command::new("powershell")
                 .arg("-NoProfile")
                 .arg("-WindowStyle")

@@ -48,6 +48,8 @@ export function BreakingChangesInstructionsDialog() {
       const response = await fetch(`http://localhost:3030/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+        }),
       });
       if(!response.ok){
         toast({
