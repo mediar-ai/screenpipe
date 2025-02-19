@@ -5,9 +5,7 @@ use accessibility_sys::{
 };
 use anyhow::Result;
 use core_foundation::{
-    base::{CFTypeRef, TCFType},
-    string::CFString,
-    array::CFArray,
+    array::CFArray, base::{CFRelease, CFTypeRef, TCFType}, string::CFString
 };
 use url::Url;
 
@@ -29,8 +27,8 @@ impl MacOSUrlDetector {
         );
 
         if status == accessibility_sys::kAXErrorSuccess {
-            let cf_role = CFString::wrap_under_get_rule(role as _);
-            let role_str = cf_role.to_string();
+            let _cf_role = CFString::wrap_under_get_rule(role as _);
+            let role_str = _cf_role.to_string();
 
             if role_str == kAXTextFieldRole {
                 let mut value: CFTypeRef = std::ptr::null_mut();
@@ -41,7 +39,8 @@ impl MacOSUrlDetector {
                 );
 
                 if status == accessibility_sys::kAXErrorSuccess {
-                    let url_str = CFString::wrap_under_get_rule(value as _).to_string();
+                    let _value_str = CFString::wrap_under_get_rule(value as _);
+                    let url_str = _value_str.to_string();
                     let url_to_parse = if !url_str.starts_with("http://") && !url_str.starts_with("https://") {
                         format!("https://{}", url_str)
                     } else {
@@ -63,8 +62,8 @@ impl MacOSUrlDetector {
         );
         
         if status == accessibility_sys::kAXErrorSuccess {
-            let children_array = CFArray::<*const std::ffi::c_void>::wrap_under_get_rule(children as _);
-            for child in children_array.iter() {
+            let _children_array = CFArray::<*const std::ffi::c_void>::wrap_under_get_rule(children as _);
+            for child in _children_array.iter() {
                 if let Some(found) = self.find_url_field(*child as AXUIElementRef) {
                     return Some(found);
                 }
@@ -99,13 +98,18 @@ impl MacOSUrlDetector {
             );
             
             if status != accessibility_sys::kAXErrorSuccess {
+                CFRelease(app_element as CFTypeRef);
                 return Ok(None);
             }
 
             let window_ref = focused_window as AXUIElementRef;
             let address_bar = match self.find_url_field(window_ref) {
                 Some(bar) => bar,
-                None => return Ok(None),
+                None => {
+                    CFRelease(focused_window as CFTypeRef);
+                    CFRelease(app_element as CFTypeRef);
+                    return Ok(None);
+                }
             };
 
             let mut url_value: CFTypeRef = std::ptr::null_mut();
@@ -115,12 +119,18 @@ impl MacOSUrlDetector {
                 &mut url_value,
             );
             
-            if status == accessibility_sys::kAXErrorSuccess {
-                let url = CFString::wrap_under_get_rule(url_value as _).to_string();
-                Ok(Some(url))
+            let result = if status == accessibility_sys::kAXErrorSuccess {
+                let url_str = CFString::wrap_under_get_rule(url_value as _);
+                Ok(Some(url_str.to_string()))
             } else {
                 Ok(None)
-            }
+            };
+
+            CFRelease(url_value as CFTypeRef);
+            CFRelease(focused_window as CFTypeRef);
+            CFRelease(app_element as CFTypeRef);
+            
+            result
         }
     }
 }
