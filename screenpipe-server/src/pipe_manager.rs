@@ -324,31 +324,67 @@ impl PipeManager {
 
             match handle.state {
                 PipeState::Port(port) => {
-                    tokio::task::spawn_blocking(move || {
-                        let killport = Killport;
-                        let signal: KillportSignal = "SIGKILL".parse().unwrap();
+                    #[cfg(unix)]
+                    {
+                        tokio::task::spawn_blocking(move || {
+                            let killport = Killport;
+                            let signal: KillportSignal = "SIGKILL".parse().unwrap();
 
-                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
-                        {
-                            Ok(killed_services) => {
-                                if killed_services.is_empty() {
-                                    debug!("no services found using port {}", port);
-                                } else {
-                                    for (killable_type, name) in killed_services {
-                                        debug!(
-                                            "successfully killed {} '{}' listening on port {}",
-                                            killable_type, name, port
-                                        );
+                            match killport.kill_service_by_port(
+                                port,
+                                signal.clone(),
+                                Mode::Auto,
+                                false,
+                            ) {
+                                Ok(killed_services) => {
+                                    if killed_services.is_empty() {
+                                        debug!("no services found using port {}", port);
+                                    } else {
+                                        for (killable_type, name) in killed_services {
+                                            debug!(
+                                                "successfully killed {} '{}' listening on port {}",
+                                                killable_type, name, port
+                                            );
+                                        }
                                     }
                                 }
+                                Err(e) => {
+                                    warn!("error killing port {}: {}", port, e);
+                                }
                             }
-                            Err(e) => {
-                                warn!("error killing port {}: {}", port, e);
+                        })
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                    }
+                    #[cfg(windows)]
+                    {
+                        use std::process::Stdio;
+                        use tokio::process::Command;
+
+                        let output = Command::new("cmd")
+                            .args(["/C", &format!("netstat -ano | findstr :{}", port)])
+                            .stdout(Stdio::piped())
+                            .output()
+                            .await
+                            .expect("Failed to execute netstat command");
+
+                        let output_str = String::from_utf8_lossy(&output.stdout);
+
+                        for line in output_str.lines() {
+                            if let Some(pid) = line.split_whitespace().last() {
+                                debug!("Found process using port {}: PID {}", port, pid);
+
+                                let _ = Command::new("taskkill")
+                                    .args(["/PID", pid, "/F", "/T"])
+                                    .spawn()
+                                    .expect("Failed to execute taskkill")
+                                    .await;
+
+                                debug!("Process {} and its child processes terminated.", pid);
                             }
                         }
-                    })
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to kill port: {}", e))?;
+                        Ok(())
+                    }
                 }
                 PipeState::Pid(pid) => {
                     // Force kill the process if it's still running
@@ -360,18 +396,9 @@ impl PipeManager {
                     }
                     #[cfg(windows)]
                     {
-                        use windows::Win32::System::Threading::{
-                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                        };
-                        unsafe {
-                            if let Ok(h_process) = OpenProcess(
-                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                                false,
-                                pid as u32,
-                            ) {
-                                let _ = TerminateProcess(h_process, 1);
-                            }
-                        }
+                        tokio::process::Command::new("taskkill")
+                            .args(["/PID", &pid.to_string(), "/F", "/T"])
+                            .await
                     }
                 }
             }
