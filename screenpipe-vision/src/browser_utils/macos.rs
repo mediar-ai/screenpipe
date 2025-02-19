@@ -73,10 +73,21 @@ impl MacOSUrlDetector {
         
         None
     }
-}
 
-impl BrowserUrlDetector for MacOSUrlDetector {
-    fn get_active_url(&self, _app_name: &str, process_id: i32) -> Result<Option<String>> {
+    fn get_url_via_applescript(&self, script: &str) -> Result<Option<String>> {
+        let output = std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script)
+            .output()?;
+        
+        if output.status.success() {
+            let url = String::from_utf8(output.stdout)?.trim().to_string();
+            return Ok(Some(url));
+        }
+        Ok(None)
+    }
+
+    fn get_url_via_accessibility(&self, process_id: i32) -> Result<Option<String>> {
         unsafe {
             let app_element = AXUIElementCreateApplication(process_id);
             
@@ -110,6 +121,17 @@ impl BrowserUrlDetector for MacOSUrlDetector {
             } else {
                 Ok(None)
             }
+        }
+    }
+}
+
+impl BrowserUrlDetector for MacOSUrlDetector {
+    fn get_active_url(&self, app_name: &str, process_id: i32) -> Result<Option<String>> {
+        if app_name == "Arc" {
+            let script = r#"tell application "Arc" to return URL of active tab of front window"#;
+            self.get_url_via_applescript(script)
+        } else {
+            self.get_url_via_accessibility(process_id)
         }
     }
 }
