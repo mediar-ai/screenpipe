@@ -361,20 +361,6 @@ export const PipeStore: React.FC = () => {
         throw new Error(data.error || "Failed to download pipe");
       }
 
-      // Enable the pipe after installation
-      const enableResponse = await fetch("http://localhost:3030/pipes/enable", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ pipe_id: pipe.name }),
-      });
-
-      const enableData = await enableResponse.json();
-      if (!enableData.success) {
-        throw new Error(enableData.error || "Failed to enable pipe");
-      }
-
       await fetchInstalledPipes();
 
       t.update({
