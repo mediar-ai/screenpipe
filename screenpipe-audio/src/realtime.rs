@@ -24,4 +24,6 @@ pub struct RealtimeTranscriptionEvent {
     pub transcription: String,
     pub is_final: bool,
     pub is_input: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }
