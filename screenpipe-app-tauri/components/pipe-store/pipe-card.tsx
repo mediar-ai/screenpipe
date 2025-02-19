@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle,
@@ -10,7 +10,7 @@ import {
   ArrowUpCircle,
 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
-import { PipeWithStatus } from "./types";
+import { BuildStatus, PipeWithStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "@/components/ui/use-toast";
 import { motion } from "framer-motion";
@@ -25,6 +25,7 @@ interface PipeCardProps {
   isLoadingPurchase?: boolean;
   isLoadingInstall?: boolean;
   onToggle: (pipe: PipeWithStatus, onComplete: () => void) => Promise<any>;
+  setPipe: (pipe: PipeWithStatus) => void;
 }
 
 export const PipeCard: React.FC<PipeCardProps> = ({
@@ -32,12 +33,14 @@ export const PipeCard: React.FC<PipeCardProps> = ({
   onInstall,
   onClick,
   onPurchase,
+  setPipe,
   isLoadingPurchase,
   isLoadingInstall,
   onToggle,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
+  const startEnableRef = useRef(true);
   const handleOpenWindow = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -56,6 +59,64 @@ export const PipeCard: React.FC<PipeCardProps> = ({
       });
     }
   };
+
+  useEffect(() => {
+    const pollBuildStatus = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:3030/pipes/info/${pipe.name}`,
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (
+          data.success &&
+          data.data.config.buildStatus !== pipe.installed_config?.buildStatus
+        ) {
+          // Update pipe with new build status
+          setPipe({
+            ...pipe,
+            installed_config: {
+              ...pipe.installed_config,
+              is_nextjs: pipe.installed_config?.is_nextjs ?? false,
+              source: pipe.installed_config?.source ?? "",
+              buildStatus: data.data.config.buildStatus as BuildStatus,
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error polling build status:", error);
+        setPipe({
+          ...pipe,
+          installed_config: {
+            ...pipe.installed_config,
+            is_nextjs: pipe.installed_config?.is_nextjs ?? false,
+            source: pipe.installed_config?.source ?? "",
+            buildStatus: "error",
+          },
+        });
+      }
+    };
+
+    let buildStatusInterval: NodeJS.Timeout | null = null;
+    if (pipe.installed_config?.buildStatus === "in_progress") {
+      buildStatusInterval = setInterval(pollBuildStatus, 3000);
+    } else {
+      if (!buildStatusInterval) return;
+      clearInterval(buildStatusInterval);
+    }
+
+    console.log("buildStatus", pipe.installed_config?.buildStatus);
+
+    return () => {
+      if (!buildStatusInterval) return;
+      clearInterval(buildStatusInterval);
+    };
+  }, [pipe.installed_config?.buildStatus]);
 
   return (
     <motion.div
@@ -76,18 +137,39 @@ export const PipeCard: React.FC<PipeCardProps> = ({
               <h3 className="font-semibold text-lg tracking-tight">
                 {pipe.name}
               </h3>
-              <p className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground">
                 <PipeStoreMarkdown
                   content={pipe.description?.substring(0, 90) || "" + "..."}
                   variant="compact"
                 />
-              </p>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 isolate">
             {pipe.is_installed ? (
               <>
-                {!pipe.is_enabled ? (
+                {pipe.installed_config?.buildStatus === "in_progress" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled
+                    className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
+                  >
+                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                    building...
+                  </Button>
+                ) : pipe.installed_config?.buildStatus === "error" ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    //onClick={handleInstall}
+                    className="font-medium no-card-hover"
+                    disabled={isLoading}
+                  >
+                    <ArrowUpCircle className="h-3.5 w-3.5 mr-2" />
+                    retry build
+                  </Button>
+                ) : !pipe.is_enabled ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -108,9 +190,19 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                     variant="outline"
                     onClick={handleOpenWindow}
                     className="hover:bg-muted font-medium relative no-card-hover"
+                    disabled={
+                      pipe.installed_config?.buildStatus &&
+                      pipe.installed_config?.buildStatus === "not_started"
+                    }
                   >
-                    <Puzzle className="h-3.5 w-3.5 mr-2" />
-                    open
+                    {pipe.installed_config?.buildStatus === "not_started" ? (
+                      <>wait for app to start building</>
+                    ) : (
+                      <>
+                        <Puzzle className="h-3.5 w-3.5 mr-2" />
+                        open
+                      </>
+                    )}
                   </Button>
                 )}
               </>

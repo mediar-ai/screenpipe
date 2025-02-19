@@ -53,6 +53,14 @@ mod pipes {
         shutdown: watch::Sender<bool>,
     }
 
+    #[derive(Debug, Clone)]
+    pub enum BuildStatus {
+        NotStarted,
+        InProgress,
+        Success,
+        Failed(String),
+    }
+
     impl CronHandle {
         pub fn stop(&self) {
             let _ = self.shutdown.send(true);
@@ -104,13 +112,13 @@ while ($true) {{
         Start-Sleep -Seconds 1
     }} catch {{
         Write-Host "Parent process ($parentPid) not found, terminating child processes"
-        
+
         # Get all child processes recursively
         $children = Get-ChildProcesses $childPid
-        
+
         # Add the main process to the list
         $allProcesses = @($childPid) + $children
-        
+
         foreach ($pid in $allProcesses) {{
             try {{
                 Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
@@ -119,7 +127,7 @@ while ($true) {{
                 Write-Host "Process $pid already terminated"
             }}
         }}
-        
+
         exit
     }}
 }}
@@ -145,11 +153,11 @@ find_all_children() {{
 
 cleanup() {{
     echo "[$(date)] Starting cleanup..."
-    
+
     # Get all child processes recursively
     all_children=$(find_all_children $child_pid)
     echo "[$(date)] Found child processes: $all_children"
-    
+
     # Try to kill by process group first
     child_pgid=$(ps -o pgid= -p $child_pid 2>/dev/null | tr -d ' ')
     if [ ! -z "$child_pgid" ]; then
@@ -158,7 +166,7 @@ cleanup() {{
         sleep 1
         pkill -KILL -g $child_pgid 2>/dev/null || true
     fi
-    
+
     # Kill all children individually if they still exist
     if [ ! -z "$all_children" ]; then
         echo "[$(date)] Killing all child processes: $all_children"
@@ -166,13 +174,13 @@ cleanup() {{
         sleep 1
         kill -KILL $all_children 2>/dev/null || true
     fi
-    
+
     # Kill the main process if it still exists
     echo "[$(date)] Killing main process $child_pid"
     kill -TERM $child_pid 2>/dev/null || true
     sleep 1
     kill -KILL $child_pid 2>/dev/null || true
-    
+
     # Final verification
     sleep 1
     remaining=$(ps -o pid= -g $child_pgid 2>/dev/null || true)
@@ -180,7 +188,7 @@ cleanup() {{
         echo "[$(date)] WARNING: Some processes might still be running: $remaining"
         pkill -KILL -g $child_pgid 2>/dev/null || true
     fi
-    
+
     exit 0
 }}
 
@@ -521,7 +529,26 @@ done
             }
 
             // Try to build the Next.js project
-            let build_success = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_status = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_success = matches!(build_status, BuildStatus::Success);
+
+            if pipe_json_path.exists() {
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+
+                pipe_config["buildStatus"] = match &build_status {
+                    BuildStatus::Success => json!("success"),
+                    BuildStatus::Failed(error) => json!({
+                        "status": "failed",
+                        "error": error
+                    }),
+                    BuildStatus::InProgress => json!("in_progress"),
+                    BuildStatus::NotStarted => json!("not_started"),
+                };
+
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
+            }
 
             let port = env_vars
                 .iter()
@@ -890,6 +917,7 @@ done
                 };
 
                 pipe_config["is_nextjs"] = json!(true);
+                pipe_config["buildStatus"] = json!("not_started");
                 let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
@@ -1399,7 +1427,7 @@ done
         Ok(())
     }
 
-    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
+    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatus> {
         info!(
             "checking if i need to build the next.js project in: {:?}",
             pipe_dir
@@ -1411,11 +1439,21 @@ done
             let build_manifest = build_dir.join("build-manifest.json");
             if build_manifest.exists() {
                 info!("found existing next.js build, skipping rebuild");
-                return Ok(true);
+                return Ok(BuildStatus::Success);
             }
             // Invalid/incomplete build directory - remove it
             debug!("removing invalid next.js build directory");
             tokio::fs::remove_dir_all(&build_dir).await?;
+        }
+
+        // Update build status to InProgress in pipe.json
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+            pipe_config["buildStatus"] = json!("in_progress");
+            let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+            tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
         }
 
         info!("running next.js build");
@@ -1429,13 +1467,11 @@ done
 
         if build_output.status.success() {
             info!("next.js build completed successfully");
-            Ok(true)
+            Ok(BuildStatus::Success)
         } else {
-            error!(
-                "next.js build failed: {}",
-                String::from_utf8_lossy(&build_output.stderr)
-            );
-            Ok(false)
+            let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
+            error!("next.js build failed: {}", error_message);
+            Ok(BuildStatus::Failed(error_message))
         }
     }
 
