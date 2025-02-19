@@ -3,15 +3,12 @@ use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tauri::async_runtime::JoinHandle;
 use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 use tracing::{debug, error, info};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -253,7 +250,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let use_all_monitors = store
+    let _use_all_monitors = store
         .get("useAllMonitors")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
@@ -379,9 +376,9 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         args.push("--enable-realtime-audio-transcription");
     }
 
-    if use_all_monitors {
-        args.push("--use-all-monitors");
-    }
+    // if use_all_monitors {
+    //     args.push("--use-all-monitors");
+    // }
 
     let disable_vision = store
         .get("disableVision")
@@ -496,9 +493,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 }
 pub struct SidecarManager {
     child: Option<CommandChild>,
-    last_restart: Instant,
-    restart_interval: Arc<Mutex<Duration>>,
-    restart_task: Option<JoinHandle<()>>,
     dev_mode: Arc<Mutex<bool>>,
 }
 
@@ -506,12 +500,11 @@ impl SidecarManager {
     pub fn new() -> Self {
         Self {
             child: None,
-            last_restart: Instant::now(),
-            restart_interval: Arc::new(Mutex::new(Duration::from_secs(0))),
-            restart_task: None,
             dev_mode: Arc::new(Mutex::new(false)),
         }
     }
+
+    
 
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
@@ -520,51 +513,13 @@ impl SidecarManager {
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
-        self.last_restart = Instant::now();
-        debug!("last_restart: {:?}", self.last_restart);
-
-        // kill previous task if any
-        if let Some(task) = self.restart_task.take() {
-            task.abort();
-        }
-
-        let restart_interval = self.restart_interval.clone();
-        // Add this function outside the SidecarManager impl
-        async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
-            let state = app_handle.state::<SidecarState>();
-            let mut manager = state.0.lock().await;
-            if let Some(manager) = manager.as_mut() {
-                manager.check_and_restart(app_handle).await
-            } else {
-                Ok(())
-            }
-        }
-
-        // In the spawn method
-        let app_handle = app.app_handle().clone();
-        self.restart_task = Some(tauri::async_runtime::spawn(async move {
-            loop {
-                let interval = *restart_interval.lock().await;
-                debug!("interval: {}", interval.as_secs());
-                if let Err(e) = check_and_restart_sidecar(&app_handle).await {
-                    error!("Failed to check and restart sidecar: {}", e);
-                }
-                sleep(Duration::from_secs(60)).await;
-            }
-        }));
+        
 
         Ok(())
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let store = get_store(app, None).unwrap();
-
-        let restart_interval = store
-            .get("restartInterval")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        debug!("restart_interval: {}", restart_interval);
 
         let dev_mode = store
             .get("devMode")
@@ -573,27 +528,9 @@ impl SidecarManager {
 
         debug!("dev_mode: {}", dev_mode);
 
-        *self.restart_interval.lock().await = Duration::from_secs(restart_interval * 60);
         *self.dev_mode.lock().await = dev_mode;
 
         Ok(())
     }
 
-    pub async fn check_and_restart(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let interval = *self.restart_interval.lock().await;
-        let dev_mode = *self.dev_mode.lock().await;
-        debug!("interval: {}", interval.as_secs());
-        debug!("last_restart: {:?}", self.last_restart);
-        debug!("elapsed: {:?}", self.last_restart.elapsed());
-        if interval.as_secs() > 0 && self.last_restart.elapsed() >= interval && !dev_mode {
-            debug!("Restarting sidecar due to restart interval");
-            if let Some(child) = self.child.take() {
-                let _ = child.kill();
-            }
-            let child = spawn_sidecar(app)?;
-            self.child = Some(child);
-            self.last_restart = Instant::now();
-        }
-        Ok(())
-    }
 }

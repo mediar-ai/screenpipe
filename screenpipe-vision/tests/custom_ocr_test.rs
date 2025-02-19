@@ -55,7 +55,7 @@ async def read_ocr(payload: dict):
 #
 # Configure your "CustomOcrConfig" in Rust to point to http://localhost:8000/ocr
 
-# Clean up
+# Clean up 
 deactivate
 rm -rf venv app.py
 */
@@ -67,10 +67,8 @@ mod tests {
     use screenpipe_vision::custom_ocr::{perform_ocr_custom, CustomOcrConfig};
     use screenpipe_vision::utils::OcrEngine;
     use std::path::PathBuf;
-    use std::sync::Arc;
 
     #[tokio::test]
-    #[ignore] // need to run server
     async fn test_custom_ocr() {
         println!("Starting custom OCR test...");
 
@@ -100,7 +98,7 @@ mod tests {
         // Perform the custom OCR.
         let (ocr_text, structured_data, confidence) = match ocr_engine {
             OcrEngine::Custom(ref config) => {
-                perform_ocr_custom(&image, Arc::new([Language::English].to_vec()), config)
+                perform_ocr_custom(&image, vec![Language::English], config)
                     .await
                     .expect("Custom OCR failed")
             }
@@ -119,7 +117,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // need to run server
     async fn test_custom_ocr_chinese() {
         println!("Starting custom OCR Chinese test...");
 
@@ -145,7 +142,7 @@ mod tests {
 
         let (ocr_text, _, _) = match ocr_engine {
             OcrEngine::Custom(ref config) => {
-                perform_ocr_custom(&image, Arc::new([Language::Chinese].to_vec()), config)
+                perform_ocr_custom(&image, vec![Language::Chinese], config)
                     .await
                     .expect("Custom OCR failed")
             }

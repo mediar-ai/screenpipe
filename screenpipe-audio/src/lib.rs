@@ -14,7 +14,8 @@ pub use audio_processing::resample;
 pub use core::{
     default_input_device, default_output_device, get_device_and_config, list_audio_devices,
     parse_audio_device, record_and_transcribe, start_realtime_recording, trigger_audio_permission,
-    AudioStream, AudioTranscriptionEngine, LAST_AUDIO_CAPTURE,
+    AudioDevice, AudioStream, AudioTranscriptionEngine, DeviceControl, DeviceType,
+    LAST_AUDIO_CAPTURE,
 };
 pub mod realtime;
 pub use encode::encode_single_audio;

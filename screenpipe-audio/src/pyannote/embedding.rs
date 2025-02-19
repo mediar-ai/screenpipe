@@ -2,31 +2,24 @@ use crate::pyannote::session;
 use anyhow::{Context, Result};
 use ndarray::Array2;
 use ort::Session;
-use std::{path::Path, sync::Mutex};
+use std::path::Path;
 
 #[derive(Debug)]
-pub struct EmbeddingExtractor {}
-
-lazy_static::lazy_static! {
-    static ref EMBEDDING_SESSION: Mutex<Option<Session>> = Mutex::new(None);
+pub struct EmbeddingExtractor {
+    session: Session,
 }
 
 impl EmbeddingExtractor {
     pub fn new<P: AsRef<Path>>(model_path: P) -> Result<Self> {
-        let mut session = EMBEDDING_SESSION.lock().unwrap();
-        if session.is_none() {
-            *session = Some(session::create_session(model_path.as_ref(), false)?);
-        }
-        Ok(Self {})
+        let session = session::create_session(model_path.as_ref())?;
+        Ok(Self { session })
     }
     pub fn compute(&mut self, samples: &[f32]) -> Result<impl Iterator<Item = f32>> {
-        let session = EMBEDDING_SESSION.lock().unwrap();
-        let session = session.as_ref().unwrap();
         let features: Array2<f32> = knf_rs::compute_fbank(samples).map_err(anyhow::Error::msg)?;
         let features = features.insert_axis(ndarray::Axis(0)); // Add batch dimension
         let inputs = ort::inputs! ["feats" => features.view()]?;
 
-        let ort_outs = session.run(inputs).context("Failed to run the session")?;
+        let ort_outs = self.session.run(inputs)?;
         let ort_out = ort_outs
             .get("embs")
             .context("Output tensor not found")?

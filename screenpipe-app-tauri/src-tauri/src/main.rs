@@ -867,11 +867,6 @@ async fn main() {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
 
-                    // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.check_and_restart(&app_handle).await {
-                        error!("Failed to restart sidecar: {}", e);
-                    }
                 });
             } else {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");
