@@ -1,8 +1,13 @@
 #!/bin/bash
 
+# Try to load CN_API_KEY from .env if not set in environment
+if [ -z "$CN_API_KEY" ] && [ -f ".env" ]; then
+    export $(grep -v '^#' .env | grep CN_API_KEY)
+fi
+
 # Check if the CN_API_KEY is set or throw an error
 if [ -z "$CN_API_KEY" ]; then
-    echo "Error: CN_API_KEY is not set"
+    echo "Error: CN_API_KEY is not set in environment or .env file"
     exit 1
 fi
 
@@ -33,11 +38,11 @@ if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]] || ! [[ "$patch"
 fi
 
 for ((m=0; m<=$minor; m++)); do
-    for ((p=0; p<=70; p++)); do
+    for ((p=0; p<=50; p++)); do
         version="$major.$m.$p"
         if [[ "$(echo -e "$version\n$purge_up_to" | sort -V | head -n1)" == "$version" && "$version" != "$purge_up_to" ]]; then
             echo "Purging version $version"
-            cn release purge screenpipe "$version"
+            cn release purge mediar-ai/screenpipe "$version"
         else
             echo "Skipping version $version"
         fi
