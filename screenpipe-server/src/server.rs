@@ -1106,7 +1106,7 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)), None)
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
