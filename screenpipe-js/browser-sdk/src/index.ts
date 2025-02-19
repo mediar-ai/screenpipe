@@ -14,6 +14,8 @@ import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 import { PipesManager } from "../../common/PipesManager";
 
+type Result<T> = { success: true; data: T } | { success: false; error: any };
+
 const WS_URL = "ws://localhost:3030/ws/events";
 
 // At the top of the file, add WebSocket instances
@@ -80,16 +82,6 @@ export interface BrowserPipe {
     moveMouse: (x: number, y: number) => Promise<boolean>;
     click: (button: "left" | "right" | "middle") => Promise<boolean>;
   };
-  pipes: {
-    list: () => Promise<string[]>;
-    download: (url: string) => Promise<boolean>;
-    enable: (pipeId: string) => Promise<boolean>;
-    disable: (pipeId: string) => Promise<boolean>;
-    update: (
-      pipeId: string,
-      config: { [key: string]: string }
-    ) => Promise<boolean>;
-  };
   streamTranscriptions(): AsyncGenerator<
     TranscriptionStreamResponse,
     void,
@@ -109,6 +101,23 @@ export interface BrowserPipe {
   streamEvents(
     includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
+  pipes: {
+    list: () => Promise<Result<string[]>>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<Result<Record<string, any>>>;
+  };
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -265,32 +274,43 @@ class BrowserPipeImpl implements BrowserPipe {
   };
 
   pipes: {
-    list: () => Promise<string[]>;
-    download: (url: string) => Promise<boolean>;
+    list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
     update: (
       pipeId: string,
-      config: { [key: string]: string }
+      config: { [key: string]: string },
     ) => Promise<boolean>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<Result<Record<string, any>>>;
   } = {
-    list: async () => {
+    list: async (): Promise<Result<string[]>> => {
       try {
         const response = await fetch("http://localhost:3030/pipes/list", {
           method: "GET",
           headers: { "Content-Type": "application/json" },
         });
 
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
         const data = await response.json();
-        return data.data;
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to list pipes:", error);
-        return [];
+        return { success: false, error: error };
       }
     },
-    download: async (url: string) => {
+    download: async (url: string): Promise<Result<Record<string, any>>> => {
       try {
-        const response = await fetch("http://localhost:3030/pipes/download", {
+        const response = await fetch(`http://localhost:3030/pipes/download`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -298,15 +318,20 @@ class BrowserPipeImpl implements BrowserPipe {
           }),
         });
 
-        return response.ok;
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
       } catch (error) {
         console.error("failed to download pipe:", error);
-        return false;
+        return { success: false, error: error };
       }
     },
-    enable: async (pipeId: string) => {
+    enable: async (pipeId: string): Promise<boolean> => {
       try {
-        const response = await fetch("http://localhost:3030/pipes/enable", {
+        const response = await fetch(`http://localhost:3030/pipes/enable`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -320,9 +345,9 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-    disable: async (pipeId: string) => {
+    disable: async (pipeId: string): Promise<boolean> => {
       try {
-        const response = await fetch("http://localhost:3030/pipes/disable", {
+        const response = await fetch(`http://localhost:3030/pipes/disable`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -336,16 +361,19 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
-    update: async (pipeId: string, config: { [key: string]: string }) => {
+    update: async (
+      pipeId: string,
+      config: { [key: string]: string 
+      }): Promise<boolean> => {
       try {
-        const response = await fetch("http://localhost:3030/pipes/update", {
+        const response = await fetch(`http://localhost:3030/pipes/update`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             pipe_id: pipeId,
             config,
           }),
-        });
+        }); 
 
         return response.ok;
       } catch (error) {
@@ -353,6 +381,69 @@ class BrowserPipeImpl implements BrowserPipe {
         return false;
       }
     },
+    info: async (pipeId: string): Promise<Result<Record<string, any>>> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/info/${pipeId}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to get pipe info:", error);
+        return { success: false, error: error };
+      }
+    },
+    downloadPrivate: async (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ): Promise<Result<Record<string, any>>> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/download-private`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            pipe_name: pipeName,
+            pipe_id: pipeId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to download private pipe:", error);
+        return { success: false, error: error };
+      }
+    },
+    delete: async (pipeId: string): Promise<boolean> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to delete pipe:", error);
+        return false;
+      }
+    }
   };
 
   async *streamTranscriptions(): AsyncGenerator<

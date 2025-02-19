@@ -12,9 +12,9 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect } from "react";
 import posthog from "posthog-js";
+import localforage from "localforage";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -265,7 +265,7 @@ const tauriStorage: PersistStorage = {
     const tauriStore = await getStore();
     const allKeys = await tauriStore.keys();
     const values: Record<string, any> = {};
-    
+
     for (const k of allKeys) {
       values[k] = await tauriStore.get(k);
     }
@@ -275,11 +275,17 @@ const tauriStorage: PersistStorage = {
   setItem: async (_key: string, value: any) => {
     const tauriStore = await getStore();
 
+    delete value.settings.customSettings;
     const flattenedValue = flattenObject(value.settings);
 
     // Delete all existing keys first
-    const existingKeys = await tauriStore.keys();
-    for (const key of existingKeys) {
+    //const existingKeys = await tauriStore.keys();
+    //for (const key of existingKeys) {
+    //	await tauriStore.delete(key);
+    //}
+
+    // Only delete keys that are present in the new settings
+    for (const key of Object.keys(flattenedValue)) {
       await tauriStore.delete(key);
     }
 
@@ -365,8 +371,25 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
-  const loadUser = async (token: string) => { 
+  const loadUser = async (token: string, forceReload = false) => {
     try {
+      // try to get from cache first (unless force reload)
+      const cacheKey = `user_data_${token}`;
+      if (!forceReload) {
+        const cached = await localforage.getItem<{
+          data: User;
+          timestamp: number;
+        }>(cacheKey);
+
+        // use cache if less than 30s old
+        if (cached && Date.now() - cached.timestamp < 30000) {
+          setSettings({
+            user: cached.data,
+          });
+          return;
+        }
+      }
+
       const response = await fetch(`https://screenpi.pe/api/user`, {
         method: "POST",
         headers: {
@@ -391,11 +414,18 @@ export function useSettings() {
         });
       }
 
+      // cache the result
+      await localforage.setItem(cacheKey, {
+        data: userData,
+        timestamp: Date.now(),
+      });
+
       setSettings({
         user: userData,
       });
     } catch (err) {
       console.error("failed to load user:", err);
+      throw err;
     }
   };
 

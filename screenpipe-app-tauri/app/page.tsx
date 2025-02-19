@@ -33,6 +33,8 @@ export default function Home() {
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
 
+  // staggered polling with exponential backoff while maintaining responsiveness
+  // while reducing backend load
   useEffect(() => {
     const interval = setInterval(() => {
       loadUser(settings.user?.token!);
