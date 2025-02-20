@@ -36,34 +36,10 @@ export default function Home() {
   // staggered polling with exponential backoff while maintaining responsiveness
   // while reducing backend load
   useEffect(() => {
-    let retries = 0;
-    const maxRetries = 5;
-    const minDelay = 1000; // 1s minimum
-    const maxDelay = 30000; // 30s maximum
-    let timeoutId: NodeJS.Timeout;
-
-    const loadUserWithBackoff = async () => {
-      if (!settings.user?.token) return;
-
-      try {
-        await loadUser(settings.user.token, false);
-        retries = 0;
-      } catch (err) {
-        console.error("failed to load user:", err);
-        retries = Math.min(retries + 1, maxRetries);
-      }
-
-      // calculate next delay with exponential backoff
-      const delay = Math.min(minDelay * Math.pow(2, retries), maxDelay);
-      timeoutId = setTimeout(loadUserWithBackoff, delay);
-    };
-
-    loadUserWithBackoff();
-
-    // cleanup
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
+    const interval = setInterval(() => {
+      loadUser(settings.user?.token!);
+    }, 1000);
+    return () => clearInterval(interval);
   }, [settings]);
 
   useEffect(() => {

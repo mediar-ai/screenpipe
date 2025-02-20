@@ -293,6 +293,7 @@ impl DatabaseManager {
         &self,
         device_name: &str,
         timestamp: Option<DateTime<Utc>>,
+        browser_url: Option<&str>,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -329,12 +330,13 @@ impl DatabaseManager {
 
         // Insert the new frame with file_path as name
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url) VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(timestamp)
         .bind(file_path)
+        .bind(browser_url.map(|s| s.to_string()))
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -401,7 +403,7 @@ impl DatabaseManager {
                     "Failed to insert OCR text for frame_id: {} after {} attempts",
                     frame_id, MAX_RETRIES
                 );
-                return Err(sqlx::Error::PoolTimedOut); // Return error after max retries
+                return Err(sqlx::Error::PoolTimedOut);
             }
         }
 
@@ -752,7 +754,8 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
-                GROUP_CONCAT(tags.name, ',') as tags
+                GROUP_CONCAT(tags.name, ',') as tags,
+                frames.browser_url
             FROM {}
             JOIN frames ON ocr_text.frame_id = frames.id
             JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
@@ -804,6 +807,7 @@ impl DatabaseManager {
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
+                browser_url: raw.browser_url,
             })
             .collect())
     }
@@ -1549,7 +1553,8 @@ impl DatabaseManager {
                 ui_monitoring.window,
                 ui_monitoring.initial_traversal_at,
                 video_chunks.file_path,
-                frames.offset_index
+                frames.offset_index,
+                frames.browser_url
             FROM {}
             LEFT JOIN frames ON
                 frames.timestamp BETWEEN
@@ -1989,7 +1994,8 @@ impl DatabaseManager {
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
-                GROUP_CONCAT(tags.name, ',') as tags
+                GROUP_CONCAT(tags.name, ',') as tags,
+                frames.browser_url
             FROM embedding_matches
             JOIN ocr_text ON embedding_matches.frame_id = ocr_text.frame_id
             JOIN frames ON ocr_text.frame_id = frames.id
@@ -2026,6 +2032,7 @@ impl DatabaseManager {
                     .tags
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
+                browser_url: raw.browser_url,
             })
             .collect())
     }

@@ -21,3 +21,4 @@ pub use microsoft::perform_ocr_windows;
 #[cfg(target_os = "macos")]
 pub use run_ui_monitoring_macos::run_ui;
 pub use tesseract::perform_ocr_tesseract;
+pub mod browser_utils;
