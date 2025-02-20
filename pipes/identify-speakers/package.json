@@ -1,6 +1,6 @@
 {
   "name": "identify-speakers",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -22,8 +22,8 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.1.5",
-    "@screenpipe/browser": "^0.1.26",
-    "@screenpipe/js": "^1.0.9",
+    "@screenpipe/browser": "^0.1.28",
+    "@screenpipe/js": "^1.0.12",
     "@shadcn/ui": "^0.0.4",
     "@tanstack/react-query": "^5.62.7",
     "@types/js-levenshtein": "^1.1.3",

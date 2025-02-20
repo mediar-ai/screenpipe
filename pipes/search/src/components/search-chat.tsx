@@ -1077,6 +1077,8 @@ export function SearchChat() {
                             filePath={item.content.filePath}
                             startTime={item.content.startTime}
                             endTime={item.content.endTime}
+                            speaker={item.content.speaker}
+
                           />
                         </div>
                       ) : (
@@ -1505,7 +1507,7 @@ export function SearchChat() {
         open={isQueryParamsDialogOpen}
         onOpenChange={setIsQueryParamsDialogOpen}
       >
-        <DialogContent className="sm:max-w-[605px]">
+        <DialogContent className="sm:max-w-[605px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>advanced search parameters</DialogTitle>
             <DialogDescription>

@@ -1,5 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "screenpipe",
+  "identifier": "screenpi.pe",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -36,8 +38,6 @@
       "assets/*"
     ]
   },
-  "productName": "screenpipe",
-  "identifier": "screenpi.pe",
   "plugins": {
     "updater": {
       "active": true,
@@ -70,6 +70,30 @@
           "host": "screenpi.pe",
           "pathPrefix": [
             "/purchase-successful"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/settings"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/changelog"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/onboarding"
+          ]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": [
+            "/status"
           ]
         }
       ]

@@ -6,9 +6,8 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use screenpipe_core::AudioDevice;
-    use screenpipe_core::AudioDeviceType;
-    use screenpipe_core::DeviceManager;
+    use lru::LruCache;
+    use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
     use screenpipe_server::video_cache::FrameCache;
@@ -18,8 +17,10 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -32,7 +33,6 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            device_manager: Arc::new(DeviceManager::default()),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -42,7 +42,9 @@ mod tests {
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
             ui_monitoring_enabled: false,
-            frame_image_cache: None,
+            frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(100).unwrap(),
+            )))),
         });
 
         let router = create_router();
@@ -67,7 +69,7 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -81,7 +83,7 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test2".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -170,8 +172,8 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "This is a test OCR text", // 21 chars
@@ -203,7 +205,7 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test1".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -216,7 +218,7 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test2".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -361,7 +363,7 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")
@@ -396,7 +398,7 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), AudioDeviceType::Input),
+                &AudioDevice::new("test".to_string(), DeviceType::Input),
                 None,
                 None,
                 None,
@@ -549,14 +551,14 @@ mod tests {
             .insert_video_chunk("old_video.mp4", "test_device")
             .await
             .unwrap();
-        let old_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let old_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
         // Insert recent data
         let _ = db
             .insert_video_chunk("recent_video.mp4", "test_device")
             .await
             .unwrap();
-        let recent_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let recent_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
         // Insert OCR data with different timestamps
         sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")

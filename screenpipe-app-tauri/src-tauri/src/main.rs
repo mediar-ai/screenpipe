@@ -16,18 +16,12 @@ use std::sync::Arc;
 use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState},
-};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
-use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -52,7 +46,7 @@ pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::stop_screenpipe;
 pub use sidecar::spawn_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
@@ -433,39 +427,6 @@ async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
     Ok(log_files)
 }
 
-fn send_recording_notification(
-    app_handle: &tauri::AppHandle,
-    success: bool,
-    action: &str,
-    error_msg: Option<&str>,
-) {
-    let (title, body, event) = if success {
-        (
-            "Screenpipe",
-            format!("Recording {}", action),
-            format!("recording_{}", action),
-        )
-    } else {
-        (
-            "Screenpipe",
-            format!("Failed to {} recording", action),
-            "recording_failed".to_string(),
-        )
-    };
-
-    if let Some(err) = error_msg {
-        error!("Recording operation failed: {}", err);
-    }
-
-    let _ = app_handle
-        .notification()
-        .builder()
-        .title(title)
-        .body(&body)
-        .show();
-    let _ = app_handle.emit(&event, body);
-}
-
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     // Create a new runtime for this synchronous function
 
@@ -483,6 +444,63 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     } else {
         get_base_dir(app, Some(data_dir))
     }
+}
+
+use tokio::time::{sleep, Duration};
+
+#[tauri::command]
+async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
+    debug!("Starting upload for file: {}", file_path);
+    
+    // Read file contents - do this outside retry loop to avoid multiple reads
+    let file_contents = match tokio::fs::read(file_path).await {
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        },
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(e.to_string())
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let max_retries = 3;
+    let mut attempt = 0;
+    let mut last_error = String::new();
+
+    while attempt < max_retries {
+        attempt += 1;
+        debug!("Upload attempt {} of {}", attempt, max_retries);
+
+        match client
+            .put(signed_url)
+            .body(file_contents.clone())
+            .send()
+            .await 
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    debug!("Successfully uploaded file on attempt {}", attempt);
+                    return Ok(true);
+                }
+                last_error = format!("Upload failed with status: {}", response.status());
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            },
+            Err(e) => {
+                last_error = format!("Request failed: {}", e);
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            }
+        }
+
+        if attempt < max_retries {
+            let delay = Duration::from_secs(2u64.pow(attempt as u32 - 1)); // Exponential backoff
+            debug!("Waiting {}s before retry...", delay.as_secs());
+            sleep(delay).await;
+        }
+    }
+
+    Err(format!("Upload failed after {} attempts. Last error: {}", max_retries, last_error))
 }
 
 // Helper function to parse shortcut string
@@ -609,6 +627,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
@@ -651,7 +670,7 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes,
+            stop_screenpipe,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
@@ -668,8 +687,9 @@ async fn main() {
             commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
+            upload_file_to_s3,
             update_global_shortcuts,
-            get_env
+            get_env,
         ])
         .setup(|app| {
             //deep link register_all
@@ -746,160 +766,11 @@ async fn main() {
             let update_manager = start_update_check(app_handle, 5)?;
 
             // Tray setup
-            if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
-
-                let start_recording =
-                    MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
-                let stop_recording =
-                    MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
-
-                let version = MenuItemBuilder::with_id(
-                    "version",
-                    format!("version {}", app.package_info().version),
-                )
-                .enabled(false)
-                .build(app)?;
-
-                let menu_divider = PredefinedMenuItem::separator(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app)
-                    .items(&[
-                        &version,
-                        &show,
-                        &start_recording,
-                        &stop_recording,
-                        update_manager.update_now_menu_item_ref(),
-                        &menu_divider,
-                        &quit,
-                    ])
-                    .build()?;
-                let _ = main_tray.set_menu(Some(menu));
-
+            if let Some(_) = app.tray_by_id("screenpipe_main") {
                 let update_item = update_manager.update_now_menu_item_ref().clone();
-                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
-
-                main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
-                    "show" => {
-                        show_main_window(app_handle, false);
-                    }
-                    "quit" => {
-                        debug!("Quit requested");
-                        // Kill all pipes before quitting
-                        let app_handle_clone = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            // Stop any running recordings
-                            let state = app_handle_clone.state::<SidecarState>();
-                            if let Err(e) =
-                                kill_all_sreenpipes(state, app_handle_clone.clone()).await
-                            {
-                                error!("Error stopping recordings during quit: {}", e);
-                            }
-                        });
-                        // Then exit
-                        app_handle.exit(0);
-                    }
-                    "start_recording" => {
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let state = app_handle.state::<SidecarState>();
-                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-                                send_recording_notification(
-                                    &app_handle,
-                                    false,
-                                    "start",
-                                    Some(&err.to_string()),
-                                );
-                            } else {
-                                send_recording_notification(&app_handle, true, "started", None);
-                            }
-                        });
-                    }
-                    "stop_recording" => {
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let state = app_handle.state::<SidecarState>();
-                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                error!("Failed to stop recording: {}", err);
-                                let _ = app_handle
-                                    .notification()
-                                    .builder()
-                                    .title("Screenpipe")
-                                    .body("Failed to stop recording")
-                                    .show();
-                                let _ =
-                                    app_handle.emit("recording_failed", "Failed to stop recording");
-                            } else {
-                                let _ = app_handle
-                                    .notification()
-                                    .builder()
-                                    .title("Screenpipe")
-                                    .body("Recording stopped")
-                                    .show();
-                                let _ = app_handle.emit("recording_stopped", "Recording stopped");
-                            }
-                        });
-                    }
-                    "update_now" => {
-                        use tauri_plugin_notification::NotificationExt;
-                        app_handle
-                            .notification()
-                            .builder()
-                            .title("screenpipe")
-                            .body("installing latest version")
-                            .show()
-                            .unwrap();
-
-                        tokio::task::block_in_place(move || {
-                            Handle::current().block_on(async move {
-                                if let Err(err) = sidecar::kill_all_sreenpipes(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
-                                    error!("Failed to kill sidecar: {}", err);
-                                }
-                            });
-                        });
-                        update_manager.update_screenpipe();
-                    }
-                    id if id.starts_with("pipe_") => {
-                        let pipe_id = id.replace("pipe_", "");
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            match get_pipe_port(&pipe_id).await {
-                                Ok(port) => {
-                                    if let Err(e) =
-                                        commands::open_pipe_window(app_handle, port, pipe_id).await
-                                    {
-                                        error!("Failed to open pipe window: {}", e);
-                                    }
-                                }
-                                Err(e) => error!("Failed to get pipe port: {}", e),
-                            }
-                        });
-                    }
-                    _ => (),
-                });
-                main_tray.on_tray_icon_event(move |tray, event| match event {
-                    tauri::tray::TrayIconEvent::Click {
-                        button,
-                        button_state,
-                        ..
-                    } => {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            } else {
-                                show_main_window(app, true);
-                            }
-                        }
-                    }
-                    _ => {}
-                });
+                if let Err(e) = tray::setup_tray(&app.handle(), &update_item) {
+                    error!("Failed to setup tray: {}", e);
+                }
             }
 
             // Store setup and analytics initialization
@@ -947,6 +818,7 @@ async fn main() {
                     interval_hours,
                     "http://localhost:3030".to_string(),
                     base_dir.clone(),
+                    is_analytics_enabled,
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -995,11 +867,6 @@ async fn main() {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
 
-                    // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.check_and_restart(&app_handle).await {
-                        error!("Failed to restart sidecar: {}", e);
-                    }
                 });
             } else {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");

@@ -13,7 +13,7 @@ mod tests {
         AudioTranscriptionEngine,
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
-    use screenpipe_core::{DeviceManager, Language};
+    use screenpipe_core::Language;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::str::FromStr;
@@ -209,14 +209,14 @@ mod tests {
         let output_path =
             PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
         let output_path_2 = output_path.clone();
-        let (whisper_sender, whisper_receiver) = create_whisper_channel(
+        let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
             Arc::new(AudioTranscriptionEngine::WhisperTiny),
             VadEngineEnum::WebRtc,
             None,
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
-            Arc::new(DeviceManager::default()),
+            None,
         )
         .await
         .unwrap();
@@ -330,7 +330,7 @@ mod tests {
         ));
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
-        let mut segments = prepare_segments(
+        let (mut segments, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
@@ -426,7 +426,7 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let mut segments = prepare_segments(
+        let (mut segments, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,

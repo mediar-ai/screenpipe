@@ -45,7 +45,5 @@ jobs:
             fi
           done
           
-          echo "listing all zip files:"
-          ls -la *.zip || echo "no zip files found"
 
    

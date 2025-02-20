@@ -127,6 +127,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         if let Ok(event) = res {
             if event.kind.is_modify() {
                 if let Ok(store) = get_store(&app_handle_clone, None) {
+                    let _ = store.reload();
                     if let Ok(settings) = serde_json::to_string(&store.entries()) {
                         let _ = settings_tx_clone.send(settings);
                     }
@@ -159,6 +160,8 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
         .route("/window-size", axum::routing::post(set_window_size))
         .route("/sse/settings", axum::routing::get(settings_stream))
+        .route("/sidecar/start", axum::routing::post(start_sidecar))
+        .route("/sidecar/stop", axum::routing::post(stop_sidecar))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -262,10 +265,10 @@ async fn handle_auth(
 
         info!("saving auth data: {:?}", auth_data);
 
-        store.set("auth_data", serde_json::to_value(Some(auth_data)).unwrap());
+        store.set("user", serde_json::to_value(Some(auth_data)).unwrap());
     } else {
         store.set(
-            "auth_data",
+            "user",
             serde_json::to_value::<Option<AuthData>>(None).unwrap(),
         );
     }
@@ -277,6 +280,8 @@ async fn handle_auth(
             "failed to save auth data".to_string(),
         ));
     }
+
+    state.app_handle.emit("cli-login", ()).unwrap();
 
     Ok(Json(ApiResponse {
         success: true,
@@ -348,6 +353,58 @@ async fn set_window_size(
             StatusCode::NOT_FOUND,
             format!("window with title '{}' not found", payload.title),
         ))
+    }
+}
+
+async fn start_sidecar(
+    State(state): State<ServerState>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received request to start sidecar");
+
+    let app_handle = state.app_handle.clone();
+    match crate::sidecar::spawn_screenpipe(
+        app_handle.clone().state::<crate::SidecarState>(),
+        app_handle,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: "sidecar started successfully".to_string(),
+        })),
+        Err(e) => {
+            error!("failed to start sidecar: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to start sidecar: {}", e),
+            ))
+        }
+    }
+}
+
+async fn stop_sidecar(
+    State(state): State<ServerState>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received request to stop sidecar");
+
+    let app_handle = state.app_handle.clone();
+    match crate::sidecar::stop_screenpipe(
+        app_handle.clone().state::<crate::SidecarState>(),
+        app_handle,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: "sidecar stopped successfully".to_string(),
+        })),
+        Err(e) => {
+            error!("failed to stop sidecar: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to stop sidecar: {}", e),
+            ))
+        }
     }
 }
 

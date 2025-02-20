@@ -1,3 +1,5 @@
+use crate::core::RealtimeVisionEvent;
+use crate::UIFrame;
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use screenpipe_events::send_event;
@@ -13,8 +15,6 @@ use tokio::process::Command;
 use tokio::signal;
 use tokio::time::{sleep, timeout, Duration};
 use which::which;
-
-use crate::UIFrame;
 
 pub async fn run_ui() -> Result<()> {
     info!("starting ui monitoring service...");
@@ -131,7 +131,7 @@ pub async fn run_ui() -> Result<()> {
                 frame = UIFrame::read_from_pipe(&mut reader) => {
                     match frame {
                         Ok(frame) => {
-                            let _ = send_event("ui_frame", frame);
+                            let _ = send_event("ui_frame", RealtimeVisionEvent::Ui(frame));
                         }
                         Err(e) => {
                             if let Some(io_err) = e.downcast_ref::<io::Error>() {

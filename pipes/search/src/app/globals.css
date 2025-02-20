@@ -71,7 +71,7 @@ body {
   }
 }
 
-[role="dialog"] {
+/* [role="dialog"] {
   max-width: 696px !important;
   max-height: 60vh !important;
   width: 70vw !important;
@@ -79,5 +79,5 @@ body {
   margin: 0 auto;
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
-}
+} */
 

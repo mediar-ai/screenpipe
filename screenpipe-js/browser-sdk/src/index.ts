@@ -12,6 +12,9 @@ import type {
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+import { PipesManager } from "../../common/PipesManager";
+
+type Result<T> = { success: true; data: T } | { success: false; error: any };
 
 const WS_URL = "ws://localhost:3030/ws/events";
 
@@ -23,10 +26,10 @@ let wsWithoutImages: WebSocket | null = null;
 async function* wsEvents(
   includeImages: boolean = false
 ): AsyncGenerator<EventStreamResponse, void, unknown> {
-  // Reuse existing connection or create new one
   let ws = includeImages ? wsWithImages : wsWithoutImages;
 
   if (!ws || ws.readyState === WebSocket.CLOSED) {
+    console.log("creating new websocket connection, includeImages:", includeImages)
     ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
     if (includeImages) {
       wsWithImages = ws;
@@ -36,16 +39,48 @@ async function* wsEvents(
 
     // Wait for connection to establish
     await new Promise((resolve, reject) => {
-      ws!.onopen = resolve;
-      ws!.onerror = reject;
+      const onOpen = () => {
+        console.log("websocket connected")
+        resolve(undefined);
+      };
+      const onError = (error: Event) => {
+        console.error("websocket connection error:", error)
+        reject(error);
+      };
+      ws!.addEventListener("open", onOpen, { once: true });
+      ws!.addEventListener("error", onError, { once: true });
     });
   }
 
-  while (true) {
-    const event: MessageEvent = await new Promise((resolve) => {
-      ws!.addEventListener("message", (ev: MessageEvent) => resolve(ev));
-    });
-    yield JSON.parse(event.data);
+  // Create a single message handler that will be reused
+  const messageQueue: MessageEvent[] = [];
+  let resolveMessage: ((value: MessageEvent) => void) | null = null;
+
+  const messageHandler = (ev: MessageEvent) => {
+    if (resolveMessage) {
+      resolveMessage(ev);
+      resolveMessage = null;
+    } else {
+      messageQueue.push(ev);
+    }
+  };
+
+  ws.addEventListener("message", messageHandler);
+
+  try {
+    while (true) {
+      const message = await new Promise<MessageEvent>((resolve) => {
+        if (messageQueue.length > 0) {
+          resolve(messageQueue.shift()!);
+        } else {
+          resolveMessage = resolve;
+        }
+      });
+      
+      yield JSON.parse(message.data);
+    }
+  } finally {
+    ws.removeEventListener("message", messageHandler);
   }
 }
 
@@ -98,6 +133,24 @@ export interface BrowserPipe {
   streamEvents(
     includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
+  disconnect(): void;
+  pipes: {
+    list: () => Promise<Result<string[]>>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<Result<Record<string, any>>>;
+  };
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -182,12 +235,6 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return true;
     } catch (error) {
-      await this.captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-        distinct_id: userId,
-        email: email,
-      });
       return false;
     }
   }
@@ -240,14 +287,8 @@ class BrowserPipeImpl implements BrowserPipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-        distinct_id: userId,
-        email: email,
-      });
       console.error("error querying screenpipe:", error);
-      return null;
+      throw error;
     }
   }
 
@@ -263,6 +304,179 @@ class BrowserPipeImpl implements BrowserPipe {
       sendInputControl({ type: "MouseMove", data: { x, y } }),
     click: (button: "left" | "right" | "middle") =>
       sendInputControl({ type: "MouseClick", data: button }),
+  };
+
+  pipes: {
+    list: () => Promise<Result<string[]>>;
+    enable: (pipeId: string) => Promise<boolean>;
+    disable: (pipeId: string) => Promise<boolean>;
+    delete: (pipeId: string,) => Promise<boolean>;
+    download: (url: string) => Promise<Result<Record<string, any>>>;
+    info: (pipeId: string) => Promise<Result<Record<string, any>>>;
+    update: (
+      pipeId: string,
+      config: { [key: string]: string },
+    ) => Promise<boolean>;
+    downloadPrivate: (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ) => Promise<Result<Record<string, any>>>;
+  } = {
+    list: async (): Promise<Result<string[]>> => {
+      try {
+        const response = await fetch("http://localhost:3030/pipes/list", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
+        const data = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to list pipes:", error);
+        return { success: false, error: error };
+      }
+    },
+    download: async (url: string): Promise<Result<Record<string, any>>> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/download`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }   
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to download pipe:", error);
+        return { success: false, error: error };
+      }
+    },
+    enable: async (pipeId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/enable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to enable pipe:", error);
+        return false;
+      }
+    },
+    disable: async (pipeId: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/disable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to disable pipe:", error);
+        return false;
+      }
+    },
+    update: async (
+      pipeId: string,
+      config: { [key: string]: string 
+      }): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+            config,
+          }),
+        }); 
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to update pipe:", error);
+        return false;
+      }
+    },
+    info: async (pipeId: string): Promise<Result<Record<string, any>>> => {
+      try {
+        const response = await fetch(`http://localhost:3030/pipes/info/${pipeId}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to get pipe info:", error);
+        return { success: false, error: error };
+      }
+    },
+    downloadPrivate: async (
+      url: string,
+      pipeName: string,
+      pipeId: string
+    ): Promise<Result<Record<string, any>>> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/download-private`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            pipe_name: pipeName,
+            pipe_id: pipeId,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`http error! status: ${response.status}`);
+        }
+
+        const data: Record<string, any> = await response.json();
+        return { success: true, data: data.data };
+      } catch (error) {
+        console.error("failed to download private pipe:", error);
+        return { success: false, error: error };
+      }
+    },
+    delete: async (pipeId: string): Promise<boolean> => {
+      try {
+        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const response = await fetch(`${apiUrl}/pipes/delete`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pipe_id: pipeId,
+          }),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error("failed to delete pipe:", error);
+        return false;
+      }
+    }
   };
 
   async *streamTranscriptions(): AsyncGenerator<
@@ -291,6 +505,7 @@ class BrowserPipeImpl implements BrowserPipe {
                 timestamp: chunk.timestamp,
                 device: chunk.device,
                 isInput: chunk.is_input,
+                speaker: chunk.speaker,
               },
             };
           }
@@ -344,10 +559,23 @@ class BrowserPipeImpl implements BrowserPipe {
       yield event;
     }
   }
+
+  public disconnect() {
+    if (wsWithImages) {
+      wsWithImages.close();
+      wsWithImages = null;
+    }
+    if (wsWithoutImages) {
+      wsWithoutImages.close();
+      wsWithoutImages = null;
+    }
+  }
 }
 
 const pipeImpl = new BrowserPipeImpl();
+const pipeManager = new PipesManager();
 export const pipe = pipeImpl;
+pipeImpl.pipes = pipeManager;
 
 export * from "../../common/types";
 export { getDefaultSettings } from "../../common/utils";

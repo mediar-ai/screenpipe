@@ -32,7 +32,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
-              loadUser(apiKey);
+              await loadUser(apiKey, true);
               toast({
                 title: "logged in!",
                 description: "your api key has been set",

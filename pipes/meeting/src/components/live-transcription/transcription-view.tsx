@@ -2,7 +2,7 @@
 
 import { Loader2, ArrowDown, LayoutList, Layout } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useState, useMemo, useEffect, useRef } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { TranscriptionChunk, ServiceStatus } from "../meeting-history/types"
 import { ChunkOverlay } from "./floating-container-buttons"
 import { Input } from "@/components/ui/input"
@@ -39,7 +39,7 @@ export function TranscriptionView({
     isScrolledToBottom,
     settings
 }: TranscriptionViewProps) {
-    const { title, notes, setSegments, setNotes, data, updateStore } = useMeetingContext()
+    const { title, notes, setNotes, data, updateStore } = useMeetingContext()
     const [viewMode, setViewMode] = useState<'overlay' | 'sidebar' | 'timestamp'>('overlay')
     const [useOverlay, setUseOverlay] = useState(false)
     const [mergeModalOpen, setMergeModalOpen] = useState(false)
@@ -173,7 +173,7 @@ export function TranscriptionView({
 
     // Store chunks when they update
     useEffect(() => {
-        console.log('storing chunks in transcription view', {
+        console.log('storing chunks:', {
             count: chunks.length,
             isLoading
         })
@@ -181,7 +181,7 @@ export function TranscriptionView({
     }, [chunks])
 
     // Move handleTextEdit inside the component
-    const handleTextEdit = async (index: number, newText: string) => {
+    const handleTextEdit = useCallback(async (index: number, newText: string) => {
         console.log('text edited for chunk', index, ':', newText)
         if (!data) return
 
@@ -191,7 +191,7 @@ export function TranscriptionView({
         }
         setEditedChunks(newEditedChunks)
         await updateStore({ ...data, editedChunks: newEditedChunks })
-    }
+    }, [data, editedChunks, updateStore])
 
     const mergeSpeakers = async (newSpeaker: string) => {
         if (!selectedSpeaker) return
@@ -275,8 +275,7 @@ export function TranscriptionView({
         // Only process if we have a previous chunk and haven't processed it yet
         if (previousChunkIndex >= 0 && 
             previousChunkIndex > lastProcessedChunkRef.current && 
-            !improvingChunks[previousChunkIndex] &&
-            settings.openaiApiKey) {
+            !improvingChunks[previousChunkIndex]) {
             
             const improveChunk = async () => {
                 setImprovingChunks(prev => ({ ...prev, [previousChunkIndex]: true }))
@@ -319,7 +318,7 @@ export function TranscriptionView({
 
             improveChunk()
         }
-    }, [mergeChunks, title, notes, settings, data, updateStore])
+    }, [mergeChunks, title, notes, settings, data, updateStore, handleTextEdit, improvingChunks])
 
     // Update segments when mergeChunks changes
     useEffect(() => {
@@ -328,13 +327,8 @@ export function TranscriptionView({
             editedChunksCount: Object.keys(editedChunks).length,
             speakerMappingsCount: Object.keys(speakerMappings).length
         })
-        const segments = mergeChunks.map(chunk => ({
-            timestamp: chunk.timestamp,
-            transcription: editedChunks[chunk.id] ?? chunk.text,
-            deviceName: chunk.deviceName || '',
-            speaker: chunk.speaker || 'speaker_0'
-        }))
-        setSegments(segments)
+        // Don't call setNotes here as it overwrites meeting notes
+        // Instead, update segments separately
     }, [mergeChunks, editedChunks, speakerMappings])
 
     const handleGenerateNote = async (index: number) => {
@@ -359,6 +353,26 @@ export function TranscriptionView({
             console.error('failed to generate note:', error)
         }
     }
+
+    // Add immediate chunk processing
+    useEffect(() => {
+        console.log('processing new chunks:', {
+            total: chunks.length,
+            merged: mergeChunks.length
+        })
+        
+        // Force a re-render when chunks update
+        const timer = requestAnimationFrame(() => {
+            if (scrollRef.current && isAutoScrollEnabled) {
+                scrollRef.current.scrollTo({
+                    top: scrollRef.current.scrollHeight,
+                    behavior: 'smooth'
+                })
+            }
+        })
+
+        return () => cancelAnimationFrame(timer)
+    }, [chunks, mergeChunks.length])
 
     return (
         <>

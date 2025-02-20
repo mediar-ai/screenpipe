@@ -1,7 +1,6 @@
 mod call_ai;
 mod monitor_keystroke_commands;
 mod run;
-mod screenshot;
 pub mod type_and_animate; 
 
 pub use call_ai::call_ai;

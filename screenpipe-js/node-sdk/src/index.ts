@@ -3,16 +3,12 @@ import type {
   InputControlResponse,
   ScreenpipeQueryParams,
   ScreenpipeResponse,
-  TranscriptionStreamResponse,
-  TranscriptionChunk,
-  VisionEvent,
-  VisionStreamResponse,
   NotificationOptions,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
 import { SettingsManager } from "./SettingsManager";
 import { InboxManager } from "./InboxManager";
-import { EventSource } from "eventsource";
+import { PipesManager } from "../../common/PipesManager";
 import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
 
 class NodePipe {
@@ -32,6 +28,7 @@ class NodePipe {
 
   public settings = new SettingsManager();
   public inbox = new InboxManager();
+  public pipes = new PipesManager();
 
   public async sendDesktopNotification(
     options: NotificationOptions
@@ -49,10 +46,6 @@ class NodePipe {
       });
       return true;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "notification",
-        error: "send_failed",
-      });
       console.error("failed to send notification:", error);
       return false;
     }
@@ -123,89 +116,8 @@ class NodePipe {
       });
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
-      await captureEvent("error_occurred", {
-        feature: "search",
-        error: "query_failed",
-      });
       console.error("error querying screenpipe:", error);
-      return null;
-    }
-  }
-
-  public async *streamTranscriptions(): AsyncGenerator<
-    TranscriptionStreamResponse,
-    void,
-    unknown
-  > {
-    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
-    const eventSource = new EventSource(`${apiUrl}/sse/transcriptions`);
-
-    try {
-      while (true) {
-        const chunk: TranscriptionChunk = await new Promise(
-          (resolve, reject) => {
-            eventSource.onmessage = (event) => {
-              if (event.data.trim() === "keep-alive-text") {
-                return;
-              }
-              resolve(JSON.parse(event.data));
-            };
-            eventSource.onerror = (error) => {
-              reject(error);
-            };
-          }
-        );
-
-        yield {
-          id: crypto.randomUUID(),
-          object: "text_completion_chunk",
-          created: Date.now(),
-          model: "screenpipe-realtime",
-          choices: [
-            {
-              text: chunk.transcription,
-              index: 0,
-              finish_reason: chunk.is_final ? "stop" : null,
-            },
-          ],
-          metadata: {
-            timestamp: chunk.timestamp,
-            device: chunk.device,
-            isInput: chunk.is_input,
-          },
-        };
-      }
-    } finally {
-      eventSource.close();
-    }
-  }
-
-  public async *streamVision(
-    includeImages: boolean = false
-  ): AsyncGenerator<VisionStreamResponse, void, unknown> {
-    const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
-    const eventSource = new EventSource(
-      `${apiUrl}/sse/vision?images=${includeImages}`
-    );
-
-    try {
-      while (true) {
-        const event: VisionEvent = await new Promise((resolve, reject) => {
-          eventSource.onmessage = (event) => {
-            resolve(JSON.parse(event.data));
-          };
-          eventSource.onerror = (error) => {
-            reject(error);
-          };
-        });
-
-        yield {
-          type: "vision_stream",
-          data: event,
-        };
-      }
-    } finally {
-      eventSource.close();
+      throw error;
     }
   }
 

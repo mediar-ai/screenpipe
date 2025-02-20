@@ -7,7 +7,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 pub async fn realtime_stt(
     stream: Arc<AudioStream>,
-    languages: Arc<Vec<Language>>,
+    languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
@@ -24,4 +24,6 @@ pub struct RealtimeTranscriptionEvent {
     pub transcription: String,
     pub is_final: bool,
     pub is_input: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker: Option<String>,
 }

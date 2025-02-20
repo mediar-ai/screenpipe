@@ -75,26 +75,37 @@ export function useBrowserTranscriptionStream(
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
-        console.log('received websocket message:', data.type)
+        // console.log('received websocket message:', data.type)
         if (data.type === 'Results') {
           const words = data.channel.alternatives[0].words || []
           if (data.is_final && words.length > 0) {
+            const text = data.channel.alternatives[0].transcript
+            const speaker = `speaker_${words[0].speaker || 0}`
+            
             console.log('new browser transcription:', {
-              text: data.channel.alternatives[0].transcript,
-              speaker: `speaker_${words[0].speaker || 0}`,
-              words: words
+              text,
+              speaker,
+              words,
+              timestamp: new Date().toISOString()
             })
             
             const chunk: TranscriptionChunk = {
               id: Date.now(),
               timestamp: new Date().toISOString(),
-              text: data.channel.alternatives[0].transcript,
+              text,
               isInput: true,
               device: 'browser',
-              speaker: `speaker_${words[0].speaker || 0}`
+              speaker
             }
             
-            setChunks(prev => [...prev, chunk])
+            // Use callback form to ensure we always have latest state
+            setChunks(prev => {
+              console.log('updating chunks:', { 
+                prevCount: prev.length,
+                newChunk: chunk
+              })
+              return [...prev, chunk]
+            })
           }
         }
       }
