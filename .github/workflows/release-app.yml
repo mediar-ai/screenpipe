@@ -621,6 +621,26 @@ jobs:
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
 
+      - name: Set short git commit SHA
+        id: vars
+        run: |
+          calculatedSha=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+
+      - uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          prerelease: true
+          name: "Screenpipe Beta ${{ env.COMMIT_SHORT_SHA }}"
+          updateOnlyUnreleased: true
+          artifacts: "release.tar.gz,foo/*.txt"
+          artfiacts: >
+            "screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe,
+            screenpipe-app-tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz,
+            screenpipe-app-tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.dmg,
+            screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+            screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.dmg"
+
   retry-win:
     needs: publish-tauri
     if: ${{ always() && contains(needs.publish-tauri.result, 'failure') }}
