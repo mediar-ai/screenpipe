@@ -8,7 +8,7 @@ use screenpipe_audio::speaker::prepare_segments;
 use screenpipe_audio::transcription::stt::stt;
 use screenpipe_audio::transcription::whisper::model::WhisperModel;
 use screenpipe_audio::vad::{silero::SileroVad, VadEngine};
-use screenpipe_audio::AudioInput;
+use screenpipe_audio::{resample, AudioInput};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -89,6 +89,16 @@ async fn main() {
             let audio_input = AudioInput {
                 data: Arc::new(audio_data.0),
                 sample_rate: 44100, // hardcoded based on test data sample rate
+                channels: 1,
+                device: Arc::new(default_input_device().unwrap()),
+            };
+
+            // resample to 16000
+            let audio_data = resample(&audio_input.data, audio_input.sample_rate, 16000).unwrap();
+
+            let audio_input = AudioInput {
+                data: Arc::new(audio_data),
+                sample_rate: 16000,
                 channels: 1,
                 device: Arc::new(default_input_device().unwrap()),
             };
