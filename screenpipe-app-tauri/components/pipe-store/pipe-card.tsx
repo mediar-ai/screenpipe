@@ -125,7 +125,6 @@ export const PipeCard: React.FC<PipeCardProps> = ({
         boxShadow: "0 0 10px rgba(255,255,255,0.1)",
         transition: { duration: 0.2 },
       }}
-      layout
     >
       <div className="flex flex-col h-full justify-between space-y-4">
         <div className="flex items-start justify-between gap-4">
