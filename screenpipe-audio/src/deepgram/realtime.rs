@@ -15,15 +15,14 @@ use futures::{SinkExt, TryStreamExt};
 use screenpipe_core::Language;
 use screenpipe_events::send_event;
 use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
 use tracing::info;
-use chrono::{DateTime, Utc};
-use std::collections::VecDeque;
-use std::sync::Mutex;
-use once_cell::sync::Lazy;
-use similar_string::compare_similarity as similar_text;
+use std::sync::atomic::{AtomicI64, Ordering};
+
+// Add this near other static/global variables
+static LAST_DISPLAY_AUDIO_ACTIVITY: AtomicI64 = AtomicI64::new(0);
 
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
@@ -95,7 +94,7 @@ pub async fn start_deepgram_stream(
         .encoding(Encoding::Linear16);
 
     let mut handle = req.clone().handle().await?;
-    let mut results = req.stream(get_stream(stream)).await?;
+    let mut results = req.stream(get_stream(stream, device.device_type.clone())).await?;
     let device_clone = device.clone();
 
     loop {
@@ -109,7 +108,7 @@ pub async fn start_deepgram_stream(
                     handle_transcription(
                         result,
                         device_clone.clone(),
-                    ).await?;
+                    ).await;
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(100)) => {
@@ -122,11 +121,33 @@ pub async fn start_deepgram_stream(
     Ok(())
 }
 
-fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, RecvError>> {
+fn get_stream(mut stream: Receiver<Vec<f32>>, device_type: DeviceType) -> FuturesReceiver<Result<Bytes, RecvError>> {
     let (mut tx, rx) = mpsc::channel(1);
 
     tokio::spawn(async move {
         while let Ok(data) = stream.recv().await {
+            if device_type == DeviceType::Output {
+                let sum_squares: f32 = data.iter().map(|&x| x * x).sum();
+                let rms = (sum_squares / data.len() as f32).sqrt();
+                
+                if rms > 0.01 {
+                    LAST_DISPLAY_AUDIO_ACTIVITY.store(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as i64,
+                        Ordering::SeqCst
+                    );
+                }
+            } else if SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as i64
+                - LAST_DISPLAY_AUDIO_ACTIVITY.load(Ordering::SeqCst) < 100 
+            {
+                continue;
+            }
+
             let mut bytes = BytesMut::with_capacity(data.len() * 2);
             for sample in data {
                 bytes.put_i16_le((sample * i16::MAX as f32) as i16);
@@ -140,121 +161,31 @@ fn get_stream(mut stream: Receiver<Vec<f32>>) -> FuturesReceiver<Result<Bytes, R
     rx
 }
 
-#[derive(Clone, Debug)]
-struct DisplayChunk {
-    text: String,
-    timestamp: DateTime<Utc>,
-}
-
-static DISPLAY_CHUNKS: Lazy<Arc<Mutex<VecDeque<DisplayChunk>>>> = 
-    Lazy::new(|| Arc::new(Mutex::new(VecDeque::new())));
-
-const CHECK_WINDOW_MS: i64 = 1000;   // Check mic against display within 1s
-const BUFFER_WINDOW_MS: i64 = 2000;  // Keep 2s of display history
-const SIMILARITY_THRESHOLD: f64 = 70.0;  // 70% similarity threshold instead of 0.7
-
-async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) -> Result<()> {
+async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) {
     if let StreamResponse::TranscriptResponse {
         channel, is_final, ..
-    } = result {
-        let alternative = channel.alternatives.first().unwrap();
-        let text = alternative.transcript.clone();
-        let speaker = alternative.words.first()
+    } = result
+    {
+        let res = channel.alternatives.first().unwrap();
+        let text = res.transcript.clone();
+        let is_input = device.device_type == DeviceType::Input;
+        
+        let speaker = res.words.first()
             .and_then(|w| w.speaker)
             .map(|s| s.to_string());
-        let now = Utc::now();
-        let is_input = device.device_type == DeviceType::Input;
 
-        info!("transcription from device: {} (type: {:?})", device, device.device_type);
-
-        if text.is_empty() {
-            return Ok(());
-        }
-
-        if !is_input {
-            // Display audio: store and forward immediately
-            if let Ok(mut chunks) = DISPLAY_CHUNKS.lock() {
-                // Cleanup old chunks - with safe duration conversion
-                while let Some(chunk) = chunks.front() {
-                    let duration = now.signed_duration_since(chunk.timestamp);
-                    if duration.num_milliseconds() > BUFFER_WINDOW_MS {
-                        chunks.pop_front();
-                    } else {
-                        break;
-                    }
-                }
-                
-                chunks.push_back(DisplayChunk {
-                    text: text.clone(),
-                    timestamp: now,
-                });
-            }
-
-            // Forward display transcription immediately
-            info!("display transcription: {}", text);
-            send_event(
+        if !text.is_empty() {
+            let _ = send_event(
                 "transcription",
                 RealtimeTranscriptionEvent {
-                    timestamp: now,
+                    timestamp: chrono::Utc::now(),
                     device: device.to_string(),
-                    transcription: text,
+                    transcription: text.to_string(),
                     is_final,
                     is_input,
                     speaker,
                 },
-            )?;
-            return Ok(());
-        }
-
-        // Increase delay to allow more time for display chunks to arrive
-        // For mic input, add small delay to allow display chunks to be recorded
-        tokio::time::sleep(Duration::from_millis(200)).await;  // Changed from 50ms to 200ms
-
-        // For mic input, check against recent display chunks
-        let should_skip = if let Ok(chunks) = DISPLAY_CHUNKS.lock() {
-            let recent_chunks: String = chunks.iter()
-                .filter(|chunk| {
-                    let duration = now.signed_duration_since(chunk.timestamp);
-                    duration.num_milliseconds().abs() <= CHECK_WINDOW_MS
-                })
-                .map(|chunk| chunk.text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            info!("checking mic='{}' against display='{}'", text, recent_chunks);
-
-            if !recent_chunks.is_empty() {
-                let similarity = similar_text(&text.to_lowercase(), &recent_chunks.to_lowercase());
-                if (similarity * 100.0) > SIMILARITY_THRESHOLD {
-                    info!("skipping mic echo: mic='{}', recent_display='{}', similarity={:.2}%", 
-                        text, recent_chunks, similarity * 100.0);
-                    true
-                } else {
-                    info!("keeping mic input: similarity {:.2}% below threshold", similarity * 100.0);
-                    false
-                }
-            } else {
-                info!("no recent display chunks to compare against");
-                false
-            }
-        } else {
-            false
-        };
-
-        if !should_skip {
-            // Forward unique mic input
-            send_event(
-                "transcription",
-                RealtimeTranscriptionEvent {
-                    timestamp: now,
-                    device: device.to_string(),
-                    transcription: text,
-                    is_final,
-                    is_input,
-                    speaker,
-                },
-            )?;
+            );
         }
     }
-    Ok(())
 }
