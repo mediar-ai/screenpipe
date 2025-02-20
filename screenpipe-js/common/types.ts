@@ -243,6 +243,7 @@ export interface TranscriptionChunk {
   device: string;
   is_input: boolean;
   is_final: boolean;
+  speaker?: string;
 }
 
 export interface TranscriptionStreamResponse {
@@ -259,6 +260,7 @@ export interface TranscriptionStreamResponse {
     timestamp: string;
     device: string;
     isInput: boolean;
+    speaker?: string;
   };
 }
 

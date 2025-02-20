@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/browser",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -44,5 +44,11 @@
         "./dist/browser.d.ts"
       ]
     }
-  }
+  },
+  "description": "screenpipe browser test sdk",
+  "directories": {
+    "test": "tests"
+  },
+  "author": "",
+  "license": "ISC"
 }

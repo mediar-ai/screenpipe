@@ -26,10 +26,10 @@ let wsWithoutImages: WebSocket | null = null;
 async function* wsEvents(
   includeImages: boolean = false
 ): AsyncGenerator<EventStreamResponse, void, unknown> {
-  // Reuse existing connection or create new one
   let ws = includeImages ? wsWithImages : wsWithoutImages;
 
   if (!ws || ws.readyState === WebSocket.CLOSED) {
+    console.log("creating new websocket connection, includeImages:", includeImages)
     ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
     if (includeImages) {
       wsWithImages = ws;
@@ -39,16 +39,48 @@ async function* wsEvents(
 
     // Wait for connection to establish
     await new Promise((resolve, reject) => {
-      ws!.onopen = resolve;
-      ws!.onerror = reject;
+      const onOpen = () => {
+        console.log("websocket connected")
+        resolve(undefined);
+      };
+      const onError = (error: Event) => {
+        console.error("websocket connection error:", error)
+        reject(error);
+      };
+      ws!.addEventListener("open", onOpen, { once: true });
+      ws!.addEventListener("error", onError, { once: true });
     });
   }
 
-  while (true) {
-    const event: MessageEvent = await new Promise((resolve) => {
-      ws!.addEventListener("message", (ev: MessageEvent) => resolve(ev));
-    });
-    yield JSON.parse(event.data);
+  // Create a single message handler that will be reused
+  const messageQueue: MessageEvent[] = [];
+  let resolveMessage: ((value: MessageEvent) => void) | null = null;
+
+  const messageHandler = (ev: MessageEvent) => {
+    if (resolveMessage) {
+      resolveMessage(ev);
+      resolveMessage = null;
+    } else {
+      messageQueue.push(ev);
+    }
+  };
+
+  ws.addEventListener("message", messageHandler);
+
+  try {
+    while (true) {
+      const message = await new Promise<MessageEvent>((resolve) => {
+        if (messageQueue.length > 0) {
+          resolve(messageQueue.shift()!);
+        } else {
+          resolveMessage = resolve;
+        }
+      });
+      
+      yield JSON.parse(message.data);
+    }
+  } finally {
+    ws.removeEventListener("message", messageHandler);
   }
 }
 
@@ -101,6 +133,7 @@ export interface BrowserPipe {
   streamEvents(
     includeImages: boolean
   ): AsyncGenerator<EventStreamResponse, void, unknown>;
+  disconnect(): void;
   pipes: {
     list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
@@ -472,6 +505,7 @@ class BrowserPipeImpl implements BrowserPipe {
                 timestamp: chunk.timestamp,
                 device: chunk.device,
                 isInput: chunk.is_input,
+                speaker: chunk.speaker,
               },
             };
           }
@@ -523,6 +557,17 @@ class BrowserPipeImpl implements BrowserPipe {
   ): AsyncGenerator<EventStreamResponse, void, unknown> {
     for await (const event of wsEvents(includeImages)) {
       yield event;
+    }
+  }
+
+  public disconnect() {
+    if (wsWithImages) {
+      wsWithImages.close();
+      wsWithImages = null;
+    }
+    if (wsWithoutImages) {
+      wsWithoutImages.close();
+      wsWithoutImages = null;
     }
   }
 }
