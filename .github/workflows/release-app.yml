@@ -151,7 +151,7 @@ jobs:
           - platform: "ubuntu-22.04"
             args: "--target x86_64-unknown-linux-gnu"
             target: x86_64-unknown-linux-gnu
-            tauri-args: "--target x86_64-unknown-linux-gnu"
+            tauri-args: ""
             os_type: "linux"
 
     runs-on: ${{ matrix.platform }}
