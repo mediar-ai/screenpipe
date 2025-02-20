@@ -501,7 +501,8 @@ impl DatabaseManager {
                                 end_time,
                                 min_length,
                                 max_length,
-                                speaker_ids
+                                speaker_ids,
+                                None,
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -577,6 +578,7 @@ impl DatabaseManager {
                             min_length,
                             max_length,
                             speaker_ids,
+                            None,
                         )
                         .await?;
                     results.extend(audio_results.into_iter().map(SearchResult::Audio));
@@ -607,6 +609,7 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         speaker_ids,
+                        None,
                     )
                     .await?;
                 let ui_results = self
@@ -665,6 +668,7 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         speaker_ids,
+                        None,
                     )
                     .await?;
                 let ocr_results = self
@@ -818,6 +822,7 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
+        audio_transcription_id: Option<i64>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
         let mut json_array: String = "[]".to_string();
         if let Some(ids) = speaker_ids {
@@ -832,11 +837,13 @@ impl DatabaseManager {
             "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
         };
 
-        let where_clause = if query.is_empty() {
-            "WHERE 1=1"
-        } else {
-            "WHERE audio_transcriptions_fts MATCH ?1"
-        };
+        let mut where_clause = "WHERE 1=1".to_owned();
+        if !query.is_empty() {
+            where_clause += " AND audio_transcriptions_fts MATCH ?1";
+        }
+        if let Some(audio_transcription_id) = audio_transcription_id {
+            where_clause += &format!(" AND audio_transcriptions.id = {}", audio_transcription_id);
+        } 
 
         let sql = format!(
             r#"

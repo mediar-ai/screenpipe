@@ -1,10 +1,10 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::db_types::Speaker;
+use crate::server::AudioContent;
 use crate::{DatabaseManager, VideoCapture};
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::future::join_all;
-use tracing::{debug, error, info, warn};
 use screenpipe_audio::vad_engine::VadSensitivity;
 use screenpipe_audio::{
     create_whisper_channel, record_and_transcribe, vad_engine::VadEngineEnum, AudioDevice,
@@ -13,8 +13,10 @@ use screenpipe_audio::{
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
+use screenpipe_events::send_event;
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,6 +24,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
+use tracing::{debug, error, info, warn};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn start_continuous_recording(
@@ -498,6 +501,7 @@ async fn process_audio_result(
     let transcription = result.transcription.unwrap();
     let transcription_engine = audio_transcription_engine.to_string();
     let mut chunk_id: Option<i64> = None;
+    let mut audio_transcription_id: Option<i64> = None;
 
     info!(
         "device {} inserting audio chunk: {:?}",
@@ -517,13 +521,14 @@ async fn process_audio_result(
             }
         }
     }
+
     match db.get_or_insert_audio_chunk(&result.path).await {
         Ok(audio_chunk_id) => {
             if transcription.is_empty() {
                 return Ok(Some(audio_chunk_id));
             }
 
-            if let Err(e) = db
+            match db
                 .insert_audio_transcription(
                     audio_chunk_id,
                     &transcription,
@@ -536,23 +541,60 @@ async fn process_audio_result(
                 )
                 .await
             {
-                error!(
-                    "Failed to insert audio transcription for device {}: {}",
-                    result.input.device, e
-                );
-                return Ok(Some(audio_chunk_id));
-            } else {
-                debug!(
-                    "Inserted audio transcription for chunk {} from device {} using {}",
-                    audio_chunk_id, result.input.device, transcription_engine
-                );
-                chunk_id = Some(audio_chunk_id);
+                Err(e) => {
+                    error!(
+                        "Failed to insert audio transcription for device {}: {}",
+                        result.input.device, e
+                    );
+                    return Ok(Some(audio_chunk_id));
+                }
+                Ok(transcription_id) => {
+                    debug!(
+                        "Inserted audio transcription for chunk {} from device {} using {}",
+                        audio_chunk_id, result.input.device, transcription_engine
+                    );
+                    chunk_id = Some(audio_chunk_id);
+                    audio_transcription_id = Some(transcription_id);
+                }
             }
         }
         Err(e) => error!(
             "Failed to insert audio chunk for device {}: {}",
             result.input.device, e
         ),
+    };
+
+    let audio_content = db
+        .search_audio(
+            "",
+            1,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            audio_transcription_id,
+        )
+        .await?
+        .pop();
+    if let Some(audio) = audio_content {
+        let _ = send_event(
+            "audio_content",
+            AudioContent {
+                chunk_id: audio.audio_chunk_id,
+                transcription: audio.transcription,
+                timestamp: audio.timestamp,
+                file_path: audio.file_path,
+                offset_index: audio.offset_index,
+                tags: audio.tags,
+                device_name: audio.device_name,
+                device_type: audio.device_type,
+                speaker: audio.speaker,
+                start_time: audio.start_time,
+                end_time: audio.end_time,
+            },
+        );
     }
     Ok(chunk_id)
 }
