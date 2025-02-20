@@ -139,20 +139,19 @@ async function launchProcesses(
   cookies: CookieParam[],
   model: LanguageModel,
 ): Promise<void> {
-  // await Promise.all([
-  //   profileProcess(cookies, model),
-  //   ocrProcess(model),
-  //   timelineProcess(cookies),
-  // ]);
-  // await Promise.all([summaryProcess(model), suggestionProcess(model)]);
-  await suggestionProcess(model);
+  await Promise.all([
+    profileProcess(cookies, model),
+    ocrProcess(model),
+    timelineProcess(cookies),
+  ]);
+  await Promise.all([summaryProcess(model), suggestionProcess(model)]);
 
-  // profileJob = cron.schedule("*/30 * * * *", () =>
-  //   profileProcess(cookies, model),
-  // );
-  // ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
-  // timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
-  // summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
+  profileJob = cron.schedule("*/30 * * * *", () =>
+    profileProcess(cookies, model),
+  );
+  ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
+  timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
+  summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
   suggestionJob = cron.schedule("*/5 * * * *", () => suggestionProcess(model));
 }
 
