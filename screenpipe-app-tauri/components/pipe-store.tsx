@@ -906,6 +906,9 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     const checkForUpdates = async () => {
+      if(!settings.user.token){
+        return;
+      }
       // Get last check time from local storage
       const lastCheckTime = await localforage.getItem<number>('lastUpdateCheck');
       const now = Date.now();
@@ -918,8 +921,15 @@ export const PipeStore: React.FC = () => {
       // Store current time as last check
       await localforage.setItem('lastUpdateCheck', now);
 
-      // Check for updates silently (no toast)
-      await handleUpdateAllPipes(true);
+      const installedPipes = pipes.filter((pipe) => pipe.is_installed);
+
+      const storeApi = await PipeApi.create(settings.user.token);
+      for (const pipe of installedPipes) {
+        const update = await storeApi.checkUpdate(pipe.id, pipe.installed_config?.version!);
+        if (update.has_update) {
+          await handleUpdatePipe(pipe);
+        }
+      }
     };
 
     // Run check immediately
