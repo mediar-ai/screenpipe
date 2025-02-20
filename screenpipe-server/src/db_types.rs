@@ -36,6 +36,7 @@ pub struct OCRResultRaw {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub struct OCRResult {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone)]
@@ -132,6 +134,7 @@ pub struct UiContent {
     pub file_path: String,
     pub offset_index: i64,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
