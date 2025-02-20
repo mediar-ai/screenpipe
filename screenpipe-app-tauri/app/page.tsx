@@ -36,11 +36,10 @@ export default function Home() {
   // staggered polling with exponential backoff while maintaining responsiveness
   // while reducing backend load
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
+      if (settings.user?.token) {
+        loadUser(settings.user.token);
+      }
+  }, [settings.user.token]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
