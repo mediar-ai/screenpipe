@@ -9,7 +9,7 @@ mod pipes {
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
     use tokio::sync::watch;
 
