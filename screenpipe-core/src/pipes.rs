@@ -119,15 +119,15 @@ while ($true) {{
         # Add the main process to the list
         $allProcesses = @($childPid) + $children
         
-        foreach ($pid in $allProcesses) {{
+        foreach ($processId in $allProcesses) {{
             try {{
-                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
                 Write-Host "Stopped process: $pid"
             }} catch {{
-                Write-Host "Process $pid already terminated"
+                Write-Host "Process $processId already terminated"
             }}
         }}
-        
+        Stop-Process -Id $PID -Force
         exit
     }}
 }}
