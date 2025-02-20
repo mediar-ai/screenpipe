@@ -1,5 +1,5 @@
-import { Calendar, Home, Inbox, Search, Settings, Plus } from "lucide-react"
-
+import React, { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import {
     Sidebar,
     SidebarContent,
@@ -11,90 +11,94 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarHeader,
-    SidebarTrigger,
-
-} from "@/components/ui/sidebar"
-import { Button } from "./ui/button"
-import { SearchForm } from "@/components/search-form"
-
-// Menu items.
-const items = [
-    {
-        title: "Whats im doing in last 30...",
-        url: "#",
-    },
-    {
-        title: "give me summary of whole day...",
-        url: "#",
-    },
-]
+} from "@/components/ui/sidebar";
+import { SearchForm } from "@/components/search-form";
+import { listHistory, HistoryItem } from "@/hooks/actions/history";
 
 export function HistorySidebar() {
+    const [todayItems, setTodayItems] = useState<HistoryItem[]>([]);
+    const [yesterdayItems, setYesterdayItems] = useState<HistoryItem[]>([]);
+    const [previous7DaysItems, setPrevious7DaysItems] = useState<HistoryItem[]>([]);
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+            const history = await listHistory();
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const sevenDaysAgo = new Date(today);
+            sevenDaysAgo.setDate(today.getDate() - 7);
+
+            const todayItems: HistoryItem[] = [];
+            const yesterdayItems: HistoryItem[] = [];
+            const previous7DaysItems: HistoryItem[] = [];
+
+            history.forEach(item => {
+                const itemDate = new Date(item.timestamp);
+                if (itemDate.toDateString() === today.toDateString()) {
+                    todayItems.push(item);
+                } else if (itemDate.toDateString() === yesterday.toDateString()) {
+                    yesterdayItems.push(item);
+                } else if (itemDate >= sevenDaysAgo && itemDate < today) {
+                    previous7DaysItems.push(item);
+                }
+            });
+
+            setTodayItems(todayItems);
+            setYesterdayItems(yesterdayItems);
+            setPrevious7DaysItems(previous7DaysItems);
+        };
+
+        fetchHistory();
+    }, []);
+
+    const handleHistoryClick = (id: string) => {
+        localStorage.setItem("historyId", id);
+        window.location.reload();
+    };
+
+    const renderHistoryItems = (items: HistoryItem[]) => (
+        items.map(item => (
+            <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton asChild>
+                    <a href="#" onClick={() => handleHistoryClick(item.id)}>
+                        <span>{item.title}</span>
+                    </a>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+        ))
+    );
+
     return (
         <Sidebar>
-
             <SidebarHeader>
                 <SearchForm />
             </SidebarHeader>
-
             <SidebarContent>
                 <SidebarGroup>
                     <SidebarGroupLabel>Today</SidebarGroupLabel>
-                    {/* <Button */}
-                    {/*     variant="ghost" */}
-                    {/*     size="icon" */}
-                    {/*     onClick={true} */}
-                    {/*     className="h-8 w-8" */}
-                    {/* > */}
-                    {/*     <Plus className="h-4 w-4" /> */}
-                    {/* </Button> */}
                     <SidebarGroupAction title="Add Project">
                         <Plus /> <span className="sr-only">Add Project</span>
                     </SidebarGroupAction>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
-                                            <span>{item.title}</span>
-                                        </a>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
+                            {renderHistoryItems(todayItems)}
                         </SidebarMenu>
                     </SidebarGroupContent>
                     <SidebarGroupLabel>Yesterday</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
-                                            <span>{item.title}</span>
-                                        </a>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
+                            {renderHistoryItems(yesterdayItems)}
                         </SidebarMenu>
                     </SidebarGroupContent>
                     <SidebarGroupLabel>Previous 7 days</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton asChild>
-                                        <a href={item.url}>
-                                            <span>{item.title}</span>
-                                        </a>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
+                            {renderHistoryItems(previous7DaysItems)}
                         </SidebarMenu>
                     </SidebarGroupContent>
                 </SidebarGroup>
             </SidebarContent>
         </Sidebar>
-    )
+    );
 }
-

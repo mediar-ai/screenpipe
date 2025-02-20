@@ -102,6 +102,8 @@ import {
 } from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
+import { saveHistory, loadHistory, HistoryItem } from "@/hooks/actions/history";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Agent {
     id: string;
@@ -649,6 +651,50 @@ export function SearchChat() {
         }, 0);
     };
 
+    // Function to load chat history from local storage
+    const loadChatHistory = async () => {
+        const historyId = localStorage.getItem("historyId");
+        if (historyId) {
+            const history = await loadHistory(historyId);
+            const historyItem = history[0];
+            if (historyItem) {
+                // Restore search parameters
+                setQuery(historyItem.searchParams.q || "");
+                setContentType(historyItem.searchParams.content_type);
+                setLimit(historyItem.searchParams.limit);
+                setStartDate(new Date(historyItem.searchParams.start_time));
+                setEndDate(new Date(historyItem.searchParams.end_time));
+                setAppName(historyItem.searchParams.app_name || "");
+                setWindowName(historyItem.searchParams.window_name || "");
+                setIncludeFrames(historyItem.searchParams.include_frames);
+                setMinLength(historyItem.searchParams.min_length);
+                setMaxLength(historyItem.searchParams.max_length);
+
+                // Restore results
+                setResults(historyItem.results);
+                setTotalResults(historyItem.results.length);
+                setHasSearched(true);
+                setShowExamples(false);
+
+                // Restore messages if any
+                if (historyItem.messages) {
+                    setChatMessages(
+                        historyItem.messages.map((msg) => ({
+                            id: msg.id,
+                            role: msg.type === "ai" ? "assistant" : "user",
+                            content: msg.content,
+                        }))
+                    );
+                }
+            }
+        }
+    };
+
+    // Load chat history when the component mounts
+    useEffect(() => {
+        loadChatHistory();
+    }, []);
+
     const handleFloatingInputSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!floatingInput.trim() && !isStreaming) return;
@@ -763,6 +809,77 @@ export function SearchChat() {
                 ]);
                 scrollToBottom();
             }
+            // Save history after the response is fully received
+            const historyId = localStorage.getItem("historyId");
+            let historyItem: HistoryItem;
+
+            if (historyId) {
+                const history = await loadHistory(historyId);
+                historyItem = history[0] || {
+                    id: historyId,
+                    title: floatingInput,
+                    query: floatingInput,
+                    timestamp: new Date().toISOString(),
+                    searchParams: {
+                        q: query,
+                        content_type: contentType,
+                        limit: limit,
+                        offset: offset,
+                        start_time: startDate.toISOString(),
+                        end_time: endDate.toISOString(),
+                        app_name: appName,
+                        window_name: windowName,
+                        include_frames: includeFrames,
+                        min_length: minLength,
+                        max_length: maxLength,
+                    },
+                    results: results,
+                    messages: [],
+                };
+            } else {
+                historyItem = {
+                    id: uuidv4(),
+                    title: floatingInput,
+                    query: floatingInput,
+                    timestamp: new Date().toISOString(),
+                    searchParams: {
+                        q: query,
+                        content_type: contentType,
+                        limit: limit,
+                        offset: offset,
+                        start_time: startDate.toISOString(),
+                        end_time: endDate.toISOString(),
+                        app_name: appName,
+                        window_name: windowName,
+                        include_frames: includeFrames,
+                        min_length: minLength,
+                        max_length: maxLength,
+                    },
+                    results: results,
+                    messages: [],
+                };
+                localStorage.setItem("historyId", historyItem.id);
+            }
+
+            // Add human message to history
+            historyItem.messages.push({
+                id: generateId(),
+                type: "user",
+                content: floatingInput,
+                timestamp: new Date().toISOString(),
+            });
+
+            // Add AI message to history
+            historyItem.messages.push({
+                id: generateId(),
+                type: "ai",
+                content: fullResponse,
+                timestamp: new Date().toISOString(),
+            });
+            console.log("updated item, from frontend : ", [historyItem])
+
+            const res = await saveHistory([historyItem]);
+            console.log("res for saveHistory ", res)
         } catch (error: any) {
             if (error.toString().includes("unauthorized")) {
                 toast({
