@@ -1,8 +1,11 @@
 "use server";
 
+import { openApp, apps } from "open";
 import { eventEmitter } from "@/lib/events";
 
-export async function getBrowserWSEndpoint(): Promise<string | null> {
+export async function getBrowserWSEndpoint(
+  tryAgain: boolean = true,
+): Promise<string | null> {
   try {
     const response = await fetch("http://127.0.0.1:9222/json/version");
     if (!response.ok) {
@@ -14,10 +17,18 @@ export async function getBrowserWSEndpoint(): Promise<string | null> {
       "ws://127.0.0.1:",
     );
   } catch (e) {
-    eventEmitter.emit("catchError", {
-      title: "Error connecting to browser.",
-      description: "Could not find websocket endpoint.",
-    });
-    return null;
+    if (tryAgain) {
+      await openApp(apps.chrome, {
+        arguments: ["--remote-debugging-port=9222"],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      return await getBrowserWSEndpoint(false);
+    } else {
+      eventEmitter.emit("catchError", {
+        title: "Error connecting to browser.",
+        description: "Could not find websocket endpoint.",
+      });
+      return null;
+    }
   }
 }
