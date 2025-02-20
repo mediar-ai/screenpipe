@@ -2043,6 +2043,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/update-version", post(update_pipe_version_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
+        .route("/pipes/purge", post(purge_pipe_handler))
         .route("/health", get(health_check))
         .route("/ws/health", get(ws_health_handler))
         .route("/raw_sql", post(execute_raw_sql))
@@ -2407,6 +2408,31 @@ pub async fn delete_pipe_handler(
     }
 }
 
+pub async fn purge_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<PurgePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.purge_pipes().await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipes purged successfully"
+            })),
+        ),
+        Err(e) => {
+            error!("failed to purge pipes: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                "success": false,
+                "error": format!("failed to purge pipes: {}", e)
+                })),
+            )
+        }
+    }
+}
+
 // Add this struct for the request payload
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
@@ -2424,6 +2450,10 @@ pub struct RestartAudioDevicesResponse {
     success: bool,
     message: String,
     restarted_devices: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PurgePipeRequest {
 }
 
 // async fn restart_audio_devices(

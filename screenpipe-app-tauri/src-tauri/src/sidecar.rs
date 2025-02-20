@@ -81,11 +81,14 @@ pub async fn stop_screenpipe(
 ) -> Result<(), String> {
     debug!("Killing screenpipe");
 
-    let mut manager = state.0.lock().await;
-    if let Some(manager) = manager.as_mut() {
-        if let Some(child) = manager.child.take() {
-            if let Err(e) = child.kill() {
-                error!("Failed to kill child process: {}", e);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut manager = state.0.lock().await;
+        if let Some(manager) = manager.as_mut() {
+            if let Some(child) = manager.child.take() {
+                if let Err(e) = child.kill() {
+                    error!("Failed to kill child process: {}", e);
+                }
             }
         }
     }
@@ -102,11 +105,16 @@ pub async fn stop_screenpipe(
         }
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-
             const CREATE_NO_WINDOW: u32 = 0x08000000;
-            tokio::process::Command::new("taskkill")
-                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            tokio::process::Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-WindowStyle")
+                .arg("hidden")
+                .arg("-Command")
+                .arg(format!(
+                    r#"taskkill.exe /F /T /IM screenpipe.exe"#,
+                ))
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await

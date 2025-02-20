@@ -527,9 +527,11 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_runtime = Runtime::new().unwrap();
     let vision_runtime = Runtime::new().unwrap();
+    let pipes_runtime = Runtime::new().unwrap();
 
     let audio_handle = audio_runtime.handle().clone();
     let vision_handle = vision_runtime.handle().clone();
+    let pipes_handle = pipes_runtime.handle().clone();
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
@@ -951,7 +953,7 @@ async fn main() -> anyhow::Result<()> {
         }
         match pipe_manager.start_pipe_task(pipe.id.clone()).await {
             Ok(future) => {
-                tokio::spawn(future);
+                pipes_handle.spawn(future);
             }
             Err(e) => {
                 error!("failed to start pipe {}: {}", pipe.id, e);
@@ -1073,6 +1075,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tokio::task::block_in_place(|| {
+        drop(pipes_runtime);
         drop(vision_runtime);
         drop(audio_runtime);
     });
