@@ -83,10 +83,12 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("symphonia=error".parse().unwrap())
         .add_directive("hf_hub=error".parse().unwrap());
 
+    // noise - but prob should be more precise on which error to ignore
     #[cfg(target_os = "windows")]
     let env_filter = env_filter
         .add_directive("xcap::platform::impl_window=off".parse().unwrap())
-        .add_directive("xcap::platform::impl_monitor=off".parse().unwrap());
+        .add_directive("xcap::platform::impl_monitor=off".parse().unwrap())
+        .add_directive("xcap::platform::utils=off".parse().unwrap());
 
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()
