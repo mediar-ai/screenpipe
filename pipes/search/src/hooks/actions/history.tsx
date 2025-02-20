@@ -74,11 +74,14 @@ export const saveHistory = async (updated: HistoryItem[]): Promise<void> => {
 };
 
 export const deleteHistoryItem = async (id: string): Promise<void> => {
-    const history = await loadHistory();
-    const updated = history.filter(item => item.id !== id);
-    await saveHistory(updated);
+    try {
+        const history = await loadHistory();
+        const updated = history.filter(item => item.id !== id);
+        fs.writeFileSync(HISTORY_FILE_PATH, JSON.stringify(updated, null, 2));
+    } catch (error) {
+        console.error('Failed to delete history item:', error);
+    }
 };
-
 export const listHistory = async (): Promise<{ id: string; title: string; timestamp: string }[]> => {
     try {
         if (fs.existsSync(HISTORY_FILE_PATH)) {
@@ -92,3 +95,4 @@ export const listHistory = async (): Promise<{ id: string; title: string; timest
         return [];
     }
 };
+

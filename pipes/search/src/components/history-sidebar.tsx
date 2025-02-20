@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
     Sidebar,
     SidebarContent,
@@ -13,7 +13,13 @@ import {
     SidebarHeader,
 } from "@/components/ui/sidebar";
 import { SearchForm } from "@/components/search-form";
-import { listHistory, HistoryItem } from "@/hooks/actions/history";
+import { listHistory, HistoryItem, deleteHistoryItem } from "@/hooks/actions/history";
+
+// Add this function to handle delete action
+const handleDeleteHistory = async (id: string) => {
+    await deleteHistoryItem(id);
+    window.location.reload();
+};
 
 export function HistorySidebar() {
     const [todayItems, setTodayItems] = useState<HistoryItem[]>([]);
@@ -61,9 +67,15 @@ export function HistorySidebar() {
         items.map(item => (
             <SidebarMenuItem key={item.id}>
                 <SidebarMenuButton asChild>
-                    <a href="#" onClick={() => handleHistoryClick(item.id)}>
-                        <span>{item.title}</span>
-                    </a>
+                    <div>
+                        <a href="#" onClick={() => handleHistoryClick(item.id)}>
+                            <span>{item.title}</span>
+                        </a>
+                        <Trash2
+                            className="absolute right-0 ml-2 cursor-pointer"
+                            onClick={() => handleDeleteHistory(item.id)}
+                        />
+                    </div>
                 </SidebarMenuButton>
             </SidebarMenuItem>
         ))
