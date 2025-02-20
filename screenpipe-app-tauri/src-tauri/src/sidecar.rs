@@ -126,7 +126,7 @@ pub async fn stop_screenpipe(
                 .arg("hidden")
                 .arg("-Command")
                 .arg(format!(
-                    r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*screenpipe" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                    r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*screenpipe*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
                 ))
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
