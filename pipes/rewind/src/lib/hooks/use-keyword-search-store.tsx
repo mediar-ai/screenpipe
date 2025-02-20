@@ -17,6 +17,7 @@ export interface SearchMatch {
 	window_name: string;
 	confidence: number;
 	text: string;
+	url: string;
 }
 
 export interface SearchRequest {

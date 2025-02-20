@@ -2204,6 +2204,7 @@ impl DatabaseManager {
 SELECT
     f.id,
     f.timestamp,
+    f.browser_url as url,
     o.app_name,
     o.window_name,
     o.text as ocr_text,
@@ -2273,6 +2274,7 @@ LIMIT ? OFFSET ?
                     window_name: row.window_name.clone(),
                     confidence: calculate_confidence(&positions),
                     text: row.ocr_text.clone(),
+                    url: row.url.clone(),
                 }
             })
             .collect())

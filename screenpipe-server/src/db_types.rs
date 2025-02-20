@@ -243,12 +243,14 @@ pub struct SearchMatch {
     pub confidence: f32,
     // pub context: Option<String>,
     pub text: String,
+    pub url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct FrameRow {
     pub id: i64,
     pub timestamp: DateTime<Utc>,
+    pub url: String,
     pub app_name: String,
     pub window_name: String,
     pub ocr_text: String,
