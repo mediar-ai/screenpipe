@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
 	Popover,
-	PopoverContent,
+	PopoverContentInDialog as PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
 

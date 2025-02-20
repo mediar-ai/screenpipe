@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { NewSearchCommand, SearchCommand } from "@/components/search-command";
+import { SearchCommand } from "@/components/search-command";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
 import { SettingsProvider } from "@/components/settings-provider";
@@ -60,7 +60,7 @@ export default async function RootLayout({
 					) : (
 						<>
 							<NuqsAdapter>
-								<NewSearchCommand />
+								<SearchCommand />
 								{children}
 							</NuqsAdapter>
 						</>

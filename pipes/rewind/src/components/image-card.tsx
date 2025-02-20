@@ -73,7 +73,7 @@ export const ImageGrid = ({
 					e.stopPropagation();
 
 					const scrollIntensity = Math.abs(e.deltaY);
-					const direction = Math.sign(e.deltaY);
+					const direction = -Math.sign(e.deltaY);
 					const limitIndexChange = 5;
 
 					const indexChange =
