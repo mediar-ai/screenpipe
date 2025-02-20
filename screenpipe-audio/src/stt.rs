@@ -240,13 +240,17 @@ pub async fn create_whisper_channel(
                             audio.data = Arc::new(audio_data.clone());
                             audio.sample_rate = m::SAMPLE_RATE as u32;
 
-                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
-                                Ok(segments) => segments,
+                            let (mut segments, speech_ratio_ok) = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
+                                Ok((segments, speech_ratio_ok)) => (segments, speech_ratio_ok),
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
                                     continue;
                                 }
                             };
+
+                            if !speech_ratio_ok {
+                                continue;
+                            }
 
                             let path = match write_audio_to_file(
                                 &audio.data.to_vec(),

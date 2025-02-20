@@ -8,10 +8,10 @@ use tokio::fs;
 use tracing::info;
 
 async fn setup_test_env() -> Result<()> {
-    // enable tracing logging
-    tracing_subscriber::fmt()
+    // Only initialize if not already set
+    let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
-        .init();
+        .try_init();
     Ok(())
 }
 
@@ -127,6 +127,7 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
         window_name: "test_window".to_string(),
         app_name: "test_app".to_string(),
         is_focused: true,
+        process_id: 1234,
     };
 
     // perform ocr using apple native (macos only)

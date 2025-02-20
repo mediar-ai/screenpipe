@@ -452,8 +452,20 @@ export const PipeStore: React.FC = () => {
         duration: 100000,
       });
 
-      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
-      await cmd.execute();
+      const response = await fetch(`http://localhost:3030/pipes/purge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+        }),
+      });
+      if(!response.ok){
+        toast({
+          title: "failed to purge pipes",
+          description: "failed to purge pipes, please try again",
+          variant: "destructive"
+        });
+        return;
+      }
       await fetchInstalledPipes();
 
       t.update({
