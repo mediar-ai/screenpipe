@@ -371,6 +371,24 @@ impl PipeManager {
                     .await;
             }
 
+            #[cfg(windows)]
+            {
+                // killing by name is faster
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                let _ = tokio::process::Command::new("powershell")
+                    .arg("-NoProfile")
+                    .arg("-WindowStyle")
+                    .arg("hidden")
+                    .arg("-Command")
+                    .arg(format!(
+                        r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*.screenpipe\pipes\{}*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                        &id.to_string()
+                    ))
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                    .await;
+            }
+
             match handle.state {
                 PipeState::Port(port) => {
                     tokio::task::spawn(async move {

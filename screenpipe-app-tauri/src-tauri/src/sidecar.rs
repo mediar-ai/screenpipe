@@ -107,13 +107,26 @@ pub async fn stop_screenpipe(
         {
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tokio::process::Command::new("powershell")
+            let _ = tokio::process::Command::new("powershell")
                 .arg("-NoProfile")
                 .arg("-WindowStyle")
                 .arg("hidden")
                 .arg("-Command")
                 .arg(format!(
                     r#"taskkill.exe /F /T /IM screenpipe.exe"#,
+                ))
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .await;
+
+            // fallback wild kill
+            tokio::process::Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-WindowStyle")
+                .arg("hidden")
+                .arg("-Command")
+                .arg(format!(
+                    r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*screenpipe*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
                 ))
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
