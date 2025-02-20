@@ -318,17 +318,6 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
           curl -fsSL https://bun.sh/install | bash
 
-      - name: Build and run application (Linux)
-        if: matrix.os_type == 'linux'
-        run: |
-          git clone https://github.com/mediar-ai/screenpipe
-          cd screenpipe
-          cargo build --release
-          ./target/release/screenpipe
-          cd screenpipe-app-tauri
-          bun install
-          bun tauri build
-
       - name: Install vcpkg
         if: matrix.os_type == 'windows'
         uses: lukka/run-vcpkg@v11
