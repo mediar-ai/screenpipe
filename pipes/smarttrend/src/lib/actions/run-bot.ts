@@ -263,16 +263,19 @@ ${JSON.stringify(tweetArray, null, 2)}
     let summary = "";
     let i = 0;
     for await (const chunk of fullStream) {
-      summary += getText(chunk);
+      const text = getText(chunk);
+      if (text) {
+        summary += text;
 
-      if (i < 99) {
-        eventEmitter.emit("updateProgress", {
-          process: 0,
-          value: 50 + (i + 1) / 2,
-        });
+        if (i < 99) {
+          eventEmitter.emit("updateProgress", {
+            process: 0,
+            value: 50 + (i + 1) / 2,
+          });
+        }
+
+        i += 1;
       }
-
-      i += 1;
     }
 
     await store.pushSummary(summary);
@@ -331,13 +334,16 @@ ${JSON.stringify(context, null, 2)}
     let summary = "";
     let i = 0;
     for await (const chunk of fullStream) {
-      summary += getText(chunk);
+      const text = getText(chunk);
+      if (text) {
+        summary += text;
 
-      if (i < 99) {
-        eventEmitter.emit("updateProgress", { process: 1, value: i + 1 });
+        if (i < 99) {
+          eventEmitter.emit("updateProgress", { process: 1, value: i + 1 });
+        }
+
+        i += 1;
       }
-
-      i += 1;
     }
 
     await store.pushSummary(summary);
@@ -448,13 +454,16 @@ ${JSON.stringify(summaries, null, 2)}
     let summary = "";
     let i = 0;
     for await (const chunk of fullStream) {
-      summary += getText(chunk);
+      const text = getText(chunk);
+      if (text) {
+        summary += text;
 
-      if (i < 99) {
-        eventEmitter.emit("updateProgress", { process: 3, value: i + 1 });
+        if (i < 99) {
+          eventEmitter.emit("updateProgress", { process: 3, value: i + 1 });
+        }
+
+        i += 1;
       }
-
-      i += 1;
     }
 
     await store.compileSummaries(summary);
@@ -558,7 +567,7 @@ ${JSON.stringify(tweets, null, 2)}
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
-function getText(chunk: any): string {
+function getText(chunk: any): string | null {
   if (chunk.type === "deltaText") {
     return chunk.text;
   } else if (chunk.type === "error") {
@@ -567,6 +576,8 @@ function getText(chunk: any): string {
     } else {
       throw chunk.error;
     }
+  } else {
+    return null;
   }
 }
 
