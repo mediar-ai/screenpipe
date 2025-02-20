@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  CheckCircle,
   Download,
   Puzzle,
   UserIcon,
@@ -40,7 +39,6 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
-  const startEnableRef = useRef(true);
   const handleOpenWindow = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
@@ -64,7 +62,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
     const pollBuildStatus = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3030/pipes/info/${pipe.name}`,
+          `http://localhost:3030/pipes/info/${pipe.id}`,
         );
 
         if (!response.ok) {
@@ -162,7 +160,11 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                   <Button
                     size="sm"
                     variant="destructive"
-                    //onClick={handleInstall}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsLoading(true);
+                      onToggle(pipe, () => setIsLoading(false));
+                    }}
                     className="font-medium no-card-hover"
                     disabled={isLoading}
                   >

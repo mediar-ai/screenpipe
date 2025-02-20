@@ -788,8 +788,16 @@ done
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
         info!("Processing pipe from source: {}", source);
 
-        let pipe_name =
+        let is_local = Url::parse(source).is_err();
+
+        let mut pipe_name =
             sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
+
+        // Add _local suffix for local pipes
+        if is_local {
+            pipe_name.push_str("_local");
+        }
+
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
         debug!("Destination directory: {:?}", dest_dir);

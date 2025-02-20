@@ -139,8 +139,9 @@ export const PipeStore: React.FC = () => {
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
+          console.log(p);
           return {
-            id: p.config?.id || "",
+            id: p.id || "",
             name: pluginName || "",
             description: p.desc,
             version: p.config?.version || "0.0.0",
@@ -602,7 +603,7 @@ export const PipeStore: React.FC = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: pipe.id }),
       });
 
       const data = await response.json();
@@ -679,7 +680,7 @@ export const PipeStore: React.FC = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            pipe_id: selectedPipe.name,
+            pipe_id: selectedPipe.id,
             config: config,
           }),
         });
@@ -725,7 +726,7 @@ export const PipeStore: React.FC = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: pipe.id }),
       });
 
       const data = await response.json();
@@ -1060,12 +1061,8 @@ export const PipeStore: React.FC = () => {
                 pipe={pipe}
                 setPipe={(updatedPipe) => {
                   setPipes((prevPipes) => {
-                    const identifierIdOrName =
-                      updatedPipe.id.length === 0
-                        ? updatedPipe.name
-                        : updatedPipe.id;
                     return prevPipes.map((p) =>
-                      p.id === identifierIdOrName ? updatedPipe : p,
+                      p.id === updatedPipe.id ? updatedPipe : p,
                     );
                   });
                 }}

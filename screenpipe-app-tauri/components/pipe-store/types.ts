@@ -18,6 +18,7 @@ export interface InstalledPipe {
     buildStatus?: BuildStatus;
   };
   desc: string;
+  id: string;
 }
 
 export interface PipeWithStatus extends PipeStorePlugin {
