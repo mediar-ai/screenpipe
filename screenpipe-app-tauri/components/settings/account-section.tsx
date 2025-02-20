@@ -25,6 +25,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import posthog from "posthog-js";
+import { platform } from "@tauri-apps/plugin-os";
+import { Dialog, DialogTrigger, DialogContent } from "@/components/ui/dialog";
 
 function PlanCard({
   title,
@@ -103,7 +105,7 @@ export function AccountSection() {
             const apiKey = new URL(url).searchParams.get("api_key");
             if (apiKey) {
               updateSettings({ user: { token: apiKey } });
-              await loadUser(apiKey);
+              await loadUser(apiKey, true);
 
               toast({
                 title: "logged in!",
@@ -122,7 +124,7 @@ export function AccountSection() {
                     stripe_connected: true,
                   },
                 });
-                loadUser(settings.user.token!);
+                loadUser(settings.user.token!, true);
               }
               toast({
                 title: "stripe connected!",

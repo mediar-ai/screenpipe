@@ -36,7 +36,7 @@ fn create_speech_segment(
     samples: &[f32],
     padded_samples: &[f32],
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: Arc<Mutex<EmbeddingManager>>,
+    embedding_manager: &mut EmbeddingManager,
 ) -> Result<SpeechSegment> {
     let start = start_offset / sample_rate as f64;
     let end = offset as f64 / sample_rate as f64;
@@ -95,7 +95,7 @@ pub struct SegmentIterator {
     sample_rate: u32,
     session: ort::Session,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: Arc<Mutex<EmbeddingManager>>,
+    embedding_manager: EmbeddingManager,
     current_position: usize,
     frame_size: i32,
     window_size: usize,
@@ -112,7 +112,7 @@ impl SegmentIterator {
         sample_rate: u32,
         model_path: P,
         embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-        embedding_manager: Arc<Mutex<EmbeddingManager>>,
+        embedding_manager: EmbeddingManager,
     ) -> Result<Self> {
         let session = session::create_session(model_path.as_ref())?;
         let window_size = (sample_rate * 10) as usize;
@@ -178,7 +178,7 @@ impl SegmentIterator {
                         &self.samples,
                         &self.padded_samples,
                         self.embedding_extractor.clone(),
-                        self.embedding_manager.clone(),
+                        &mut self.embedding_manager,
                     ) {
                         Ok(segment) => segment,
                         Err(_) => {
@@ -249,7 +249,7 @@ pub fn get_segments<P: AsRef<Path>>(
     sample_rate: u32,
     model_path: P,
     embedding_extractor: Arc<Mutex<EmbeddingExtractor>>,
-    embedding_manager: Arc<Mutex<EmbeddingManager>>,
+    embedding_manager: EmbeddingManager,
 ) -> Result<SegmentIterator> {
     SegmentIterator::new(
         samples.to_vec(),
@@ -271,21 +271,14 @@ fn get_speaker_embedding(
 }
 
 pub fn get_speaker_from_embedding(
-    embedding_manager: Arc<Mutex<EmbeddingManager>>,
+    embedding_manager: &mut EmbeddingManager,
     embedding: Vec<f32>,
 ) -> String {
     let search_threshold = 0.5;
 
     embedding_manager
-        .lock()
-        .unwrap()
         .search_speaker(embedding.clone(), search_threshold)
-        .ok_or_else(|| {
-            embedding_manager
-                .lock()
-                .unwrap()
-                .search_speaker(embedding, 0.0)
-        }) // Ensure always to return speaker
+        .ok_or_else(|| embedding_manager.search_speaker(embedding, 0.0)) // Ensure always to return speaker
         .map(|r| r.to_string())
         .unwrap_or("?".into())
 }

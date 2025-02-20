@@ -1,13 +1,14 @@
+Based on the provided commits, here is the changelog for the new Screenpipe update:
+
 ### **New Features:**
-- **Introduced pipe update version endpoint:** Added a new endpoint to prevent loss of configuration during updates and facilitate smoother updates.
+- **Added production configuration file:** Implemented a new production configuration file for improved deployment setup.
+- **Added permissions guard:** Introduced a permissions guard in the sidecar to enhance security before starting the application.
 
 ### **Improvements:**
-- **Documented LMStudio and Ollama usage:** Added documentation to assist users in utilizing LMStudio and Ollama effectively.
-- **Reduced auto destruct polling:** Decreased the polling duration for auto destruct to enhance performance during Windows updates.
+- **Reenabled event API:** Restored functionality of the event API for better interaction and integration.
 
 ### **Fixes:**
-- **Fixed search with custom AI provider:** Resolved an issue where search functionality was not compatible with custom AI providers lacking an API key.
-- **Fixed hydration errors:** Addressed hydration errors to improve stability and performance.
+- **Fixed CLI issue:** Addressed a small fix in the command-line interface for improved usability.
 
-#### **Full Changelog:** [f025f..6336b](https://github.com/mediar-ai/screenpipe/compare/f025f..6336b)
+#### **Full Changelog:** [d0f98..ae40f](https://github.com/mediar-ai/screenpipe/compare/d0f98..ae40f)
 

@@ -2,7 +2,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
-use screenpipe_core::AudioDevice;
+use screenpipe_audio::AudioDevice;
 use screenpipe_server::{db_types::ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         let ocr_text = format!("OCR text {}", rng.gen::<u32>());
         let text_json = format!(r#"{{"text": "{}"}}"#, ocr_text);
         db.insert_ocr_text(
@@ -41,7 +41,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             "test_engine",
             &AudioDevice::new(
                 "test_device".to_string(),
-                screenpipe_core::AudioDeviceType::Input,
+                screenpipe_audio::DeviceType::Input,
             ),
             None,
             None,

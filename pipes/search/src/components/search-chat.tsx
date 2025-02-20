@@ -1077,6 +1077,8 @@ export function SearchChat() {
                             filePath={item.content.filePath}
                             startTime={item.content.startTime}
                             endTime={item.content.endTime}
+                            speaker={item.content.speaker}
+
                           />
                         </div>
                       ) : (

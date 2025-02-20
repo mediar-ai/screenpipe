@@ -69,9 +69,7 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     if (settings.usePiiRemoval) {
       args.push("--use-pii-removal");
     }
-    if (settings.restartInterval > 0) {
-      args.push(`--restart-interval ${settings.restartInterval}`);
-    }
+
     if (settings.disableAudio) {
       args.push("--disable-audio");
     }

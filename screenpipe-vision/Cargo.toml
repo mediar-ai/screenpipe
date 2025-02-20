@@ -88,6 +88,8 @@ harness = false
 name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
 
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+xcap = "0.3.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
@@ -96,13 +98,16 @@ windows = { version = "0.58", features = [
   "Storage",
   "Storage_Streams",
 ] }
-xcap = "0.0.12"
+# version 0.3.2 on Windows is broken
+# see https://github.com/nashaofu/xcap/issues/194
+xcap = "0.2.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-xcap-macos = { package = "xcap", git = "https://github.com/mediar-ai/xcap", rev = "965bc99" }
 cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
+accessibility-sys = "0.1.3"
+core-foundation = "0.9.4"
+url = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"
-xcap = "0.0.14"

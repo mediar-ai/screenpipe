@@ -10,25 +10,21 @@ use lazy_static::lazy_static;
 use log::debug;
 use regex::Regex;
 use screenpipe_core::Language;
-use std::{collections::HashSet, sync::Arc};
-use tokio::sync::Mutex;
+use std::collections::HashSet;
 
 lazy_static! {
     static ref TOKEN_REGEX: Regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>").unwrap();
 }
 
-pub async fn process_with_whisper(
-    whisper_model: Arc<Mutex<WhisperModel>>,
+pub fn process_with_whisper(
+    whisper_model: &mut WhisperModel,
     audio: &[f32],
+    mel_filters: &[f32],
     languages: Vec<Language>,
 ) -> Result<String> {
-    let mut whisper = whisper_model.lock().await;
-    let WhisperModel {
-        model,
-        tokenizer,
-        device,
-        mel_filters,
-    } = &mut *whisper;
+    let model = &mut whisper_model.model;
+    let tokenizer = &whisper_model.tokenizer;
+    let device = &whisper_model.device;
 
     debug!("converting pcm to mel spectrogram");
     let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);

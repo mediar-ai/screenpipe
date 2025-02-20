@@ -31,5 +31,9 @@ pub use server::ContentItem;
 pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
 pub use server::Server;
-pub use server::VisionDeviceControlRequest;
 pub use video::VideoCapture;
+pub use axum::Json as JsonResponse;
+pub use server::{
+    api_list_monitors,
+    MonitorInfo,
+};

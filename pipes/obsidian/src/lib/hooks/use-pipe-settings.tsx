@@ -6,7 +6,7 @@ import {
 } from "../actions/get-screenpipe-app-settings";
 
 const DEFAULT_SETTINGS: Partial<Settings> = {
-  prompt: `yo, you're my personal data detective! 🕵️‍♂️
+  prompt: `yo, you're my personal data detective! 🕵
 
 rules for the investigation:
 - extract names of people i interact with and what we discussed, when i encounter a person, make sure to extract their name like this [[John Doe]] so it's linked in my notes
@@ -33,13 +33,9 @@ this data will be used later for analysis, it must contains valuable insights on
 if you do your job well, i'll give you a 🍺 and $1m`,
 };
 
-const STORAGE_KEY = "obsidian-settings";
-
 export function usePipeSettings() {
   const [settings, setSettings] = useState<Partial<Settings> | null>(null);
   const [loading, setLoading] = useState(true);
-
-  console.log("settings", settings);
 
   useEffect(() => {
     loadSettings();
@@ -47,17 +43,21 @@ export function usePipeSettings() {
 
   const loadSettings = async () => {
     try {
-      // Load notion settings from localStorage
-      const storedSettings = localStorage.getItem(STORAGE_KEY);
-      const notionSettings = storedSettings ? JSON.parse(storedSettings) : {};
-
       // Load screenpipe app settings
       const screenpipeSettings = await getScreenpipeAppSettings();
+
+      console.log(screenpipeSettings);
+
+      const obsidianSettings = {
+        ...(screenpipeSettings.customSettings?.obsidian && {
+          ...screenpipeSettings.customSettings?.obsidian,
+        }),
+      };
 
       // Merge everything together
       setSettings({
         ...DEFAULT_SETTINGS,
-        ...notionSettings,
+        ...obsidianSettings,
         screenpipeAppSettings: screenpipeSettings,
       });
     } catch (error) {
@@ -82,12 +82,9 @@ export function usePipeSettings() {
         ...screenpipeAppSettings,
         customSettings: {
           ...screenpipeAppSettings?.customSettings,
-          obsidian: mergedObsidianSettings,
+          obsidian: obsidianSettings,
         },
       });
-
-      // Update notion settings in localStorage
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
 
       // Update state with everything
       setSettings({

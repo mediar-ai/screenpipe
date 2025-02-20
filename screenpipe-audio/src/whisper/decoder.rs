@@ -284,7 +284,6 @@ impl<'a> Decoder<'a> {
         Ok(segments)
     }
 }
-
 pub fn token_id(tokenizer: &Tokenizer, token: &str) -> candle::Result<u32> {
     match tokenizer.token_to_id(token) {
         None => candle::bail!("no token-id for {token}"),

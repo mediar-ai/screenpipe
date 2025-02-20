@@ -3,7 +3,7 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
-    use screenpipe_core::{AudioDevice, AudioDeviceType};
+    use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::{
         db_types::{ContentType, SearchResult},
         DatabaseManager,
@@ -11,7 +11,15 @@ mod tests {
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
-        DatabaseManager::new("sqlite::memory:").await.unwrap()
+        let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
+
+        // Run all migrations
+        sqlx::migrate!("./src/migrations")
+            .run(&db.pool)
+            .await
+            .unwrap();
+
+        db
     }
 
     #[tokio::test]
@@ -21,7 +29,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
@@ -69,7 +77,7 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -131,7 +139,7 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -200,7 +208,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
@@ -220,7 +228,7 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -290,7 +298,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -310,7 +318,7 @@ mod tests {
             "Hello from audio 1",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -327,7 +335,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -346,7 +354,7 @@ mod tests {
                 "Hello from audio 2",
                 1,
                 "",
-                &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+                &AudioDevice::new("test".to_string(), DeviceType::Output),
                 None,
                 None,
                 None,
@@ -467,7 +475,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // TODO FIX
     async fn test_count_search_results_with_time_range() {
         let db = setup_test_db().await;
 
@@ -478,7 +485,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -498,7 +505,7 @@ mod tests {
             "Hello from audio 1",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -513,7 +520,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -533,7 +540,7 @@ mod tests {
             "Hello from audio 2",
             1,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             None,
             None,
             None,
@@ -673,7 +680,7 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+                    &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
                     None,
                     None,
@@ -737,7 +744,7 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+                    &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
                     None,
                     None,
@@ -793,7 +800,7 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+                    &AudioDevice::new("test".to_string(), DeviceType::Output),
                     Some(speaker.id),
                     None,
                     None,
@@ -836,7 +843,7 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker.id),
             None,
             None,
@@ -880,7 +887,7 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker.id),
             None,
             None,
@@ -897,7 +904,7 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
             Some(speaker2.id),
             None,
             None,
@@ -921,7 +928,7 @@ mod tests {
             .unwrap();
 
         // Insert first frame with OCR
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from frame 1",
@@ -935,7 +942,7 @@ mod tests {
         .unwrap();
 
         // Insert second frame with OCR
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from frame 2",
