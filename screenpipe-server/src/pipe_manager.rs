@@ -20,6 +20,8 @@ pub struct PipeInfo {
     pub source: String,
     pub port: Option<u16>,
     pub is_nextjs: bool,
+    pub desc: String,
+    pub build_status: Option<Value>,
 }
 
 struct PipeHandle {
@@ -139,11 +141,17 @@ impl PipeManager {
         pipes.iter().find(|pipe| pipe.id == id).cloned()
     }
 
-    async fn load_pipe_info(pipe_id: String, config_path: PathBuf) -> PipeInfo {
+    async fn load_pipe_info(pipe_id: String, pipe_path: PathBuf) -> PipeInfo {
+        let config_path = pipe_path.join("pipe.json");
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
             .unwrap_or(Value::Null);
+
+        let desc_file = pipe_path.join("README.md");
+        let desc_pipe = tokio::fs::read_to_string(desc_file)
+            .await
+            .unwrap_or_default();
 
         PipeInfo {
             id: pipe_id,
@@ -166,6 +174,8 @@ impl PipeManager {
                 .get("is_nextjs")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            desc: desc_pipe,
+            build_status: config.get("buildStatus").cloned(),
         }
     }
 
@@ -186,8 +196,7 @@ impl PipeManager {
                         .map(|ft| ft.is_dir())
                         .unwrap_or(false)
                 {
-                    let config_path = entry.path().join("pipe.json");
-                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), entry.path()).await);
                 }
             }
         }
@@ -201,11 +210,15 @@ impl PipeManager {
 
         let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
 
+        // Check if the URL is a local path
+        let is_local = normalized_url.starts_with('/') || normalized_url.starts_with('.');
+
         // update the config with the source url
         self.update_config(
             &pipe_dir.file_name().unwrap().to_string_lossy(),
             serde_json::json!({
                 "source": normalized_url,
+                "enabled": is_local,
             }),
         )
         .await?;

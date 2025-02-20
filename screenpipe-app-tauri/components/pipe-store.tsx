@@ -42,15 +42,15 @@ export const PipeStore: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
-    []
+    [],
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
   const { open: openStatusDialog } = useStatusDialog();
   const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
   const filteredPipes = pipes
@@ -58,7 +58,7 @@ export const PipeStore: React.FC = () => {
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
         (!showInstalledOnly || pipe.is_installed) &&
-        !pipe.is_installing
+        !pipe.is_installing,
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
@@ -104,7 +104,7 @@ export const PipeStore: React.FC = () => {
       const storePluginsWithStatus = await Promise.all(
         plugins.map(async (plugin) => {
           const installedPipe = installedPipes.find(
-            (p) => p.config?.id === plugin.id
+            (p) => p.config?.id === plugin.id,
           );
           const currentVersion = installedPipe?.config?.version;
 
@@ -113,7 +113,7 @@ export const PipeStore: React.FC = () => {
             try {
               const updateCheck = await pipeApi.checkUpdate(
                 plugin.id,
-                currentVersion
+                currentVersion,
               );
               has_update = updateCheck.has_update;
             } catch (error) {
@@ -126,25 +126,24 @@ export const PipeStore: React.FC = () => {
             is_installed: !!installedPipe,
             installed_config: installedPipe?.config,
             has_purchased: purchaseHistory.some(
-              (p) => p.plugin_id === plugin.id
+              (p) => p.plugin_id === plugin.id,
             ),
             is_core_pipe: corePipes.includes(plugin.name),
             is_enabled: installedPipe?.config?.enabled ?? false,
             has_update,
           };
-        })
+        }),
       );
 
       const customPipes = installedPipes
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
         .map((p) => {
-          console.log(p.config);
-
           const pluginName = p.config?.source?.split("/").pop();
+          const is_local = p.id.endsWith("_local");
           return {
-            id: p.config?.id || "",
+            id: p.id || "",
             name: pluginName || "",
-            description: "",
+            description: p.desc,
             version: p.config?.version || "0.0.0",
             is_paid: false,
             price: 0,
@@ -158,6 +157,7 @@ export const PipeStore: React.FC = () => {
             is_core_pipe: false,
             is_enabled: p.config?.enabled || false,
             source_code: p.config?.source || "",
+            is_local,
           };
         });
 
@@ -176,7 +176,7 @@ export const PipeStore: React.FC = () => {
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -289,6 +289,7 @@ export const PipeStore: React.FC = () => {
       });
 
       await fetchInstalledPipes();
+
       t.dismiss();
     } catch (error) {
       console.error("failed to add custom pipe:", error);
@@ -302,7 +303,7 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -310,8 +311,8 @@ export const PipeStore: React.FC = () => {
       // Keep the pipe in its current position by updating its status
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: true } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: true } : p,
+        ),
       );
 
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
@@ -354,7 +355,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.id,
             url: response.download_url,
           }),
-        }
+        },
       );
 
       const data = await downloadResponse.json();
@@ -381,8 +382,8 @@ export const PipeStore: React.FC = () => {
         prevPipes.map((p) =>
           p.id === pipe.id
             ? { ...p, is_installed: true, is_installing: false }
-            : p
-        )
+            : p,
+        ),
       );
 
       onComplete?.();
@@ -391,8 +392,8 @@ export const PipeStore: React.FC = () => {
       // Reset the pipe's status on error
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: false } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: false } : p,
+        ),
       );
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({
@@ -455,14 +456,13 @@ export const PipeStore: React.FC = () => {
       const response = await fetch(`http://localhost:3030/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-        }),
+        body: JSON.stringify({}),
       });
-      if(!response.ok){
+      if (!response.ok) {
         toast({
           title: "failed to purge pipes",
           description: "failed to purge pipes, please try again",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }
@@ -509,7 +509,7 @@ export const PipeStore: React.FC = () => {
 
       // Filter installed pipes that have updates available
       const pipesToUpdate = pipes.filter(
-        (pipe) => pipe.is_installed && pipe.has_update
+        (pipe) => pipe.is_installed && pipe.has_update,
       );
 
       if (pipesToUpdate.length === 0) {
@@ -593,7 +593,7 @@ export const PipeStore: React.FC = () => {
 
   const handleTogglePipe = async (
     pipe: PipeWithStatus,
-    onComplete: () => void
+    onComplete: () => void,
   ) => {
     try {
       const t = toast({
@@ -608,13 +608,15 @@ export const PipeStore: React.FC = () => {
       });
 
       const endpoint = pipe.installed_config?.enabled ? "disable" : "enable";
+      console.log("toggel", pipe, endpoint);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
@@ -626,7 +628,7 @@ export const PipeStore: React.FC = () => {
         title: `pipe ${endpoint}d`,
       });
       const installedPipes = await fetchInstalledPipes();
-
+      console.log("installed Pipes", installedPipes);
       const pp = installedPipes?.find((p) => p.config.id === pipe.id);
       const port = pp?.config.port;
 
@@ -638,6 +640,7 @@ export const PipeStore: React.FC = () => {
             port,
             ...prev.installed_config!,
             enabled: !pipe.installed_config?.enabled,
+            buildStatus: "in_progress",
           },
         };
       });
@@ -647,7 +650,7 @@ export const PipeStore: React.FC = () => {
         `Failed to ${
           pipe.installed_config?.enabled ? "disable" : "enable"
         } pipe:`,
-        error
+        error,
       );
       toast({
         title: "error toggling pipe",
@@ -658,7 +661,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleLoadFromLocalFolder = async (
-    setNewRepoUrl: (url: string) => void
+    setNewRepoUrl: (url: string) => void,
   ) => {
     try {
       const selectedFolder = await open({
@@ -684,13 +687,14 @@ export const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
+        const id = selectedPipe.is_local ? selectedPipe.id : selectedPipe.name;
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            pipe_id: selectedPipe.name,
+            pipe_id: id,
             config: config,
           }),
         });
@@ -731,12 +735,13 @@ export const PipeStore: React.FC = () => {
       });
       setSelectedPipe(null);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch("http://localhost:3030/pipes/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
@@ -859,7 +864,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.name,
             source: responseDownload.download_url,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -881,6 +886,7 @@ export const PipeStore: React.FC = () => {
       });
 
       await fetchInstalledPipes();
+
       t.dismiss();
     } catch (error) {
       console.error("failed to update pipe:", error);
@@ -1046,7 +1052,7 @@ export const PipeStore: React.FC = () => {
                       className="flex items-center gap-2"
                       disabled={
                         !pipes.some(
-                          (pipe) => pipe.is_installed && pipe.has_update
+                          (pipe) => pipe.is_installed && pipe.has_update,
                         )
                       }
                     >
@@ -1068,6 +1074,13 @@ export const PipeStore: React.FC = () => {
               <PipeCard
                 key={pipe.id}
                 pipe={pipe}
+                setPipe={(updatedPipe) => {
+                  setPipes((prevPipes) => {
+                    return prevPipes.map((p) =>
+                      p.id === updatedPipe.id ? updatedPipe : p,
+                    );
+                  });
+                }}
                 onInstall={handleInstallPipe}
                 onClick={setSelectedPipe}
                 onPurchase={handlePurchasePipe}
