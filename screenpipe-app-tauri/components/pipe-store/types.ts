@@ -29,6 +29,7 @@ export interface PipeWithStatus extends PipeStorePlugin {
   is_core_pipe: boolean;
   is_installing?: boolean;
   has_update?: boolean;
+  is_local?: boolean;
 }
 
 export interface BrokenPipe {

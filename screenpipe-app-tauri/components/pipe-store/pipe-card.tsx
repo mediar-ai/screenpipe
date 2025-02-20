@@ -60,10 +60,9 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 
   useEffect(() => {
     const pollBuildStatus = async () => {
+      const id = pipe.is_local ? pipe.id : pipe.name;
       try {
-        const response = await fetch(
-          `http://localhost:3030/pipes/info/${pipe.id}`,
-        );
+        const response = await fetch(`http://localhost:3030/pipes/info/${id}`);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -294,6 +293,11 @@ export const PipeCard: React.FC<PipeCardProps> = ({
                 <Download className="h-3 w-3" />
                 <span className="relative z-10 font-mono">source</span>
               </motion.a>
+            )}
+            {pipe.is_local && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted font-mono text-xs">
+                local
+              </span>
             )}
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 font-mono text-xs">
               {pipe.installed_config?.version && "v"}

@@ -139,7 +139,7 @@ export const PipeStore: React.FC = () => {
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
-          console.log(p);
+          const is_local = p.id.endsWith("_local");
           return {
             id: p.id || "",
             name: pluginName || "",
@@ -157,6 +157,7 @@ export const PipeStore: React.FC = () => {
             is_core_pipe: false,
             is_enabled: p.config?.enabled || false,
             source_code: p.config?.source || "",
+            is_local,
           };
         });
 
@@ -455,14 +456,13 @@ export const PipeStore: React.FC = () => {
       const response = await fetch(`http://localhost:3030/pipes/purge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-        }),
+        body: JSON.stringify({}),
       });
-      if(!response.ok){
+      if (!response.ok) {
         toast({
           title: "failed to purge pipes",
           description: "failed to purge pipes, please try again",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }
@@ -610,12 +610,13 @@ export const PipeStore: React.FC = () => {
       const endpoint = pipe.installed_config?.enabled ? "disable" : "enable";
       console.log("toggel", pipe, endpoint);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.id }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
@@ -686,13 +687,14 @@ export const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
+        const id = selectedPipe.is_local ? selectedPipe.id : selectedPipe.name;
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            pipe_id: selectedPipe.id,
+            pipe_id: id,
             config: config,
           }),
         });
@@ -733,12 +735,13 @@ export const PipeStore: React.FC = () => {
       });
       setSelectedPipe(null);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch("http://localhost:3030/pipes/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.id }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
