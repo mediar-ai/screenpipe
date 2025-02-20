@@ -117,7 +117,7 @@ class NodePipe {
       return convertToCamelCase(data) as ScreenpipeResponse;
     } catch (error) {
       console.error("error querying screenpipe:", error);
-      return null;
+      throw error;
     }
   }
 

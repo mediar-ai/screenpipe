@@ -84,7 +84,9 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("hf_hub=error".parse().unwrap());
 
     #[cfg(target_os = "windows")]
-    let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
+    let env_filter = env_filter
+        .add_directive("xcap::platform::impl_window=off".parse().unwrap())
+        .add_directive("xcap::platform::impl_monitor=off".parse().unwrap());
 
     let env_filter = env::var("SCREENPIPE_LOG")
         .unwrap_or_default()
@@ -525,9 +527,11 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_runtime = Runtime::new().unwrap();
     let vision_runtime = Runtime::new().unwrap();
+    let pipes_runtime = Runtime::new().unwrap();
 
     let audio_handle = audio_runtime.handle().clone();
     let vision_handle = vision_runtime.handle().clone();
+    let pipes_handle = pipes_runtime.handle().clone();
 
     let db_clone = Arc::clone(&db);
     let output_path_clone = Arc::new(local_data_dir.join("data").to_string_lossy().into_owned());
@@ -546,14 +550,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
-    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
-    let realtime_vision_sender_clone = realtime_vision_sender.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let realtime_vision_sender_clone = realtime_vision_sender.clone();
                 let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
@@ -581,7 +581,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    realtime_vision_sender_clone,
                 );
 
                 let result = tokio::select! {
@@ -624,7 +623,6 @@ async fn main() -> anyhow::Result<()> {
 
     let (audio_devices_tx, _) = broadcast::channel(100);
 
-    let _realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
     // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
@@ -955,7 +953,7 @@ async fn main() -> anyhow::Result<()> {
         }
         match pipe_manager.start_pipe_task(pipe.id.clone()).await {
             Ok(future) => {
-                tokio::spawn(future);
+                pipes_handle.spawn(future);
             }
             Err(e) => {
                 error!("failed to start pipe {}: {}", pipe.id, e);
@@ -1043,7 +1041,7 @@ async fn main() -> anyhow::Result<()> {
 
             loop {
                 tokio::select! {
-                    result = run_ui(realtime_vision_sender_clone.clone()) => {
+                    result = run_ui() => {
                         match result {
                             Ok(_) => break,
                             Err(e) => {
@@ -1077,6 +1075,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     tokio::task::block_in_place(|| {
+        drop(pipes_runtime);
         drop(vision_runtime);
         drop(audio_runtime);
     });

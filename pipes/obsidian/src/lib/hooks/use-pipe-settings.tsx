@@ -33,8 +33,6 @@ this data will be used later for analysis, it must contains valuable insights on
 if you do your job well, i'll give you a 🍺 and $1m`,
 };
 
-const STORAGE_KEY = "obsidian-settings";
-
 export function usePipeSettings() {
   const [settings, setSettings] = useState<Partial<Settings> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,16 +48,7 @@ export function usePipeSettings() {
 
       console.log(screenpipeSettings);
 
-      // Load notion settings from localStorage
-      //const storedSettings = localStorage.getItem(STORAGE_KEY);
-      //const notionSettings = storedSettings
-      //  ? JSON.parse(storedSettings)
-      //  : {
-      //      ...(screenpipeSettings.customSettings?.obsidian && {
-      //        ...screenpipeSettings.customSettings?.obsidian,
-      //      }),
-      //    };
-      const notionSettings = {
+      const obsidianSettings = {
         ...(screenpipeSettings.customSettings?.obsidian && {
           ...screenpipeSettings.customSettings?.obsidian,
         }),
@@ -68,7 +57,7 @@ export function usePipeSettings() {
       // Merge everything together
       setSettings({
         ...DEFAULT_SETTINGS,
-        ...notionSettings,
+        ...obsidianSettings,
         screenpipeAppSettings: screenpipeSettings,
       });
     } catch (error) {
@@ -96,9 +85,6 @@ export function usePipeSettings() {
           obsidian: obsidianSettings,
         },
       });
-
-      // Update notion settings in localStorage
-      // localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedObsidianSettings));
 
       // Update state with everything
       setSettings({
