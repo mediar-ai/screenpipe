@@ -139,6 +139,7 @@ pub struct CapturedWindow {
     pub image: DynamicImage,
     pub app_name: String,
     pub window_name: String,
+    pub process_id: i32,
     pub is_focused: bool,
 }
 
@@ -203,10 +204,10 @@ pub async fn capture_all_visible_windows(
             let app_name = window.app_name().to_string();
             let title = window.title().to_string();
             let is_focused = window.is_focused();
-
+            let process_id = window.pid();
             // Capture image immediately while we have access to the window
             match window.capture_image() {
-                Ok(buffer) => Some((app_name, title, is_focused, buffer)),
+                Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),
                 Err(_) => None,
             }
         })
@@ -217,7 +218,7 @@ pub async fn capture_all_visible_windows(
     }
 
     // Process the captured data
-    for (app_name, window_name, is_focused, buffer) in windows_data {
+    for (app_name, window_name, is_focused, buffer, process_id) in windows_data {
         // Convert to DynamicImage
         let image = DynamicImage::ImageRgba8(
             image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())
@@ -235,6 +236,7 @@ pub async fn capture_all_visible_windows(
                 image,
                 app_name,
                 window_name,
+                process_id: process_id as i32,
                 is_focused,
             });
         }

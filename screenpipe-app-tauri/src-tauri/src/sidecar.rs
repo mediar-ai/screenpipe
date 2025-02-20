@@ -3,18 +3,13 @@ use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tauri::async_runtime::JoinHandle;
 use tauri::Emitter;
 use tauri::{Manager, State};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
-use tokio::time::sleep;
 use tracing::{debug, error, info};
-use crate::permissions::OSPermissionStatus;
-use crate::permissions::do_permissions_check;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {
@@ -86,11 +81,14 @@ pub async fn stop_screenpipe(
 ) -> Result<(), String> {
     debug!("Killing screenpipe");
 
-    let mut manager = state.0.lock().await;
-    if let Some(manager) = manager.as_mut() {
-        if let Some(child) = manager.child.take() {
-            if let Err(e) = child.kill() {
-                error!("Failed to kill child process: {}", e);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut manager = state.0.lock().await;
+        if let Some(manager) = manager.as_mut() {
+            if let Some(child) = manager.child.take() {
+                if let Err(e) = child.kill() {
+                    error!("Failed to kill child process: {}", e);
+                }
             }
         }
     }
@@ -107,11 +105,16 @@ pub async fn stop_screenpipe(
         }
         #[cfg(target_os = "windows")]
         {
-            use std::os::windows::process::CommandExt;
-
             const CREATE_NO_WINDOW: u32 = 0x08000000;
-            tokio::process::Command::new("taskkill")
-                .args(&["/F", "/T", "/IM", "screenpipe.exe"])
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            tokio::process::Command::new("powershell")
+                .arg("-NoProfile")
+                .arg("-WindowStyle")
+                .arg("hidden")
+                .arg("-Command")
+                .arg(format!(
+                    r#"taskkill.exe /F /T /IM screenpipe.exe"#,
+                ))
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
                 .await
@@ -255,7 +258,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let use_all_monitors = store
+    let _use_all_monitors = store
         .get("useAllMonitors")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
@@ -498,9 +501,6 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 }
 pub struct SidecarManager {
     child: Option<CommandChild>,
-    last_restart: Instant,
-    restart_interval: Arc<Mutex<Duration>>,
-    restart_task: Option<JoinHandle<()>>,
     dev_mode: Arc<Mutex<bool>>,
 }
 
@@ -508,89 +508,26 @@ impl SidecarManager {
     pub fn new() -> Self {
         Self {
             child: None,
-            last_restart: Instant::now(),
-            restart_interval: Arc::new(Mutex::new(Duration::from_secs(0))),
-            restart_task: None,
             dev_mode: Arc::new(Mutex::new(false)),
         }
     }
 
-    pub fn assert_permissions(&mut self) -> Result<(), String> {
-         // check for permissions before spawning
-         let permissions = do_permissions_check(true);
-
-         if permissions.screen_recording != OSPermissionStatus::Granted {
-             return Err("Screen recording permission denied".to_string());
-         }
-         if permissions.microphone != OSPermissionStatus::Granted {
-             return Err("Microphone permission denied".to_string());
-         }
-         if permissions.camera != OSPermissionStatus::Granted {
-            return Err("Camera permission denied".to_string());
-        }
-
-        Ok(())
-    }
+    
 
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
         self.update_settings(app).await?;
 
-        // check for permissions before spawning
-        #[cfg(target_os = "macos")]
-        {
-            self.assert_permissions()?;
-        }
-
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
-        // self.last_restart = Instant::now();
-        // info!("last restart: {:?}", self.last_restart);
-
-        // // kill previous task if any
-        // if let Some(task) = self.restart_task.take() {
-        //     task.abort();
-        // }
-
-        // let restart_interval = self.restart_interval.clone();
-        // info!("restart_interval: {:?}", restart_interval);
-        // // Add this function outside the SidecarManager impl
-        // async fn check_and_restart_sidecar(app_handle: &tauri::AppHandle) -> Result<(), String> {
-        //     let state = app_handle.state::<SidecarState>();
-        //     let mut manager = state.0.lock().await;
-        //     if let Some(manager) = manager.as_mut() {
-        //         manager.check_and_restart(app_handle).await
-        //     } else {
-        //         Ok(())
-        //     }
-        // }
-
-        // // In the spawn method
-        // let app_handle = app.app_handle().clone();
-        // self.restart_task = Some(tauri::async_runtime::spawn(async move {
-        //     loop {
-        //         let interval = *restart_interval.lock().await;
-        //         info!("interval: {}", interval.as_secs());
-        //         if let Err(e) = check_and_restart_sidecar(&app_handle).await {
-        //             error!("Failed to check and restart sidecar: {}", e);
-        //         }
-        //         sleep(Duration::from_secs(60)).await;
-        //     }
-        // }));
+        
 
         Ok(())
     }
 
     async fn update_settings(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         let store = get_store(app, None).unwrap();
-
-        let restart_interval = store
-            .get("restartInterval")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-
-        debug!("restart_interval: {}", restart_interval);
 
         let dev_mode = store
             .get("devMode")
@@ -599,51 +536,9 @@ impl SidecarManager {
 
         debug!("dev_mode: {}", dev_mode);
 
-        *self.restart_interval.lock().await = Duration::from_secs(restart_interval * 60);
         *self.dev_mode.lock().await = dev_mode;
 
         Ok(())
     }
 
-    pub async fn check_and_restart(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
-        let interval = *self.restart_interval.lock().await;
-        let dev_mode = *self.dev_mode.lock().await;
-        info!("interval: {}", interval.as_secs());
-        info!("last_restart: {:?}", self.last_restart);
-        info!("elapsed: {:?}", self.last_restart.elapsed());
-
-        if interval.as_secs() > 0 && self.last_restart.elapsed() >= interval && !dev_mode {
-            info!("attempting to restart sidecar due to restart interval");
-            
-            // Safely kill the existing sidecar
-            if let Some(child) = self.child.take() {
-                match child.kill() {
-                    Ok(_) => info!("successfully killed previous sidecar"),
-                    Err(e) => {
-                        error!("failed to kill previous sidecar: {}", e);
-                        // Continue anyway as the process might have already died
-                    }
-                }
-            }
-
-            // Wait for process cleanup
-            sleep(Duration::from_secs(5)).await;
-
-            // Try to spawn new sidecar
-            match spawn_sidecar(app) {
-                Ok(new_child) => {
-                    info!("successfully spawned new sidecar");
-                    self.child = Some(new_child);
-                    self.last_restart = Instant::now();
-                }
-                Err(e) => {
-                    error!("failed to spawn new sidecar: {}", e);
-                    // Don't propagate error - let the app continue running
-                    // The next check interval will try again
-                }
-            }
-        }
-        
-        Ok(())
-    }
 }

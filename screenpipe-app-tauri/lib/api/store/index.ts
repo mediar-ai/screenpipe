@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import localforage from "localforage";
 
 export interface PipeStorePlugin {
   id: string;
@@ -60,9 +61,15 @@ export interface CheckUpdateResponse {
   latest_file_size: number;
 }
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
 export class PipeApi {
   private baseUrl: string;
   private authToken: string;
+  private cacheTTL = 60000; // 60 seconds cache
 
   private constructor(authToken: string) {
     this.baseUrl = "https://screenpi.pe";
@@ -87,6 +94,34 @@ export class PipeApi {
     }
   }
 
+  private async getCached<T>(key: string): Promise<T | null> {
+    try {
+      const entry = await localforage.getItem<CacheEntry<T>>(`pipe_api_${key}`);
+      if (!entry) return null;
+
+      if (Date.now() - entry.timestamp > this.cacheTTL) {
+        await localforage.removeItem(`pipe_api_${key}`);
+        return null;
+      }
+
+      return entry.data;
+    } catch (error) {
+      console.warn("cache read error:", error);
+      return null;
+    }
+  }
+
+  private async setCache<T>(key: string, data: T) {
+    try {
+      await localforage.setItem(`pipe_api_${key}`, {
+        data,
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      console.warn("cache write error:", error);
+    }
+  }
+
   async getUserPurchaseHistory(): Promise<PurchaseHistoryResponse> {
     try {
       const response = await fetch(
@@ -102,8 +137,7 @@ export class PipeApi {
         throw new Error(`failed to fetch purchase history: ${error}`);
       }
 
-      const data = (await response.json()) as PurchaseHistoryResponse;
-      return data;
+      return (await response.json()) as PurchaseHistoryResponse;
     } catch (error) {
       console.error("error getting purchase history:", error);
       throw error;
@@ -111,6 +145,10 @@ export class PipeApi {
   }
 
   async listStorePlugins(): Promise<PipeStorePlugin[]> {
+    const cacheKey = "store-plugins";
+    const cached = await this.getCached<PipeStorePlugin[]>(cacheKey);
+    if (cached) return cached;
+
     try {
       const response = await fetch(`${this.baseUrl}/api/plugins/registry`, {
         headers: {
@@ -122,6 +160,7 @@ export class PipeApi {
         throw new Error(`failed to fetch plugins: ${error}`);
       }
       const data: PipeStorePlugin[] = await response.json();
+      await this.setCache(cacheKey, data);
       return data;
     } catch (error) {
       console.error("error listing pipes:", error);
@@ -184,6 +223,10 @@ export class PipeApi {
     pipeId: string,
     version: string
   ): Promise<CheckUpdateResponse> {
+    const cacheKey = `update_${pipeId}_${version}`;
+    const cached = await this.getCached<CheckUpdateResponse>(cacheKey);
+    if (cached) return cached;
+
     try {
       const response = await fetch(`${this.baseUrl}/api/plugins/check-update`, {
         method: "POST",
@@ -200,10 +243,21 @@ export class PipeApi {
       }
 
       const data = await response.json();
+      await this.setCache(cacheKey, data);
       return data;
     } catch (error) {
       console.error("error checking for updates:", error);
       throw error;
     }
+  }
+
+  // method to force refresh cache if needed
+  async clearCache() {
+    const keys = await localforage.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith("pipe_api_"))
+        .map((key) => localforage.removeItem(key))
+    );
   }
 }

@@ -172,8 +172,8 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "This is a test OCR text", // 21 chars
@@ -363,7 +363,7 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")
@@ -551,14 +551,14 @@ mod tests {
             .insert_video_chunk("old_video.mp4", "test_device")
             .await
             .unwrap();
-        let old_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let old_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
         // Insert recent data
         let _ = db
             .insert_video_chunk("recent_video.mp4", "test_device")
             .await
             .unwrap();
-        let recent_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let recent_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
         // Insert OCR data with different timestamps
         sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
