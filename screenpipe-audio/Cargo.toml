@@ -82,6 +82,10 @@ futures = "0.3.31"
 deepgram = "0.6.4"
 bytes = { version = "1.9.0", features = ["serde"] }
 
+# For text similarity comparison
+similar-string = "1.0"
+
+
 [target.'cfg(target_os = "windows")'.dependencies]
 ort = { version = "=2.0.0-rc.6", features = [
   "download-binaries",
