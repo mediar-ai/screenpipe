@@ -33,6 +33,8 @@ interface PipeDetailsProps {
   onRefreshFromDisk: (pipe: PipeWithStatus, onComplete: () => void) => void;
 }
 
+const buildStatusNotAllows = ["in_progress", "not_started"];
+
 const isValidSource = (source?: string): boolean => {
   if (!source) return false;
 
@@ -134,7 +136,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                             <Button
                               onClick={() =>
                                 onRefreshFromDisk(pipe, () =>
-                                  setIsLoading(false)
+                                  setIsLoading(false),
                                 )
                               }
                               variant="outline"
@@ -219,48 +221,52 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-8 ">
-            {pipe.installed_config?.enabled && pipe.installed_config?.port && (
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        openUrl(
-                          `http://localhost:${pipe.installed_config?.port}`
-                        )
-                      }
-                      disabled={!pipe.installed_config?.enabled}
-                    >
-                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                      open in browser
-                    </Button>
-                    <Button
-                      variant="default"
-                      onClick={async () => {
-                        try {
-                          await invoke("open_pipe_window", {
-                            port: pipe.installed_config!.port,
-                            title: pipe.name,
-                          });
-                        } catch (err) {
-                          console.error("failed to open pipe window:", err);
-                          toast({
-                            title: "error opening pipe window",
-                            description: "please try again or check the logs",
-                            variant: "destructive",
-                          });
+            {pipe.installed_config?.enabled &&
+              !buildStatusNotAllows.includes(
+                pipe.installed_config.buildStatus ?? "",
+              ) &&
+              pipe.installed_config?.port && (
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          openUrl(
+                            `http://localhost:${pipe.installed_config?.port}`,
+                          )
                         }
-                      }}
-                      disabled={!pipe.installed_config.enabled}
-                    >
-                      <Puzzle className="mr-2 h-3.5 w-3.5" />
-                      open as app
-                    </Button>
+                        disabled={!pipe.installed_config?.enabled}
+                      >
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                        open in browser
+                      </Button>
+                      <Button
+                        variant="default"
+                        onClick={async () => {
+                          try {
+                            await invoke("open_pipe_window", {
+                              port: pipe.installed_config!.port,
+                              title: pipe.name,
+                            });
+                          } catch (err) {
+                            console.error("failed to open pipe window:", err);
+                            toast({
+                              title: "error opening pipe window",
+                              description: "please try again or check the logs",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        disabled={!pipe.installed_config.enabled}
+                      >
+                        <Puzzle className="mr-2 h-3.5 w-3.5" />
+                        open as app
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
             {pipe.description && (
               <div>

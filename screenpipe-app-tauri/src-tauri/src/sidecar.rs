@@ -107,7 +107,7 @@ pub async fn stop_screenpipe(
         {
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tokio::process::Command::new("powershell")
+            let _ = tokio::process::Command::new("powershell")
                 .arg("-NoProfile")
                 .arg("-WindowStyle")
                 .arg("hidden")
@@ -117,7 +117,7 @@ pub async fn stop_screenpipe(
                 ))
                 .creation_flags(CREATE_NO_WINDOW)
                 .output()
-                .await
+                .await;
         }
     }
     .await;
