@@ -44,17 +44,21 @@ export async function runBot(
 ): Promise<boolean> {
   await stopBot();
 
+  const model = await getModel(settings);
+  if (!model) {
+    eventEmitter.emit("catchError", {
+      title: "Error finding AI model.",
+      description: "Your AI model settings are not configured correctly.",
+    });
+    return false;
+  }
+
   const browserWSEndpoint = await getBrowserWSEndpoint();
   if (!browserWSEndpoint) {
     return false;
   }
 
   browser = await puppeteer.connect({ browserWSEndpoint });
-
-  const model = await getModel(settings);
-  if (!model) {
-    return false;
-  }
 
   launchProcesses(cookies, model);
 
@@ -549,7 +553,6 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
   switch (settings.aiProviderType) {
     case "openai":
       if (!settings.openaiApiKey) {
-        if (browser) await browser.close();
         return null;
       }
 
@@ -560,14 +563,12 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
         const response = await fetch("http://localhost:11434/api/tags");
         if (!response.ok) throw new Error();
       } catch {
-        if (browser) await browser.close();
         return null;
       }
 
       return ollama(settings.aiModel) as LanguageModel;
     case "screenpipe-cloud":
       if (!settings.user?.token) {
-        if (browser) await browser.close();
         return null;
       }
 
@@ -575,7 +576,6 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
       return openai(settings.aiModel) as LanguageModel;
     case "custom":
       if (!settings.openaiApiKey) {
-        if (browser) await browser.close();
         return null;
       }
 
