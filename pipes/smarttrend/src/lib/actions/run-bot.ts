@@ -4,8 +4,13 @@ import cron from "node-cron";
 import { pipe, Settings } from "@screenpipe/js";
 import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
-import { streamText, streamObject, type LanguageModel } from "ai";
-import { openai } from "@ai-sdk/openai";
+import {
+  streamText,
+  streamObject,
+  TypeValidationError,
+  type LanguageModel,
+} from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
 import * as store from "@/lib/store";
@@ -231,7 +236,7 @@ async function profileProcess(
 
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
-    const { textStream } = await streamText({
+    const { fullStream } = await streamText({
       model,
       prompt: `
 You are an AI assistant analyzing a Twitter user's profile and engagement patterns to generate a concise summary.
@@ -257,8 +262,8 @@ ${JSON.stringify(tweetArray, null, 2)}
 
     let summary = "";
     let i = 0;
-    for await (const textPart of textStream) {
-      summary += textPart;
+    for await (const chunk of fullStream) {
+      summary += getText(chunk);
 
       if (i < 99) {
         eventEmitter.emit("updateProgress", {
@@ -303,7 +308,7 @@ async function ocrProcess(model: LanguageModel): Promise<void> {
     });
     const context = res?.data.map((e) => e.content);
 
-    const { textStream } = await streamText({
+    const { fullStream } = await streamText({
       model,
       prompt: `
 You are an AI assistant analyzing OCR-extracted text to identify key insights, trends, and relevant topics.
@@ -325,8 +330,8 @@ ${JSON.stringify(context, null, 2)}
 
     let summary = "";
     let i = 0;
-    for await (const textPart of textStream) {
-      summary += textPart;
+    for await (const chunk of fullStream) {
+      summary += getText(chunk);
 
       if (i < 99) {
         eventEmitter.emit("updateProgress", { process: 1, value: i + 1 });
@@ -423,7 +428,7 @@ async function summaryProcess(model: LanguageModel): Promise<void> {
 
     const summaries = await store.getSummaries();
 
-    const { textStream } = await streamText({
+    const { fullStream } = await streamText({
       model,
       prompt: `
 You are an AI assistant creating a concise and well-structured summary based on multiple previous summaries.
@@ -442,8 +447,8 @@ ${JSON.stringify(summaries, null, 2)}
 
     let summary = "";
     let i = 0;
-    for await (const textPart of textStream) {
-      summary += textPart;
+    for await (const chunk of fullStream) {
+      summary += getText(chunk);
 
       if (i < 99) {
         eventEmitter.emit("updateProgress", { process: 3, value: i + 1 });
@@ -522,7 +527,7 @@ ${JSON.stringify(tweets, null, 2)}
 
     let i = 0;
     for await (const suggestion of elementStream) {
-      store.pushSuggestion(suggestion);
+      await store.pushSuggestion(suggestion);
       eventEmitter.emit("addSuggestion", suggestion);
 
       if (i < 5) {
@@ -533,6 +538,10 @@ ${JSON.stringify(tweets, null, 2)}
       }
 
       i += 1;
+    }
+
+    if (i === 0) {
+      throw new Error("No elements returned.");
     }
 
     await store.removeTweets(tweets.length);
@@ -549,14 +558,30 @@ ${JSON.stringify(tweets, null, 2)}
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
+function getText(chunk: any): string {
+  if (chunk.type === "deltaText") {
+    return chunk.text;
+  } else if (chunk.type === "error") {
+    if (TypeValidationError.isInstance(chunk.error)) {
+      return chunk.error.value.choices[0]?.delta?.content || "";
+    } else {
+      throw chunk.error;
+    }
+  }
+}
+
 async function getModel(settings: Settings): Promise<LanguageModel | null> {
+  let openai;
   switch (settings.aiProviderType) {
     case "openai":
       if (!settings.openaiApiKey) {
         return null;
       }
 
-      process.env.OPENAI_API_KEY = settings.openaiApiKey;
+      openai = createOpenAI({
+        apiKey: settings.openaiApiKey,
+        baseURL: settings.aiUrl,
+      });
       return openai(settings.aiModel) as LanguageModel;
     case "native-ollama":
       try {
@@ -572,14 +597,20 @@ async function getModel(settings: Settings): Promise<LanguageModel | null> {
         return null;
       }
 
-      process.env.OPENAI_API_KEY = settings.user.token;
+      openai = createOpenAI({
+        apiKey: settings.user.token,
+        baseURL: settings.aiUrl,
+      });
       return openai(settings.aiModel) as LanguageModel;
     case "custom":
       if (!settings.openaiApiKey) {
         return null;
       }
 
-      process.env.OPENAI_API_KEY = settings.openaiApiKey;
+      openai = createOpenAI({
+        apiKey: settings.openaiApiKey,
+        baseURL: settings.aiUrl,
+      });
       return openai(settings.aiModel) as LanguageModel;
   }
   return null;
