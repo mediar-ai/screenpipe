@@ -29,6 +29,26 @@ below is the detailed cli reference for screenpipe's core functionality.
 
 <MotionDiv delay={0.5}>
 
+## Configuring a Hugging Face Mirror
+
+If you are using the `screenpipe` CLI and need to download models from Hugging Face (which may be blocked in certain regions like China), you can set the `HF_ENDPOINT` environment variable.
+
+## Example:
+
+### Linux/macOS:
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+### Windows:
+```powershell
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
 ### audio options
 
 - **audio-chunk-duration** (`-d, --audio-chunk-duration <INT>`): audio chunk duration in seconds
