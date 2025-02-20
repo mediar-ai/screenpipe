@@ -6,6 +6,7 @@ import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
 import {
   streamText,
+  generateObject,
   streamObject,
   TypeValidationError,
   type LanguageModel,
@@ -138,19 +139,20 @@ async function launchProcesses(
   cookies: CookieParam[],
   model: LanguageModel,
 ): Promise<void> {
-  await Promise.all([
-    profileProcess(cookies, model),
-    ocrProcess(model),
-    timelineProcess(cookies),
-  ]);
-  await Promise.all([summaryProcess(model), suggestionProcess(model)]);
+  // await Promise.all([
+  //   profileProcess(cookies, model),
+  //   ocrProcess(model),
+  //   timelineProcess(cookies),
+  // ]);
+  // await Promise.all([summaryProcess(model), suggestionProcess(model)]);
+  await suggestionProcess(model);
 
-  profileJob = cron.schedule("*/30 * * * *", () =>
-    profileProcess(cookies, model),
-  );
-  ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
-  timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
-  summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
+  // profileJob = cron.schedule("*/30 * * * *", () =>
+  //   profileProcess(cookies, model),
+  // );
+  // ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
+  // timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
+  // summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
   suggestionJob = cron.schedule("*/5 * * * *", () => suggestionProcess(model));
 }
 
@@ -550,7 +552,70 @@ ${JSON.stringify(tweets, null, 2)}
     }
 
     if (i === 0) {
-      throw new Error("No elements returned.");
+      const { fullStream } = await streamText({
+        model,
+        prompt: `
+You are an AI assistant analyzing tweet data to determine the best engagement opportunities. 
+Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion. 
+Use summaries of the user's data to add context and improve relevance.
+Generate recommended replies and timestamps for selected tweets. Return JSON output.
+
+### **Instructions:**
+- Prioritize tweets that align with the user’s niche, past tweets, and bio.
+- If a tweet is only loosely relevant but has high engagement, consider the visibility benefits.
+- Match the user's writing style (e.g., casual, professional, witty).
+- If the user is an expert, suggest insightful or debate-provoking replies.
+- If the user asks a lot of questions, favor responses that encourage further discussion.
+- Higher scores indicate better relevance, engagement potential, or visibility.
+- Recommend an optimal time to reply. Timestamps should match the format of provided tweet data.
+- Reasons for the suggestion should be in second person.
+- Only include hashtags that match those used by the user in previous tweets.
+
+### **User Summaries:**
+\`\`\`json
+${JSON.stringify(summaries, null, 2)}
+\`\`\`
+
+### **Tweets To Analyze:**
+\`\`\`json
+${JSON.stringify(tweets, null, 2)}
+\`\`\`
+
+### **Response Schema**
+Return in the following JSON format:
+[{
+  tweetId: string,
+  handle: string,
+  reply: string,
+  reason: string
+}]
+              `,
+        temperature: 0.7,
+      });
+
+      let data = "";
+      let i = 0;
+      for await (const chunk of fullStream) {
+        const text = getText(chunk);
+        if (text) {
+          data += text;
+
+          if (i < 99) {
+            eventEmitter.emit("updateProgress", { process: 4, value: i + 1 });
+          }
+
+          i += 1;
+        }
+      }
+
+      const extracted = extractBetweenBraces(data);
+      if (extracted) {
+        const suggestions: Suggestion[] = JSON.parse(extracted);
+        for (const suggestion of suggestions) {
+          await store.pushSuggestion(suggestion);
+          eventEmitter.emit("addSuggestion", suggestion);
+        }
+      }
     }
 
     await store.removeTweets(tweets.length);
@@ -579,6 +644,16 @@ function getText(chunk: any): string | null {
   } else {
     return null;
   }
+}
+
+function extractBetweenBraces(s: string): string | null {
+  const firstIndex = s.indexOf("[");
+  const lastIndex = s.lastIndexOf("]");
+
+  if (firstIndex !== -1 && lastIndex !== -1 && lastIndex > firstIndex) {
+    return s.slice(firstIndex, lastIndex + 1);
+  }
+  return null;
 }
 
 async function getModel(settings: Settings): Promise<LanguageModel | null> {
