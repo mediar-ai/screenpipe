@@ -30,6 +30,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import localforage from "localforage";
 
 const corePipes: string[] = ["data-table", "search"];
 
@@ -106,20 +107,6 @@ export const PipeStore: React.FC = () => {
           const installedPipe = installedPipes.find(
             (p) => p.config?.id === plugin.id,
           );
-          const currentVersion = installedPipe?.config?.version;
-
-          let has_update = false;
-          if (currentVersion) {
-            try {
-              const updateCheck = await pipeApi.checkUpdate(
-                plugin.id,
-                currentVersion,
-              );
-              has_update = updateCheck.has_update;
-            } catch (error) {
-              console.error(`Failed to check updates for ${plugin.id}:`, error);
-            }
-          }
 
           return {
             ...plugin,
@@ -130,7 +117,7 @@ export const PipeStore: React.FC = () => {
             ),
             is_core_pipe: corePipes.includes(plugin.name),
             is_enabled: installedPipe?.config?.enabled ?? false,
-            has_update,
+            has_update: false,
           };
         }),
       );
@@ -904,7 +891,7 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     fetchPurchaseHistory();
-  }, [settings.user]);
+  }, [settings.user.token]);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -914,6 +901,43 @@ export const PipeStore: React.FC = () => {
     const interval = setInterval(() => {
       fetchInstalledPipes();
     }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      if(!settings.user.token){
+        return;
+      }
+      // Get last check time from local storage
+      const lastCheckTime = await localforage.getItem<number>('lastUpdateCheck');
+      const now = Date.now();
+      
+      // Check if 5 minutes have passed since last check
+      if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
+        return;
+      }
+
+      // Store current time as last check
+      await localforage.setItem('lastUpdateCheck', now);
+
+      const installedPipes = pipes.filter((pipe) => pipe.is_installed);
+
+      const storeApi = await PipeApi.create(settings.user.token);
+      for (const pipe of installedPipes) {
+        const update = await storeApi.checkUpdate(pipe.id, pipe.installed_config?.version!);
+        if (update.has_update) {
+          await handleUpdatePipe(pipe);
+        }
+      }
+    };
+
+    // Run check immediately
+    checkForUpdates();
+
+    // Set up interval to check every 5 minutes
+    const interval = setInterval(checkForUpdates, 5 * 60 * 1000);
+    
     return () => clearInterval(interval);
   }, []);
 
