@@ -149,10 +149,18 @@ jobs:
             tauri-args: "--target x86_64-pc-windows-msvc"
             os_type: "windows"
           - platform: "ubuntu-22.04"
-            args: "--target x86_64-unknown-linux-gnu"
+            args: "--target x86_64-unknown-linux-gnu --features mkl"
             target: x86_64-unknown-linux-gnu
             tauri-args: "--target x86_64-unknown-linux-gnu"
             os_type: "linux"
+            build_type: "intel-mkl"
+          - platform: "ubuntu-22.04"
+            args: "--target x86_64-unknown-linux-gnu --features cuda"
+            target: x86_64-unknown-linux-gnu
+            tauri-args: "--target x86_64-unknown-linux-gnu"
+            os_type: "linux"
+            build_type: "nvidia-cuda"
+
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -292,47 +300,34 @@ jobs:
         run: |
           brew install ffmpeg
 
-      - name: Install dependencies
-        if: matrix.os_type == 'linux'
-        shell: bash
+      - name: Install dependencies (Linux - Intel MKL)
+        if: matrix.os_type == 'linux' && matrix.build_type == 'intel-mkl'
         run: |
-          sudo apt update && sudo apt install -y \
-            g++ \
-            ffmpeg \
-            tesseract-ocr \
-            cmake \
-            libavformat-dev \
-            libavfilter-dev \
-            libavdevice-dev \
-            libssl-dev \
-            libtesseract-dev \
-            libxdo-dev \
-            libsdl2-dev \
-            libclang-dev \
-            libxtst-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libgl1-mesa-dev \
-            libasound2-dev \
-            libpulse-dev \
-            curl \
-            pkg-config \
-            libsqlite3-dev \
-            libbz2-dev \
-            zlib1g-dev \
-            libonig-dev \
-            libayatana-appindicator3-dev \
-            libsamplerate-dev \
-            libwebrtc-audio-processing-dev
+          sudo apt update
+          sudo apt install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+          sudo apt install -y intel-mkl libmkl-dev
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
           curl -fsSL https://bun.sh/install | bash
 
-      - name: Install frontend dependencies
-        working-directory: ./screenpipe-app-tauri
-        run: bun install
+      - name: Install dependencies (Linux - NVIDIA CUDA)
+        if: matrix.os_type == 'linux' && matrix.build_type == 'nvidia-cuda'
+        run: |
+          sudo apt update
+          sudo apt install -y g++ ffmpeg tesseract-ocr cmake libavformat-dev libavfilter-dev libavdevice-dev libssl-dev libtesseract-dev libxdo-dev libsdl2-dev libclang-dev libxtst-dev
+          sudo apt install -y nvidia-cuda-toolkit
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+          curl -fsSL https://bun.sh/install | bash
+
+      - name: Build and run application (Linux)
+        if: matrix.os_type == 'linux'
+        run: |
+          git clone https://github.com/mediar-ai/screenpipe
+          cd screenpipe
+          cargo build --release
+          ./target/release/screenpipe
+          cd screenpipe-app-tauri
+          bun install
+          bun tauri build
 
       - name: Install vcpkg
         if: matrix.os_type == 'windows'
