@@ -358,9 +358,9 @@ impl PipeManager {
 
             #[cfg(unix)]
             {
-                // try with id first
+                // Make grep pattern more specific to target only pipe processes
                 let command = format!(
-                    "ps axuw | grep {} | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                    "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
                     &id.to_string()
                 );
 
