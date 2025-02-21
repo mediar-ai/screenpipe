@@ -1,5 +1,4 @@
 import { MainImage } from "./image-card";
-import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 
@@ -16,10 +15,6 @@ export const CurrentFrame = () => {
 	const { currentResultIndex, searchResults } = useKeywordSearchStore();
 
 	const currentFrame = searchResults[currentResultIndex];
-
-	useEffect(() => {
-		console.log(currentFrame);
-	}, [currentFrame]);
 
 	return (
 		<div

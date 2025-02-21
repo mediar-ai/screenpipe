@@ -12,7 +12,7 @@ import { parser } from "@/lib/keyword-parser";
 import { CurrentFrame } from "@/components/current-frame";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { AppSelect } from "@/components/search-command";
-import { ArrowLeft, SkipBack, StepBack } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 export default function Page() {
 	const [querys, setQuerys] = useKeywordParams();

@@ -169,13 +169,20 @@ export const ImageGrid = ({
 								onClick={() => setCurrentResultIndex(index)}
 								style={{ direction: "ltr" }}
 							>
-								<div className="aspect-video overflow-hidden flex-1">
+								<div className="aspect-video overflow-hidden flex-1 relative">
+									<div className="absolute inset-0 flex items-center justify-center bg-neutral-100">
+										<Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+									</div>
 									<img
 										src={`http://localhost:3030/frames/${result.frame_id}`}
 										alt={`${result.app_name} - ${result.window_name}`}
-										className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+										className="h-full w-full object-cover transition-transform duration-300 relative group-hover:scale-105"
 										loading="lazy"
 										draggable={false}
+										onLoad={(e) => {
+											(e.target as HTMLImageElement).style.opacity = "1";
+										}}
+										style={{ opacity: 0 }}
 									/>
 								</div>
 								<div className="p-3 space-y-1">
@@ -256,20 +263,6 @@ export const MainImage = () => {
 		};
 	}, [currentFrame]);
 
-	//const convertVisionCoordinates = (
-	//	bounds: TextBounds,
-	//	imageHeight: number,
-	//) => {
-	//	if (!imageRect) return null;
-	//
-	//	return {
-	//		left: bounds.left * imageRect.width,
-	//		top: imageHeight - bounds.top * imageHeight - bounds.height * imageHeight,
-	//		width: bounds.width * imageRect.width,
-	//		height: bounds.height * imageHeight,
-	//	};
-	//};
-
 	if (!currentFrame) {
 		return (
 			<div className="relative col-span-3 aspect-video w-full h-full overflow-hidden rounded-lg bg-neutral-100">
@@ -284,7 +277,9 @@ export const MainImage = () => {
 			ref={containerRef}
 			className="relative aspect-auto w-full h-full overflow-hidden rounded-lg bg-neutral-100"
 		>
-			<div className="bg-neutral-200" />
+			<div className="absolute inset-0 flex items-center justify-center">
+				<Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+			</div>
 			<div className="relative">
 				<img
 					ref={imageRef}
@@ -292,41 +287,18 @@ export const MainImage = () => {
 					alt={`${currentFrame.app_name} - ${currentFrame.window_name}`}
 					className="h-full w-full object-contain max-h-[75vh]"
 					draggable={false}
+					onLoad={(e) => {
+						(e.target as HTMLImageElement).style.opacity = "1";
+					}}
+					style={{ opacity: 0 }}
 				/>
-
 				{imageRect && (
 					<div
 						className="absolute inset-0 pointer-events-none"
 						style={{
 							width: imageRect.width,
 						}}
-					>
-						{
-							//        currentFrame.text_positions?.map(
-							//	(position: TextPosition, index: number) => {
-							//		const coords = convertVisionCoordinates(
-							//			position.bounds,
-							//			imageRect.height,
-							//		);
-							//		if (!coords) return null;
-							//
-							//		return (
-							//			<div
-							//				key={index}
-							//				className="absolute bg-yellow-300/40 border border-yellow-500/50"
-							//				style={{
-							//					left: `${coords.left}px`,
-							//					top: `${coords.top}px`,
-							//					width: `${coords.width}px`,
-							//					height: `${coords.height}px`,
-							//				}}
-							//				title={position.text}
-							//			/>
-							//		);
-							//	},
-							//)
-						}
-					</div>
+					/>
 				)}
 			</div>
 		</div>
