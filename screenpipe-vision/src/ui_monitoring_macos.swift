@@ -1302,9 +1302,10 @@ func saveToDatabase(windowId: WindowIdentifier, newTextOutput: String, timestamp
             sqlite3_bind_text(updateStmt, 3, sanitizedApp, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(updateStmt, 4, sanitizedWindow, -1, SQLITE_TRANSIENT)
 
-            if sqlite3_step(updateStmt) != SQLITE_DONE {
-                print("error updating row")
-            }
+            // comment spam 
+            // if sqlite3_step(updateStmt) != SQLITE_DONE {
+            //     print("error updating row")
+            // }
             sqlite3_finalize(updateStmt)
         }
     } else {

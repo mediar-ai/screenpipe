@@ -30,27 +30,28 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import localforage from "localforage";
 
 const corePipes: string[] = ["data-table", "search"];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings } = useSettings();
+  const { settings, loadUser } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
-    []
+    [],
   );
   const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
   const { open: openStatusDialog } = useStatusDialog();
   const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
   const filteredPipes = pipes
@@ -58,7 +59,7 @@ export const PipeStore: React.FC = () => {
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
         (!showInstalledOnly || pipe.is_installed) &&
-        !pipe.is_installing
+        !pipe.is_installing,
     )
     .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
 
@@ -87,6 +88,25 @@ export const PipeStore: React.FC = () => {
     };
   }, [pipes, setPipes, setInstalledPipes, setLoadingInstalls, settings.user]);
 
+  useEffect(() => {
+    const unsubscribePromise = listen("update-all-pipes", async () => {
+      // not sure this is a good idea ... basically pipes will break in the hand of users when update will happen
+      if (!checkLogin(settings.user, false)) return;
+
+      for (const pipe of pipes) {
+        // Then download the new version
+        await handleUpdatePipe(pipe);
+      }
+
+      // Refresh the pipe list
+      await fetchInstalledPipes();
+    });
+
+    return () => {
+      unsubscribePromise.then((unsubscribe) => unsubscribe());
+    };
+  }, []);
+
   const fetchStorePlugins = async () => {
     try {
       const pipeApi = await PipeApi.create(settings.user?.token!);
@@ -96,47 +116,32 @@ export const PipeStore: React.FC = () => {
       const storePluginsWithStatus = await Promise.all(
         plugins.map(async (plugin) => {
           const installedPipe = installedPipes.find(
-            (p) => p.config?.id === plugin.id
+            (p) => p.config?.id === plugin.id,
           );
-          const currentVersion = installedPipe?.config?.version;
-
-          let has_update = false;
-          if (currentVersion) {
-            try {
-              const updateCheck = await pipeApi.checkUpdate(
-                plugin.id,
-                currentVersion
-              );
-              has_update = updateCheck.has_update;
-            } catch (error) {
-              console.error(`Failed to check updates for ${plugin.id}:`, error);
-            }
-          }
 
           return {
             ...plugin,
             is_installed: !!installedPipe,
             installed_config: installedPipe?.config,
             has_purchased: purchaseHistory.some(
-              (p) => p.plugin_id === plugin.id
+              (p) => p.plugin_id === plugin.id,
             ),
             is_core_pipe: corePipes.includes(plugin.name),
             is_enabled: installedPipe?.config?.enabled ?? false,
-            has_update,
+            has_update: false,
           };
-        })
+        }),
       );
 
       const customPipes = installedPipes
         .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
         .map((p) => {
-          console.log(p.config);
-
           const pluginName = p.config?.source?.split("/").pop();
+          const is_local = p.id.endsWith("_local");
           return {
-            id: p.config?.id || "",
+            id: p.id || "",
             name: pluginName || "",
-            description: "",
+            description: p.desc,
             version: p.config?.version || "0.0.0",
             is_paid: false,
             price: 0,
@@ -150,6 +155,7 @@ export const PipeStore: React.FC = () => {
             is_core_pipe: false,
             is_enabled: p.config?.enabled || false,
             source_code: p.config?.source || "",
+            is_local,
           };
         });
 
@@ -168,7 +174,7 @@ export const PipeStore: React.FC = () => {
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -281,6 +287,7 @@ export const PipeStore: React.FC = () => {
       });
 
       await fetchInstalledPipes();
+
       t.dismiss();
     } catch (error) {
       console.error("failed to add custom pipe:", error);
@@ -294,7 +301,7 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -302,8 +309,8 @@ export const PipeStore: React.FC = () => {
       // Keep the pipe in its current position by updating its status
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: true } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: true } : p,
+        ),
       );
 
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
@@ -346,7 +353,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.id,
             url: response.download_url,
           }),
-        }
+        },
       );
 
       const data = await downloadResponse.json();
@@ -373,8 +380,8 @@ export const PipeStore: React.FC = () => {
         prevPipes.map((p) =>
           p.id === pipe.id
             ? { ...p, is_installed: true, is_installing: false }
-            : p
-        )
+            : p,
+        ),
       );
 
       onComplete?.();
@@ -383,8 +390,8 @@ export const PipeStore: React.FC = () => {
       // Reset the pipe's status on error
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: false } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: false } : p,
+        ),
       );
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({
@@ -444,8 +451,19 @@ export const PipeStore: React.FC = () => {
         duration: 100000,
       });
 
-      const cmd = Command.sidecar("screenpipe", ["pipe", "purge", "-y"]);
-      await cmd.execute();
+      const response = await fetch(`http://localhost:3030/pipes/purge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) {
+        toast({
+          title: "failed to purge pipes",
+          description: "failed to purge pipes, please try again",
+          variant: "destructive",
+        });
+        return;
+      }
       await fetchInstalledPipes();
 
       t.update({
@@ -473,9 +491,7 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      posthog.capture("update_all_pipes", {});
-
-      let t
+      let t;
       if (!delayToast) {
         t = toast({
           title: "checking for updates",
@@ -491,7 +507,7 @@ export const PipeStore: React.FC = () => {
 
       // Filter installed pipes that have updates available
       const pipesToUpdate = pipes.filter(
-        (pipe) => pipe.is_installed && pipe.has_update
+        (pipe) => pipe.is_installed && pipe.has_update,
       );
 
       if (pipesToUpdate.length === 0) {
@@ -575,14 +591,9 @@ export const PipeStore: React.FC = () => {
 
   const handleTogglePipe = async (
     pipe: PipeWithStatus,
-    onComplete: () => void
+    onComplete: () => void,
   ) => {
     try {
-      posthog.capture("toggle_pipe", {
-        pipe_id: pipe.id,
-        enabled: !pipe.installed_config?.enabled,
-      });
-
       const t = toast({
         title: "loading pipe",
         description: "please wait...",
@@ -595,13 +606,15 @@ export const PipeStore: React.FC = () => {
       });
 
       const endpoint = pipe.installed_config?.enabled ? "disable" : "enable";
+      console.log("toggel", pipe, endpoint);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch(`http://localhost:3030/pipes/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
@@ -613,7 +626,7 @@ export const PipeStore: React.FC = () => {
         title: `pipe ${endpoint}d`,
       });
       const installedPipes = await fetchInstalledPipes();
-
+      console.log("installed Pipes", installedPipes);
       const pp = installedPipes?.find((p) => p.config.id === pipe.id);
       const port = pp?.config.port;
 
@@ -625,6 +638,7 @@ export const PipeStore: React.FC = () => {
             port,
             ...prev.installed_config!,
             enabled: !pipe.installed_config?.enabled,
+            buildStatus: "in_progress",
           },
         };
       });
@@ -634,7 +648,7 @@ export const PipeStore: React.FC = () => {
         `Failed to ${
           pipe.installed_config?.enabled ? "disable" : "enable"
         } pipe:`,
-        error
+        error,
       );
       toast({
         title: "error toggling pipe",
@@ -645,7 +659,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleLoadFromLocalFolder = async (
-    setNewRepoUrl: (url: string) => void
+    setNewRepoUrl: (url: string) => void,
   ) => {
     try {
       const selectedFolder = await open({
@@ -671,13 +685,14 @@ export const PipeStore: React.FC = () => {
   const handleConfigSave = async (config: Record<string, any>) => {
     if (selectedPipe) {
       try {
+        const id = selectedPipe.is_local ? selectedPipe.id : selectedPipe.name;
         const response = await fetch("http://localhost:3030/pipes/update", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            pipe_id: selectedPipe.name,
+            pipe_id: id,
             config: config,
           }),
         });
@@ -712,21 +727,19 @@ export const PipeStore: React.FC = () => {
   };
   const handleDeletePipe = async (pipe: PipeWithStatus) => {
     try {
-      posthog.capture("delete_pipe", {
-        pipe_id: pipe.id,
-      });
       toast({
         title: "deleting pipe",
         description: "please wait...",
       });
       setSelectedPipe(null);
 
+      const id = pipe.is_local ? pipe.id : pipe.name;
       const response = await fetch("http://localhost:3030/pipes/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ pipe_id: pipe.name }),
+        body: JSON.stringify({ pipe_id: id }),
       });
 
       const data = await response.json();
@@ -755,10 +768,6 @@ export const PipeStore: React.FC = () => {
 
   const handleRefreshFromDisk = async (pipe: PipeWithStatus) => {
     try {
-      posthog.capture("refresh_pipe_from_disk", {
-        pipe_id: pipe.name,
-      });
-
       toast({
         title: "refreshing pipe",
         description: "please wait...",
@@ -796,10 +805,6 @@ export const PipeStore: React.FC = () => {
     try {
       if (!checkLogin(settings.user)) return;
 
-      posthog.capture("update_pipe", {
-        pipe_id: pipe.name,
-      });
-
       const currentVersion = pipe.installed_config?.version!;
       const storeApi = await PipeApi.create(settings.user!.token!);
       const update = await storeApi.checkUpdate(pipe.id, currentVersion);
@@ -811,52 +816,61 @@ export const PipeStore: React.FC = () => {
         return;
       }
 
-      // Create initial toast with progress bar
       const t = toast({
         title: "updating pipe",
         description: (
           <div className="space-y-2">
-            <Progress value={0} className="h-1" />
-            <p className="text-xs">deleting old version...</p>
+            <Progress value={25} className="h-1" />
+            <p className="text-xs">checking for updates...</p>
           </div>
         ),
         duration: 100000,
       });
 
-      // First delete the pipe
-      await handleDeletePipe(pipe);
+      // Update progress for download start
+      t.update({
+        id: t.id,
+        description: (
+          <div className="space-y-2">
+            <Progress value={50} className="h-1" />
+            <p className="text-xs">downloading update...</p>
+          </div>
+        ),
+      });
 
-      // Then download the new version
-      if (pipe.installed_config?.source) {
-        t.update({
-          id: t.id,
-          title: "updating pipe",
-          description: (
-            <div className="space-y-2">
-              <Progress value={50} className="h-1" />
-              <p className="text-xs">downloading new version...</p>
-            </div>
-          ),
-          duration: 100000,
-        });
+      const responseDownload = await storeApi.downloadPipe(pipe.id);
 
-        await handleInstallPipe(pipe);
+      // Update progress for installation
+      t.update({
+        id: t.id,
+        description: (
+          <div className="space-y-2">
+            <Progress value={75} className="h-1" />
+            <p className="text-xs">installing update...</p>
+          </div>
+        ),
+      });
 
-        // Enable the pipe after installation
-        const response = await fetch(`http://localhost:3030/pipes/enable`, {
+      const response = await fetch(
+        `http://localhost:3030/pipes/update-version`,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ pipe_id: pipe.name }),
-        });
+          body: JSON.stringify({
+            pipe_id: pipe.name,
+            source: responseDownload.download_url,
+          }),
+        },
+      );
 
-        const data = await response.json();
-        if (!data.success) {
-          console.warn("failed to enable pipe:", data.error);
-        }
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error);
       }
 
+      // Update progress for completion
       t.update({
         id: t.id,
         title: "pipe updated",
@@ -869,7 +883,6 @@ export const PipeStore: React.FC = () => {
         duration: 2000,
       });
 
-      // Refresh the pipe list
       await fetchInstalledPipes();
 
       t.dismiss();
@@ -889,7 +902,7 @@ export const PipeStore: React.FC = () => {
 
   useEffect(() => {
     fetchPurchaseHistory();
-  }, [settings.user]);
+  }, [settings.user.token]);
 
   useEffect(() => {
     fetchInstalledPipes();
@@ -901,6 +914,43 @@ export const PipeStore: React.FC = () => {
     }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const checkForUpdates = async () => {
+      if(!settings.user.token){
+        return;
+      }
+      // Get last check time from local storage
+      const lastCheckTime = await localforage.getItem<number>('lastUpdateCheck');
+      const now = Date.now();
+      
+      // Check if 5 minutes have passed since last check
+      if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
+        return;
+      }
+
+      // Store current time as last check
+      await localforage.setItem('lastUpdateCheck', now);
+
+      const installedPipes = pipes.filter((pipe) => pipe.is_installed);
+
+      const storeApi = await PipeApi.create(settings.user.token);
+      for (const pipe of installedPipes) {
+        const update = await storeApi.checkUpdate(pipe.id, pipe.installed_config?.version!);
+        if (update.has_update) {
+          await handleUpdatePipe(pipe);
+        }
+      }
+    };
+
+    // Run check immediately
+    checkForUpdates();
+
+    // Set up interval to check every 10 seconds actual check  is done in the function
+    const interval = setInterval(checkForUpdates, 10 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [settings.user.token]);
 
   useEffect(() => {
     const setupDeepLink = async () => {
@@ -1037,7 +1087,7 @@ export const PipeStore: React.FC = () => {
                       className="flex items-center gap-2"
                       disabled={
                         !pipes.some(
-                          (pipe) => pipe.is_installed && pipe.has_update
+                          (pipe) => pipe.is_installed && pipe.has_update,
                         )
                       }
                     >
@@ -1059,6 +1109,13 @@ export const PipeStore: React.FC = () => {
               <PipeCard
                 key={pipe.id}
                 pipe={pipe}
+                setPipe={(updatedPipe) => {
+                  setPipes((prevPipes) => {
+                    return prevPipes.map((p) =>
+                      p.id === updatedPipe.id ? updatedPipe : p,
+                    );
+                  });
+                }}
                 onInstall={handleInstallPipe}
                 onClick={setSelectedPipe}
                 onPurchase={handlePurchasePipe}

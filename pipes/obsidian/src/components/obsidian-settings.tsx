@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSettings } from "@/lib/hooks/use-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,16 +8,14 @@ import {
   FolderOpen,
   FileCheck,
   Brain,
-  Users,
   LineChart,
   Clock,
   ExternalLink,
-  LoaderIcon,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { OllamaModelsList } from "./ollama-models-list";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import path from "path";
@@ -26,26 +23,19 @@ import { FileSuggestTextarea } from "./file-suggest-textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { debounce } from "lodash";
 import { updatePipeConfig } from "@/lib/actions/update-pipe-config";
-
-// This interface represents the shape of obsidian settings
-interface ObsidianSettings {
-  path: string;
-  interval: number;
-  pageSize: number;
-  aiModel: string;
-  prompt: string | null;
-}
-
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+import { MemoizedReactMarkdown } from "./markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import { CodeBlock } from "./ui/codeblock";
+import { VideoComponent } from "./video";
 export function ObsidianSettings() {
-  const { settings, updateSettings, loading } = useSettings();
+  const { settings, updateSettings, loading } = usePipeSettings();
   const [lastLog, setLastLog] = useState<any>(null);
   const { toast } = useToast();
-  const [intelligence, setIntelligence] = useState<any>(null);
+  const [intelligence, setIntelligence] = useState<string | null>(null);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
-  const [logDeepLink, setLogDeepLink] = useState<string | null>(null);
-  const [intelligenceDeepLink, setIntelligenceDeepLink] = useState<
-    string | null
-  >(null);
+
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const [testLogLoading, setTestLogLoading] = useState(false);
   const [pathValidation, setPathValidation] = useState<{
@@ -62,10 +52,10 @@ export function ObsidianSettings() {
   const [suggestedPaths, setSuggestedPaths] = useState<string[]>([]);
 
   useEffect(() => {
-    if (settings?.customSettings?.obsidian?.prompt) {
-      setCustomPrompt(settings.customSettings.obsidian.prompt);
+    if (settings) {
+      setCustomPrompt(settings.prompt || "");
     }
-  }, [settings?.customSettings?.obsidian?.prompt]);
+  }, [settings]);
 
   useEffect(() => {
     const fetchPaths = async () => {
@@ -83,10 +73,11 @@ export function ObsidianSettings() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const formData = new FormData(e.target as HTMLFormElement);
-    const path = formData.get("path") as string;
 
-    if (!path?.trim()) {
+    const formData = new FormData(e.target as HTMLFormElement);
+    const vaultPath = formData.get("vaultPath") as string;
+
+    if (!vaultPath?.trim()) {
       toast({
         variant: "destructive",
         title: "error",
@@ -107,20 +98,27 @@ export function ObsidianSettings() {
     });
 
     try {
-      const obsidianSettings: ObsidianSettings = {
-        path: formData.get("path") as string,
-        interval: parseInt(formData.get("interval") as string) * 60000,
-        pageSize: parseInt(formData.get("pageSize") as string),
-        aiModel: formData.get("aiModel") as string,
-        prompt: customPrompt,
+      const vaultPath = formData.get("vaultPath") as string;
+      const logTimeWindow =
+        parseInt(formData.get("logTimeWindow") as string) * 60000;
+      const analysisTimeWindow =
+        parseInt(formData.get("analysisTimeWindow") as string) * 60 * 60 * 1000;
+
+      const logPageSize = parseInt(formData.get("logPageSize") as string);
+
+      const obsidianSettings = {
+        vaultPath,
+        logTimeWindow,
+        logPageSize,
+        prompt: customPrompt || "",
+        analysisTimeWindow,
       };
 
       await updateSettings({
-        customSettings: {
-          obsidian: obsidianSettings,
-        },
+        ...settings!,
+        ...obsidianSettings,
       });
-      await updatePipeConfig(obsidianSettings.interval / 60000);
+      await updatePipeConfig(logTimeWindow / 60000);
 
       loadingToast.update({
         id: loadingToast.id,
@@ -128,7 +126,7 @@ export function ObsidianSettings() {
         description: "your obsidian settings have been updated",
       });
     } catch (err) {
-      // dismiss loading toast and show error
+      console.warn("error saving settings:", err);
       loadingToast.update({
         id: loadingToast.id,
         title: "error",
@@ -140,29 +138,10 @@ export function ObsidianSettings() {
   const testLog = async () => {
     setTestLogLoading(true);
     try {
-      const formData = new FormData(
-        document.querySelector("form") as HTMLFormElement
-      );
-      const obsidianSettings: ObsidianSettings = {
-        path: formData.get("path") as string,
-        interval: parseInt(formData.get("interval") as string) * 60000,
-        pageSize: parseInt(formData.get("pageSize") as string),
-        aiModel: formData.get("aiModel") as string,
-        prompt: customPrompt,
-      };
-
-      await updateSettings({
-        customSettings: {
-          obsidian: obsidianSettings,
-        },
-      });
-      await updatePipeConfig(obsidianSettings.interval / 60000);
-
       // Then test log generation
       const res = await fetch("/api/log");
       const data = await res.json();
       setLastLog(data);
-      setLogDeepLink(data.deepLink);
     } catch (err) {
       console.error("error testing log:", err);
       toast({
@@ -193,25 +172,18 @@ export function ObsidianSettings() {
       const path = dirHandle.name;
 
       // Update the input value and settings
-      const input = document.getElementById("path") as HTMLInputElement;
+      const input = document.getElementById("vaultPath") as HTMLInputElement;
       if (input) {
         input.value = path;
       }
 
-      await updateSettings(
-        {
-          customSettings: {
-            obsidian: {
-              ...settings.customSettings?.obsidian,
-              path,
-            },
-          },
-        },
-        "obsidian"
-      );
+      await updateSettings({
+        ...settings!,
+        vaultPath: path,
+      });
 
       toast({
-        title: "path updated",
+        title: "vault path updated",
         description: "obsidian vault path has been set",
       });
     } catch (err) {
@@ -231,7 +203,6 @@ export function ObsidianSettings() {
       const data = await res.json();
       console.log("data", data);
       setIntelligence(data.intelligence);
-      setIntelligenceDeepLink(data.deepLink);
 
       if (!data.summary.logsAnalyzed) {
         toast({
@@ -243,15 +214,15 @@ export function ObsidianSettings() {
       }
 
       toast({
-        title: "intelligence generated",
-        description: `analyzed ${data.summary.logsAnalyzed} logs, found ${data.summary.contacts} contacts`,
+        title: "analysis complete",
+        description: `analyzed ${data.summary.logsAnalyzed} logs`,
       });
     } catch (err) {
-      console.warn("error testing intelligence:", err);
+      console.warn("error testing analysis:", err);
       toast({
         variant: "destructive",
         title: "error",
-        description: "failed to generate intelligence",
+        description: "failed to generate analysis",
       });
     } finally {
       setIntelligenceLoading(false);
@@ -259,11 +230,11 @@ export function ObsidianSettings() {
   };
 
   const openObsidianVault = async () => {
-    if (!settings.customSettings?.obsidian?.path) return;
+    if (!settings?.vaultPath) return;
 
     try {
       // Start from the current path and walk up until we find .obsidian folder
-      let currentPath = settings.customSettings.obsidian.path;
+      let currentPath = settings.vaultPath;
       let vaultPath = null;
 
       while (currentPath !== "/") {
@@ -294,7 +265,7 @@ export function ObsidianSettings() {
 
       const vaultName = path.basename(vaultPath);
       // Get relative path from vault root to AI folder
-      const relativePath = settings.customSettings.obsidian.path
+      const relativePath = settings.vaultPath
         .replace(vaultPath, "")
         .replace(/^\//, "");
       const searchQuery = `path:"${relativePath}"`;
@@ -312,11 +283,6 @@ export function ObsidianSettings() {
         description: "failed to open vault in obsidian",
       });
     }
-  };
-
-  // Helper function to check if vault path is set
-  const isVaultPathSet = () => {
-    return Boolean(settings.customSettings?.obsidian?.path?.trim());
   };
 
   const validatePath = useCallback(
@@ -406,75 +372,71 @@ export function ObsidianSettings() {
 
   // Add this new useEffect for initial path validation
   useEffect(() => {
-    if (settings?.customSettings?.obsidian?.path) {
-      validatePath(settings.customSettings.obsidian.path);
+    if (settings?.vaultPath) {
+      validatePath(settings.vaultPath);
     }
-  }, [settings?.customSettings?.obsidian?.path, validatePath]);
+  }, [settings?.vaultPath, validatePath]);
 
   if (loading) {
     return (
       <div className="w-full max-w-4xl mx-auto space-y-8">
-        <Tabs defaultValue="logs">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="logs">logs</TabsTrigger>
-            <TabsTrigger value="intelligence">intelligence (beta)</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="logs" className="space-y-4 w-full my-2">
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-24" />
-              <div className="flex gap-2">
-                <Skeleton className="h-10 flex-1" />
-                <Skeleton className="h-10 w-10" />
-                <Skeleton className="h-10 w-10" />
-              </div>
+        <form onSubmit={handleSave} className="space-y-4 w-full my-2">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <div className="flex gap-2">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-10" />
+              <Skeleton className="h-10 w-10" />
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-36" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-32" />
             <Skeleton className="h-10 w-full" />
-          </TabsContent>
-        </Tabs>
+          </div>
+
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+
+          <Skeleton className="h-10 w-full" />
+        </form>
       </div>
     );
   }
-
+  const hasMP4File = (content: string) =>
+    content.trim().toLowerCase().includes(".mp4");
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
-      <Tabs defaultValue="logs">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="logs">logs</TabsTrigger>
-          <TabsTrigger value="intelligence">intelligence (beta)</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="logs">
-          <form onSubmit={handleSave} className="space-y-4 w-full my-2">
+      <form onSubmit={handleSave}>
+        <Card>
+          <CardHeader>
+            <CardTitle>obsidian settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="path">obsidian vault path</Label>
+              <Label htmlFor="vaultPath" className="flex items-center gap-2">
+                <FolderOpen className="h-4 w-4" />
+                obsidian vault path (this is the folder where we will save the
+                logs and insights)
+              </Label>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <Input
-                    id="path"
-                    name="path"
-                    defaultValue={settings.customSettings?.obsidian?.path}
+                    id="vaultPath"
+                    name="vaultPath"
+                    defaultValue={settings?.vaultPath}
                     placeholder="/path/to/vault"
                     className={`${
                       pathValidation.isValid
@@ -496,7 +458,7 @@ export function ObsidianSettings() {
                         className="cursor-pointer hover:bg-muted"
                         onClick={() => {
                           const input = document.getElementById(
-                            "path"
+                            "vaultPath"
                           ) as HTMLInputElement;
                           if (input) {
                             input.value = path;
@@ -524,12 +486,13 @@ export function ObsidianSettings() {
                   variant="outline"
                   onClick={openObsidianVault}
                   className="px-3"
-                  title="open in obsidian"
+                  title="open in obsidian (only works in browser)"
                   disabled={!pathValidation.isValid}
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>
               </div>
+
               {pathValidation.message && (
                 <p
                   className={`text-sm ${
@@ -542,91 +505,241 @@ export function ObsidianSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="interval">sync interval (minutes)</Label>
-              <Input
-                disabled={!pathValidation.isValid}
-                id="interval"
-                name="interval"
-                type="number"
-                min="1"
-                step="1"
-                max="60"
-                defaultValue={
-                  settings.customSettings?.obsidian?.interval
-                    ? settings.customSettings?.obsidian?.interval / 60000
-                    : 5
-                }
-              />
-            </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>short-term activity logs</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="logTimeWindow"
+                      className="flex items-center gap-2"
+                    >
+                      <Clock className="h-4 w-4" />
+                      logging interval (minutes)
+                    </Label>
+                    <Input
+                      disabled={!pathValidation.isValid}
+                      id="logTimeWindow"
+                      name="logTimeWindow"
+                      type="number"
+                      min="1"
+                      step="1"
+                      max="60"
+                      defaultValue={
+                        settings?.logTimeWindow
+                          ? settings?.logTimeWindow / 60000
+                          : 5
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      how often screenpipe will create a new log entry about
+                      your activity
+                    </p>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="pageSize">page size</Label>
-              <Input
-                disabled={!pathValidation.isValid}
-                id="pageSize"
-                name="pageSize"
-                type="number"
-                defaultValue={
-                  settings.customSettings?.obsidian?.pageSize || 100
-                }
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="logPageSize"
+                      className="flex items-center gap-2"
+                    >
+                      <LineChart className="h-4 w-4" />
+                      screenpipe page size
+                    </Label>
+                    <Input
+                      disabled={!pathValidation.isValid}
+                      id="logPageSize"
+                      name="logPageSize"
+                      type="number"
+                      min="1"
+                      step="1"
+                      defaultValue={settings?.logPageSize || 100}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      how many screenpipe results to include in the AI prompt
+                      for log generation
+                    </p>
+                  </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="aiModel">
-                ollama/local openai-compatible model
-              </Label>
-              <OllamaModelsList
-                disabled={!pathValidation.isValid}
-                defaultValue={
-                  settings.customSettings?.obsidian?.aiModel ||
-                  "llama3.2:3b-instruct-q4_K_M"
-                }
-                onChange={(value) => {
-                  updateSettings({
-                    customSettings: {
-                      ...settings.customSettings,
-                      obsidian: {
-                        ...settings.customSettings?.obsidian,
-                        aiModel: value,
-                      },
-                    },
-                  });
-                }}
-              />
-            </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="logModel"
+                      className="flex items-center gap-2"
+                    >
+                      <Brain className="h-4 w-4" />
+                      log generation model
+                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                        ollama run{" "}
+                        {settings?.logModel || "llama3.2:3b-instruct-q4_K_M"}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              `ollama run ${
+                                settings?.logModel ||
+                                "llama3.2:3b-instruct-q4_K_M"
+                              }`
+                            );
+                            toast({
+                              title: "copied to clipboard",
+                              duration: 1000,
+                            });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </code>
+                    </Label>
+                    <OllamaModelsList
+                      disabled={!pathValidation.isValid}
+                      defaultValue={
+                        settings?.logModel || "llama3.2:3b-instruct-q4_K_M"
+                      }
+                      onChange={(value) => {
+                        updateSettings({
+                          ...settings,
+                          logModel: value,
+                        });
+                      }}
+                    />
+                    {settings?.logModel &&
+                      (settings.logModel.includes("deepseek") ||
+                        settings.logModel.includes("o3") ||
+                        settings.logModel.includes("o1")) && (
+                        <p className="text-sm text-red-500">
+                          warning: reasoning models like deepseek are not
+                          recommended for log generation.
+                        </p>
+                      )}
+                    <p className="text-xs text-muted-foreground">
+                      local AI model used for generating individual activity
+                      logs
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
 
-            <div className="space-y-2">
-              <Label htmlFor="prompt">custom prompt</Label>
-              <FileSuggestTextarea
-                value={customPrompt || ""}
-                setValue={setCustomPrompt}
-                disabled={!pathValidation.isValid}
-              />
-              <p className="text-xs text-muted-foreground">
-                make sure to keep the prompt within llm context window size.
-                <br />
-                protip: use the @mention feature to link to files in your vault
-                as context.
-              </p>
-            </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>long-term analysis</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="analysisWindow"
+                      className="flex items-center gap-2"
+                    >
+                      <Clock className="h-4 w-4" />
+                      analysis window (hours)
+                    </Label>
+                    <Input
+                      disabled={!pathValidation.isValid}
+                      id="analysisWindow"
+                      name="analysisTimeWindow"
+                      type="number"
+                      min="1"
+                      step="1"
+                      defaultValue={
+                        settings?.analysisTimeWindow
+                          ? settings.analysisTimeWindow / (60 * 60 * 1000)
+                          : 1
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      timeframe of logs to analyze for generating insights
+                    </p>
+                  </div>
 
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="analysisModel"
+                      className="flex items-center gap-2"
+                    >
+                      <Brain className="h-4 w-4" />
+                      analysis model
+                      <code className="px-2 py-0.5 bg-muted rounded-md text-xs flex items-center gap-2">
+                        ollama run{" "}
+                        {settings?.analysisModel ||
+                          "deepseek-r1:7b-qwen-distill-q4_K_M"}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(
+                              `ollama run ${
+                                settings?.analysisModel ||
+                                "deepseek-r1:7b-qwen-distill-q4_K_M"
+                              }`
+                            );
+                            toast({
+                              title: "copied to clipboard",
+                              duration: 1000,
+                            });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </code>
+                    </Label>
+                    <OllamaModelsList
+                      disabled={!pathValidation.isValid}
+                      defaultValue={
+                        settings?.analysisModel ||
+                        "deepseek-r1:7b-qwen-distill-q4_K_M"
+                      }
+                      onChange={(value) => {
+                        updateSettings({
+                          ...settings,
+                          analysisModel: value,
+                        });
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      local AI model used for generating high-level insights
+                      (typically larger model)
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>prompt customization</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="prompt" className="flex items-center gap-2">
+                      <FileCheck className="h-4 w-4" />
+                      custom prompt
+                    </Label>
+                    <FileSuggestTextarea
+                      value={customPrompt || ""}
+                      setValue={setCustomPrompt}
+                      disabled={!pathValidation.isValid}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      customize how activity logs and insights are generated
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4 w-full flex flex-col">
+          <div className="flex gap-2 mt-4">
             <Button
-              className="w-full"
-              type="submit"
-              disabled={!pathValidation.isValid}
-            >
-              <FileCheck className="mr-2 h-4 w-4" />
-              save settings
-            </Button>
-          </form>
-
-          <div className="space-y-4 w-full flex flex-col">
-            <Button
+              type="button"
               onClick={testLog}
               variant="outline"
               disabled={testLogLoading || !pathValidation.isValid}
-              className="w-full"
+              className="flex-1"
             >
               {testLogLoading ? (
                 <>
@@ -634,166 +747,176 @@ export function ObsidianSettings() {
                   testing...
                 </>
               ) : (
-                "test log generation"
+                <>
+                  <FileCheck className="mr-2 h-4 w-4" />
+                  test log generation
+                </>
               )}
             </Button>
 
-            {lastLog && (
-              <div className="p-4 border rounded-lg space-y-2 font-mono text-sm">
-                <h4>last generated log:</h4>
-                <pre className="bg-muted p-2 rounded overflow-auto">
-                  {JSON.stringify(lastLog, null, 2)}
-                </pre>
-              </div>
-            )}
-
-            {lastLog && logDeepLink && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(logDeepLink, "_blank")}
-                className="ml-2 my-2"
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                open in obsidian
-              </Button>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="intelligence" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium">relationship intelligence</h3>
             <Button
+              type="button"
               onClick={testIntelligence}
               variant="outline"
               disabled={intelligenceLoading || !pathValidation.isValid}
+              className="flex-1"
             >
               <Brain className="mr-2 h-4 w-4" />
-              {intelligenceLoading ? "analyzing..." : "analyze relationships"}
+              {intelligenceLoading ? "analyzing..." : "test analyze activity"}
+            </Button>
+
+            <Button
+              type="submit"
+              disabled={!pathValidation.isValid}
+              className="flex-1"
+            >
+              <FileCheck className="mr-2 h-4 w-4" />
+              save settings
             </Button>
           </div>
 
-          {intelligence && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* contacts summary */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    contacts
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {intelligence?.contacts?.length > 0 ? (
-                      intelligence.contacts.map((contact: any) => (
-                        <div key={contact.name} className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">{contact.name}</span>
-                            <Badge
-                              variant={
-                                contact.sentiment > 0 ? "default" : "secondary"
-                              }
-                            >
-                              {contact.company || "unknown"}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            last: {contact.lastInteraction}
-                          </div>
-                          <div className="flex gap-1 flex-wrap">
-                            {contact.topics.map((topic: string) => (
-                              <Badge key={topic} variant="outline">
-                                {topic}
-                              </Badge>
-                            ))}
-                          </div>
-                          {contact.nextSteps.length > 0 && (
-                            <div className="text-sm text-muted-foreground">
-                              next steps: {contact.nextSteps.join(", ")}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-muted-foreground">
-                        no contacts found
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* insights */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <LineChart className="h-4 w-4" />
-                    insights
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-medium mb-2">follow-ups needed</h4>
-                      {intelligence.insights.followUps.map((item: string) => (
-                        <div
-                          key={item}
-                          className="text-sm text-muted-foreground"
+          {lastLog && (
+            <div className="p-4 border rounded-lg space-y-2">
+              <h4 className="font-mono text-sm">last log:</h4>
+              <div className="bg-muted p-2 rounded overflow-auto">
+                <MemoizedReactMarkdown
+                  className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  components={{
+                    p({ children }) {
+                      return <p className="mb-2 last:mb-0">{children}</p>;
+                    },
+                    a({ node, href, children, ...props }) {
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          {...props}
                         >
-                          • {item}
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <h4 className="font-medium mb-2">opportunities</h4>
-                      {intelligence.insights.opportunities.map(
-                        (item: string) => (
-                          <div
-                            key={item}
-                            className="text-sm text-muted-foreground"
+                          {children}
+                        </a>
+                      );
+                    },
+                    code({ node, className, children, ...props }) {
+                      const content = String(children).replace(/\n$/, "");
+                      const match = /language-(\w+)/.exec(className || "");
+
+                      if (!match) {
+                        return (
+                          <code
+                            className="px-1 py-0.5 rounded-sm font-mono text-sm"
+                            {...props}
                           >
-                            • {item}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                            {content}
+                          </code>
+                        );
+                      }
+
+                      return (
+                        <CodeBlock
+                          key={Math.random()}
+                          language={(match && match[1]) || ""}
+                          value={content}
+                          {...props}
+                        />
+                      );
+                    },
+                  }}
+                >
+                  {`\`\`\`json\n${JSON.stringify(lastLog, null, 2)}\n\`\`\``}
+                </MemoizedReactMarkdown>
+              </div>
             </div>
           )}
 
-          {/* debug view */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                raw data
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-xs overflow-auto max-h-96">
-                {JSON.stringify(intelligence, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
+          {intelligence && (
+            <div className="p-4 border rounded-lg space-y-2">
+              <h4 className="font-mono text-sm">analysis:</h4>
+              <div className="bg-muted p-2 rounded overflow-auto">
+                <MemoizedReactMarkdown
+                  className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0"
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  components={{
+                    video({ node, className, children, ...props }) {
+                      const content = String(children).replace(/\n$/, "");
+                      const match = /language-(\w+)/.exec(className || "");
 
-          {intelligence && intelligenceDeepLink && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(intelligenceDeepLink, "_blank")}
-              className="ml-2"
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              open in obsidian
-            </Button>
+                      const isMP4File = hasMP4File(content);
+
+                      if (isMP4File || !match) {
+                        return <VideoComponent filePath={content.trim()} />;
+                      }
+
+                      return (
+                        <CodeBlock
+                          key={Math.random()}
+                          language={(match && match[1]) || ""}
+                          value={content}
+                          {...props}
+                        />
+                      );
+                    },
+                    p({ children }) {
+                      return <p className="mb-2 last:mb-0">{children}</p>;
+                    },
+                    a({ node, href, children, ...props }) {
+                      const isMP4Link = href?.toLowerCase().includes(".mp4");
+
+                      if (isMP4Link && href) {
+                        return <VideoComponent filePath={href} />;
+                      }
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          {...props}
+                        >
+                          {children}
+                        </a>
+                      );
+                    },
+                    code({ node, className, children, ...props }) {
+                      const content = String(children).replace(/\n$/, "");
+                      const match = /language-(\w+)/.exec(className || "");
+
+                      const isMP4File = hasMP4File(content);
+
+                      if (isMP4File || !match) {
+                        if (isMP4File) {
+                          return <VideoComponent filePath={content.trim()} />;
+                        }
+                        return (
+                          <code
+                            className="px-1 py-0.5 rounded-sm font-mono text-sm"
+                            {...props}
+                          >
+                            {content}
+                          </code>
+                        );
+                      }
+
+                      return (
+                        <CodeBlock
+                          key={Math.random()}
+                          language={(match && match[1]) || ""}
+                          value={content}
+                          {...props}
+                        />
+                      );
+                    },
+                  }}
+                >
+                  {`${intelligence}`}
+                </MemoizedReactMarkdown>
+              </div>
+            </div>
           )}
-          <div className="my-4 h-16" />
-        </TabsContent>
-      </Tabs>
+
+          <div className="h-10" />
+        </div>
+      </form>
     </div>
   );
 }

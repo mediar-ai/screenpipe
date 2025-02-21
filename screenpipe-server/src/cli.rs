@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
-use clap::{CommandFactory, Parser, Subcommand, ValueHint};
+use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
+use clap::CommandFactory;
 use screenpipe_audio::{vad_engine::VadSensitivity, AudioTranscriptionEngine as CoreAudioTranscriptionEngine};
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
-use anyhow::Result;
 use screenpipe_audio::vad_engine::VadEngineEnum;
 use screenpipe_core::Language;
 
@@ -147,11 +147,6 @@ pub struct Cli {
     #[arg(short = 'r', long)]
     pub realtime_audio_device: Vec<String>,
 
-    /// List available audio devices (deprecated: use 'audio list' instead)
-    #[arg(long)]
-    #[deprecated(since = "0.2.30", note = "please use 'audio list' instead")]
-    pub list_audio_devices: bool,
-
     /// Data directory. Default to $HOME/.screenpipe
     #[arg(long, value_hint = ValueHint::DirPath)]
     pub data_dir: Option<String>,
@@ -190,11 +185,6 @@ pub struct Cli {
         arg(short = 'o', long, value_enum, default_value_t = CliOcrEngine::Tesseract)
     )]
     pub ocr_engine: CliOcrEngine,
-
-    /// List available monitors (deprecated: use 'vision list' instead)
-    #[arg(long)]
-    #[deprecated(since = "0.2.30", note = "please use 'vision list' instead")]
-    pub list_monitors: bool,
 
     /// Monitor IDs to use, these will be used to select the monitors to record
     #[arg(short = 'm', long)]
@@ -268,10 +258,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub capture_unfocused_windows: bool,
 
-    /// Automatically detect and use all monitors, including newly connected ones
-    #[arg(long, default_value_t = false)]
-    pub use_all_monitors: bool,
-
     #[command(subcommand)]
     pub command: Option<Command>,
 
@@ -289,7 +275,6 @@ impl Cli {
         }
         Ok(unique_langs.into_iter().collect())
     }
-
     pub fn handle_completions(&self, shell: Shell) -> anyhow::Result<()> {
         let mut cmd = Self::command();
         generate(shell, &mut cmd, "screenpipe", &mut std::io::stdout());
@@ -299,20 +284,20 @@ impl Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Pipe management commands
-    Pipe {
+    /// Audio device management commands
+    Audio {
         #[command(subcommand)]
-        subcommand: PipeCommand,
+        subcommand: AudioCommand,
     },
     /// Vision device management commands
     Vision {
         #[command(subcommand)]
         subcommand: VisionCommand,
     },
-    /// Audio device management commands
-    Audio {
+    /// Pipe management commands
+    Pipe {
         #[command(subcommand)]
-        subcommand: AudioCommand,
+        subcommand: PipeCommand,
     },
     /// Add video files to existing screenpipe data (OCR only) - DOES NOT SUPPORT AUDIO
     Add {
@@ -349,29 +334,33 @@ pub enum Command {
         #[arg(long, default_value_t = false)]
         enable_beta: bool,
     },
-     /// Generate shell completions
-     Completions {
+    /// Run database migrations
+    Migrate,
+         /// Generate shell completions
+    Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
     },
-    /// Run database migrations
-    Migrate,
-    /// Run system diagnostics and health checks
-    Doctor {
+}
+
+#[derive(Subcommand)]
+pub enum AudioCommand {
+    /// List available audio devices
+    List {
         /// Output format
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
         output: OutputFormat,
-        
-        /// Fix issues automatically when possible
-        #[arg(short, long, default_value_t = false)]
-        fix: bool,
     },
-    /// Add screenpipe to system PATH
-    AddToPath {
-        /// Skip confirmation prompt
-        #[arg(short = 'y', long)]
-        yes: bool,
+}
+
+#[derive(Subcommand)]
+pub enum VisionCommand {
+    /// List available monitors and vision devices
+    List {
+        /// Output format
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
     },
 }
 
@@ -465,26 +454,6 @@ pub enum PipeCommand {
         /// Server port
         #[arg(short = 'p', long, default_value_t = 3030)]
         port: u16,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum VisionCommand {
-    /// List available vision devices (monitors)
-    List {
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum AudioCommand {
-    /// List available audio devices
-    List {
-        /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
-        output: OutputFormat,
     },
 }
 

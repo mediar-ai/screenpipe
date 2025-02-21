@@ -5,7 +5,6 @@ import { getStore, useSettings } from "@/lib/hooks/use-settings";
 import React, { useEffect } from "react";
 import NotificationHandler from "@/components/notification-handler";
 import Header from "@/components/header";
-import { usePostHog } from "posthog-js/react";
 import { useToast } from "@/components/ui/use-toast";
 import Onboarding from "@/components/onboarding";
 import { useOnboarding } from "@/lib/hooks/use-onboarding";
@@ -15,7 +14,6 @@ import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
 
-import { platform } from "@tauri-apps/plugin-os";
 import { PipeStore } from "@/components/pipe-store";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -26,15 +24,22 @@ import localforage from "localforage";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 
 export default function Home() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, loadUser, reloadStore } = useSettings();
   const { setActiveProfile } = useProfiles();
-  const posthog = usePostHog();
   const { toast } = useToast();
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const { setIsOpen: setSettingsOpen } = useSettingsDialog();
   const isProcessingRef = React.useRef(false);
+
+  // staggered polling with exponential backoff while maintaining responsiveness
+  // while reducing backend load
+  useEffect(() => {
+      if (settings.user?.token) {
+        loadUser(settings.user.token);
+      }
+  }, [settings.user.token]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -98,7 +103,7 @@ export default function Home() {
       }),
 
       listen("shortcut-stop-recording", async () => {
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
 
         toast({
           title: "recording stopped",
@@ -115,7 +120,7 @@ export default function Home() {
           description: `switched to ${profile} profile, restarting screenpipe now`,
         });
 
-        await invoke("kill_all_sreenpipes");
+        await invoke("stop_screenpipe");
 
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -147,7 +152,7 @@ export default function Home() {
           const pipeApi = new PipeApi();
           console.log("audio-devices", devices);
           await Promise.all(
-            devices.map((device) => pipeApi.startAudio(device))
+            devices.map((device) => pipeApi.startAudio(device)),
           );
           toast({
             title: "audio started",
@@ -198,17 +203,9 @@ export default function Home() {
   }, [setSettingsOpen]);
 
   useEffect(() => {
-    if (settings.userId) {
-      posthog?.identify(settings.userId, {
-        os: platform(),
-      });
-    }
-  }, [settings.userId, posthog]);
-
-  useEffect(() => {
     const checkScreenPermissionRestart = async () => {
       const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
+        "screenPermissionRestartPending",
       );
       if (restartPending) {
         setShowOnboarding(true);
@@ -218,8 +215,19 @@ export default function Home() {
     checkScreenPermissionRestart();
   }, [setShowOnboarding]);
 
+  useEffect(() => {
+    const unlisten = listen("cli-login", async (event) => {
+      console.log("received cli-login event:", event);
+      await reloadStore();
+    });
+
+    return () => {
+      unlisten.then((unlistenFn) => unlistenFn());
+    };
+  }, []);
+
   return (
-    <div className="flex flex-col items-center flex-1">
+    <div className="flex flex-col items-center flex-1 max-w-screen-2xl mx-auto relative">
       <NotificationHandler />
       {showOnboarding ? (
         <Onboarding />
@@ -228,7 +236,7 @@ export default function Home() {
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <Header />
-          <div className=" w-[90%]">
+          <div className=" w-full">
             <PipeStore />
           </div>
         </>

@@ -4,11 +4,12 @@ use axum::{
     Router,
 };
 use chrono::Utc;
-use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceManager};
+use lru::LruCache;
+use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{num::NonZeroUsize, path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 use screenpipe_server::{
@@ -26,7 +27,6 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
 
     let app_state = Arc::new(AppState {
         db: db.clone(),
-        device_manager: Arc::new(DeviceManager::default()),
         vision_disabled: false,
         audio_disabled: false,
         app_start_time: Utc::now(),
@@ -36,7 +36,9 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
         ui_monitoring_enabled: false,
-        frame_image_cache: None,
+        frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+            NonZeroUsize::new(100).unwrap(),
+        )))),
     });
 
     let app = create_router().with_state(app_state.clone());
@@ -363,7 +365,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         .unwrap();
 
     // Insert test frame
-    let frame_id = db.insert_frame("test_device", None).await.unwrap();
+    let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
 
     // Insert test OCR data
     db.insert_ocr_text(
@@ -387,7 +389,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "Test audio transcription",
         0,
         "test_engine",
-        &AudioDevice::new("test".to_string(), AudioDeviceType::Output),
+        &AudioDevice::new("test".to_string(), DeviceType::Output),
         None,
         None,
         None,

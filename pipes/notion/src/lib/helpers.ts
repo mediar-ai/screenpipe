@@ -3,9 +3,9 @@ import { WorkLog } from "./types";
 import { generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { z } from "zod";
-import { getNotionSettings } from "./actions/namespace-settings";
 import { Client } from "@notionhq/client";
 import { NotionToMarkdown } from "notion-to-md";
+import { getScreenpipeAppSettings } from "./actions/get-screenpipe-app-settings";
 
 export const workLog = z.object({
   title: z.string(),
@@ -18,10 +18,12 @@ async function extractLinkedContent(prompt: string): Promise<string> {
     // Match @[[file]] or @[[folder/file]] patterns
     const linkRegex = /@\[\[(.*?)\]\]/g;
     const matches = [...prompt.matchAll(linkRegex)];
-    const settings = await getNotionSettings();
+    const settings = await getScreenpipeAppSettings();
     let enrichedPrompt = prompt;
 
-    const notion = new Client({ auth: settings?.notion?.accessToken });
+    const notion = new Client({
+      auth: settings?.customSettings?.notion?.accessToken,
+    });
 
     const n2m = new NotionToMarkdown({ notionClient: notion });
     for (const match of matches) {
@@ -33,7 +35,7 @@ async function extractLinkedContent(prompt: string): Promise<string> {
 
         enrichedPrompt = enrichedPrompt.replace(
           match[0],
-          `\n--- Content of ${pageId} ---\n${mdString.parent}\n---\n`,
+          `\n--- Content of ${pageId} ---\n${mdString.parent}\n---\n`
         );
       } catch (error) {
         console.error(error, `of ${pageId}`);
@@ -51,7 +53,7 @@ export async function generateWorkLog(
   model: string,
   startTime: Date,
   endTime: Date,
-  customPrompt?: string,
+  customPrompt?: string
 ): Promise<WorkLog> {
   let enrichedPrompt = customPrompt || "";
 

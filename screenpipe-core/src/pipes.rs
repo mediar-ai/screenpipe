@@ -9,7 +9,7 @@ mod pipes {
     use std::future::Future;
     use std::path::PathBuf;
     use std::pin::Pin;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
     use tokio::process::Command;
     use tokio::sync::watch;
 
@@ -39,6 +39,10 @@ mod pipes {
     use std::collections::HashSet;
     use std::str::FromStr;
 
+    // Add at top of file with other imports
+    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+
     #[derive(Clone, Debug, Copy)]
     pub enum PipeState {
         Port(u16),
@@ -47,6 +51,14 @@ mod pipes {
 
     pub struct CronHandle {
         shutdown: watch::Sender<bool>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum BuildStatus {
+        NotStarted,
+        InProgress,
+        Success,
+        Failed(String),
     }
 
     impl CronHandle {
@@ -78,6 +90,248 @@ mod pipes {
             .or_else(|| sanitized.strip_suffix("-ref-main"))
             .unwrap_or(&sanitized)
             .to_string()
+    }
+
+    async fn create_watchdog_script(parent_pid: u32, child_pid: u32) -> Result<PathBuf> {
+        let script_content = if cfg!(windows) {
+            format!(
+                r#"
+$parentPid = {parent_pid}
+$childPid = {child_pid}
+
+function Get-ChildProcesses($ProcessId) {{
+    Get-WmiObject Win32_Process | Where-Object {{ $_.ParentProcessId -eq $ProcessId }} | ForEach-Object {{
+        $_.ProcessId
+        Get-ChildProcesses $_.ProcessId
+    }}
+}}
+
+while ($true) {{
+    try {{
+        $parent = Get-Process -Id $parentPid -ErrorAction Stop
+        Start-Sleep -Seconds 1
+    }} catch {{
+        Write-Host "Parent process ($parentPid) not found, terminating child processes"
+        
+        # Get all child processes recursively
+        $children = Get-ChildProcesses $childPid
+        
+        # Add the main process to the list
+        $allProcesses = @($childPid) + $children
+        
+        foreach ($processId in $allProcesses) {{
+            try {{
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                Write-Host "Stopped process: $pid"
+            }} catch {{
+                Write-Host "Process $processId already terminated"
+            }}
+        }}
+        Stop-Process -Id $PID -Force
+        exit
+    }}
+}}
+"#
+            )
+        } else {
+            format!(
+                r#"#!/bin/bash
+set -x  # Enable debug mode
+parent_pid={parent_pid}
+child_pid={child_pid}
+
+echo "[$(date)] Watchdog started - monitoring parent PID: $parent_pid, child PID: $child_pid"
+
+find_all_children() {{
+    local parent=$1
+    local children=$(pgrep -P $parent)
+    echo $children
+    for child in $children; do
+        find_all_children $child
+    done
+}}
+
+cleanup() {{
+    echo "[$(date)] Starting cleanup..."
+    
+    # Get all child processes recursively
+    all_children=$(find_all_children $child_pid)
+    echo "[$(date)] Found child processes: $all_children"
+    
+    # Try to kill by process group first
+    child_pgid=$(ps -o pgid= -p $child_pid 2>/dev/null | tr -d ' ')
+    if [ ! -z "$child_pgid" ]; then
+        echo "[$(date)] Killing process group $child_pgid"
+        pkill -TERM -g $child_pgid 2>/dev/null || true
+        sleep 1
+        pkill -KILL -g $child_pgid 2>/dev/null || true
+    fi
+    
+    # Kill all children individually if they still exist
+    if [ ! -z "$all_children" ]; then
+        echo "[$(date)] Killing all child processes: $all_children"
+        kill -TERM $all_children 2>/dev/null || true
+        sleep 1
+        kill -KILL $all_children 2>/dev/null || true
+    fi
+    
+    # Kill the main process if it still exists
+    echo "[$(date)] Killing main process $child_pid"
+    kill -TERM $child_pid 2>/dev/null || true
+    sleep 1
+    kill -KILL $child_pid 2>/dev/null || true
+    
+    # Final verification
+    sleep 1
+    remaining=$(ps -o pid= -g $child_pgid 2>/dev/null || true)
+    if [ ! -z "$remaining" ]; then
+        echo "[$(date)] WARNING: Some processes might still be running: $remaining"
+        pkill -KILL -g $child_pgid 2>/dev/null || true
+    fi
+    
+    exit 0
+}}
+
+trap cleanup SIGTERM SIGINT
+
+while true; do
+    if ! ps -p $parent_pid > /dev/null 2>&1; then
+        echo "[$(date)] Parent process ($parent_pid) not found, terminating child processes"
+        cleanup
+        exit
+    fi
+    sleep 1
+done
+"#
+            )
+        };
+
+        let temp_dir = std::env::temp_dir();
+        let script_name = if cfg!(windows) {
+            format!("watchdog_{parent_pid}_{child_pid}.ps1")
+        } else {
+            format!("watchdog_{parent_pid}_{child_pid}.sh")
+        };
+        let script_path = temp_dir.join(script_name);
+
+        tokio::fs::write(&script_path, script_content).await?;
+
+        // Set executable permissions on Unix systems only
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = tokio::fs::metadata(&script_path).await?.permissions();
+            perms.set_mode(0o755);
+            tokio::fs::set_permissions(&script_path, perms).await?;
+        }
+
+        Ok(script_path)
+    }
+
+    async fn spawn_watchdog(parent_pid: u32, child_pid: u32) -> Result<tokio::process::Child> {
+        let script_path = create_watchdog_script(parent_pid, child_pid).await?;
+
+        info!(
+            "Spawning watchdog process for parent_pid={}, child_pid={}",
+            parent_pid, child_pid
+        );
+        info!("Watchdog script path: {:?}", script_path);
+
+        // Create a log file for the watchdog
+        let log_path =
+            std::env::temp_dir().join(format!("watchdog_{}_{}.log", parent_pid, child_pid));
+
+        #[cfg(windows)]
+        let child = {
+            Command::new("powershell")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-NoProfile")
+                .arg("-NonInteractive")
+                .arg("-WindowStyle")
+                .arg("Hidden")
+                .arg("-File")
+                .arg(&script_path)
+                .creation_flags(0x08000000)
+                .stdout(std::fs::File::create(&log_path)?)
+                .stderr(std::fs::File::create(&log_path)?)
+                .spawn()?
+        };
+
+        #[cfg(not(windows))]
+        let child = {
+            Command::new("bash")
+                .arg(&script_path)
+                .stdout(std::fs::File::create(&log_path)?)
+                .stderr(std::fs::File::create(&log_path)?)
+                .spawn()?
+        };
+
+        if let Some(id) = child.id() {
+            info!("Watchdog process spawned with PID: {}", id);
+
+            // Modify verification for Windows
+            #[cfg(windows)]
+            {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let output = Command::new("powershell")
+                        .arg("-NoProfile")
+                        .arg("-NonInteractive")
+                        .arg("-Command")
+                        .arg(format!(
+                            "Get-Process -Id {} -ErrorAction SilentlyContinue",
+                            id
+                        ))
+                        .output()
+                        .await;
+
+                    match output {
+                        Ok(output) => {
+                            if output.status.success() {
+                                info!("Watchdog process verified running with PID: {}", id);
+                            } else {
+                                error!("Watchdog process not found after spawn! PID: {}", id);
+                            }
+                        }
+                        Err(e) => error!("Failed to verify watchdog process: {}", e),
+                    }
+                });
+            }
+
+            #[cfg(not(windows))]
+            {
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    let output = Command::new("ps")
+                        .args(["-p", &id.to_string()])
+                        .output()
+                        .await;
+
+                    match output {
+                        Ok(output) => {
+                            if output.status.success() {
+                                info!("Watchdog process verified running with PID: {}", id);
+                            } else {
+                                error!("Watchdog process not found after spawn! PID: {}", id);
+                            }
+                        }
+                        Err(e) => error!("Failed to verify watchdog process: {}", e),
+                    }
+                });
+            }
+        }
+
+        // Clean up script after a delay
+        let script_path_clone = script_path.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            if let Err(e) = tokio::fs::remove_file(&script_path_clone).await {
+                error!("Failed to remove watchdog script: {}", e);
+            }
+        });
+
+        Ok(child)
     }
 
     pub async fn run_pipe(
@@ -275,7 +529,26 @@ mod pipes {
             }
 
             // Try to build the Next.js project
-            let build_success = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_status = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_success = matches!(build_status, BuildStatus::Success);
+
+            if pipe_json_path.exists() {
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+
+                pipe_config["buildStatus"] = match &build_status {
+                    BuildStatus::Success => json!("success"),
+                    BuildStatus::Failed(error) => json!({
+                        "status": "failed",
+                        "error": error
+                    }),
+                    BuildStatus::InProgress => json!("in_progress"),
+                    BuildStatus::NotStarted => json!("not_started"),
+                };
+
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
+            }
 
             let port = env_vars
                 .iter()
@@ -317,6 +590,24 @@ mod pipes {
 
             debug!("[{}] streaming logs for next.js pipe", pipe);
             stream_logs(pipe, &mut child).await?;
+
+            let child_pid = child.id().expect("Failed to get child PID") as u32;
+            let parent_pid = std::process::id();
+
+            info!("Spawned bun process with PID: {}", child_pid);
+
+            // Spawn watchdog process
+            match spawn_watchdog(parent_pid, child_pid).await {
+                Ok(watchdog) => {
+                    debug!(
+                        "Watchdog process spawned successfully with PID: {:?}",
+                        watchdog.id()
+                    );
+                }
+                Err(e) => {
+                    warn!("Failed to spawn watchdog process: {}", e);
+                }
+            }
 
             return Ok((child, PipeState::Port(port)));
         }
@@ -497,8 +788,16 @@ mod pipes {
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
         info!("Processing pipe from source: {}", source);
 
-        let pipe_name =
+        let is_local = Url::parse(source).is_err();
+
+        let mut pipe_name =
             sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
+
+        // Add _local suffix for local pipes
+        if is_local {
+            pipe_name.push_str("_local");
+        }
+
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
         debug!("Destination directory: {:?}", dest_dir);
@@ -626,6 +925,7 @@ mod pipes {
                 };
 
                 pipe_config["is_nextjs"] = json!(true);
+                pipe_config["buildStatus"] = json!("not_started");
                 let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
@@ -1135,7 +1435,7 @@ mod pipes {
         Ok(())
     }
 
-    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
+    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatus> {
         info!(
             "checking if i need to build the next.js project in: {:?}",
             pipe_dir
@@ -1147,11 +1447,21 @@ mod pipes {
             let build_manifest = build_dir.join("build-manifest.json");
             if build_manifest.exists() {
                 info!("found existing next.js build, skipping rebuild");
-                return Ok(true);
+                return Ok(BuildStatus::Success);
             }
             // Invalid/incomplete build directory - remove it
             debug!("removing invalid next.js build directory");
             tokio::fs::remove_dir_all(&build_dir).await?;
+        }
+
+        // Update build status to InProgress in pipe.json
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+            pipe_config["buildStatus"] = json!("in_progress");
+            let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+            tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
         }
 
         info!("running next.js build");
@@ -1165,13 +1475,11 @@ mod pipes {
 
         if build_output.status.success() {
             info!("next.js build completed successfully");
-            Ok(true)
+            Ok(BuildStatus::Success)
         } else {
-            error!(
-                "next.js build failed: {}",
-                String::from_utf8_lossy(&build_output.stderr)
-            );
-            Ok(false)
+            let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
+            error!("next.js build failed: {}", error_message);
+            Ok(BuildStatus::Failed(error_message))
         }
     }
 

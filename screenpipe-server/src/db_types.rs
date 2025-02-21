@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use screenpipe_core::AudioDeviceType;
+use screenpipe_audio::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
@@ -36,6 +36,7 @@ pub struct OCRResultRaw {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub struct OCRResult {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone)]
@@ -105,7 +107,7 @@ pub struct AudioResult {
     pub transcription_engine: String,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: AudioDeviceType,
+    pub device_type: DeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -132,6 +134,7 @@ pub struct UiContent {
     pub file_path: String,
     pub offset_index: i64,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]

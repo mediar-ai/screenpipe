@@ -45,6 +45,7 @@ export interface OCRContent {
   tags: string[];
   frame?: string;
   frameName?: string;
+  browserUrl?: string;
 }
 
 /**
@@ -76,6 +77,8 @@ export interface UiContent {
   initialTraversalAt?: string;
   filePath: string;
   offsetIndex: number;
+  frameName?: string;
+  browserUrl?: string;
 }
 
 /**
@@ -240,6 +243,7 @@ export interface TranscriptionChunk {
   device: string;
   is_input: boolean;
   is_final: boolean;
+  speaker?: string;
 }
 
 export interface TranscriptionStreamResponse {
@@ -256,6 +260,7 @@ export interface TranscriptionStreamResponse {
     timestamp: string;
     device: string;
     isInput: boolean;
+    speaker?: string;
   };
 }
 

@@ -46,7 +46,7 @@ pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::kill_all_sreenpipes;
+pub use sidecar::stop_screenpipe;
 pub use sidecar::spawn_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
@@ -446,6 +446,63 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
     }
 }
 
+use tokio::time::{sleep, Duration};
+
+#[tauri::command]
+async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
+    debug!("Starting upload for file: {}", file_path);
+    
+    // Read file contents - do this outside retry loop to avoid multiple reads
+    let file_contents = match tokio::fs::read(file_path).await {
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        },
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(e.to_string())
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let max_retries = 3;
+    let mut attempt = 0;
+    let mut last_error = String::new();
+
+    while attempt < max_retries {
+        attempt += 1;
+        debug!("Upload attempt {} of {}", attempt, max_retries);
+
+        match client
+            .put(signed_url)
+            .body(file_contents.clone())
+            .send()
+            .await 
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    debug!("Successfully uploaded file on attempt {}", attempt);
+                    return Ok(true);
+                }
+                last_error = format!("Upload failed with status: {}", response.status());
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            },
+            Err(e) => {
+                last_error = format!("Request failed: {}", e);
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            }
+        }
+
+        if attempt < max_retries {
+            let delay = Duration::from_secs(2u64.pow(attempt as u32 - 1)); // Exponential backoff
+            debug!("Waiting {}s before retry...", delay.as_secs());
+            sleep(delay).await;
+        }
+    }
+
+    Err(format!("Upload failed after {} attempts. Last error: {}", max_retries, last_error))
+}
+
 // Helper function to parse shortcut string
 fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
     let parts: Vec<&str> = shortcut_str.split('+').collect();
@@ -613,7 +670,7 @@ async fn main() {
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes,
+            stop_screenpipe,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
@@ -630,8 +687,9 @@ async fn main() {
             commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
+            upload_file_to_s3,
             update_global_shortcuts,
-            get_env
+            get_env,
         ])
         .setup(|app| {
             //deep link register_all
@@ -760,6 +818,7 @@ async fn main() {
                     interval_hours,
                     "http://localhost:3030".to_string(),
                     base_dir.clone(),
+                    is_analytics_enabled,
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -808,11 +867,6 @@ async fn main() {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
 
-                    // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.check_and_restart(&app_handle).await {
-                        error!("Failed to restart sidecar: {}", e);
-                    }
                 });
             } else {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");

@@ -1,5 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "screenpipe",
+  "identifier": "screenpi.pe",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -34,8 +36,6 @@
       "assets/*"
     ]
   },
-  "productName": "screenpipe",
-  "identifier": "screenpi.pe",
   "plugins": {
     "updater": {
       "active": true,

@@ -1,9 +1,11 @@
-Based on the provided commits, here is the changelog for the new Screenpipe update:
+### **New Features:**
+- **Added browser_url to SDK responses:** Enhanced the SDK by including the browser URL in the responses for better context and usability.
 
 ### **Improvements:**
-- **Removed streaming from node-sdk:** Streamlined the node-sdk by removing the streaming functionality, which is now fully supported in the browser version.
+- **Reduced noise in Windows vision data:** Improved the quality of Windows vision data by reducing noise, resulting in clearer visual recordings.
 
-No new features or fixes were identified in the commits provided.
+### **Fixes:**
+- *(No relevant fixes noted in the provided commits.)*
 
-#### **Full Changelog:** [d2232..9558d](https://github.com/mediar-ai/screenpipe/compare/d2232..9558d)
+#### **Full Changelog:** [89e40..a26c4](https://github.com/mediar-ai/screenpipe/compare/89e40..a26c4)
 

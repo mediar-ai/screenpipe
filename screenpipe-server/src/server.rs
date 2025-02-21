@@ -18,7 +18,6 @@ use futures::{
     SinkExt, StreamExt,
 };
 use image::ImageFormat::{self};
-use screenpipe_core::{AudioDevice, AudioDeviceType, DeviceControl, DeviceManager};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
@@ -34,10 +33,12 @@ use crate::{
 };
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
+use screenpipe_audio::{
+    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+};
 use tracing::{debug, error, info};
-use screenpipe_audio::{default_input_device, default_output_device, list_audio_devices};
 
-use screenpipe_vision::monitor::list_monitors;
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -72,7 +73,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    pub device_manager: Arc<DeviceManager>,
+    // pub device_manager: Arc<DeviceManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -188,6 +189,7 @@ pub struct OCRContent {
     pub tags: Vec<String>,
     pub frame: Option<String>,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -199,7 +201,7 @@ pub struct AudioContent {
     pub offset_index: i64,
     pub tags: Vec<String>,
     pub device_name: String,
-    pub device_type: AudioDeviceType,
+    pub device_type: DeviceType,
     pub speaker: Option<Speaker>,
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
@@ -216,6 +218,7 @@ pub struct UiContent {
     pub file_path: String,
     pub offset_index: i64,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -226,11 +229,11 @@ pub(crate) struct ListDeviceResponse {
 
 #[derive(Serialize)]
 pub struct MonitorInfo {
-    id: u32,
-    name: String,
-    width: u32,
-    height: u32,
-    is_default: bool,
+    pub id: u32,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub is_default: bool,
 }
 
 #[derive(Deserialize)]
@@ -261,6 +264,7 @@ fn default_limit() -> u32 {
 #[derive(Serialize, Deserialize)]
 pub struct HealthCheckResponse {
     pub status: String,
+    pub status_code: u16,
     pub last_frame_timestamp: Option<DateTime<Utc>>,
     pub last_audio_timestamp: Option<DateTime<Utc>>,
     pub last_ui_timestamp: Option<DateTime<Utc>>,
@@ -350,6 +354,7 @@ pub(crate) async fn search(
                 tags: ocr.tags.clone(),
                 frame: None,
                 frame_name: Some(ocr.frame_name.clone()),
+                browser_url: ocr.browser_url.clone(),
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -374,6 +379,7 @@ pub(crate) async fn search(
                 file_path: ui.file_path.clone(),
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
+                browser_url: ui.browser_url.clone(),
             }),
         })
         .collect();
@@ -462,16 +468,26 @@ pub(crate) async fn api_list_audio_devices(
 pub async fn api_list_monitors(
 ) -> Result<JsonResponse<Vec<MonitorInfo>>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let monitors = list_monitors().await;
-    let monitor_info: Vec<MonitorInfo> = monitors
-        .into_iter()
-        .map(|monitor| MonitorInfo {
-            id: monitor.id(),
-            name: monitor.name().to_string(),
-            width: monitor.width(),
-            height: monitor.height(),
-            is_default: monitor.is_primary(),
-        })
-        .collect();
+    let monitor_info = futures::future::join_all(monitors.into_iter().map(|monitor| async move {
+        let monitor_id = monitor.id();
+        match get_monitor_by_id(monitor_id).await {
+            Some(monitor) => MonitorInfo {
+                id: monitor.id(),
+                name: monitor.name().to_string(),
+                width: monitor.width(),
+                height: monitor.height(),
+                is_default: monitor.is_primary(),
+            },
+            None => MonitorInfo {
+                id: monitor_id,
+                name: "Unknown".to_string(),
+                width: 0,
+                height: 0,
+                is_default: false,
+            },
+        }
+    }))
+    .await;
 
     if monitor_info.is_empty() {
         Err((
@@ -604,7 +620,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         }
     };
 
-    let (overall_status, message, verbose_instructions) = if (frame_status == "ok"
+    let (overall_status, message, verbose_instructions, status_code) = if (frame_status == "ok"
         || frame_status == "disabled")
         && (audio_status == "ok" || audio_status == "disabled")
         && (ui_status == "ok" || ui_status == "disabled")
@@ -613,6 +629,7 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "healthy",
             "all systems are functioning normally.".to_string(),
             None,
+            200,
         )
     } else {
         let mut unhealthy_systems = Vec::new();
@@ -630,12 +647,14 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
             "unhealthy",
             format!("some systems are not functioning properly: {}. frame status: {}, audio status: {}, ui status: {}",
                     unhealthy_systems.join(", "), frame_status, audio_status, ui_status),
-            Some("if you're experiencing issues, please try contacting us on discord".to_string())
+            Some("if you're experiencing issues, please try contacting us on discord".to_string()),
+            500,
         )
     };
 
     JsonResponse(HealthCheckResponse {
         status: overall_status.to_string(),
+        status_code,
         last_frame_timestamp: last_frame,
         last_audio_timestamp: audio,
         last_ui_timestamp: last_ui,
@@ -646,7 +665,6 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
         verbose_instructions,
     })
 }
-
 // Request and response structs
 #[derive(Deserialize)]
 struct DownloadPipeRequest {
@@ -669,6 +687,12 @@ struct RunPipeRequest {
 struct UpdatePipeConfigRequest {
     pipe_id: String,
     config: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct UpdatePipeVersionRequest {
+    pipe_id: String,
+    source: String,
 }
 
 // Handler functions
@@ -819,6 +843,33 @@ async fn update_pipe_config_handler(
     }
 }
 
+async fn update_pipe_version_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<UpdatePipeVersionRequest>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    debug!("Updating pipe version for: {}", payload.pipe_id);
+    match state
+        .pipe_manager
+        .update_pipe_version(&payload.pipe_id, &payload.source)
+        .await
+    {
+        Ok(_) => Ok(JsonResponse(json!({
+            "data": {
+                "pipe_id": payload.pipe_id,
+                "message": "pipe version updated"
+            },
+            "success": true
+        }))),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({
+                "error": format!("failed to update pipe version: {}", e),
+                "success": false
+            })),
+        )),
+    }
+}
+
 async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
@@ -850,7 +901,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    device_manager: Arc<DeviceManager>,
+    // device_manager: Arc<DeviceManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -863,7 +914,7 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        device_manager: Arc<DeviceManager>,
+        // device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -873,7 +924,7 @@ impl Server {
         Server {
             db,
             addr,
-            device_manager,
+            // device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -892,7 +943,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            device_manager: self.device_manager.clone(),
+            // device_manager: self.device_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -1059,7 +1110,11 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(
+            device_name,
+            Some(frame.timestamp.unwrap_or_else(Utc::now)),
+            None,
+        )
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -1124,7 +1179,7 @@ async fn add_transcription_to_db(
 
     let device = AudioDevice {
         name: device_name.to_string(),
-        device_type: AudioDeviceType::Input,
+        device_type: DeviceType::Input,
     };
 
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
@@ -1629,12 +1684,12 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-#[derive(Deserialize)]
-pub struct AudioDeviceControlRequest {
-    device_name: String,
-    #[serde(default)]
-    device_type: Option<AudioDeviceType>,
-}
+// #[derive(Deserialize)]
+// pub struct AudioDeviceControlRequest {
+//     device_name: String,
+//     #[serde(default)]
+//     device_type: Option<DeviceType>,
+// }
 
 #[derive(Serialize)]
 pub struct AudioDeviceControlResponse {
@@ -1643,94 +1698,94 @@ pub struct AudioDeviceControlResponse {
 }
 
 // Add these new handler functions before create_router()
-async fn start_audio_device(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<AudioDeviceControlRequest>,
-) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
-    let device = AudioDevice {
-        name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
-    };
+// async fn start_audio_device(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<AudioDeviceControlRequest>,
+// ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+//     let device = AudioDevice {
+//         name: payload.device_name.clone(),
+//         device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
+//     };
 
-    // Validate device exists
-    let available_devices = list_audio_devices().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({
-                "error": format!("failed to list audio devices: {}", e),
-                "success": false
-            })),
-        )
-    })?;
+//     // Validate device exists
+//     let available_devices = list_audio_devices().await.map_err(|e| {
+//         (
+//             StatusCode::INTERNAL_SERVER_ERROR,
+//             JsonResponse(json!({
+//                 "error": format!("failed to list audio devices: {}", e),
+//                 "success": false
+//             })),
+//         )
+//     })?;
 
-    if !available_devices.contains(&device) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({
-                "error": format!("device not found: {}", device.name),
-                "success": false
-            })),
-        ));
-    }
+//     if !available_devices.contains(&device) {
+//         return Err((
+//             StatusCode::BAD_REQUEST,
+//             JsonResponse(json!({
+//                 "error": format!("device not found: {}", device.name),
+//                 "success": false
+//             })),
+//         ));
+//     }
 
-    let control = DeviceControl {
-        device: screenpipe_core::DeviceType::Audio(device.clone()),
-        is_running: true,
-        is_paused: false,
-    };
+//     let control = DeviceControl {
+//         device: screenpipe_core::DeviceType::Audio(device.clone()),
+//         is_running: true,
+//         is_paused: false,
+//     };
 
-    let _ = state.device_manager.update_device(control).await;
+//     let _ = state.device_manager.update_device(control).await;
 
-    Ok(JsonResponse(AudioDeviceControlResponse {
-        success: true,
-        message: format!("started audio device: {}", device.name),
-    }))
-}
+//     Ok(JsonResponse(AudioDeviceControlResponse {
+//         success: true,
+//         message: format!("started audio device: {}", device.name),
+//     }))
+// }
 
-async fn stop_audio_device(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<AudioDeviceControlRequest>,
-) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
-    let device = AudioDevice {
-        name: payload.device_name.clone(),
-        device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
-    };
+// async fn stop_audio_device(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<AudioDeviceControlRequest>,
+// ) -> Result<JsonResponse<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+//     let device = AudioDevice {
+//         name: payload.device_name.clone(),
+//         device_type: payload.device_type.unwrap_or(AudioDeviceType::Input),
+//     };
 
-    // Validate device exists
-    let available_devices = list_audio_devices().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({
-                "error": format!("failed to list audio devices: {}", e),
-                "success": false
-            })),
-        )
-    })?;
+//     // Validate device exists
+//     let available_devices = list_audio_devices().await.map_err(|e| {
+//         (
+//             StatusCode::INTERNAL_SERVER_ERROR,
+//             JsonResponse(json!({
+//                 "error": format!("failed to list audio devices: {}", e),
+//                 "success": false
+//             })),
+//         )
+//     })?;
 
-    if !available_devices.contains(&device) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({
-                "error": format!("device not found: {}", device.name),
-                "success": false
-            })),
-        ));
-    }
+//     if !available_devices.contains(&device) {
+//         return Err((
+//             StatusCode::BAD_REQUEST,
+//             JsonResponse(json!({
+//                 "error": format!("device not found: {}", device.name),
+//                 "success": false
+//             })),
+//         ));
+//     }
 
-    let _ = state
-        .device_manager
-        .update_device(DeviceControl {
-            device: screenpipe_core::DeviceType::Audio(device.clone()),
-            is_running: false,
-            is_paused: false,
-        })
-        .await;
+//     let _ = state
+//         .device_manager
+//         .update_device(DeviceControl {
+//             device: screenpipe_core::DeviceType::Audio(device.clone()),
+//             is_running: false,
+//             is_paused: false,
+//         })
+//         .await;
 
-    Ok(JsonResponse(AudioDeviceControlResponse {
-        success: true,
-        message: format!("stopped audio device: {}", device.name),
-    }))
-}
+//     Ok(JsonResponse(AudioDeviceControlResponse {
+//         success: true,
+//         message: format!("stopped audio device: {}", device.name),
+//     }))
+// }
 
 #[derive(Deserialize)]
 struct EventsQuery {
@@ -1793,11 +1848,11 @@ pub struct VisionDeviceControlRequest {
     device_id: u32,
 }
 
-impl VisionDeviceControlRequest {
-    pub fn new(device_id: u32) -> Self {
-        Self { device_id }
-    }
-}
+// impl VisionDeviceControlRequest {
+//     pub fn new(device_id: u32) -> Self {
+//         Self { device_id }
+//     }
+// }
 
 #[derive(Serialize)]
 pub struct VisionDeviceControlResponse {
@@ -1805,72 +1860,72 @@ pub struct VisionDeviceControlResponse {
     message: String,
 }
 
-async fn start_vision_device(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VisionDeviceControlRequest>,
-) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
-    debug!("starting vision device: {}", payload.device_id);
-    // Validate device exists
-    let monitors = list_monitors().await;
-    if !monitors.iter().any(|m| m.id() == payload.device_id) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({
-                "error": format!("monitor not found: {}", payload.device_id),
-                "success": false
-            })),
-        ));
-    }
+// async fn start_vision_device(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<VisionDeviceControlRequest>,
+// ) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+//     debug!("starting vision device: {}", payload.device_id);
+//     // Validate device exists
+//     let monitors = list_monitors().await;
+//     if !monitors.iter().any(|m| m.id() == payload.device_id) {
+//         return Err((
+//             StatusCode::BAD_REQUEST,
+//             JsonResponse(json!({
+//                 "error": format!("monitor not found: {}", payload.device_id),
+//                 "success": false
+//             })),
+//         ));
+//     }
 
-    debug!("starting vision device: {}", payload.device_id);
-    let _ = state
-        .device_manager
-        .update_device(DeviceControl {
-            device: screenpipe_core::DeviceType::Vision(payload.device_id),
-            is_running: true,
-            is_paused: false,
-        })
-        .await;
+//     debug!("starting vision device: {}", payload.device_id);
+//     let _ = state
+//         .device_manager
+//         .update_device(DeviceControl {
+//             device: screenpipe_core::DeviceType::Vision(payload.device_id),
+//             is_running: true,
+//             is_paused: false,
+//         })
+//         .await;
 
-    Ok(JsonResponse(VisionDeviceControlResponse {
-        success: true,
-        message: format!("started vision device: {}", payload.device_id),
-    }))
-}
+//     Ok(JsonResponse(VisionDeviceControlResponse {
+//         success: true,
+//         message: format!("started vision device: {}", payload.device_id),
+//     }))
+// }
 
-async fn stop_vision_device(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<VisionDeviceControlRequest>,
-) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
-    debug!("stopping vision device: {}", payload.device_id);
-    // Validate device exists
-    let monitors = list_monitors().await;
-    if !monitors.iter().any(|m| m.id() == payload.device_id) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            JsonResponse(json!({
-                "error": format!("monitor not found: {}", payload.device_id),
-                "success": false
-            })),
-        ));
-    }
+// async fn stop_vision_device(
+//     State(state): State<Arc<AppState>>,
+//     Json(payload): Json<VisionDeviceControlRequest>,
+// ) -> Result<JsonResponse<VisionDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+//     debug!("stopping vision device: {}", payload.device_id);
+//     // Validate device exists
+//     let monitors = list_monitors().await;
+//     if !monitors.iter().any(|m| m.id() == payload.device_id) {
+//         return Err((
+//             StatusCode::BAD_REQUEST,
+//             JsonResponse(json!({
+//                 "error": format!("monitor not found: {}", payload.device_id),
+//                 "success": false
+//             })),
+//         ));
+//     }
 
-    debug!("stopping vision device: {}", payload.device_id);
+//     debug!("stopping vision device: {}", payload.device_id);
 
-    let _ = state
-        .device_manager
-        .update_device(DeviceControl {
-            device: screenpipe_core::DeviceType::Vision(payload.device_id),
-            is_running: false,
-            is_paused: false,
-        })
-        .await;
+//     let _ = state
+//         .device_manager
+//         .update_device(DeviceControl {
+//             device: screenpipe_core::DeviceType::Vision(payload.device_id),
+//             is_running: false,
+//             is_paused: false,
+//         })
+//         .await;
 
-    Ok(JsonResponse(VisionDeviceControlResponse {
-        success: true,
-        message: format!("stopped vision device: {}", payload.device_id),
-    }))
-}
+//     Ok(JsonResponse(VisionDeviceControlResponse {
+//         success: true,
+//         message: format!("stopped vision device: {}", payload.device_id),
+//     }))
+// }
 
 // websocket events handler
 async fn ws_events_handler(ws: WebSocketUpgrade, query: Query<EventsQuery>) -> Response {
@@ -1930,6 +1985,34 @@ async fn handle_socket(socket: WebSocket, query: Query<EventsQuery>) {
     debug!("WebSocket connection closed");
 }
 
+async fn ws_health_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
+    ws.on_upgrade(move |socket| handle_health_socket(socket, state))
+}
+
+async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    let mut interval = tokio::time::interval(Duration::from_secs(5));
+
+    loop {
+        tokio::select! {
+        _ = interval.tick() => {
+            let health_response = health_check(State(state.clone())).await;
+            let health_status = serde_json::to_string(&health_response.0).unwrap_or_default();
+            if let Err(e) = socket.send(Message::Text(health_status)).await {
+                error!("Failed to send health status: {}", e);
+                break;
+            }
+        }
+            result = socket.recv() => {
+                if result.is_none() {
+                    break;
+                }
+            }
+        }
+    }
+
+    debug!("WebSocket connection closed gracefully");
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1958,8 +2041,11 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/enable", post(run_pipe_handler))
         .route("/pipes/disable", post(stop_pipe_handler))
         .route("/pipes/update", post(update_pipe_config_handler))
+        .route("/pipes/update-version", post(update_pipe_version_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
+        .route("/pipes/purge", post(purge_pipe_handler))
         .route("/health", get(health_check))
+        .route("/ws/health", get(ws_health_handler))
         .route("/raw_sql", post(execute_raw_sql))
         .route("/add", post(add_to_database))
         .route("/stream/frames", get(stream_frames_handler))
@@ -1975,13 +2061,15 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
-        .route("/audio/start", post(start_audio_device))
-        .route("/audio/stop", post(stop_audio_device))
+        // .route("/audio/start", post(start_audio_device))
+        // .route("/audio/stop", post(stop_audio_device))
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
-        .route("/vision/start", post(start_vision_device))
-        .route("/vision/stop", post(stop_vision_device))
+        // .route("/vision/start", post(start_vision_device))
+        // .route("/vision/stop", post(stop_vision_device))
+        // .route("/audio/restart", post(restart_audio_devices))
+        // .route("/vision/restart", post(restart_vision_devices))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2320,6 +2408,31 @@ pub async fn delete_pipe_handler(
     }
 }
 
+pub async fn purge_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<PurgePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.purge_pipes().await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipes purged successfully"
+            })),
+        ),
+        Err(e) => {
+            error!("failed to purge pipes: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                "success": false,
+                "error": format!("failed to purge pipes: {}", e)
+                })),
+            )
+        }
+    }
+}
+
 // Add this struct for the request payload
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
@@ -2331,221 +2444,129 @@ struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
 }
-/*
 
-Curl commands for reference:
-# 1. Basic search query
-curl "http://localhost:3030/search?q=test&limit=5&offset=0" | jq
-
-# 2. Search with content type filter (OCR)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr" | jq
-
-# 3. Search with content type filter (Audio)
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=audio" | jq
-
-# 4. Search with pagination
-curl "http://localhost:3030/search?q=test&limit=10&offset=20" | jq
-
-# 6. Search with no query (should return all results)
-curl "http://localhost:3030/search?limit=5&offset=0"
-
-// list devices
-// # curl "http://localhost:3030/audio/list" | jq
-
-
-echo "Listing audio devices:"
-curl "http://localhost:3030/audio/list" | jq
-
-
-echo "Searching for content:"
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all" | jq
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=ocr" | jq
-
-curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=all" | jq
-
-# last 5 w frames
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-5M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# 30 min to 25 min ago
-curl "http://localhost:3030/search?limit=5&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-curl "http://localhost:3030/search?limit=1&offset=0&content_type=all&include_frames=true&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq -r '.data[0].content.frame' | base64 --decode > /tmp/frame.png && open /tmp/frame.png
-
-# Search for content from the last 30 minutes
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for content up to 1 hour ago
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for content between 2 hours ago and 1 hour ago
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for OCR content from yesterday
-curl "http://localhost:3030/search?q=test&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-1d -v0H -v0M -v0S +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1d -v23H -v59M -v59S +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search for audio content with a keyword from the beginning of the current month
-curl "http://localhost:3030/search?q=libmp3&limit=5&offset=0&content_type=audio&start_time=$(date -u -v1d -v0H -v0M -v0S +%Y-%m-01T%H:%M:%SZ)" | jq
-
-curl "http://localhost:3030/search?app_name=cursor"
-curl "http://localhost:3030/search?content_type=audio&min_length=20"
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=50&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq .
-
-
-curl "http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=$(date -u -v-2H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-date -u -v-2H +%Y-%m-%dT%H:%M:%SZ
-2024-08-12T06:51:54Z
-date -u -v-1H +%Y-%m-%dT%H:%M:%SZ
-2024-08-12T07:52:17Z
-
-curl 'http://localhost:3030/search?limit=50&offset=0&content_type=all&start_time=2024-08-12T06:48:18Z&end_time=2024-08-12T07:48:34Z' | jq .
-
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T04:00:00Z&end_time=2024-08-12T05:00:00Z&content_type=all" | jq .
-
-curl "http://localhost:3030/search?q=Matt&offset=0&limit=10&start_time=2024-08-12T06:43:53Z&end_time=2024-08-12T08:43:53Z&content_type=all" | jq .
-
-curl 'http://localhost:3030/search?offset=0&limit=10&start_time=2024-08-12T04%3A00%3A00Z&end_time=2024-08-12T05%3A00%3A00Z&content_type=all' | jq .
-
-
-
-
-
-
-
-
-
-
-
-# First, search for Rust-related content
-curl "http://localhost:3030/search?q=debug&limit=5&offset=0&content_type=ocr"
-
-# Then, assuming you found a relevant item with id 123, tag it
-curl -X POST "http://localhost:3030/tags/vision/626" \
-     -H "Content-Type: application/json" \
-     -d '{"tags": ["debug"]}'
-
-
-
-
-# List all pipes
-curl "http://localhost:3030/pipes/list" | jq
-
-# Download a new pipe
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "./pipes/pipe-stream-ocr-text"}' | jq
-
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "./pipes/pipe-security-check"}' | jq
-
-
-curl -X POST "http://localhost:3030/pipes/download" \
-     -H "Content-Type: application/json" \
-     -d '{"url": "https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-stream-ocr-text"}' | jq
-
-
-# Get info for a specific pipe
-curl "http://localhost:3030/pipes/info/pipe-stream-ocr-text" | jq
-
-# Run a pipe
-curl -X POST "http://localhost:3030/pipes/enable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
-
-
-
-     curl -X POST "http://localhost:3030/pipes/enable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-security-check"}' | jq
-
-# Stop a pipe
-curl -X POST "http://localhost:3030/pipes/disable" \
-     -H "Content-Type: application/json" \
-     -d '{"pipe_id": "pipe-stream-ocr-text"}' | jq
-
-# Update pipe configuration
-curl -X POST "http://localhost:3030/pipes/update" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "pipe_id": "pipe-stream-ocr-text",
-       "config": {
-         "key": "value",
-         "another_key": "another_value"
-       }
-     }' | jq
-
-
-
-
-
-# Basic search with min_length and max_length
-curl "http://localhost:3030/search?q=test&limit=10&offset=0&min_length=5&max_length=50" | jq
-
-# Search for OCR content with length constraints
-curl "http://localhost:3030/search?q=code&content_type=ocr&limit=5&offset=0&min_length=20&max_length=100" | jq
-
-# Search for audio content with length constraints
-curl "http://localhost:3030/search?q=meeting&content_type=audio&limit=5&offset=0&min_length=50&max_length=200" | jq
-
-# Search with time range and length constraints
-curl "http://localhost:3030/search?q=project&limit=10&offset=0&min_length=10&max_length=100&start_time=$(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | jq
-
-# Search with app_name and length constraints
-curl "http://localhost:3030/search?app_name=cursor&limit=5&offset=0&min_length=15&max_length=150" | jq
-
-# Search with window_name and length constraints
-curl "http://localhost:3030/search?window_name=alacritty&min_length=5&max_length=50" | jq
-
-# Search for very short content
-curl "http://localhost:3030/search?q=&limit=10&offset=0&max_length=10" | jq
-
-# Search for very long content
-curl "http://localhost:3030/search?q=&limit=10&offset=0&min_length=500" | jq
-
-
-curl "http://localhost:3030/search?limit=10&offset=0&min_length=500&content_type=audio" | jq
-
-
-# read random data and generate a clip using the merge endpoint
-
-
-# Perform the search and store the response
-
-# First, let's search for some recent video content
-SEARCH_RESPONSE1=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-25M +%Y-%m-%dT%H:%M:%SZ)")
-SEARCH_RESPONSE2=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-40M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-35M +%Y-%m-%dT%H:%M:%SZ)")
-SEARCH_RESPONSE3=$(curl -s "http://localhost:3030/search?q=&limit=5&offset=0&content_type=ocr&start_time=$(date -u -v-50M +%Y-%m-%dT%H:%M:%SZ)&end_time=$(date -u -v-45M +%Y-%m-%dT%H:%M:%SZ)")
-
-# Extract the file paths from the search results without creating JSON arrays
-VIDEO_PATHS1=$(echo "$SEARCH_RESPONSE1" | jq -r '.data[].content.file_path' | sort -u)
-VIDEO_PATHS2=$(echo "$SEARCH_RESPONSE2" | jq -r '.data[].content.file_path' | sort -u)
-VIDEO_PATHS3=$(echo "$SEARCH_RESPONSE3" | jq -r '.data[].content.file_path' | sort -u)
-
-# Merge the video paths and create a single JSON array
-MERGED_VIDEO_PATHS=$(echo "$VIDEO_PATHS1"$'\n'"$VIDEO_PATHS2"$'\n'"$VIDEO_PATHS3" | sort -u | jq -R -s -c 'split("\n") | map(select(length > 0))')
-
-# Create the JSON payload for merging videos
-MERGE_PAYLOAD=$(jq -n \
-  --argjson video_paths "$MERGED_VIDEO_PATHS" \
-  '{
-    video_paths: $video_paths
-  }')
-
-echo "Merge Payload: $MERGE_PAYLOAD"
-
-# Send the merge request and store the response
-MERGE_RESPONSE=$(curl -s -X POST "http://localhost:3030/experimental/frames/merge" \
-  -H "Content-Type: application/json" \
-  -d "$MERGE_PAYLOAD")
-
-echo "Merge Response: $MERGE_RESPONSE"
-
-# Extract the merged video path from the response
-MERGED_VIDEO_PATH=$(echo "$MERGE_RESPONSE" | jq -r '.video_path')
-
-echo "Merged Video Path: $MERGED_VIDEO_PATH"
-
-*/
+#[derive(Serialize)]
+pub struct RestartAudioDevicesResponse {
+    success: bool,
+    message: String,
+    restarted_devices: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PurgePipeRequest {
+}
+
+// async fn restart_audio_devices(
+//     State(state): State<Arc<AppState>>,
+// ) -> Result<JsonResponse<RestartAudioDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
+//     debug!("restarting active audio devices");
+
+//     // Get currently active devices from device manager
+//     let active_devices = state.device_manager.get_active_devices().await;
+//     let mut restarted_devices = Vec::new();
+
+//     for (_, control) in active_devices {
+//         debug!("restarting audio device: {:?}", control.device);
+
+//         let audio_device = match control.device {
+//             DeviceType::Audio(device) => device,
+//             _ => continue,
+//         };
+//         // Stop the device
+//         let _ = state
+//             .device_manager
+//             .update_device(DeviceControl {
+//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
+//                 is_running: false,
+//                 is_paused: false,
+//             })
+//             .await;
+
+//         // Small delay to ensure clean shutdown
+//         tokio::time::sleep(Duration::from_millis(1000)).await;
+
+//         // Start the device again
+//         let _ = state
+//             .device_manager
+//             .update_device(DeviceControl {
+//                 device: screenpipe_core::DeviceType::Audio(audio_device.clone()),
+//                 is_running: true,
+//                 is_paused: false,
+//             })
+//             .await;
+
+//         restarted_devices.push(audio_device.name.clone());
+//     }
+
+//     if restarted_devices.is_empty() {
+//         Ok(JsonResponse(RestartAudioDevicesResponse {
+//             success: true,
+//             message: "no active audio devices to restart".to_string(),
+//             restarted_devices,
+//         }))
+//     } else {
+//         Ok(JsonResponse(RestartAudioDevicesResponse {
+//             success: true,
+//             message: format!("restarted {} audio devices", restarted_devices.len()),
+//             restarted_devices,
+//         }))
+//     }
+// }
+
+#[derive(Serialize)]
+pub struct RestartVisionDevicesResponse {
+    success: bool,
+    message: String,
+    restarted_devices: Vec<u32>,
+}
+// async fn restart_vision_devices(
+//     State(state): State<Arc<AppState>>,
+// ) -> Result<JsonResponse<RestartVisionDevicesResponse>, (StatusCode, JsonResponse<Value>)> {
+//     debug!("restarting active vision devices");
+
+//     let active_devices = state.device_manager.get_active_devices().await;
+//     let mut restarted_devices = Vec::new();
+
+//     for (_, control) in active_devices {
+//         let vision_device = match control.device {
+//             DeviceType::Vision(device) => device,
+//             _ => continue,
+//         };
+
+//         debug!("restarting vision device: {:?}", vision_device);
+
+//         // Stop the device
+//         let _ = state
+//             .device_manager
+//             .update_device(DeviceControl {
+//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
+//                 is_running: false,
+//                 is_paused: false,
+//             })
+//             .await;
+
+//         tokio::time::sleep(Duration::from_millis(1000)).await;
+
+//         // Start the device again
+//         let _ = state
+//             .device_manager
+//             .update_device(DeviceControl {
+//                 device: screenpipe_core::DeviceType::Vision(vision_device.clone()),
+//                 is_running: true,
+//                 is_paused: false,
+//             })
+//             .await;
+
+//         restarted_devices.push(vision_device.clone());
+//     }
+
+//     Ok(JsonResponse(RestartVisionDevicesResponse {
+//         success: true,
+//         message: if restarted_devices.is_empty() {
+//             "no active vision devices to restart".to_string()
+//         } else {
+//             format!("restarted {} vision devices", restarted_devices.len())
+//         },
+//         restarted_devices,
+//     }))
+// }
