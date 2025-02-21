@@ -7,3 +7,6 @@ pub mod speaker;
 pub mod transcription;
 pub use utils::audio::pcm_decode;
 pub use utils::audio::resample;
+pub mod audio_manager;
+mod device_manager;
+mod segmentation_manager;
