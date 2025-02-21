@@ -38,7 +38,7 @@ use screenpipe_audio::{
 };
 use tracing::{debug, error, info};
 
-use screenpipe_vision::monitor::{list_monitors, get_monitor_by_id};
+use screenpipe_vision::monitor::{get_monitor_by_id, list_monitors};
 use screenpipe_vision::OcrEngine;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
@@ -189,6 +189,7 @@ pub struct OCRContent {
     pub tags: Vec<String>,
     pub frame: Option<String>,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -217,6 +218,7 @@ pub struct UiContent {
     pub file_path: String,
     pub offset_index: i64,
     pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -352,6 +354,7 @@ pub(crate) async fn search(
                 tags: ocr.tags.clone(),
                 frame: None,
                 frame_name: Some(ocr.frame_name.clone()),
+                browser_url: ocr.browser_url.clone(),
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -376,6 +379,7 @@ pub(crate) async fn search(
                 file_path: ui.file_path.clone(),
                 offset_index: ui.offset_index,
                 frame_name: ui.frame_name.clone(),
+                browser_url: ui.browser_url.clone(),
             }),
         })
         .collect();
@@ -1106,7 +1110,11 @@ async fn add_frame_to_db(
     let db = &state.db;
 
     let frame_id = db
-        .insert_frame(device_name, Some(frame.timestamp.unwrap_or_else(Utc::now)))
+        .insert_frame(
+            device_name,
+            Some(frame.timestamp.unwrap_or_else(Utc::now)),
+            None,
+        )
         .await?;
 
     if let Some(ocr_results) = &frame.ocr_results {
@@ -2035,6 +2043,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/pipes/update", post(update_pipe_config_handler))
         .route("/pipes/update-version", post(update_pipe_version_handler))
         .route("/pipes/delete", post(delete_pipe_handler))
+        .route("/pipes/purge", post(purge_pipe_handler))
         .route("/health", get(health_check))
         .route("/ws/health", get(ws_health_handler))
         .route("/raw_sql", post(execute_raw_sql))
@@ -2399,6 +2408,31 @@ pub async fn delete_pipe_handler(
     }
 }
 
+pub async fn purge_pipe_handler(
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<PurgePipeRequest>,
+) -> impl IntoResponse {
+    match state.pipe_manager.purge_pipes().await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": "pipes purged successfully"
+            })),
+        ),
+        Err(e) => {
+            error!("failed to purge pipes: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                "success": false,
+                "error": format!("failed to purge pipes: {}", e)
+                })),
+            )
+        }
+    }
+}
+
 // Add this struct for the request payload
 #[derive(Debug, Deserialize)]
 pub struct DeletePipeRequest {
@@ -2416,6 +2450,10 @@ pub struct RestartAudioDevicesResponse {
     success: bool,
     message: String,
     restarted_devices: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PurgePipeRequest {
 }
 
 // async fn restart_audio_devices(
@@ -2532,4 +2570,3 @@ pub struct RestartVisionDevicesResponse {
 //         restarted_devices,
 //     }))
 // }
-

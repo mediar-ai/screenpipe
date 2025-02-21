@@ -21,7 +21,7 @@ pub async fn prepare_segments(
     embedding_manager: EmbeddingManager,
     embedding_extractor: Arc<StdMutex<EmbeddingExtractor>>,
     device: &str,
-) -> Result<tokio::sync::mpsc::Receiver<SpeechSegment>> {
+) -> Result<(tokio::sync::mpsc::Receiver<SpeechSegment>, bool)> {
     let audio_data = normalize_v2(audio_data);
 
     let frame_size = 1600;
@@ -64,7 +64,8 @@ pub async fn prepare_segments(
         speech_frame_count
     );
     let (tx, rx) = tokio::sync::mpsc::channel(100);
-    if !audio_frames.is_empty() && speech_ratio >= min_speech_ratio {
+    let speech_ratio_ok = speech_ratio >= min_speech_ratio;
+    if !audio_frames.is_empty() && speech_ratio_ok {
         let segments = get_segments(
             &audio_data,
             16000,
@@ -81,5 +82,5 @@ pub async fn prepare_segments(
         }
     }
 
-    Ok(rx)
+    Ok((rx, speech_ratio_ok))
 }

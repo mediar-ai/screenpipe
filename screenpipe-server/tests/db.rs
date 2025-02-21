@@ -11,7 +11,15 @@ mod tests {
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
-        DatabaseManager::new("sqlite::memory:").await.unwrap()
+        let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
+
+        // Run all migrations
+        sqlx::migrate!("./src/migrations")
+            .run(&db.pool)
+            .await
+            .unwrap();
+
+        db
     }
 
     #[tokio::test]
@@ -21,7 +29,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
@@ -200,7 +208,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
@@ -290,7 +298,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -327,7 +335,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -477,7 +485,7 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
@@ -512,7 +520,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
@@ -920,7 +928,7 @@ mod tests {
             .unwrap();
 
         // Insert first frame with OCR
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from frame 1",
@@ -934,7 +942,7 @@ mod tests {
         .unwrap();
 
         // Insert second frame with OCR
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from frame 2",
@@ -1040,5 +1048,118 @@ mod tests {
             .unwrap();
 
         assert_eq!(count, 2, "Should count both matching frames");
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_search_ui_monitoring() {
+        let db = setup_test_db().await;
+
+        // Insert UI monitoring data
+        sqlx::query(
+            r#"
+            INSERT INTO ui_monitoring (
+                text_output,
+                timestamp,
+                app,
+                window,
+                initial_traversal_at
+            ) VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind("Hello from UI monitoring")
+        .bind(Utc::now())
+        .bind("test_app")
+        .bind("test_window")
+        .bind(Utc::now())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Test search with app name filter
+        let results = db
+            .search(
+                "Hello",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                Some("test_app"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::UI(ui_result) = &results[0] {
+            assert_eq!(ui_result.text, "Hello from UI monitoring");
+            assert_eq!(ui_result.app_name, "test_app");
+            assert_eq!(ui_result.window_name, "test_window");
+        } else {
+            panic!("Expected UI result");
+        }
+
+        // Test search with window name filter
+        let results = db
+            .search(
+                "Hello",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                Some("test_window"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+
+        // Test search with no matches
+        let results = db
+            .search(
+                "nonexistent",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 0);
+
+        // Test search with empty query (should return all UI entries)
+        let results = db
+            .search(
+                "",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
     }
 }

@@ -26,10 +26,12 @@ export interface Intelligence {
 }
 
 export interface Settings {
-  interval: number;
-  pageSize: number;
-  aiModel: string;
-  vaultPath: string;
   prompt: string;
+  vaultPath: string;
+  logTimeWindow: number;
+  logPageSize: number;
+  logModel: string;
+  analysisModel: string;
+  analysisTimeWindow: number;
   screenpipeAppSettings: ScreenpipeAppSettings;
 }

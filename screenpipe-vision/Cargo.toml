@@ -33,6 +33,7 @@ clap = { version = "4.0", features = ["derive"] }
 
 # Integrations
 screenpipe-integrations = { path = "../screenpipe-integrations" }
+screenpipe-events = { path = "../screenpipe-events" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
@@ -42,8 +43,8 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-# TO-DO: use a released version. Done for now to avoid waiting xcap release.
-xcap = { package = "xcap", git = "https://github.com/nashaofu/xcap", rev = "214cb44" }
+# TO-DO: change it to "0.3.3" when released
+xcap = { package = "xcap", git = "https://github.com/ologbonowiwi/xcap", rev = "ae0dab1" }
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -90,7 +91,6 @@ harness = false
 name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
 
-
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
   "Graphics_Imaging",
@@ -98,10 +98,15 @@ windows = { version = "0.58", features = [
   "Storage",
   "Storage_Streams",
 ] }
+# version 0.3.2 on Windows is broken
+# see https://github.com/nashaofu/xcap/issues/194
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
 cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
+accessibility-sys = "0.1.3"
+core-foundation = "0.9.4"
+url = "2.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "=0.2.164"

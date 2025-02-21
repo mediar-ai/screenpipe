@@ -45,6 +45,7 @@ export interface OCRContent {
   tags: string[];
   frame?: string;
   frameName?: string;
+  browserUrl?: string;
 }
 
 /**
@@ -76,6 +77,8 @@ export interface UiContent {
   initialTraversalAt?: string;
   filePath: string;
   offsetIndex: number;
+  frameName?: string;
+  browserUrl?: string;
 }
 
 /**

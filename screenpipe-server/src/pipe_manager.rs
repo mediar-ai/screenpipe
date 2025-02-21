@@ -1,7 +1,4 @@
 use anyhow::Result;
-use killport::cli::Mode;
-use killport::killport::{Killport, KillportOperations};
-use killport::signal::KillportSignal;
 use screenpipe_core::{download_pipe, download_pipe_private, PipeState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,6 +20,8 @@ pub struct PipeInfo {
     pub source: String,
     pub port: Option<u16>,
     pub is_nextjs: bool,
+    pub desc: String,
+    pub build_status: Option<Value>,
 }
 
 struct PipeHandle {
@@ -142,11 +141,17 @@ impl PipeManager {
         pipes.iter().find(|pipe| pipe.id == id).cloned()
     }
 
-    async fn load_pipe_info(pipe_id: String, config_path: PathBuf) -> PipeInfo {
+    async fn load_pipe_info(pipe_id: String, pipe_path: PathBuf) -> PipeInfo {
+        let config_path = pipe_path.join("pipe.json");
         let config = tokio::fs::read_to_string(&config_path)
             .await
             .and_then(|s| serde_json::from_str::<Value>(&s).map_err(Into::into))
             .unwrap_or(Value::Null);
+
+        let desc_file = pipe_path.join("README.md");
+        let desc_pipe = tokio::fs::read_to_string(desc_file)
+            .await
+            .unwrap_or_default();
 
         PipeInfo {
             id: pipe_id,
@@ -169,6 +174,8 @@ impl PipeManager {
                 .get("is_nextjs")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            desc: desc_pipe,
+            build_status: config.get("buildStatus").cloned(),
         }
     }
 
@@ -189,8 +196,7 @@ impl PipeManager {
                         .map(|ft| ft.is_dir())
                         .unwrap_or(false)
                 {
-                    let config_path = entry.path().join("pipe.json");
-                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), config_path).await);
+                    pipe_infos.push(Self::load_pipe_info(pipe_id.into_owned(), entry.path()).await);
                 }
             }
         }
@@ -204,11 +210,15 @@ impl PipeManager {
 
         let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
 
+        // Check if the URL is a local path
+        let is_local = normalized_url.starts_with('/') || normalized_url.starts_with('.');
+
         // update the config with the source url
         self.update_config(
             &pipe_dir.file_name().unwrap().to_string_lossy(),
             serde_json::json!({
                 "source": normalized_url,
+                "enabled": is_local,
             }),
         )
         .await?;
@@ -261,26 +271,60 @@ impl PipeManager {
     }
 
     pub async fn purge_pipes(&self) -> Result<()> {
-        // First, get all running pipes
-        let pipes = self.list_pipes().await;
+        let mut retries = 3;
 
-        // Stop all running pipes
-        for pipe in pipes {
-            if pipe.enabled {
-                debug!("stopping pipe {} before purge", pipe.id);
-                self.stop_pipe(&pipe.id).await?;
+        loop {
+            // First, get all running pipes
+            let pipes = self.list_pipes().await;
+
+            // Stop all running pipes
+            for pipe in pipes {
+                if pipe.enabled {
+                    debug!("stopping pipe [{}] before purge", pipe.id);
+                        match self.stop_pipe(&pipe.id).await {
+                            Ok(_) => {
+                                debug!("successfully killed pipe process [{}]", &pipe.id);
+                            }
+                            Err(_) => {
+                                debug!("failed to stop pipe [{}],", &pipe.id);
+                            }
+                        };
+                }
+            }
+
+            // wait a little
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+            let pipe_dir = self.screenpipe_dir.join("pipes");
+            if pipe_dir.exists() {
+                match tokio::fs::remove_dir_all(&pipe_dir).await {
+                    Ok(_) => {
+                        debug!("all pipes purged");
+                        return Ok(());
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::Other => {
+                        debug!("attempting iterative deletion");
+                        let mut entries = tokio::fs::read_dir(&pipe_dir).await?;
+                        while let Some(entry) = entries.next_entry().await? {
+                            if let Err(e) = tokio::fs::remove_file(entry.path()).await {
+                                debug!("failed to remove file: {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if retries > 0 {
+                            retries -= 1;
+                            debug!("failed to purge pipes, retrying! ({} retries left)", retries);
+                        } else {
+                            return Err(e.into());
+                        }
+                    }
+                }
+            } else {
+                debug!("pipe directory does not exist");
+                return Ok(());
             }
         }
-
-        // Wait for all pipes to stop
-        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-
-        // Then remove the directory
-        let pipe_dir = self.screenpipe_dir.join("pipes");
-        tokio::fs::remove_dir_all(pipe_dir).await?;
-
-        debug!("all pipes purged");
-        Ok(())
     }
 
     pub async fn delete_pipe(&self, id: &str) -> Result<()> {
@@ -312,28 +356,127 @@ impl PipeManager {
             // Wait a bit for the process to actually terminate
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
+            #[cfg(unix)]
+            {
+                // Make grep pattern more specific to target only pipe processes
+                let command = format!(
+                    "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                    &id.to_string()
+                );
+
+                let _ = tokio::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(command)
+                    .output()
+                    .await;
+            }
+
+            #[cfg(windows)]
+            {
+                // killing by name is faster
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                let _ = tokio::process::Command::new("powershell")
+                    .arg("-NoProfile")
+                    .arg("-WindowStyle")
+                    .arg("hidden")
+                    .arg("-Command")
+                    .arg(format!(
+                        r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*.screenpipe\pipes\{}*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                        &id.to_string()
+                    ))
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+                    .await;
+            }
+
             match handle.state {
                 PipeState::Port(port) => {
-                    tokio::task::spawn_blocking(move || {
-                        let killport = Killport;
-                        let signal: KillportSignal = "SIGKILL".parse().unwrap();
-
-                        match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                    tokio::task::spawn(async move {
+                        // killport doesn't seems working
+                        #[cfg(unix)]
                         {
-                            Ok(killed_services) => {
-                                if killed_services.is_empty() {
-                                    debug!("no services found using port {}", port);
-                                } else {
-                                    for (killable_type, name) in killed_services {
-                                        debug!(
-                                            "successfully killed {} '{}' listening on port {}",
-                                            killable_type, name, port
-                                        );
+                            // soft kill
+                            let command = format!(
+                                "lsof -i :{} | grep -E 'bun|node' | awk 'NR>1 {{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                                port
+                            );
+
+                            let output = tokio::process::Command::new("sh")
+                                .arg("-c")
+                                .arg(command)
+                                .output()
+                                .await
+                                .expect("failed to execute sh command");
+
+                            if !output.status.success() {
+                                // keep killport in fallback
+                                use killport::cli::Mode;
+                                use killport::killport::{Killport, KillportOperations};
+                                use killport::signal::KillportSignal;
+
+                                let killport = Killport;
+                                let signal: KillportSignal = "SIGKILL".parse().unwrap();
+
+                                match killport.kill_service_by_port(port, signal.clone(), Mode::Auto, false)
+                                {
+                                    Ok(killed_services) => {
+                                        if killed_services.is_empty() {
+                                            debug!("no services found using port {}", port);
+                                        } else {
+                                            for (killable_type, name) in killed_services {
+                                                debug!(
+                                                    "successfully killed {} '{}' listening on port {}",
+                                                    killable_type, name, port
+                                                );
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("error killing port {}: {}", port, e);
                                     }
                                 }
+
+                            } else {
+                                debug!(
+                                    "successfully killed listening on port {}",
+                                    port
+                                );
                             }
-                            Err(e) => {
-                                warn!("error killing port {}: {}", port, e);
+                        }
+                        #[cfg(windows)] 
+                        {
+                            const CREATE_NO_WINDOW: u32 = 0x08000000;
+                            let output = tokio::process::Command::new("netstat")
+                                .args(&["-ano"])
+                                .creation_flags(CREATE_NO_WINDOW)
+                                .output()
+                                .await
+                                .expect("failed to execute netstat");
+
+                            let output_str = std::str::from_utf8(&output.stdout)
+                                .expect("failed to convert output to string");
+
+                            for line in output_str.lines() {
+                                // parts
+                                let parts: Vec<&str> = line.split_whitespace().collect();
+                                if parts.len() >= 5 {
+                                // only kill local address
+                                    let local_address = parts[1];
+                                    if local_address.ends_with(&format!(":{}", port)) {
+                                        // extract pid
+                                        if let Ok(pid) = parts[4].parse::<u32>() {
+                                            let kill_result = tokio::process::Command::new("taskkill.exe")
+                                                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                                                .creation_flags(CREATE_NO_WINDOW)
+                                                .output()
+                                                .await
+                                                .expect("failed to execute taskkill");
+                                            if kill_result.status.success() {
+                                                info!("successfully stopped pipe running on port: {}", port);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     })
@@ -350,17 +493,15 @@ impl PipeManager {
                     }
                     #[cfg(windows)]
                     {
-                        use windows::Win32::System::Threading::{
-                            OpenProcess, TerminateProcess, PROCESS_ACCESS_RIGHTS,
-                        };
-                        unsafe {
-                            if let Ok(h_process) = OpenProcess(
-                                PROCESS_ACCESS_RIGHTS(0x0001), // PROCESS_TERMINATE access right
-                                false,
-                                pid as u32,
-                            ) {
-                                let _ = TerminateProcess(h_process, 1);
-                            }
+                        const CREATE_NO_WINDOW: u32 = 0x08000000;
+                        let kill_result = tokio::process::Command::new("taskkill")
+                            .args(&["/F", "/T", "/PID", &pid.to_string()])
+                            .creation_flags(CREATE_NO_WINDOW)
+                            .output()
+                            .await
+                            .expect("failed to execute taskkill");
+                        if kill_result.status.success() {
+                            info!("successfully stopped pipe pid: {}", pid.to_string());
                         }
                     }
                 }

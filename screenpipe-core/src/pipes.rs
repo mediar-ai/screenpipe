@@ -53,6 +53,14 @@ mod pipes {
         shutdown: watch::Sender<bool>,
     }
 
+    #[derive(Debug, Clone)]
+    pub enum BuildStatus {
+        NotStarted,
+        InProgress,
+        Success,
+        Failed(String),
+    }
+
     impl CronHandle {
         pub fn stop(&self) {
             let _ = self.shutdown.send(true);
@@ -111,15 +119,15 @@ while ($true) {{
         # Add the main process to the list
         $allProcesses = @($childPid) + $children
         
-        foreach ($pid in $allProcesses) {{
+        foreach ($processId in $allProcesses) {{
             try {{
-                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
                 Write-Host "Stopped process: $pid"
             }} catch {{
-                Write-Host "Process $pid already terminated"
+                Write-Host "Process $processId already terminated"
             }}
         }}
-        
+        Stop-Process -Id $PID -Force
         exit
     }}
 }}
@@ -521,7 +529,26 @@ done
             }
 
             // Try to build the Next.js project
-            let build_success = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_status = try_build_nextjs(&pipe_dir, &bun_path).await?;
+            let build_success = matches!(build_status, BuildStatus::Success);
+
+            if pipe_json_path.exists() {
+                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+                let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+
+                pipe_config["buildStatus"] = match &build_status {
+                    BuildStatus::Success => json!("success"),
+                    BuildStatus::Failed(error) => json!({
+                        "status": "failed",
+                        "error": error
+                    }),
+                    BuildStatus::InProgress => json!("in_progress"),
+                    BuildStatus::NotStarted => json!("not_started"),
+                };
+
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
+            }
 
             let port = env_vars
                 .iter()
@@ -761,8 +788,16 @@ done
     pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
         info!("Processing pipe from source: {}", source);
 
-        let pipe_name =
+        let is_local = Url::parse(source).is_err();
+
+        let mut pipe_name =
             sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
+
+        // Add _local suffix for local pipes
+        if is_local {
+            pipe_name.push_str("_local");
+        }
+
         let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
         debug!("Destination directory: {:?}", dest_dir);
@@ -890,6 +925,7 @@ done
                 };
 
                 pipe_config["is_nextjs"] = json!(true);
+                pipe_config["buildStatus"] = json!("not_started");
                 let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
                 let mut file = File::create(&pipe_json_path).await?;
                 file.write_all(updated_pipe_json.as_bytes()).await?;
@@ -1399,7 +1435,7 @@ done
         Ok(())
     }
 
-    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<bool> {
+    async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatus> {
         info!(
             "checking if i need to build the next.js project in: {:?}",
             pipe_dir
@@ -1411,11 +1447,21 @@ done
             let build_manifest = build_dir.join("build-manifest.json");
             if build_manifest.exists() {
                 info!("found existing next.js build, skipping rebuild");
-                return Ok(true);
+                return Ok(BuildStatus::Success);
             }
             // Invalid/incomplete build directory - remove it
             debug!("removing invalid next.js build directory");
             tokio::fs::remove_dir_all(&build_dir).await?;
+        }
+
+        // Update build status to InProgress in pipe.json
+        let pipe_json_path = pipe_dir.join("pipe.json");
+        if pipe_json_path.exists() {
+            let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+            pipe_config["buildStatus"] = json!("in_progress");
+            let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+            tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
         }
 
         info!("running next.js build");
@@ -1429,13 +1475,11 @@ done
 
         if build_output.status.success() {
             info!("next.js build completed successfully");
-            Ok(true)
+            Ok(BuildStatus::Success)
         } else {
-            error!(
-                "next.js build failed: {}",
-                String::from_utf8_lossy(&build_output.stderr)
-            );
-            Ok(false)
+            let error_message = String::from_utf8_lossy(&build_output.stderr).to_string();
+            error!("next.js build failed: {}", error_message);
+            Ok(BuildStatus::Failed(error_message))
         }
     }
 
