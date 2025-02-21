@@ -54,7 +54,31 @@ async function generateWorkLog(
     - include all relevant media file paths in the mediaLinks array
     - maintain user privacy by excluding sensitive/personal information
     - ensure description and content are properly escaped for markdown table cells (use <br> for newlines)
+    - link to people using [[firstname]]
+    - link to concepts using [[concept-name]]
     
+    Example outputs:
+    {
+        "title": "engineering: implemented rust error handling",
+        "description": "refactored error handling in [[screenpipe-core]] pipeline. paired with [[sarah]] to implement anyhow::Result across key modules. improved error propagation and logging",
+        "tags": ["#rust", "#error-handling", "#pair-programming"],
+        "mediaLinks": ["<video src=\"file:///recordings/pair-programming-session.mp4\" controls></video>"]
+    }
+
+    {
+        "title": "sales: customer discovery call with fintech startup",
+        "description": "met with [[alex]] from payflow. discussed [[24-7-recording]] use cases for compliance. key pain point: audit trail generation. next: technical demo next week",
+        "tags": ["#sales", "#fintech", "#customer-discovery"],
+        "mediaLinks": ["<video src=\"file:///recordings/sales-call-payflow.mp4\" controls></video>"]
+    }
+
+    {
+        "title": "research: llm context window analysis",
+        "description": "reviewed [[claude-3]] papers on attention mechanisms. summarized findings in [[context-window]] note. potential implications for [[screenpipe]]'s chunking strategy",
+        "tags": ["#research", "#llm", "#ai-architecture"],
+        "mediaLinks": []
+    }
+
     Return a JSON object with:
     {
         "title": "Brief, specific title describing the main activity",
@@ -93,16 +117,16 @@ async function syncLogToObsidian(
   logEntry: WorkLog,
   obsidianPath: string
 ): Promise<string> {
-  const normalizedPath = path.normalize(obsidianPath);
-  await fs.mkdir(normalizedPath, { recursive: true });
+  const logsPath = path.join(path.normalize(obsidianPath), "logs");
+  await fs.mkdir(logsPath, { recursive: true });
 
   const today = new Date();
   const filename = `${today.getFullYear()}-${String(
     today.getMonth() + 1
   ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}.md`;
-  const filePath = path.join(normalizedPath, filename);
+  const filePath = path.join(logsPath, filename);
 
-  const vaultName = path.basename(path.resolve(normalizedPath));
+  const vaultName = path.basename(path.resolve(obsidianPath));
 
   const escapeTableCell = (content: string) => {
     return content.replace(/\|/g, "\\|").replace(/\n/g, "<br>");

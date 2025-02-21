@@ -11,15 +11,16 @@ async function readRecentLogs(
   obsidianPath: string,
   since: Date
 ): Promise<string> {
+  const logsPath = path.join(path.normalize(obsidianPath), "logs");
   const today = new Date().toISOString().split("T")[0];
   const yesterday = since.toISOString().split("T")[0];
 
   try {
     const todayContent = await fs
-      .readFile(path.join(obsidianPath, `${today}.md`), "utf8")
+      .readFile(path.join(logsPath, `${today}.md`), "utf8")
       .catch(() => "");
     const yesterdayContent = await fs
-      .readFile(path.join(obsidianPath, `${yesterday}.md`), "utf8")
+      .readFile(path.join(logsPath, `${yesterday}.md`), "utf8")
       .catch(() => "");
 
     return `${yesterdayContent}\n${todayContent}`;
@@ -66,8 +67,10 @@ Instructions for Media and Formatting:
 - Do not wrap your response in \`\`\`markdown\`\`\` tags
 - Add relevant #tags for categorization
 - Escape any pipe characters (|) in tables with \\|
+- Do not hallucinate video paths, use the exact video path from the logs
 - All your outputs will be written directly in Obsidian note taking app so use the formatting of the app in your response to maximize readability, 
 embeding links, videos, etc. usually mp4 needs video html component and not the link format
+- If you do not know the answer or do not have the right context, say I do not know, do not hallucinate
 
 Analysis Structure:
 ### Summary
@@ -120,18 +123,16 @@ async function saveMarkdown(
   obsidianPath: string,
   filename: string
 ): Promise<string> {
-  const normalizedPath = path.normalize(obsidianPath);
-  await fs.mkdir(normalizedPath, { recursive: true });
+  const analysesPath = path.join(path.normalize(obsidianPath), "analyses");
+  await fs.mkdir(analysesPath, { recursive: true });
 
-  const filePath = path.join(normalizedPath, filename);
+  const filePath = path.join(analysesPath, filename);
   await fs.writeFile(filePath, content, "utf8");
 
-  const relativePath = obsidianPath
-    .replace(normalizedPath, "")
-    .replace(/^\//, "");
+  const vaultName = path.basename(path.resolve(obsidianPath));
   return `obsidian://open?vault=${encodeURIComponent(
-    relativePath
-  )}&file=${encodeURIComponent(filename)}`;
+    vaultName
+  )}&file=analyses/${encodeURIComponent(filename)}`;
 }
 
 export async function GET() {
@@ -182,7 +183,11 @@ export async function GET() {
       .toString()
       .padStart(2, "0")}-analysis.md`;
 
-    const deepLink = await saveMarkdown(analysis, obsidianPath, filename);
+    const deepLink = await saveMarkdown(
+      "\n" + analysis,
+      obsidianPath,
+      filename
+    );
 
     return NextResponse.json({
       message: "analysis completed",
