@@ -605,6 +605,15 @@ export function ObsidianSettings() {
                         });
                       }}
                     />
+                    {settings?.logModel &&
+                      (settings.logModel.includes("deepseek") ||
+                        settings.logModel.includes("o3") ||
+                        settings.logModel.includes("o1")) && (
+                        <p className="text-sm text-red-500">
+                          warning: reasoning models like deepseek are not
+                          recommended for log generation.
+                        </p>
+                      )}
                     <p className="text-xs text-muted-foreground">
                       local AI model used for generating individual activity
                       logs
