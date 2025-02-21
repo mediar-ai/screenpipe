@@ -119,8 +119,12 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let registry = tracing_subscriber::registry()
         .with(env_filter)
-        .with(fmt::layer().with_writer(std::io::stdout).with_timer(timer))
-        .with(fmt::layer().with_writer(non_blocking));
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_timer(timer.clone()),
+        )
+        .with(fmt::layer().with_writer(non_blocking).with_timer(timer));
 
     // Build the final registry with conditional Sentry layer
     if !cli.disable_telemetry {
