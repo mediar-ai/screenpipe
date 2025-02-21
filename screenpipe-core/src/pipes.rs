@@ -1503,31 +1503,121 @@ done
         let temp_dir = dest_dir.with_extension("_temp");
         tokio::fs::create_dir_all(&temp_dir).await?;
 
+        // Create initial pipe.json in temp directory with download status
+        let temp_pipe_json = temp_dir.join("pipe.json");
+        let initial_config = json!({
+            "buildStatus": {
+                "status": "in_progress",
+                "step": "downloading",
+            }
+        });
+        tokio::fs::write(
+            &temp_pipe_json,
+            serde_json::to_string_pretty(&initial_config)?,
+        )
+        .await?;
+
+        // Helper function to update build status
+        async fn update_build_status(
+            path: &Path,
+            status: &str,
+            step: &str,
+            error: Option<&str>,
+        ) -> anyhow::Result<()> {
+            if path.exists() {
+                let pipe_json = tokio::fs::read_to_string(path).await?;
+                let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
+                pipe_config["buildStatus"] = match error {
+                    Some(err) => json!({
+                        "status": status,
+                        "step": step,
+                        "error": err
+                    }),
+                    None => json!({
+                        "status": status,
+                        "step": step
+                    }),
+                };
+                let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
+                tokio::fs::write(path, updated_pipe_json).await?;
+            }
+            Ok(())
+        }
+
+        // Cleanup function
+        async fn cleanup_temp(temp_dir: &Path, temp_zip: &Path) -> anyhow::Result<()> {
+            if temp_zip.exists() {
+                if let Err(e) = tokio::fs::remove_file(temp_zip).await {
+                    warn!("Failed to remove temporary zip file: {}", e);
+                }
+            }
+            if temp_dir.exists() {
+                if let Err(e) = tokio::fs::remove_dir_all(temp_dir).await {
+                    warn!("Failed to remove temporary directory: {}", e);
+                }
+            }
+            Ok(())
+        }
+
         // Download zip file
         debug!("downloading zip file from: {}", source);
         let client = Client::new();
-        let response = client.get(source).send().await?;
-        let zip_content = response.bytes().await?;
+        let response = match client.get(source).send().await {
+            Ok(res) => res,
+            Err(e) => {
+                let err_msg = format!("Failed to download zip: {}", e);
+                error!("{}", err_msg);
+                cleanup_temp(&temp_dir, &temp_dir.join("temp.zip")).await?;
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        };
+
+        let zip_content = match response.bytes().await {
+            Ok(content) => content,
+            Err(e) => {
+                let err_msg = format!("Failed to read zip content: {}", e);
+                error!("{}", err_msg);
+                cleanup_temp(&temp_dir, &temp_dir.join("temp.zip")).await?;
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        };
 
         // Create temporary zip file
         let temp_zip = temp_dir.join("temp.zip");
-        tokio::fs::write(&temp_zip, &zip_content).await?;
+        if let Err(e) = tokio::fs::write(&temp_zip, &zip_content).await {
+            let err_msg = format!("Failed to write temporary zip file: {}", e);
+            error!("{}", err_msg);
+            cleanup_temp(&temp_dir, &temp_zip).await?;
+            return Err(anyhow::anyhow!(err_msg));
+        }
 
-        // Unzip the file using tokio spawn_blocking to handle sync operations
+        // Update status before extraction
+        let temp_pipe_json = temp_dir.join("pipe.json");
+        update_build_status(&temp_pipe_json, "in_progress", "extracting", None).await?;
+
+        // Unzip the file
         debug!("unzipping file to temp directory");
         let temp_zip_path = temp_zip.clone();
         let temp_dir_path = temp_dir.clone();
 
-        tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let extraction_result = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
             let zip_file = std::fs::File::open(&temp_zip_path)?;
             let mut archive = zip::ZipArchive::new(zip_file)?;
+            let total_files = archive.len();
 
-            for i in 0..archive.len() {
+            for i in 0..total_files {
                 let mut file = archive.by_index(i)?;
                 let name = file.name().to_string();
+
+                // Check for zip slip vulnerability
+                if name.contains("..") {
+                    return Err(anyhow::anyhow!(
+                        "Invalid zip file: potential path traversal attack"
+                    ));
+                }
+
                 let outpath = temp_dir_path.join(&name);
-                let ends_with_slash = name.ends_with('/');
-                if ends_with_slash {
+                if name.ends_with('/') {
                     std::fs::create_dir_all(&outpath)?;
                 } else {
                     if let Some(p) = outpath.parent() {
@@ -1541,18 +1631,52 @@ done
             }
             Ok(())
         })
-        .await??;
+        .await;
+
+        // Handle extraction errors
+        if let Err(e) = extraction_result {
+            let err_msg = format!("Extraction task failed: {}", e);
+            error!("{}", err_msg);
+            update_build_status(&temp_pipe_json, "error", "extracting", Some(&err_msg)).await?;
+            cleanup_temp(&temp_dir, &temp_zip).await?;
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
+        if let Err(e) = extraction_result.unwrap() {
+            let err_msg = format!("Failed to extract zip: {}", e);
+            error!("{}", err_msg);
+            update_build_status(&temp_pipe_json, "error", "extracting", Some(&err_msg)).await?;
+            cleanup_temp(&temp_dir, &temp_zip).await?;
+            return Err(anyhow::anyhow!(err_msg));
+        }
 
         // Remove the temporary zip file
-        tokio::fs::remove_file(&temp_zip).await?;
+        if let Err(e) = tokio::fs::remove_file(&temp_zip).await {
+            warn!("Failed to remove temporary zip file: {}", e);
+        }
 
         // Move temp dir to final location
         if dest_dir.exists() {
-            tokio::fs::remove_dir_all(&dest_dir).await?;
+            if let Err(e) = tokio::fs::remove_dir_all(&dest_dir).await {
+                let err_msg = format!("Failed to remove existing destination directory: {}", e);
+                error!("{}", err_msg);
+                cleanup_temp(&temp_dir, &temp_zip).await?;
+                return Err(anyhow::anyhow!(err_msg));
+            }
         }
-        tokio::fs::rename(&temp_dir, &dest_dir).await?;
 
-        // Check if it's a Next.js project
+        if let Err(e) = tokio::fs::rename(&temp_dir, &dest_dir).await {
+            let err_msg = format!("Failed to move files to destination: {}", e);
+            error!("{}", err_msg);
+            cleanup_temp(&temp_dir, &temp_zip).await?;
+            return Err(anyhow::anyhow!(err_msg));
+        }
+
+        // Update status for installation
+        let final_pipe_json = dest_dir.join("pipe.json");
+        update_build_status(&final_pipe_json, "in_progress", "installing", None).await?;
+
+        // Check if it's a Next.js project and handle installation
         let package_json_path = dest_dir.join("package.json");
         let is_nextjs = if package_json_path.exists() {
             let package_json = tokio::fs::read_to_string(&package_json_path).await?;
@@ -1565,21 +1689,31 @@ done
         // Find bun path
         let bun_path = find_bun_path().ok_or_else(|| anyhow::anyhow!("bun not found"))?;
 
-        // Run bun install
+        // Run bun install with error handling
         info!("installing dependencies");
-        retry_install(&bun_path, &dest_dir, 3).await?;
+        if let Err(e) = retry_install(&bun_path, &dest_dir, 3).await {
+            let err_msg = format!("Failed to install dependencies: {}", e);
+            error!("{}", err_msg);
+            update_build_status(&final_pipe_json, "error", "installing", Some(&err_msg)).await?;
+            return Err(anyhow::anyhow!(err_msg));
+        }
 
         if is_nextjs {
-            info!("detected next.js project, starting in production mode");
-            // Update pipe.json to indicate it's a Next.js project
-            let pipe_json_path = dest_dir.join("pipe.json");
-            if pipe_json_path.exists() {
-                let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
+            info!("detected next.js project, updating configuration");
+            if final_pipe_json.exists() {
+                let pipe_json = tokio::fs::read_to_string(&final_pipe_json).await?;
                 let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
                 pipe_config["is_nextjs"] = json!(true);
+                pipe_config["buildStatus"] = json!({
+                    "status": "success",
+                    "step": "completed"
+                });
                 let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
-                tokio::fs::write(&pipe_json_path, updated_pipe_json).await?;
+                tokio::fs::write(&final_pipe_json, updated_pipe_json).await?;
             }
+        } else {
+            // Update final success status for non-Next.js projects
+            update_build_status(&final_pipe_json, "success", "completed", None).await?;
         }
 
         info!("pipe downloaded and set up successfully at: {:?}", dest_dir);
