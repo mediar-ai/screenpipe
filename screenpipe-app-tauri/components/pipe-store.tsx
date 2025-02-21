@@ -76,10 +76,16 @@ export const PipeStore: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [searchQuery, filteredPipes.length])
 
-  listen("update-all-pipes", async () => {    
-    if (!checkLogin(settings.user, false)) return;
-    await handleUpdateAllPipes(true)
-  });
+  useEffect(() => {
+    const unlisten = listen("update-all-pipes", async () => {    
+      if (!checkLogin(settings.user, false)) return;
+      await handleUpdateAllPipes(true);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [pipes, setPipes, setInstalledPipes, setLoadingInstalls, settings.user]);
 
   const fetchStorePlugins = async () => {
     try {
