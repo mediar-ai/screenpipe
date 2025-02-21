@@ -1,7 +1,7 @@
 "use client";
 
 import { DatePickerWithRange } from "@/components/date-range-picker";
-import { ImageGrid, MainImage } from "@/components/image-card";
+import { ImageGrid, MainImage, SkeletonCard } from "@/components/image-card";
 import { SearchBar } from "@/components/search-bar";
 import { Button } from "@/components/ui/button";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -122,7 +122,21 @@ export default function Page() {
 				</div>
 			)}
 
-			{querys.query ? (
+			{!isSearching && searchResults.length === 0 && querys.query ? (
+				<div className="h-64 w-96 flex mx-auto items-center justify-center whitespace-nowrap">
+					<p className="text-sm text-gray-500">
+						No results found for "{querys.query}"
+					</p>
+				</div>
+			) : null}
+
+			{isSearching &&
+				searchResults.length === 0 &&
+				Array.from({ length: 6 }).map((_, index) => (
+					<SkeletonCard key={`skeleton-${index}`} />
+				))}
+
+			{querys.query && !(searchResults.length === 0) ? (
 				<div className="h-64 flex items-end">
 					<ImageGrid searchResult={searchResults} pageRef={pageRef} />
 				</div>
