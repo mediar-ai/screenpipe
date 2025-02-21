@@ -85,7 +85,7 @@ impl ResourceMonitor {
 
         // Avoid unnecessary cloning by using references
         let payload = json!({
-            "api_key": "phc_6TUWxXM2NQGPuLhkwgRHxPfXMWqhGGpXqWNIw0GRpMD",
+            "api_key": "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce",
             "event": "resource_usage",
             "properties": {
                 "distinct_id": &self.distinct_id,
