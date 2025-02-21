@@ -1553,7 +1553,8 @@ impl DatabaseManager {
                 ui_monitoring.initial_traversal_at,
                 video_chunks.file_path,
                 frames.offset_index,
-                frames.browser_url
+                frames.browser_url,
+                frames.name as frame_name
             FROM {}
             LEFT JOIN frames ON
                 frames.timestamp BETWEEN
