@@ -1,35 +1,34 @@
-import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Power, Search, Trash2, RefreshCw } from "lucide-react";
-import { toast } from "@/components/ui/use-toast";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Command } from "@tauri-apps/plugin-shell";
-import {
-  PipeApi,
-  PipeDownloadError,
-  PurchaseHistoryItem,
-} from "@/lib/api/store";
-import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { listen } from "@tauri-apps/api/event";
-import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
-import { PipeDetails } from "./pipe-store/pipe-details";
-import { PipeCard } from "./pipe-store/pipe-card";
-import { AddPipeForm } from "./pipe-store/add-pipe-form";
-import { useSettings } from "@/lib/hooks/use-settings";
-import posthog from "posthog-js";
-import { Progress } from "./ui/progress";
-import { open } from "@tauri-apps/plugin-dialog";
-import { LoginDialog, useLoginCheck } from "./login-dialog";
-import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toast } from "@/components/ui/use-toast";
+import {
+  PipeApi,
+  PipeDownloadError,
+  PurchaseHistoryItem,
+} from "@/lib/api/store";
+import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { open } from "@tauri-apps/plugin-dialog";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import { Loader2, Power, RefreshCw, Search, Trash2 } from "lucide-react";
+import posthog from "posthog-js";
+import React, { useEffect, useState } from "react";
+import { LoginDialog, useLoginCheck } from "./login-dialog";
+import { AddPipeForm } from "./pipe-store/add-pipe-form";
+import { PipeCard } from "./pipe-store/pipe-card";
+import { PipeDetails } from "./pipe-store/pipe-details";
+import { InstalledPipe, PipeWithStatus } from "./pipe-store/types";
+import { Progress } from "./ui/progress";
 
 const corePipes: string[] = ["data-table", "search"];
 
@@ -158,6 +157,7 @@ export const PipeStore: React.FC = () => {
             is_enabled: p.config?.enabled || false,
             source_code: p.config?.source || "",
             is_local,
+            state: p.config?.enabled ? "enabled" : "disabled",
           };
         });
 
@@ -647,8 +647,7 @@ export const PipeStore: React.FC = () => {
       onComplete();
     } catch (error) {
       console.error(
-        `Failed to ${
-          pipe.installed_config?.enabled ? "disable" : "enable"
+        `Failed to ${pipe.installed_config?.enabled ? "disable" : "enable"
         } pipe:`,
         error,
       );
@@ -1073,20 +1072,8 @@ export const PipeStore: React.FC = () => {
             {filteredPipes.map((pipe) => (
               <PipeCard
                 key={pipe.id}
-                pipe={pipe}
-                setPipe={(updatedPipe) => {
-                  setPipes((prevPipes) => {
-                    return prevPipes.map((p) =>
-                      p.id === updatedPipe.id ? updatedPipe : p,
-                    );
-                  });
-                }}
-                onInstall={handleInstallPipe}
+                pipeProp={pipe}
                 onClick={setSelectedPipe}
-                onPurchase={handlePurchasePipe}
-                isLoadingPurchase={loadingPurchases.has(pipe.id)}
-                isLoadingInstall={loadingInstalls.has(pipe.id)}
-                onToggle={handleTogglePipe}
               />
             ))}
           </div>

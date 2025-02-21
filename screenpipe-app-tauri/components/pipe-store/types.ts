@@ -21,13 +21,16 @@ export interface InstalledPipe {
   id: string;
 }
 
+export type PipeState = "loading" | "purchasing" | "purchased" | "purchase_error" | "installed" | "installing" | "install_done" | "install_error" | "enabling" | "enabled" | "disabled" | "opening" | "building" | "build_done" | "build_error";
+
 export interface PipeWithStatus extends PipeStorePlugin {
+  state: PipeState;
+  has_purchased: boolean;
   is_installed: boolean;
   is_enabled: boolean;
-  installed_config?: InstalledPipe["config"];
-  has_purchased: boolean;
-  is_core_pipe: boolean;
   is_installing?: boolean;
+  installed_config?: InstalledPipe["config"];
+  is_core_pipe: boolean;
   has_update?: boolean;
   is_local?: boolean;
 }
