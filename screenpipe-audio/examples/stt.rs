@@ -103,7 +103,7 @@ async fn main() {
                 device: Arc::new(default_input_device().unwrap()),
             };
 
-            let mut segments = prepare_segments(
+            let (mut segments, _) = prepare_segments(
                 &audio_input.data,
                 vad_engine.clone(),
                 &segmentation_model_path,

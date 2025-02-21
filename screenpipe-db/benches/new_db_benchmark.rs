@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use screenpipe_server::DatabaseManager;
-use screenpipe_vision::OcrEngine;
+use screenpipe_db::{DatabaseManager, OcrEngine};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 

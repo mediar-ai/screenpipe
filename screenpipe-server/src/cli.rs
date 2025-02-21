@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueHint};
 use clap_complete::{generate, Shell};
@@ -7,7 +7,8 @@ use screenpipe_audio::{vad::{VadSensitivity, VadEngineEnum}, core::engine::Audio
 use screenpipe_vision::{custom_ocr::CustomOcrConfig, utils::OcrEngine as CoreOcrEngine};
 use clap::ValueEnum;
 use screenpipe_core::Language;
-
+use screenpipe_db::OcrEngine as DBOcrEngine;
+use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 pub enum CliAudioTranscriptionEngine {
     #[clap(name = "deepgram")]
@@ -45,6 +46,16 @@ pub enum CliOcrEngine {
     #[cfg(target_os = "macos")]
     AppleNative,
     Custom,
+}
+
+impl From<CliOcrEngine> for Arc<DBOcrEngine> {
+    fn from(cli_engine: CliOcrEngine) -> Self {
+        match cli_engine {
+            CliOcrEngine::Unstructured => Arc::new(DBOcrEngine::Unstructured),
+            CliOcrEngine::AppleNative => Arc::new(DBOcrEngine::AppleNative),
+            CliOcrEngine::Custom => Arc::new(DBOcrEngine::Custom(DBCustomOcrConfig::default())),
+        }
+    }
 }
 
 impl From<CliOcrEngine> for CoreOcrEngine {

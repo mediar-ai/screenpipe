@@ -55,6 +55,7 @@ bytemuck = "1.16.1"
 
 # Async
 tokio = { workspace = true }
+tokio-stream = "0.1.17"
 
 # Detect speech/silence
 webrtc-vad = "0.4.0"
@@ -64,6 +65,7 @@ reqwest = { workspace = true }
 
 screenpipe-core = { path = "../screenpipe-core" }
 screenpipe-events = { path = "../screenpipe-events" }
+screenpipe-db = { path = "../screenpipe-db" }
 
 # crossbeam
 crossbeam = { workspace = true }

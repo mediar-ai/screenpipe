@@ -11,6 +11,10 @@ use axum::{
 };
 use oasgen::{oasgen, OaSchema, Server};
 
+use screenpipe_db::{
+    ContentType, DatabaseManager, FrameData, OCRResult as OCRResultDB, Order, SearchMatch,
+    SearchResult, Speaker, TagContentType,
+};
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -22,18 +26,15 @@ use futures::{
 use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
-use crate::video_utils::extract_frame;
 use crate::{
-    db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
-    pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
-        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
+        extract_frame, extract_frame_from_video, extract_high_quality_frame, merge_videos,
+        validate_media, MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
-    DatabaseManager,
+    PipeManager,
 };
 use chrono::{DateTime, Utc};
 use screenpipe_audio::core::device::{
@@ -380,7 +381,7 @@ pub(crate) async fn search(
                 offset_index: audio.offset_index,
                 tags: audio.tags.clone(),
                 device_name: audio.device_name.clone(),
-                device_type: audio.device_type.clone(),
+                device_type: audio.device_type.clone().into(),
                 speaker: audio.speaker.clone(),
                 start_time: audio.start_time,
                 end_time: audio.end_time,
@@ -1199,7 +1200,7 @@ async fn add_frame_to_db(
                 frame_id,
                 &ocr.text,
                 ocr.text_json.as_deref().unwrap_or(""),
-                Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
+                Arc::new(OcrEngine::default().into()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
             )
             .await?;
         }
@@ -1250,11 +1251,6 @@ async fn add_transcription_to_db(
 ) -> Result<(), anyhow::Error> {
     let db = &state.db;
 
-    let device = AudioDevice {
-        name: device_name.to_string(),
-        device_type: DeviceType::Input,
-    };
-
     let dummy_audio_chunk_id = db.insert_audio_chunk("").await?;
 
     db.insert_audio_transcription(
@@ -1262,7 +1258,10 @@ async fn add_transcription_to_db(
         &transcription.transcription,
         -1,
         &transcription.transcription_engine,
-        &device,
+        &screenpipe_db::AudioDevice {
+            name: device_name.to_string(),
+            device_type: DeviceType::Input.into(),
+        },
         None,
         None,
         None,
@@ -1870,7 +1869,7 @@ struct SemanticSearchQuery {
 async fn semantic_search_handler(
     Query(query): Query<SemanticSearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> Result<JsonResponse<Vec<crate::db_types::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<JsonResponse<Vec<screenpipe_db::OCRResult>>, (StatusCode, JsonResponse<Value>)> {
     let limit = query.limit.unwrap_or(10);
     let threshold = query.threshold.unwrap_or(0.3);
 

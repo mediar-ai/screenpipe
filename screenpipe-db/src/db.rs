@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
-use screenpipe_audio::core::device::{AudioDevice, DeviceType};
-use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -19,16 +17,14 @@ use std::collections::BTreeMap;
 
 use zerocopy::AsBytes;
 
-use crate::db_types::{
-    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, FrameRow, OCREntry,
-    OCRResult, OCRResultRaw, OcrTextBlock, Order, SearchMatch, Speaker, TagContentType, TextBounds,
-    TextPosition,
-};
-use crate::db_types::{ContentType, UiContent};
-use crate::db_types::{SearchResult, TimeSeriesChunk};
-use crate::video_utils::VideoMetadata;
-
 use futures::future::try_join_all;
+
+use crate::{
+    AudioChunksResponse, AudioDevice, AudioEntry, AudioResult, AudioResultRaw, ContentType,
+    DeviceType, FrameData, FrameRow, OCREntry, OCRResult, OCRResultRaw, OcrEngine, OcrTextBlock,
+    Order, SearchMatch, SearchResult, Speaker, TagContentType, TextBounds, TextPosition,
+    TimeSeriesChunk, UiContent, VideoMetadata,
+};
 
 pub struct DatabaseManager {
     pub pool: SqlitePool,
@@ -985,7 +981,6 @@ impl DatabaseManager {
         browser_url: Option<&str>,
         focused: Option<bool>,
     ) -> Result<usize, sqlx::Error> {
-
         // if focused or browser_url is present, we run only on OCR
         if focused.is_some() || browser_url.is_some() {
             content_type = ContentType::OCR;

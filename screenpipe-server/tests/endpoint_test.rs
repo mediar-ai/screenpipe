@@ -8,13 +8,10 @@ mod tests {
     use chrono::{Duration, Utc};
     use lru::LruCache;
     use screenpipe_audio::core::device::{AudioDevice, DeviceType};
-    use screenpipe_server::db_types::ContentType;
-    use screenpipe_server::db_types::SearchResult;
+    use screenpipe_db::{ContentType, DatabaseManager, SearchResult};
     use screenpipe_server::video_cache::FrameCache;
     use screenpipe_server::PipeManager;
-    use screenpipe_server::{
-        create_router, AppState, ContentItem, DatabaseManager, PaginatedResponse,
-    };
+    use screenpipe_server::{AppState, ContentItem, PaginatedResponse};
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
     use std::num::NonZeroUsize;
@@ -69,7 +66,10 @@ mod tests {
                 "Short",
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test1".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -83,7 +83,10 @@ mod tests {
                 "This is a longer transcription with more words",
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test2".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -205,7 +208,10 @@ mod tests {
                 "This is a test audio transcription that should definitely be longer than thirty characters", // >30 chars
                 0,
                 "",
-                &AudioDevice::new("test1".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test1".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -218,7 +224,10 @@ mod tests {
                 "Short audio", // <30 chars
                 0,
                 "",
-                &AudioDevice::new("test2".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test2".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,
@@ -412,7 +421,10 @@ mod tests {
                 "old audio transcription",
                 0,
                 "",
-                &AudioDevice::new("test".to_string(), DeviceType::Input),
+                &screenpipe_db::AudioDevice {
+                    name: "test".to_string(),
+                    device_type: screenpipe_db::DeviceType::Input,
+                },
                 None,
                 None,
                 None,

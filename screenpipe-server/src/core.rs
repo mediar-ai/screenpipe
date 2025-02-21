@@ -1,6 +1,5 @@
 use crate::cli::{CliVadEngine, CliVadSensitivity};
-use crate::db_types::Speaker;
-use crate::{DatabaseManager, VideoCapture};
+use crate::VideoCapture;
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::future::join_all;
@@ -12,6 +11,7 @@ use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_audio::{create_whisper_channel, AudioInput, TranscriptionResult};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
+use screenpipe_db::{DatabaseManager, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
 use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
@@ -277,7 +277,12 @@ async fn record_video(
                             );
                         }
                         if let Err(e) = db
-                            .insert_ocr_text(frame_id, text, &text_json, Arc::clone(&ocr_engine))
+                            .insert_ocr_text(
+                                frame_id,
+                                text,
+                                &text_json,
+                                Arc::new((*ocr_engine).clone().into()),
+                            )
                             .await
                         {
                             error!(
@@ -553,7 +558,17 @@ async fn process_audio_result(
                     &transcription,
                     offset_index,
                     &transcription_engine,
-                    &result.input.device,
+                    &screenpipe_db::AudioDevice {
+                        name: result.input.device.name.clone(),
+                        device_type: match result.input.device.device_type {
+                            screenpipe_audio::core::device::DeviceType::Input => {
+                                screenpipe_db::DeviceType::Input
+                            }
+                            screenpipe_audio::core::device::DeviceType::Output => {
+                                screenpipe_db::DeviceType::Output
+                            }
+                        },
+                    },
                     Some(speaker.id),
                     Some(result.start_time),
                     Some(result.end_time),

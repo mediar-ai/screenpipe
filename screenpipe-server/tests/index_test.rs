@@ -5,7 +5,8 @@ use std::{
 
 use anyhow::Result;
 use dirs::home_dir;
-use screenpipe_server::{cli::OutputFormat, handle_index_command, DatabaseManager};
+use screenpipe_db::DatabaseManager;
+use screenpipe_server::{cli::OutputFormat, handle_index_command};
 use tempfile::tempdir;
 use tokio::fs;
 use tracing::debug;

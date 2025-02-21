@@ -12,9 +12,9 @@ use std::{num::NonZeroUsize, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
+use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
-    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
-    PaginatedResponse, PipeManager,
+    create_router, video_cache::FrameCache, AppState, ContentItem, PaginatedResponse, PipeManager,
 };
 
 // Add this function to initialize the logger
@@ -396,7 +396,10 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "Test audio transcription",
         0,
         "test_engine",
-        &AudioDevice::new("test".to_string(), DeviceType::Output),
+        &screenpipe_db::AudioDevice {
+            name: "test".to_string(),
+            device_type: screenpipe_db::DeviceType::Output,
+        },
         None,
         None,
         None,

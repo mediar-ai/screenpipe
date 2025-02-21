@@ -14,15 +14,17 @@ use screenpipe_audio::{
     vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_db::{
+    create_migration_worker, DatabaseManager, MigrationCommand, MigrationConfig, MigrationStatus,
+};
 use screenpipe_server::{
     cli::{
         AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, MigrationSubCommand,
         OutputFormat, PipeCommand, VisionCommand,
     },
-    create_migration_worker, handle_index_command,
+    handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, DatabaseManager, MigrationCommand, MigrationConfig,
-    MigrationStatus, PipeManager, ResourceMonitor, SCServer,
+    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -262,7 +264,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             Command::Completions { shell } => {
-                cli.handle_completions(shell.clone())?;
+                cli.handle_completions(*shell)?;
                 return Ok(());
             }
             Command::Pipe { subcommand } => {
@@ -329,7 +331,7 @@ async fn main() -> anyhow::Result<()> {
                 continue_on_error,
             } => {
                 // Initialize the database
-                let local_data_dir = get_base_dir(&data_dir)?;
+                let local_data_dir = get_base_dir(data_dir)?;
                 let db = Arc::new(
                     DatabaseManager::new(&format!(
                         "{}/db.sqlite",
@@ -514,7 +516,7 @@ async fn main() -> anyhow::Result<()> {
                 debug,
                 use_embedding,
             } => {
-                let local_data_dir = get_base_dir(&data_dir)?;
+                let local_data_dir = get_base_dir(data_dir)?;
 
                 // Update logging filter if debug is enabled
                 if *debug {
@@ -1316,7 +1318,7 @@ async fn handle_pipe_command(
                         ),
                     }
                 }
-                _ => match pipe_manager.download_pipe(&url).await {
+                _ => match pipe_manager.download_pipe(url).await {
                     Ok(pipe_id) => match output {
                         OutputFormat::Json => println!(
                             "{}",
@@ -1359,7 +1361,7 @@ async fn handle_pipe_command(
                 _ => {
                     println!("note: server not running, showing pipe configuration");
                     pipe_manager
-                        .get_pipe_info(&id)
+                        .get_pipe_info(id)
                         .await
                         .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
                 }
@@ -1382,7 +1384,7 @@ async fn handle_pipe_command(
                 }
                 _ => {
                     pipe_manager
-                        .update_config(&id, json!({"enabled": true}))
+                        .update_config(id, json!({"enabled": true}))
                         .await?;
                     println!("note: server not running, updated config only. pipe will start on next server launch");
                 }
@@ -1401,7 +1403,7 @@ async fn handle_pipe_command(
                 }
                 _ => {
                     pipe_manager
-                        .update_config(&id, json!({"enabled": false}))
+                        .update_config(id, json!({"enabled": false}))
                         .await?;
                     println!("note: server not running, updated config only");
                 }
@@ -1409,8 +1411,8 @@ async fn handle_pipe_command(
         }
 
         PipeCommand::Update { id, config, port } => {
-            let config: Value = serde_json::from_str(&config)
-                .map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
+            let config: Value =
+                serde_json::from_str(config).map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
 
             match client
                 .post(format!("{}:{}/pipes/update", server_url, port))
@@ -1425,7 +1427,7 @@ async fn handle_pipe_command(
                     println!("pipe {} config updated in running server", id);
                 }
                 _ => {
-                    pipe_manager.update_config(&id, config).await?;
+                    pipe_manager.update_config(id, config).await?;
                     println!("note: server not running, updated config only");
                 }
             }
@@ -1451,7 +1453,7 @@ async fn handle_pipe_command(
                 Ok(response) if response.status().is_success() => {
                     println!("pipe '{}' deleted from running server", id);
                 }
-                _ => match pipe_manager.delete_pipe(&id).await {
+                _ => match pipe_manager.delete_pipe(id).await {
                     Ok(_) => println!("pipe '{}' deleted from local files", id),
                     Err(e) => println!("failed to delete pipe: {}", e),
                 },

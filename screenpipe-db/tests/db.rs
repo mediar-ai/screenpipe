@@ -3,12 +3,9 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
-    use screenpipe_audio::core::device::{AudioDevice, DeviceType};
-    use screenpipe_server::{
-        db_types::{ContentType, Frame, SearchResult},
-        DatabaseManager,
+    use screenpipe_db::{
+        AudioDevice, ContentType, DatabaseManager, DeviceType, Frame, OcrEngine, SearchResult,
     };
-    use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
         // Initialize tracing for debug output
@@ -89,7 +86,10 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -155,7 +155,10 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -267,7 +270,10 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -361,7 +367,10 @@ mod tests {
             "Hello from audio 1",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -427,7 +436,10 @@ mod tests {
                 "Hello from audio 2",
                 1,
                 "",
-                &AudioDevice::new("test".to_string(), DeviceType::Output),
+                &AudioDevice {
+                    name: "test".to_string(),
+                    device_type: DeviceType::Output,
+                },
                 None,
                 None,
                 None,
@@ -610,7 +622,10 @@ mod tests {
             "Hello from audio 1",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -645,7 +660,10 @@ mod tests {
             "Hello from audio 2",
             1,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
@@ -789,7 +807,10 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), DeviceType::Output),
+                    &AudioDevice {
+                        name: "test".to_string(),
+                        device_type: DeviceType::Output,
+                    },
                     Some(speaker.id),
                     None,
                     None,
@@ -853,7 +874,10 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), DeviceType::Output),
+                    &AudioDevice {
+                        name: "test".to_string(),
+                        device_type: DeviceType::Output,
+                    },
                     Some(speaker.id),
                     None,
                     None,
@@ -909,7 +933,10 @@ mod tests {
                     "test transcription",
                     0,
                     "",
-                    &AudioDevice::new("test".to_string(), DeviceType::Output),
+                    &AudioDevice {
+                        name: "test".to_string(),
+                        device_type: DeviceType::Output,
+                    },
                     Some(speaker.id),
                     None,
                     None,
@@ -952,7 +979,10 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             Some(speaker.id),
             None,
             None,
@@ -996,7 +1026,10 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             Some(speaker.id),
             None,
             None,
@@ -1013,7 +1046,10 @@ mod tests {
             "test transcription",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             Some(speaker2.id),
             None,
             None,
@@ -1317,7 +1353,10 @@ mod tests {
             "Hello from audio",
             0,
             "",
-            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            &AudioDevice {
+                name: "test".to_string(),
+                device_type: DeviceType::Output,
+            },
             None,
             None,
             None,
