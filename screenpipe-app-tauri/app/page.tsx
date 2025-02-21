@@ -36,11 +36,10 @@ export default function Home() {
   // staggered polling with exponential backoff while maintaining responsiveness
   // while reducing backend load
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadUser(settings.user?.token!);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [settings]);
+      if (settings.user?.token) {
+        loadUser(settings.user.token);
+      }
+  }, [settings.user.token]);
 
   useEffect(() => {
     const getAudioDevices = async () => {
@@ -153,7 +152,7 @@ export default function Home() {
           const pipeApi = new PipeApi();
           console.log("audio-devices", devices);
           await Promise.all(
-            devices.map((device) => pipeApi.startAudio(device))
+            devices.map((device) => pipeApi.startAudio(device)),
           );
           toast({
             title: "audio started",
@@ -206,7 +205,7 @@ export default function Home() {
   useEffect(() => {
     const checkScreenPermissionRestart = async () => {
       const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
+        "screenPermissionRestartPending",
       );
       if (restartPending) {
         setShowOnboarding(true);
@@ -228,7 +227,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center flex-1">
+    <div className="flex flex-col items-center flex-1 max-w-screen-2xl mx-auto relative">
       <NotificationHandler />
       {showOnboarding ? (
         <Onboarding />
@@ -237,7 +236,7 @@ export default function Home() {
           <ChangelogDialog />
           <BreakingChangesInstructionsDialog />
           <Header />
-          <div className=" w-[90%]">
+          <div className=" w-full">
             <PipeStore />
           </div>
         </>

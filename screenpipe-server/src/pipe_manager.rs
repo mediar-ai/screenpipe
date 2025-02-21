@@ -362,15 +362,33 @@ impl PipeManager {
 
             #[cfg(unix)]
             {
-                // try with id first
+                // Make grep pattern more specific to target only pipe processes
                 let command = format!(
-                    "ps axuw | grep {} | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
+                    "ps axuw | grep 'pipes/{}/' | grep -v grep | awk '{{print $2}}' | xargs -I {{}} kill -TERM {{}}",
                     &id.to_string()
                 );
 
                 let _ = tokio::process::Command::new("sh")
                     .arg("-c")
                     .arg(command)
+                    .output()
+                    .await;
+            }
+
+            #[cfg(windows)]
+            {
+                // killing by name is faster
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                let _ = tokio::process::Command::new("powershell")
+                    .arg("-NoProfile")
+                    .arg("-WindowStyle")
+                    .arg("hidden")
+                    .arg("-Command")
+                    .arg(format!(
+                        r#"Get-WmiObject Win32_Process | Where-Object {{ $_.CommandLine -like "*.screenpipe\pipes\{}*" }} | ForEach-Object {{ taskkill.exe /T /F /PID $_.ProcessId }}"#,
+                        &id.to_string()
+                    ))
+                    .creation_flags(CREATE_NO_WINDOW)
                     .output()
                     .await;
             }
