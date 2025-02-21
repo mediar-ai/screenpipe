@@ -7,6 +7,17 @@ import { throttle } from "lodash";
 import { Loader2 } from "lucide-react";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 
+export const SkeletonCard = () => (
+	<div className="flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm">
+		<div className="aspect-video bg-neutral-200 animate-pulse" />
+		<div className="p-3 space-y-2">
+			<div className="h-4 bg-neutral-200 rounded animate-pulse" />
+			<div className="h-3 bg-neutral-200 rounded animate-pulse w-3/4" />
+			<div className="h-3 bg-neutral-200 rounded animate-pulse w-1/2" />
+		</div>
+	</div>
+);
+
 export const ImageGrid = ({
 	searchResult,
 	pageRef,
@@ -200,22 +211,6 @@ export const ImageGrid = ({
 						))}
 					</div>
 				</div>
-				{isSearching ? (
-					<div className="h-64 w-96 mx-auto flex items-center justify-center">
-						<div className="flex flex-col items-center gap-2">
-							<Loader2 className="h-8 w-8 animate-spin text-gray-500" />
-							<p className="text-sm text-gray-500">
-								Searching through your history...
-							</p>
-						</div>
-					</div>
-				) : searchResults.length === 0 && query ? (
-					<div className="h-64 w-96 flex mx-auto items-center justify-center">
-						<p className="text-sm text-gray-500">
-							No results found for "{query}"
-						</p>
-					</div>
-				) : null}
 			</div>
 		</div>
 	);
