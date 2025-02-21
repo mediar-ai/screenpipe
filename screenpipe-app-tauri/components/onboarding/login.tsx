@@ -1,13 +1,9 @@
-import React, { useEffect } from "react";
-import { ExternalLinkIcon, UserCog, Coins } from "lucide-react";
+import React from "react";
+import { ExternalLinkIcon, UserCog } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { toast } from "@/components/ui/use-toast";
-import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import OnboardingNavigation from "./navigation";
 
 interface OnboardingLoginProps {
@@ -21,39 +17,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
   handlePrevSlide,
   handleNextSlide,
 }) => {
-  const { settings, updateSettings, loadUser } = useSettings();
-
-  useEffect(() => {
-    const setupDeepLink = async () => {
-      const unsubscribeDeepLink = await onOpenUrl(async (urls) => {
-        console.log("urls", urls);
-        for (const url of urls) {
-          if (url.includes("api_key=")) {
-            const apiKey = new URL(url).searchParams.get("api_key");
-            if (apiKey) {
-              updateSettings({ user: { token: apiKey } });
-              await loadUser(apiKey, true);
-              toast({
-                title: "logged in!",
-                description: "your api key has been set",
-              });
-              // handleNextSlide();
-            }
-          }
-        }
-      });
-      return unsubscribeDeepLink;
-    };
-
-    let deepLinkUnsubscribe: (() => void) | undefined;
-    setupDeepLink().then((unsubscribe) => {
-      deepLinkUnsubscribe = unsubscribe;
-    });
-
-    return () => {
-      if (deepLinkUnsubscribe) deepLinkUnsubscribe();
-    };
-  }, [settings.user?.token, updateSettings, handleNextSlide]);
+  const { settings, updateSettings } = useSettings();
 
   return (
     <div className="w-full h-full flex flex-col items-center justify-center space-y-6 py-4">
@@ -67,7 +31,7 @@ const OnboardingLogin: React.FC<OnboardingLoginProps> = ({
 
         <div className="p-6 border border-border/50 rounded-lg bg-background/50">
           <div className="space-y-4">
-            {settings.user?.email ? (
+            {settings.user?.token ? (
               <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
                 <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
                 logged in as {settings.user.email}
