@@ -1,7 +1,6 @@
 pub mod device;
 pub mod engine;
 pub mod stream;
-
 use crate::transcription::deepgram::streaming::stream_transcription_deepgram;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
