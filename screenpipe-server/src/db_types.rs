@@ -201,3 +201,67 @@ pub struct AudioChunksResponse {
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OcrTextBlock {
+    pub block_num: String,
+    pub conf: String,
+    pub page_num: String,
+    pub left: String,
+    pub height: String,
+    pub level: String,
+    pub text: String,
+    pub par_num: String,
+    pub top: String,
+    pub word_num: String,
+    pub width: String,
+    pub line_num: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct TextPosition {
+    pub text: String,
+    pub confidence: f32,
+    pub bounds: TextBounds,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct TextBounds {
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Serialize)]
+pub struct SearchMatch {
+    pub frame_id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub text_positions: Vec<TextPosition>,
+    pub app_name: String,
+    pub window_name: String,
+    pub confidence: f32,
+    // pub context: Option<String>,
+    pub text: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct FrameRow {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub url: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub ocr_text: String,
+    pub text_json: String,
+}
+
+#[derive(Deserialize, PartialEq, Default)]
+pub enum Order {
+    #[serde(rename = "ascending")]
+    Ascending,
+    #[serde(rename = "descending")]
+    #[default]
+    Descending,
+}

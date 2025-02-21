@@ -21,7 +21,7 @@ use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
-    db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
+    db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
@@ -1381,20 +1381,6 @@ struct InputControlResponse {
     success: bool,
 }
 
-#[derive(Deserialize, PartialEq)]
-enum Order {
-    #[serde(rename = "ascending")]
-    Ascending,
-    #[serde(rename = "descending")]
-    Descending,
-}
-
-impl Order {
-    fn default() -> Self {
-        Order::Descending
-    }
-}
-
 // Add this new struct
 #[derive(Deserialize)]
 pub struct StreamFramesRequest {
@@ -2066,6 +2052,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
+        .route("/search/keyword", get(keyword_search_handler))
         // .route("/vision/start", post(start_vision_device))
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
@@ -2078,6 +2065,61 @@ pub fn create_router() -> Router<Arc<AppState>> {
     }
 
     router
+}
+
+async fn keyword_search_handler(
+    Query(query): Query<KeywordSearchRequest>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Vec<SearchMatch>>, (StatusCode, JsonResponse<Value>)> {
+    let matches = state
+        .db
+        .search_with_text_positions(
+            &query.query,
+            query.limit,
+            query.offset,
+            query.start_time,
+            query.end_time,
+            query.fuzzy_match,
+            query.order,
+            query.app_names,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(matches))
+}
+
+fn from_comma_separated_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    Ok(s.map(|s| s.split(',').map(String::from).collect()))
+}
+
+#[derive(Deserialize)]
+pub struct KeywordSearchRequest {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: u32,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    start_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    end_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    fuzzy_match: bool,
+    #[serde(default)]
+    order: Order,
+    #[serde(default)]
+    #[serde(deserialize_with = "from_comma_separated_string")]
+    app_names: Option<Vec<String>>,
 }
 
 pub async fn get_frame_data(
