@@ -40,7 +40,7 @@ interface PipeCardProps {
   setPipe: (pipe: PipeWithStatus) => void;
 }
 
-function getBuildStatus(status: BuildStatus | undefined): string {
+export function getBuildStatus(status: BuildStatus | undefined): string {
   return typeof status === "object" ? status.status : status || "";
 }
 
