@@ -1,16 +1,12 @@
 "use client";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { Loader2, RotateCcw, AlertCircle } from "lucide-react";
-import { TimelineIconsSection } from "@/components/timeline/timeline-dock-section";
 import { AudioTranscript } from "@/components/timeline/audio-transcript";
 import { AIPanel } from "@/components/timeline/ai-panel";
 import { TimelineProvider } from "@/lib/hooks/use-timeline-selection";
 import { throttle } from "lodash";
 import { AGENTS } from "@/components/timeline/agents";
-import { TimelineSelection } from "@/components/timeline/timeline-selection";
 import { TimelineControls } from "@/components/timeline/timeline-controls";
-import { TimelineSearch } from "@/components/timeline/timeline-search";
-import { TimelineSearch2 } from "@/components/timeline/timeline-search-v2";
 import { addDays, isAfter, isSameDay, subDays } from "date-fns";
 import { getStartDate } from "@/lib/actions/get-start-date";
 import { useTimelineData } from "@/lib/hooks/use-timeline-data";
@@ -18,6 +14,7 @@ import { useCurrentFrame } from "@/lib/hooks/use-current-frame";
 import { TimelineSlider } from "@/components/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
+import { CommandShortcut } from "@/components/ui/command";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -265,11 +262,16 @@ export default function Timeline() {
 		if (!hasDateBeenFetched(newDate)) {
 			setCurrentFrame(null);
 			const frameTimeStamp = new Date(newDate);
-			if (frameTimeStamp.getDate() === new Date(currentDate).getDate()) {
+			console.log(
+				frameTimeStamp.getDate() === new Date(currentDate).getDate(),
+				startAndEndDates.start.getDate(),
+				newDate.getDate(),
+			);
+			if (isSameDay(frameTimeStamp, new Date(currentDate))) {
 				return;
 			}
 
-			if (isAfter(startAndEndDates.start.getDate(), newDate.getDate())) {
+			if (isAfter(startAndEndDates.start, newDate)) {
 				return;
 			}
 
@@ -342,6 +344,10 @@ export default function Timeline() {
               onResultSelect={animateToIndex}
               onSearchResults={setSearchResults}
             /> */}
+						<div>
+							<CommandShortcut>⌘K</CommandShortcut>{" "}
+							<span className="text-xs text-muted-foreground">to search</span>
+						</div>
 					</div>
 				</div>
 
@@ -393,7 +399,6 @@ export default function Timeline() {
 					)}
 					{currentFrame && (
 						<img
-							//src={`data:image/png;base64,${imageFrame}`}
 							src={`http://localhost:3030/frames/${currentFrame.devices[0].frame_id}`}
 							className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
 							alt="Current frame"

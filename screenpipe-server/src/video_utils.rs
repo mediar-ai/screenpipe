@@ -515,7 +515,15 @@ impl VideoMetadataOverride {
 pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    let offset_seconds = offset_index as f64 / 1000.0;
+    let source_fps = match get_video_fps(&ffmpeg_path, &file_path).await {
+        Ok(fps) => fps,
+        Err(e) => {
+            error!("failed to get video fps, using default 1fps: {}", e);
+            1.0
+        }
+    };
+
+    let offset_seconds = offset_index as f64 * source_fps;
     let offset_str = format!("{:.3}", offset_seconds);
 
     // Create a temporary directory for frames if it doesn't exist
@@ -527,9 +535,10 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
     let output_path = frames_dir.join(&frame_filename);
 
     debug!(
-        "extracting frame from {} at offset {} to {}",
+        "extracting frame from {} at offset {} and fps {} to {}",
         file_path,
         offset_str,
+        source_fps,
         output_path.display()
     );
 
@@ -541,13 +550,18 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
             "-i",
             file_path,
             "-vf",
-            "scale=iw*0.75:ih*0.75",
+            "scale=iw*0.75:ih*0.75,format=yuvj420p", // Add format conversion
             "-vframes",
             "1",
             "-c:v",
             "mjpeg",
+            "-strict",
+            "unofficial", // Add strict compliance setting
+            "-pix_fmt",
+            "yuvj420p", // Ensure proper pixel format
             "-q:v",
             "10",
+            "-y", // Force overwrite
             output_path.to_str().unwrap(),
         ])
         .stdout(std::process::Stdio::piped())

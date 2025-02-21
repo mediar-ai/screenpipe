@@ -1,27 +1,27 @@
-import { Meeting, MeetingPrep } from "../types"
 import { MeetingCard } from "./meeting-card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown } from "lucide-react"
-import { MeetingPrepDetails } from "./meeting-prep-card"
 import { useSettings } from "@/lib/hooks/use-settings"
+import { LiveMeetingData } from "@/components/live-transcription/hooks/storage-for-live-meeting"
 
 // Mock data for upcoming meetings
-const MOCK_UPCOMING_MEETINGS: Meeting[] = [
+const MOCK_UPCOMING_MEETINGS: LiveMeetingData[] = [
   {
     id: "1",
-    humanName: "Recording demo for screenpipe",
-    meetingStart: "2024-01-30T15:00:00",
-    meetingEnd: "2024-01-30T17:00:00",
+    title: "Recording demo for screenpipe",
+    startTime: "2024-01-30T15:00:00",
+    endTime: "2024-01-30T17:00:00",
     agenda: "screenpipe intelligence showcasing example app of meeting assistant called granola 2.0. Participants record a studio quality demo of the product, talking about its feature and overall company advancements",
-    aiSummary: null,
+    analysis: null,
     participants_invited: ["louis beaumont", "matt diakonov"],
     recurrence: "weekly on thursday",
-    aiName: null,
     participants: null,
-    selectedDevices: new Set(),
-    deviceNames: new Set(),
-    segments: [],
+    chunks: [],
+    mergedChunks: [],
+    editedMergedChunks: {},
+    speakerMappings: {},
+    lastProcessedIndex: -1,
     notes: [],
+    deviceNames: new Set(),
+    selectedDevices: new Set(),
     aiPrep: {
       previousContext: {
         lastInteraction: "2024-01-23: LinkedIn Agent Demo",
@@ -62,23 +62,27 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "2",
-    humanName: "Ship-it at f.inc (accountability group)",
-    meetingStart: "2024-01-30T17:00:00",
-    meetingEnd: "2024-01-30T18:00:00",
+    title: "Ship-it at f.inc (accountability group)",
+    startTime: "2024-01-30T17:00:00",
+    endTime: "2024-01-30T18:00:00",
     agenda: "Participants share one liner about startup, progress in the last week, the biggest problem, next week plan",
-    aiSummary: null,
+    analysis: null,
     participants_invited: ["Hubert Thieblot", 'all portfolio companies in dev tools', "louis beaumont", "matt diakonov"],
     recurrence: "weekly on thursday",
-    aiName: null,
     participants: null,
-    selectedDevices: new Set(),
-    deviceNames: new Set(),
-    segments: [],
+    chunks: [],
+    mergedChunks: [],
+    editedMergedChunks: {},
+    speakerMappings: {},
+    lastProcessedIndex: -1,
     notes: [],
+    deviceNames: new Set(),
+    selectedDevices: new Set(),
     aiPrep: {
       previousContext: {
         lastInteraction: "2024-01-23: LinkedIn Agent Demo",
@@ -119,22 +123,26 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "3",
-    humanName: "English class with Kelly 🇺🇸 🔥 Speaking, Grammar",
-    meetingStart: "2024-01-30T19:30:00",
-    meetingEnd: "2024-01-30T19:55:00",
+    title: "English class with Kelly 🇺🇸 🔥 Speaking, Grammar",
+    startTime: "2024-01-30T19:30:00",
+    endTime: "2024-01-30T19:55:00",
     agenda: "Read outloud to fix pronounciation issues, thick russian accent, grammar mistakes",
-    aiSummary: null,
+    analysis: null,
     recurrence: "daily",
-    aiName: null,
     participants: null,
-    selectedDevices: new Set(),
-    deviceNames: new Set(),
-    segments: [],
+    chunks: [],
+    mergedChunks: [],
+    editedMergedChunks: {},
+    speakerMappings: {},
+    lastProcessedIndex: -1,
     notes: [],
+    deviceNames: new Set(),
+    selectedDevices: new Set(),
     aiPrep: {
       previousContext: {
         lastInteraction: "2024-01-23: LinkedIn Agent Demo",
@@ -175,15 +183,16 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "4",
-    humanName: "b2b between Matthew Diakonov and Mauricio Matsumoto Dias",
-    meetingStart: "2024-01-31T10:00:00",
-    meetingEnd: "2024-01-31T10:30:00",
+    title: "b2b between Matthew Diakonov and Mauricio Matsumoto Dias",
+    startTime: "2024-01-31T10:00:00",
+    endTime: "2024-01-31T10:30:00",
     agenda: "Enterprise deal with the largest ERP system in Brazil - TOTVS, regular meeting to manage progress of POC",
-    aiSummary: null,
+    analysis: null,
     participants_invited: [
       "Matthew Diakonov",
       "jose.cnascimento@totvs.com.br",
@@ -196,12 +205,15 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
     guestCount: 7,
     confirmedCount: 7,
     organizer: "Matthew Diakonov",
-    aiName: null,
     participants: null,
-    selectedDevices: new Set(),
-    deviceNames: new Set(),
-    segments: [],
+    chunks: [],
+    mergedChunks: [],
+    editedMergedChunks: {},
+    speakerMappings: {},
+    lastProcessedIndex: -1,
     notes: [],
+    deviceNames: new Set(),
+    selectedDevices: new Set(),
     aiPrep: {
       previousContext: {
         lastInteraction: "2024-01-24: Initial POC planning",
@@ -237,22 +249,26 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
           "prepare specific TOTVS use cases"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   },
   {
     id: "5",
-    humanName: "Dentist Stockton",
-    meetingStart: "2024-01-31T14:30:00",
-    meetingEnd: "2024-01-31T15:30:00",
+    title: "Dentist Stockton",
+    startTime: "2024-01-31T14:30:00",
+    endTime: "2024-01-31T15:30:00",
     agenda: "Cleaning teeth - important to keep log of daily dental log and notice any issues early on",
-    aiSummary: null,
+    analysis: null,
     recurrence: "every half a year",
-    aiName: null,
     participants: null,
-    selectedDevices: new Set(),
-    deviceNames: new Set(),
-    segments: [],
+    chunks: [],
+    mergedChunks: [],
+    editedMergedChunks: {},
+    speakerMappings: {},
+    lastProcessedIndex: -1,
     notes: [],
+    deviceNames: new Set(),
+    selectedDevices: new Set(),
     aiPrep: {
       previousContext: {
         lastInteraction: "2024-01-23: LinkedIn Agent Demo",
@@ -293,7 +309,8 @@ const MOCK_UPCOMING_MEETINGS: Meeting[] = [
           "emphasize platform capabilities through agent examples"
         ]
       }
-    }
+    },
+    isAiNotesEnabled: true,
   }
 ] 
 
@@ -332,12 +349,12 @@ export function UpcomingMeetings() {
         <div key={meeting.id} className="relative">
           <div className="absolute -left-0 z-10 -top-2">
             <div className="flex items-center gap-1 text-xs text-muted-foreground bg-accent rounded px-1 border border-border/40">
-              {meeting.humanName?.toLowerCase().includes("recording demo") && (
+              {meeting.title?.toLowerCase().includes("recording demo") && (
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               )}
-              {meeting.humanName?.toLowerCase().includes("recording demo") ? 
+              {meeting.title?.toLowerCase().includes("recording demo") ? 
                 "now" : 
-                `${getUpcomingTime(meeting.meetingStart)[0]} ${getUpcomingTime(meeting.meetingStart)[1]}`}
+                `${getUpcomingTime(meeting.startTime)[0]} ${getUpcomingTime(meeting.startTime)[1]}`}
             </div>
           </div>
           <MeetingCard meeting={meeting} onUpdate={handleUpdate} settings={settings} />

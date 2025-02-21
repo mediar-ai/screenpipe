@@ -434,6 +434,11 @@ export function RecordingSettings() {
     handleSettingsChange({ analyticsEnabled: newValue });
   };
 
+  const handleAutoStartToggle = async (checked: boolean) => {
+    const newValue = checked
+    handleSettingsChange({ autoStartEnabled: newValue});
+  }
+
   const handleChineseMirrorToggle = async (checked: boolean) => {
     handleSettingsChange({ useChineseMirror: checked });
     if (checked) {
@@ -1476,6 +1481,20 @@ export function RecordingSettings() {
                 id="frame-cache-toggle"
                 checked={settings.enableFrameCache}
                 onCheckedChange={handleFrameCacheToggle}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h4 className="font-medium">enable autostart</h4>
+                <p className="text-sm text-muted-foreground">
+                  automatically launch Screenpipe at startup
+                </p>
+              </div>
+              <Switch
+                id="auto-start-toggle"
+                checked={settings.autoStartEnabled}
+                onCheckedChange={handleAutoStartToggle}
               />
             </div>
 

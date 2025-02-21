@@ -1,7 +1,7 @@
 import { useRef, useCallback } from 'react'
 import { pipe } from "@screenpipe/browser"
 import { useToast } from "@/hooks/use-toast"
-import { TranscriptionChunk, ServiceStatus } from '../../meeting-history/types'
+import { TranscriptionChunk } from '../../meeting-history/types'
 
 declare global {
   interface Window {
@@ -10,95 +10,109 @@ declare global {
 }
 
 export function useTranscriptionStream(
-  setChunks: (updater: (prev: TranscriptionChunk[]) => TranscriptionChunk[]) => void
+  onNewChunk: (chunk: TranscriptionChunk) => void
 ) {
   const streamingRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const { toast } = useToast()
 
   const stopTranscriptionScreenpipe = useCallback(() => {
-    if (window._eventSource) {
-      console.log('stopping screenpipe transcription')
-      window._eventSource.close()
-      window._eventSource = undefined
-      streamingRef.current = false
+    console.log('stopping screenpipe transcription', {
+      isStreaming: streamingRef.current,
+      hasAbortController: !!abortControllerRef.current
+    })
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
     }
+    
+    // Force disconnect the pipe stream
+    pipe.disconnect()
+    streamingRef.current = false
   }, [])
 
   const startTranscriptionScreenpipe = useCallback(async () => {
     if (streamingRef.current) {
-      console.log('transcription already streaming');
-      return;
+      console.log('transcription already streaming')
+      return
     }
-    
+
     try {
-      console.log('starting transcription stream...');
-      if (window._eventSource) {
-        console.log('closing existing event source');
-        window._eventSource.close();
-      }
-      
-      streamingRef.current = true;
-      const eventSource = new EventSource('http://localhost:3030/sse/transcriptions');
-      window._eventSource = eventSource;
-      
-      eventSource.onopen = () => {
-        console.log('sse connection opened');
-      };
-      
-      let currentChunk: TranscriptionChunk | null = null
-      
-      eventSource.onmessage = (event) => {
-        if (event.data === 'keep-alive-text') return
-        
-        const chunk = JSON.parse(event.data)
-        console.log('new transcription chunk:', chunk)
-        
-        // If same speaker, append text with typing effect
-        if (currentChunk && currentChunk.speaker === chunk.speaker) {
-          const words = chunk.transcription.split(' ')
-          let wordIndex = 0
-          
-          const typeWords = () => {
-            if (wordIndex < words.length) {
-              currentChunk!.text += (currentChunk!.text ? ' ' : '') + words[wordIndex]
-              setChunks(prev => [...prev.slice(0, -1), { ...currentChunk! }])
-              wordIndex++
-              setTimeout(typeWords, 20)
+      console.log('starting transcription stream...')
+      streamingRef.current = true
+      abortControllerRef.current = new AbortController()
+      const signal = abortControllerRef.current.signal
+
+      // Create a separate async function to handle the stream
+      const handleStream = async () => {
+        const stream = pipe.streamTranscriptions()
+        try {
+          for await (const chunk of stream) {
+            // Check if aborted before processing each chunk
+            if (signal.aborted) {
+              console.log('stream aborted, breaking loop')
+              break
             }
+            
+            console.log('new transcription chunk:', {
+              text: chunk.choices[0]?.text,
+              speaker: chunk.metadata?.speaker,
+              model: chunk.model,
+              device: chunk.metadata?.device
+            })
+            const transcriptionData = chunk.choices[0]?.text
+            if (!transcriptionData) continue
+
+            const isInput = chunk.metadata?.device?.toLowerCase().includes('input') ?? false
+            const speaker = chunk.metadata?.speaker?.startsWith('speaker_') 
+              ? chunk.metadata.speaker 
+              : `speaker_${chunk.metadata?.speaker || '0'}`
+
+            const newChunk: TranscriptionChunk = {
+              id: Date.now(),
+              timestamp: chunk.metadata?.timestamp || new Date().toISOString(),
+              text: transcriptionData,
+              isInput,
+              device: chunk.metadata?.device || 'unknown',
+              speaker
+            }
+            
+            onNewChunk(newChunk)
           }
-          
-          typeWords()
-        } else {
-          // New speaker or first chunk, create new entry
-          currentChunk = {
-            id: Date.now(),
-            timestamp: chunk.timestamp,
-            text: chunk.transcription,
-            isInput: chunk.is_input,
-            device: chunk.device,
-            speaker: chunk.speaker
-          }
-          setChunks(prev => [...prev, currentChunk!])
+        } finally {
+          // Ensure we clean up if the loop breaks
+          console.log('stream loop ended')
+          streamingRef.current = false
+          pipe.disconnect() // Explicitly disconnect the stream
         }
       }
 
-      eventSource.onerror = (error) => {
-        console.error("sse error:", error);
-        eventSource.close();
-        streamingRef.current = false;
+      // Start the stream handling
+      handleStream().catch(error => {
+        console.error('stream handler error:', error)
+        streamingRef.current = false
         toast({
           title: "transcription error",
           description: "failed to stream audio. retrying...",
           variant: "destructive"
-        });
-        console.log('scheduling retry...');
-        setTimeout(startTranscriptionScreenpipe, 1000);
-      }
+        })
+        console.log('scheduling retry...')
+        setTimeout(startTranscriptionScreenpipe, 1000)
+      })
+
     } catch (error) {
-      console.error("failed to start transcription:", error);
-      streamingRef.current = false;
+      console.error("failed to start transcription:", error)
+      streamingRef.current = false
+      toast({
+        title: "transcription error",
+        description: "failed to stream audio. retrying...",
+        variant: "destructive"
+      })
+      console.log('scheduling retry...')
+      setTimeout(startTranscriptionScreenpipe, 1000)
     }
-  }, [toast, setChunks])
+  }, [onNewChunk, toast])
 
   return { 
     startTranscriptionScreenpipe, 

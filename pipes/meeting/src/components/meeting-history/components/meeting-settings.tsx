@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { ArrowLeft, Trash2, Eye, EyeOff } from "lucide-react"
 import { useEffect, useState } from 'react'
 import { getMeetings, getAllUpdates } from '../hooks/storage-meeting-data'
-import { liveStore } from '../../live-transcription/hooks/storage-for-live-meeting'
+import { meetingStore } from '../../live-transcription/hooks/storage-for-live-meeting'
 
 interface MeetingSettingsProps {
   onBack: () => void
@@ -39,10 +39,10 @@ export function MeetingSettings({ onBack }: MeetingSettingsProps) {
         const updates = await getAllUpdates()
         
         // Get all live meetings
-        const liveKeys = await liveStore.keys()
+        const liveKeys = await meetingStore.keys()
         const liveMeetings: Record<string, any> = {}
         for (const key of liveKeys) {
-          liveMeetings[key] = await liveStore.getItem(key)
+          liveMeetings[key] = await meetingStore.getItem(key)
         }
 
         console.log('loaded storage data:', {
