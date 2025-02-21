@@ -2,119 +2,80 @@ import { useRef, useCallback } from 'react'
 import { pipe } from "@screenpipe/browser"
 import { useToast } from "@/hooks/use-toast"
 import { TranscriptionChunk } from '../../meeting-history/types'
-import { useSettings } from '@/lib/hooks/use-settings'
 
 declare global {
   interface Window {
-    _eventSource?: WebSocket;
+    _eventSource?: EventSource;
   }
 }
 
 export function useTranscriptionStream(
-  setChunks: (updater: (prev: TranscriptionChunk[]) => TranscriptionChunk[]) => void
+  onNewChunk: (chunk: TranscriptionChunk) => void
 ) {
   const streamingRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const { toast } = useToast()
-  const { settings } = useSettings()
 
   const stopTranscriptionScreenpipe = useCallback(() => {
-    if (window._eventSource) {
+    if (abortControllerRef.current) {
       console.log('stopping screenpipe transcription')
-      window._eventSource.close()
-      window._eventSource = undefined
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
       streamingRef.current = false
     }
   }, [])
 
   const startTranscriptionScreenpipe = useCallback(async () => {
     if (streamingRef.current) {
-      console.log('transcription already streaming');
-      return;
+      console.log('transcription already streaming')
+      return
     }
-    
+
     try {
-      console.log('starting transcription stream...');
-      if (window._eventSource) {
-        console.log('closing existing websocket');
-        window._eventSource.close();
-      }
-      
-      streamingRef.current = true;
+      console.log('starting transcription stream...')
+      streamingRef.current = true
+      abortControllerRef.current = new AbortController()
 
-      // Use WebSocket URL from settings
-      const wsUrl = settings.aiUrl.replace('https://', 'wss://');
-      const ws = new WebSocket(`${wsUrl}/listen?sample_rate=16000&smart_format=true&diarize=true`);
-      
-      // Add auth header using settings token
-      if (settings.user?.token) {
-        ws.onopen = () => {
-          console.log('websocket connection opened, sending auth token');
-          ws.send(JSON.stringify({
-            type: 'auth',
-            token: settings.user.token
-          }));
-        };
-      }
+      for await (const chunk of pipe.streamTranscriptions()) {
+        if (abortControllerRef.current?.signal.aborted) break
+        
+        console.log('new transcription chunk:', {
+          text: chunk.choices[0]?.text,
+          speaker: chunk.metadata?.speaker,
+          model: chunk.model,
+          device: chunk.metadata?.device
+        })
+        const transcriptionData = chunk.choices[0]?.text
+        if (!transcriptionData) continue
 
-      window._eventSource = ws;
-      
-      let currentChunk: TranscriptionChunk | null = null;
-      
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('new transcription:', data);
-        
-        if (!data.channel?.alternatives?.[0]) return;
-        
-        const transcript = data.channel.alternatives[0];
-        const speaker = transcript.words?.[0]?.speaker ?? 'unknown';
-        
-        // If same speaker, append text with typing effect
-        if (currentChunk && currentChunk.speaker === `speaker_${speaker}`) {
-          const words = transcript.transcript.split(' ');
-          let wordIndex = 0;
-          
-          const typeWords = () => {
-            if (wordIndex < words.length) {
-              currentChunk!.text += (currentChunk!.text ? ' ' : '') + words[wordIndex];
-              setChunks(prev => [...prev.slice(0, -1), { ...currentChunk! }]);
-              wordIndex++;
-              setTimeout(typeWords, 20);
-            }
-          }
-          
-          typeWords();
-        } else {
-          // New speaker or first chunk
-          currentChunk = {
-            id: Date.now(),
-            timestamp: new Date().toISOString(),
-            text: transcript.transcript,
-            isInput: true,
-            device: 'microphone',
-            speaker: `speaker_${speaker}`
-          };
-          setChunks(prev => [...prev, currentChunk!]);
+        const isInput = chunk.metadata?.device?.toLowerCase().includes('input') ?? false
+        const speaker = chunk.metadata?.speaker?.startsWith('speaker_') 
+          ? chunk.metadata.speaker 
+          : `speaker_${chunk.metadata?.speaker || '0'}`
+
+        const newChunk: TranscriptionChunk = {
+          id: Date.now(),
+          timestamp: chunk.metadata?.timestamp || new Date().toISOString(),
+          text: transcriptionData,
+          isInput,
+          device: chunk.metadata?.device || 'unknown',
+          speaker
         }
-      };
-
-      ws.onerror = (error) => {
-        console.error("websocket error:", error);
-        ws.close();
-        streamingRef.current = false;
-        toast({
-          title: "transcription error",
-          description: "failed to stream audio. retrying...",
-          variant: "destructive"
-        });
-        setTimeout(startTranscriptionScreenpipe, 1000);
-      };
-
+        
+        onNewChunk(newChunk)
+      }
     } catch (error) {
-      console.error("failed to start transcription:", error);
-      streamingRef.current = false;
+      console.error("failed to start transcription:", error)
+      streamingRef.current = false
+      toast({
+        title: "transcription error",
+        description: "failed to stream audio. retrying...",
+        variant: "destructive"
+      })
+      console.log('scheduling retry...')
+      setTimeout(startTranscriptionScreenpipe, 1000)
     }
-  }, [toast, setChunks, settings]);
+  }, [onNewChunk, toast])
 
   return { 
     startTranscriptionScreenpipe, 
