@@ -9,13 +9,24 @@ use tracing::{debug, error, info};
 
 #[derive(Debug, Clone)]
 pub struct DecodingResult {
-    tokens: Vec<u32>,
+    // tokens: Vec<u32>,
     pub text: String,
     avg_logprob: f64,
     no_speech_prob: f64,
     #[allow(dead_code)]
     temperature: f64,
     compression_ratio: f64,
+}
+
+impl DecodingResult {
+    pub fn needs_fallback(&self) -> bool {
+        self.compression_ratio > m::COMPRESSION_RATIO_THRESHOLD
+            || self.avg_logprob < m::LOGPROB_THRESHOLD
+    }
+
+    pub fn is_no_speech(&self) -> bool {
+        self.no_speech_prob > m::NO_SPEECH_THRESHOLD
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +43,10 @@ pub struct Decoder<'a> {
     verbose: bool,
     tokenizer: &'a Tokenizer,
     suppress_tokens: Tensor,
+    token_values: TokenValues,
+}
+
+struct TokenValues {
     sot_token: u32,
     transcribe_token: u32,
     eot_token: u32,
@@ -51,29 +66,15 @@ impl<'a> Decoder<'a> {
         timestamps: bool,
         verbose: bool,
     ) -> Result<Self> {
-        let no_timestamps_token = token_id(tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
-        let suppress_tokens: Vec<f32> = (0..model.config().vocab_size as u32)
-            .map(|i| {
-                if model.config().suppress_tokens.contains(&i)
-                    || timestamps && i == no_timestamps_token
-                {
-                    f32::NEG_INFINITY
-                } else {
-                    0f32
-                }
-            })
-            .collect();
-        let suppress_tokens = Tensor::new(suppress_tokens.as_slice(), device)?;
-        let sot_token = token_id(tokenizer, m::SOT_TOKEN)?;
-        let transcribe_token = token_id(tokenizer, m::TRANSCRIBE_TOKEN)?;
-        let eot_token = token_id(tokenizer, m::EOT_TOKEN)?;
-        let no_speech_token = m::NO_SPEECH_TOKENS
-            .iter()
-            .find_map(|token| token_id(tokenizer, token).ok());
-        let no_speech_token = match no_speech_token {
-            None => anyhow::bail!("unable to find any non-speech token"),
-            Some(n) => n,
-        };
+        let token_values = get_token_values(tokenizer, language_token)?;
+
+        let suppress_tokens = calculate_supress_tokens(
+            model,
+            device,
+            timestamps,
+            token_values.no_timestamps_token,
+            model.config().vocab_size as u32,
+        )?;
 
         Ok(Self {
             model,
@@ -82,12 +83,7 @@ impl<'a> Decoder<'a> {
             timestamps,
             verbose,
             suppress_tokens,
-            sot_token,
-            transcribe_token,
-            eot_token,
-            no_speech_token,
-            language_token,
-            no_timestamps_token,
+            token_values,
         })
     }
 
@@ -96,97 +92,22 @@ impl<'a> Decoder<'a> {
         if self.verbose {
             info!("audio features: {:?}", audio_features.dims());
         }
-        let sample_len = self.model.config().max_target_positions / 2;
+
+        let mut sum_logprob = f64::NAN;
         let mut no_speech_prob = f64::NAN;
-        let mut tokens = vec![self.sot_token];
-        if let Some(language_token) = self.language_token {
-            tokens.push(language_token);
-        }
-        tokens.push(self.transcribe_token);
-
-        if !self.timestamps {
-            tokens.push(self.no_timestamps_token);
-        }
-
-        let mut sum_logprob = 0f64;
-        let mut last_token_was_timestamp = false;
-
-        let mut token_history = Vec::new(); // Track recent tokens
-
-        for i in 0..sample_len {
-            let tokens_t = Tensor::new(tokens.as_slice(), mel.device())?;
-            let tokens_t = tokens_t.unsqueeze(0)?;
-            let ys = self
-                .model
-                .decoder_forward(&tokens_t, &audio_features, i == 0)?;
-
-            if i == 0 {
-                let logits = self.model.decoder_final_linear(&ys.i(..1)?)?.i(0)?.i(0)?;
-                no_speech_prob = softmax(&logits, 0)?
-                    .i(self.no_speech_token as usize)?
-                    .to_scalar::<f32>()? as f64;
-            }
-
-            let (_, seq_len, _) = ys.dims3()?;
-            let logits = self
-                .model
-                .decoder_final_linear(&ys.i((..1, seq_len - 1..))?)?
-                .i(0)?
-                .i(0)?;
-
-            let logits = logits.broadcast_add(&self.suppress_tokens)?;
-
-            let logits = if last_token_was_timestamp {
-                let mask = Tensor::zeros_like(&logits)?;
-                let eot_mask = mask.get(self.eot_token as usize)?;
-                logits.broadcast_add(&eot_mask)?
-            } else {
-                logits
-            };
-
-            // Apply repetition penalty
-            let mut logits_v: Vec<f32> = logits.to_vec1()?;
-            apply_repetition_penalty(&mut logits_v, &token_history, 1.0); // Adjust penalty as needed
-
-            let next_token = if t > 0f64 {
-                let logits_tensor = Tensor::new(logits_v.as_slice(), logits.device())?;
-                let scaled_logits = (&logits_tensor / t)?;
-                let prs = softmax(&scaled_logits, 0)?;
-                let prs_vec: Vec<f32> = prs.to_vec1()?;
-                let distr = rand::distributions::WeightedIndex::new(&prs_vec)?;
-                distr.sample(&mut self.rng) as u32
-            } else {
-                logits_v
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, u), (_, v)| u.total_cmp(v))
-                    .map(|(i, _)| i as u32)
-                    .unwrap()
-            };
-
-            tokens.push(next_token);
-            token_history.push(next_token); // Add to history
-
-            let prob = softmax(&logits, candle::D::Minus1)?
-                .i(next_token as usize)?
-                .to_scalar::<f32>()? as f64;
-
-            sum_logprob += prob.ln();
-
-            if next_token == self.eot_token
-                || tokens.len() > self.model.config().max_target_positions
-            {
-                break;
-            }
-
-            last_token_was_timestamp = next_token > self.no_timestamps_token;
-        }
+        let tokens = self.calculate_tokens(
+            &audio_features,
+            mel,
+            t,
+            &mut sum_logprob,
+            &mut no_speech_prob,
+        )?;
 
         let text = self.tokenizer.decode(&tokens, true).map_err(E::msg)?;
         let avg_logprob = sum_logprob / tokens.len() as f64;
 
         Ok(DecodingResult {
-            tokens,
+            // tokens,
             text,
             avg_logprob,
             no_speech_prob,
@@ -203,9 +124,7 @@ impl<'a> Decoder<'a> {
             }
             match dr {
                 Ok(dr) => {
-                    let needs_fallback = dr.compression_ratio > m::COMPRESSION_RATIO_THRESHOLD
-                        || dr.avg_logprob < m::LOGPROB_THRESHOLD;
-                    if !needs_fallback || dr.no_speech_prob > m::NO_SPEECH_THRESHOLD {
+                    if !dr.needs_fallback() || dr.is_no_speech() {
                         return Ok(dr);
                     }
                 }
@@ -225,7 +144,21 @@ impl<'a> Decoder<'a> {
     }
 
     pub fn set_language_token(&mut self, language_token: Option<u32>) {
-        self.language_token = language_token;
+        self.token_values.language_token = language_token;
+    }
+
+    fn initialize_tokens(&self) -> Result<Vec<u32>> {
+        let mut tokens = vec![self.token_values.sot_token];
+        if let Some(language_token) = self.token_values.language_token {
+            tokens.push(language_token);
+        }
+        tokens.push(self.token_values.transcribe_token);
+
+        if !self.timestamps {
+            tokens.push(self.token_values.no_timestamps_token);
+        }
+
+        Ok(tokens)
     }
 
     pub fn run(&mut self, mel: &Tensor) -> Result<Vec<Segment>> {
@@ -249,32 +182,6 @@ impl<'a> Decoder<'a> {
                 duration: segment_duration,
                 dr,
             };
-            if self.timestamps {
-                let mut tokens_to_decode = vec![];
-                let mut prev_timestamp_s = 0f32;
-                for &token in segment.dr.tokens.iter() {
-                    if token == self.sot_token || token == self.eot_token {
-                        continue;
-                    }
-                    if token > self.no_timestamps_token {
-                        let timestamp_s = (token - self.no_timestamps_token + 1) as f32 / 50.;
-                        if !tokens_to_decode.is_empty() {
-                            let text = self
-                                .tokenizer
-                                .decode(&tokens_to_decode, true)
-                                .map_err(E::msg)?;
-                            debug!("  {:.1}s-{:.1}s: {}", prev_timestamp_s, timestamp_s, text);
-                            tokens_to_decode.clear()
-                        }
-                        prev_timestamp_s = timestamp_s;
-                    } else {
-                        tokens_to_decode.push(token)
-                    }
-                }
-                if !tokens_to_decode.is_empty() {
-                    tokens_to_decode.clear()
-                }
-            }
 
             if self.verbose {
                 info!("{seek}: {segment:?}, in {:?}", start.elapsed());
@@ -283,7 +190,153 @@ impl<'a> Decoder<'a> {
         }
         Ok(segments)
     }
+
+    fn get_next_token(&mut self, t: f64, logits_v: Vec<f32>, logits: &Tensor) -> Result<u32> {
+        if t > 0f64 {
+            let logits_tensor = Tensor::new(logits_v.as_slice(), logits.device())?;
+            let scaled_logits = (&logits_tensor / t)?;
+            let prs = softmax(&scaled_logits, 0)?;
+            let prs_vec: Vec<f32> = prs.to_vec1()?;
+            let distr = rand::distributions::WeightedIndex::new(&prs_vec)?;
+            Ok(distr.sample(&mut self.rng) as u32)
+        } else {
+            Ok(logits_v
+                .iter()
+                .enumerate()
+                .max_by(|(_, u), (_, v)| u.total_cmp(v))
+                .map(|(i, _)| i as u32)
+                .unwrap())
+        }
+    }
+
+    fn calculate_logits(
+        &self,
+        ys: &Tensor,
+        seq_len: usize,
+        last_token_was_timestamp: bool,
+    ) -> Result<Tensor> {
+        let logits = self
+            .model
+            .decoder_final_linear(&ys.i((..1, seq_len - 1..))?)?
+            .i(0)?
+            .i(0)?;
+
+        let logits = logits.broadcast_add(&self.suppress_tokens)?;
+
+        let logits = if last_token_was_timestamp {
+            let mask = Tensor::zeros_like(&logits)?;
+            let eot_mask = mask.get(self.token_values.eot_token as usize)?;
+            logits.broadcast_add(&eot_mask)?
+        } else {
+            logits
+        };
+
+        Ok(logits)
+    }
+
+    fn calculate_no_speech_prob(&self, ys: &Tensor) -> Result<f64> {
+        let logits = self.model.decoder_final_linear(&ys.i(..1)?)?.i(0)?.i(0)?;
+        Ok(softmax(&logits, 0)?
+            .i(self.token_values.no_speech_token as usize)?
+            .to_scalar::<f32>()? as f64)
+    }
+
+    fn calculate_ys(
+        &mut self,
+        tokens: &[u32],
+        audio_features: &Tensor,
+        mel: &Tensor,
+        flush: bool,
+    ) -> Result<Tensor> {
+        let tokens_t = Tensor::new(tokens, mel.device())?;
+        let tokens_t = tokens_t.unsqueeze(0)?;
+        let ys = self
+            .model
+            .decoder_forward(&tokens_t, audio_features, flush)?;
+
+        Ok(ys)
+    }
+
+    fn calculate_tokens(
+        &mut self,
+        audio_features: &Tensor,
+        mel: &Tensor,
+        t: f64,
+        sum_logprob: &mut f64,
+        no_speech_prob: &mut f64,
+    ) -> Result<Vec<u32>> {
+        let mut tokens = self.initialize_tokens()?;
+        let mut token_history = Vec::new();
+        let mut last_token_was_timestamp = false;
+
+        *no_speech_prob = self.process_initial_state(audio_features, mel)?;
+
+        let sample_len = self.model.config().max_target_positions / 2;
+        for i in 0..sample_len {
+            let next_token = self.process_next_token(
+                &tokens,
+                audio_features,
+                mel,
+                i == 0,
+                last_token_was_timestamp,
+                &token_history,
+                t,
+                sum_logprob,
+            )?;
+
+            if self.should_stop_decoding(next_token, tokens.len()) {
+                break;
+            }
+
+            tokens.push(next_token);
+            token_history.push(next_token);
+            last_token_was_timestamp = next_token > self.token_values.no_timestamps_token;
+        }
+
+        Ok(tokens)
+    }
+
+    fn process_initial_state(&mut self, audio_features: &Tensor, mel: &Tensor) -> Result<f64> {
+        let ys = self.calculate_ys(&self.initialize_tokens()?, audio_features, mel, true)?;
+        self.calculate_no_speech_prob(&ys)
+    }
+
+    fn should_stop_decoding(&self, token: u32, current_length: usize) -> bool {
+        token == self.token_values.eot_token
+            || current_length > self.model.config().max_target_positions
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn process_next_token(
+        &mut self,
+        tokens: &[u32],
+        audio_features: &Tensor,
+        mel: &Tensor,
+        is_first: bool,
+        last_token_was_timestamp: bool,
+        token_history: &[u32],
+        temperature: f64,
+        sum_logprob: &mut f64,
+    ) -> Result<u32> {
+        let ys = self.calculate_ys(tokens, audio_features, mel, is_first)?;
+        let (_, seq_len, _) = ys.dims3()?;
+        let logits = self.calculate_logits(&ys, seq_len, last_token_was_timestamp)?;
+
+        let mut logits_v: Vec<f32> = logits.to_vec1()?;
+        apply_repetition_penalty(&mut logits_v, token_history, 1.0);
+
+        let next_token = self.get_next_token(temperature, logits_v, &logits)?;
+
+        // Update probability
+        let prob = softmax(&logits, candle::D::Minus1)?
+            .i(next_token as usize)?
+            .to_scalar::<f32>()? as f64;
+        *sum_logprob += prob.ln();
+
+        Ok(next_token)
+    }
 }
+
 pub fn token_id(tokenizer: &Tokenizer, token: &str) -> candle::Result<u32> {
     match tokenizer.token_to_id(token) {
         None => candle::bail!("no token-id for {token}"),
@@ -304,4 +357,47 @@ fn apply_repetition_penalty(logits: &mut [f32], token_history: &[u32], penalty: 
             *logit -= penalty;
         }
     }
+}
+
+fn calculate_supress_tokens(
+    model: &Model,
+    device: &Device,
+    timestamps: bool,
+    no_timestamps_token: u32,
+    vocab_size: u32,
+) -> Result<Tensor> {
+    let suppress_tokens: Vec<f32> = (0..vocab_size)
+        .map(|i| {
+            if model.config().suppress_tokens.contains(&i) || timestamps && i == no_timestamps_token
+            {
+                f32::NEG_INFINITY
+            } else {
+                0f32
+            }
+        })
+        .collect();
+    Tensor::new(suppress_tokens.as_slice(), device).map_err(E::msg)
+}
+
+fn get_token_values(tokenizer: &Tokenizer, language_token: Option<u32>) -> Result<TokenValues> {
+    let no_timestamps_token = token_id(tokenizer, m::NO_TIMESTAMPS_TOKEN)?;
+    let sot_token = token_id(tokenizer, m::SOT_TOKEN)?;
+    let transcribe_token = token_id(tokenizer, m::TRANSCRIBE_TOKEN)?;
+    let eot_token = token_id(tokenizer, m::EOT_TOKEN)?;
+    let no_speech_token = m::NO_SPEECH_TOKENS
+        .iter()
+        .find_map(|token| token_id(tokenizer, token).ok());
+    let no_speech_token = match no_speech_token {
+        None => anyhow::bail!("unable to find any non-speech token"),
+        Some(n) => n,
+    };
+
+    Ok(TokenValues {
+        sot_token,
+        transcribe_token,
+        eot_token,
+        no_speech_token,
+        no_timestamps_token,
+        language_token,
+    })
 }

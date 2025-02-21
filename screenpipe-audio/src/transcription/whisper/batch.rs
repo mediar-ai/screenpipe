@@ -14,6 +14,16 @@ lazy_static! {
     static ref TOKEN_REGEX: Regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>").unwrap();
 }
 
+/// Processes audio data using the Whisper model to generate transcriptions.
+///
+/// # Arguments
+/// * `whisper_model` - The Whisper model instance
+/// * `audio` - Raw audio PCM data
+/// * `mel_filters` - Mel filter bank coefficients
+/// * `languages` - List of languages to consider for detection
+///
+/// # Returns
+/// A string containing the processed transcript
 pub fn process_with_whisper(
     whisper_model: &mut WhisperModel,
     audio: &[f32],
@@ -53,65 +63,69 @@ pub fn process_with_whisper(
 }
 
 fn process_segments(segments: Vec<Segment>) -> Result<String> {
-    let mut ranges: HashSet<String> = HashSet::new();
+    let mut unique_ranges = HashSet::new();
     let mut transcript = String::new();
 
-    let mut min_time: f32 = f32::MAX;
-    let mut max_time: f32 = f32::MIN;
-    let segments_len = segments.len();
+    let time_bounds = segments
+        .iter()
+        .fold((f32::MAX, f32::MIN), |(min, max), _| (min, max));
+    let (mut min_time, mut max_time) = time_bounds;
 
-    for (i, segment) in segments.iter().enumerate() {
-        let mut text = segment.dr.text.clone();
+    for (idx, segment) in segments.iter().enumerate() {
+        let text = segment.dr.text.clone();
+        let (start_token, end_token) = extract_time_tokens(&text)?;
+        let (start_time, end_time) =
+            parse_time_tokens(&start_token, &end_token, &mut min_time, &mut max_time);
 
-        // Extract start and end times
-        let (start, end) = extract_time_tokens(&text, &TOKEN_REGEX);
-        let (s_time, e_time) = parse_time_tokens(&start, &end, &mut min_time, &mut max_time);
+        // Skip if this is the last segment and spans the entire time range
+        if segments.len() > 1
+            && idx == segments.len() - 1
+            && start_time == min_time
+            && end_time == max_time
+        {
+            continue;
+        }
 
-        let range = format!("{}{}", start, end);
-        if ranges.insert(range) {
-            if segments_len > 1 && i == segments_len - 1 && s_time == min_time && e_time == max_time
-            {
-                continue;
-            }
-
-            text = TOKEN_REGEX.replace_all(&text, "").to_string();
-            text.push('\n');
-            transcript.push_str(&text);
+        let range_key = format!("{}{}", start_token, end_token);
+        if unique_ranges.insert(range_key) {
+            let cleaned_text = TOKEN_REGEX.replace_all(&text, "").into_owned();
+            transcript.push_str(&cleaned_text);
+            transcript.push('\n');
         }
     }
 
     Ok(transcript)
 }
 
-fn extract_time_tokens(text: &str, token_regex: &Regex) -> (String, String) {
-    let tokens = token_regex
-        .find_iter(text)
-        .map(|m| m.as_str())
-        .collect::<Vec<&str>>();
+fn extract_time_tokens(text: &str) -> Result<(String, String)> {
+    let tokens: Vec<&str> = TOKEN_REGEX.find_iter(text).map(|m| m.as_str()).collect();
 
-    let start = tokens.first().unwrap().to_string();
-    let end = tokens.last().unwrap().to_string();
+    let start = tokens
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("Missing start time token"))?
+        .to_string();
+    let end = tokens
+        .last()
+        .ok_or_else(|| anyhow::anyhow!("Missing end time token"))?
+        .to_string();
 
-    (start, end)
+    Ok((start, end))
 }
 
 fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut f32) -> (f32, f32) {
-    let num_regex = Regex::new(r"([<>|])").unwrap();
-    let s_time = num_regex
-        .replace_all(start, "")
-        .parse::<f32>()
-        .unwrap_or(*min_time);
-    let e_time = num_regex
-        .replace_all(end, "")
-        .parse::<f32>()
-        .unwrap_or(*max_time);
-
-    if *min_time > s_time {
-        *min_time = s_time;
-    }
-    if *max_time < e_time {
-        *max_time = e_time;
+    lazy_static! {
+        static ref NUM_REGEX: Regex = Regex::new(r"([<>|])").unwrap();
     }
 
-    (s_time, e_time)
+    let parse_token = |token: &str, default: f32| -> f32 {
+        NUM_REGEX.replace_all(token, "").parse().unwrap_or(default)
+    };
+
+    let start_time = parse_token(start, *min_time);
+    let end_time = parse_token(end, *max_time);
+
+    *min_time = start_time.min(*min_time);
+    *max_time = end_time.max(*max_time);
+
+    (start_time, end_time)
 }

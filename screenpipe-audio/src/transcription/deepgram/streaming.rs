@@ -40,6 +40,13 @@ pub struct RealtimeTranscriptionEvent {
     pub speaker: Option<String>,
 }
 
+/// Starts a Deepgram transcription stream for the given audio stream
+///
+/// # Arguments
+/// * `stream` - The audio stream to transcribe
+/// * `languages` - List of languages to transcribe (currently unused)
+/// * `is_running` - Atomic boolean to control the stream lifecycle
+/// * `deepgram_api_key` - Optional custom API key for Deepgram
 pub async fn stream_transcription_deepgram(
     stream: Arc<AudioStream>,
     _languages: Vec<Language>, // TODO impl language
@@ -58,6 +65,7 @@ pub async fn stream_transcription_deepgram(
     Ok(())
 }
 
+/// Initializes and manages a Deepgram streaming session
 pub async fn start_deepgram_stream(
     stream: Receiver<Vec<f32>>,
     device: Arc<AudioDevice>,
@@ -65,24 +73,20 @@ pub async fn start_deepgram_stream(
     is_running: Arc<AtomicBool>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
-    let api_key = deepgram_api_key.unwrap_or(CUSTOM_DEEPGRAM_API_TOKEN.to_string());
+    let api_key = deepgram_api_key.unwrap_or_else(|| CUSTOM_DEEPGRAM_API_TOKEN.to_string());
 
     if api_key.is_empty() {
         return Err(anyhow::anyhow!("Deepgram API key not found"));
     }
 
-    // create shutdown rx from is_running
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
 
+    // Spawn shutdown monitor
     tokio::spawn(async move {
-        loop {
-            let running = is_running.load(std::sync::atomic::Ordering::SeqCst);
-            if !running {
-                shutdown_tx.send(()).unwrap();
-                break;
-            }
+        while is_running.load(std::sync::atomic::Ordering::SeqCst) {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
+        let _ = shutdown_tx.send(()); // Ignore send errors if receiver is dropped
     });
 
     info!("Starting deepgram stream for device: {}", device);
@@ -117,20 +121,21 @@ pub async fn start_deepgram_stream(
 
     loop {
         tokio::select! {
-            _ = &mut shutdown_rx => {
+            Ok(()) = &mut shutdown_rx => {
                 info!("Shutting down deepgram stream for device: {}", device);
                 break;
             }
             result = results.try_next() => {
-                if let Ok(Some(result)) = result {
-                    handle_transcription(
-                        result,
-                        device_clone.clone(),
-                    ).await;
+                match result {
+                    Ok(Some(result)) => {
+                        handle_transcription(result, device_clone.clone()).await;
+                    }
+                    Ok(None) => break, // Stream ended
+                    Err(e) => {
+                        info!("Error in deepgram stream: {}", e);
+                        break;
+                    }
                 }
-            }
-            _ = tokio::time::sleep(Duration::from_millis(100)) => {
-                continue;
             }
         }
     }
@@ -175,7 +180,7 @@ fn get_stream(
                 bytes.put_i16_le((sample * i16::MAX as f32) as i16);
             }
             if tx.send(Ok(bytes.freeze())).await.is_err() {
-                tx.close_channel();
+                break; // Stop if receiver is dropped
             }
         }
     });

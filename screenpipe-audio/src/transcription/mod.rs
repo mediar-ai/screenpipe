@@ -14,14 +14,8 @@ pub struct AudioInput {
     pub device: Arc<AudioDevice>,
 }
 
-#[derive(Debug, Clone)]
-pub struct TranscriptionResult {
-    pub path: String,
-    pub input: AudioInput,
-    pub speaker_embedding: Vec<f32>,
-    pub transcription: Option<String>,
-    pub timestamp: u64,
-    pub error: Option<String>,
-    pub start_time: f64,
-    pub end_time: f64,
-}
+mod text_utils;
+
+mod transcription_result;
+
+pub use transcription_result::TranscriptionResult;

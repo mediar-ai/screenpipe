@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::StreamError;
-use tracing::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 use tokio::sync::{broadcast, oneshot};
+use tracing::{error, info, warn};
 
 use crate::utils::audio::audio_to_mono;
 
@@ -36,114 +36,74 @@ impl AudioStream {
         let (cpal_audio_device, config) = get_cpal_device_and_config(&device).await?;
         let channels = config.channels();
 
-        let is_running_weak_2 = Arc::downgrade(&is_running);
+        let is_running_weak = Arc::downgrade(&is_running);
         let is_disconnected = Arc::new(AtomicBool::new(false));
-        let device_clone = device.clone();
-        let config_clone = config.clone();
         let (stream_control_tx, stream_control_rx) = mpsc::channel();
 
-        let is_disconnected_clone = is_disconnected.clone();
-        let stream_control_tx_clone = stream_control_tx.clone();
-        let stream_thread = Arc::new(tokio::sync::Mutex::new(Some(thread::spawn(move || {
-            let device = device_clone;
-            let device_name = device.to_string();
-            let config = config_clone;
-            let error_callback = move |err: StreamError| {
-                if err
-                    .to_string()
-                    .contains("The requested device is no longer available")
-                {
-                    warn!(
-                        "audio device {} disconnected. stopping recording.",
-                        device_name
-                    );
-                    stream_control_tx_clone
-                        .send(StreamControl::Stop(oneshot::channel().0))
-                        .unwrap();
-
-                    is_disconnected_clone.store(true, Ordering::Relaxed);
-                } else {
-                    error!("an error occurred on the audio stream: {}", err);
-                    if err.to_string().contains("device is no longer valid") {
-                        warn!("audio device disconnected. stopping recording.");
-                        if let Some(arc) = is_running_weak_2.upgrade() {
-                            arc.store(false, Ordering::Relaxed);
-                        }
-                    }
-                }
-            };
-
-            let stream = match config.sample_format() {
-                cpal::SampleFormat::F32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[f32], _: &_| {
-                            let mono = audio_to_mono(data, channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I16 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i16], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I32 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i32], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                cpal::SampleFormat::I8 => cpal_audio_device
-                    .build_input_stream(
-                        &config.into(),
-                        move |data: &[i8], _: &_| {
-                            let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
-                            let _ = tx.send(mono);
-                        },
-                        error_callback,
-                        None,
-                    )
-                    .expect("Failed to build input stream"),
-                _ => {
-                    error!("unsupported sample format: {}", config.sample_format());
-                    return;
-                }
-            };
-
-            if let Err(e) = stream.play() {
-                error!("failed to play stream for {}: {}", device.to_string(), e);
-            }
-
-            if let Ok(StreamControl::Stop(response)) = stream_control_rx.recv() {
-                info!("stopped recording audio stream");
-                stream.pause().ok();
-                drop(stream);
-                response.send(()).ok();
-            }
-        }))));
+        let stream_thread = Self::spawn_audio_thread(
+            cpal_audio_device,
+            config.clone(),
+            tx,
+            stream_control_rx,
+            channels,
+            is_running_weak,
+            is_disconnected.clone(),
+            stream_control_tx.clone(),
+        )
+        .await?;
 
         Ok(AudioStream {
             device,
             device_config: config,
             transmitter: Arc::new(tx_clone),
             stream_control: stream_control_tx,
-            stream_thread: Some(stream_thread),
+            stream_thread: Some(Arc::new(tokio::sync::Mutex::new(Some(stream_thread)))),
             is_disconnected,
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn spawn_audio_thread(
+        device: cpal::Device,
+        config: cpal::SupportedStreamConfig,
+        tx: broadcast::Sender<Vec<f32>>,
+        stream_control_rx: mpsc::Receiver<StreamControl>,
+        channels: u16,
+        is_running_weak: std::sync::Weak<AtomicBool>,
+        is_disconnected: Arc<AtomicBool>,
+        stream_control_tx: mpsc::Sender<StreamControl>,
+    ) -> Result<thread::JoinHandle<()>> {
+        let device_name = device.name()?;
+
+        Ok(thread::spawn(move || {
+            let error_callback = create_error_callback(
+                device_name.clone(),
+                is_running_weak,
+                is_disconnected,
+                stream_control_tx,
+            );
+
+            let stream = build_input_stream(&device, &config, channels, tx, error_callback);
+
+            match stream {
+                Ok(stream) => {
+                    if let Err(e) = stream.play() {
+                        error!("failed to play stream for {}: {}", device_name, e);
+                        return;
+                    }
+
+                    if let Ok(StreamControl::Stop(response)) = stream_control_rx.recv() {
+                        info!("stopped recording audio stream");
+                        stream.pause().ok();
+                        drop(stream);
+                        response.send(()).ok();
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to build input stream: {}", e);
+                }
+            }
+        }))
     }
 
     pub async fn subscribe(&self) -> broadcast::Receiver<Vec<f32>> {
@@ -176,5 +136,95 @@ impl AudioStream {
 
     pub fn is_disconnected(&self) -> bool {
         self.is_disconnected.load(Ordering::Relaxed)
+    }
+}
+
+fn create_error_callback(
+    device_name: String,
+    is_running_weak: std::sync::Weak<AtomicBool>,
+    is_disconnected: Arc<AtomicBool>,
+    stream_control_tx: mpsc::Sender<StreamControl>,
+) -> impl FnMut(StreamError) + Send + 'static {
+    move |err: StreamError| {
+        if err
+            .to_string()
+            .contains("The requested device is no longer available")
+        {
+            warn!(
+                "audio device {} disconnected. stopping recording.",
+                device_name
+            );
+            stream_control_tx
+                .send(StreamControl::Stop(oneshot::channel().0))
+                .unwrap();
+            is_disconnected.store(true, Ordering::Relaxed);
+        } else {
+            error!("an error occurred on the audio stream: {}", err);
+            if err.to_string().contains("device is no longer valid") {
+                warn!("audio device disconnected. stopping recording.");
+                if let Some(arc) = is_running_weak.upgrade() {
+                    arc.store(false, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+}
+
+fn build_input_stream(
+    device: &cpal::Device,
+    config: &cpal::SupportedStreamConfig,
+    channels: u16,
+    tx: broadcast::Sender<Vec<f32>>,
+    error_callback: impl FnMut(StreamError) + Send + 'static,
+) -> Result<cpal::Stream> {
+    match config.sample_format() {
+        cpal::SampleFormat::F32 => device
+            .build_input_stream(
+                &config.config(),
+                move |data: &[f32], _: &_| {
+                    let mono = audio_to_mono(data, channels);
+                    let _ = tx.send(mono);
+                },
+                error_callback,
+                None,
+            )
+            .map_err(|e| anyhow!(e)),
+        cpal::SampleFormat::I16 => device
+            .build_input_stream(
+                &config.config(),
+                move |data: &[i16], _: &_| {
+                    let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                    let _ = tx.send(mono);
+                },
+                error_callback,
+                None,
+            )
+            .map_err(|e| anyhow!(e)),
+        cpal::SampleFormat::I32 => device
+            .build_input_stream(
+                &config.config(),
+                move |data: &[i32], _: &_| {
+                    let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                    let _ = tx.send(mono);
+                },
+                error_callback,
+                None,
+            )
+            .map_err(|e| anyhow!(e)),
+        cpal::SampleFormat::I8 => device
+            .build_input_stream(
+                &config.config(),
+                move |data: &[i8], _: &_| {
+                    let mono = audio_to_mono(bytemuck::cast_slice(data), channels);
+                    let _ = tx.send(mono);
+                },
+                error_callback,
+                None,
+            )
+            .map_err(|e| anyhow!(e)),
+        _ => Err(anyhow!(
+            "unsupported sample format: {}",
+            config.sample_format()
+        )),
     }
 }

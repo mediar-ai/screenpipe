@@ -37,20 +37,20 @@ impl AudioDevice {
             return Err(anyhow!("Device name cannot be empty"));
         }
 
-        let (name, device_type) = if name.to_lowercase().ends_with("(input)") {
-            (
+        let (name, device_type) = match name.to_lowercase() {
+            n if n.ends_with("(input)") => (
                 name.trim_end_matches("(input)").trim().to_string(),
                 DeviceType::Input,
-            )
-        } else if name.to_lowercase().ends_with("(output)") {
-            (
+            ),
+            n if n.ends_with("(output)") => (
                 name.trim_end_matches("(output)").trim().to_string(),
                 DeviceType::Output,
-            )
-        } else {
-            return Err(anyhow!(
-                "Device type (input/output) not specified in the name"
-            ));
+            ),
+            _ => {
+                return Err(anyhow!(
+                    "Device type (input/output) not specified in the name"
+                ))
+            }
         };
 
         Ok(AudioDevice::new(name, device_type))
@@ -79,9 +79,14 @@ pub async fn get_cpal_device_and_config(
     audio_device: &AudioDevice,
 ) -> Result<(cpal::Device, cpal::SupportedStreamConfig)> {
     let host = cpal::default_host();
-
     let is_output_device = audio_device.device_type == DeviceType::Output;
     let is_display = audio_device.to_string().contains("Display");
+    let device_name = audio_device
+        .to_string()
+        .replace(" (input)", "")
+        .replace(" (output)", "")
+        .trim()
+        .to_string();
 
     let cpal_audio_device = if audio_device.to_string() == "default" {
         match audio_device.device_type {
@@ -95,35 +100,22 @@ pub async fn get_cpal_device_and_config(
         };
 
         #[cfg(target_os = "macos")]
-        {
-            if is_output_device {
-                if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit)
-                {
-                    devices = screen_capture_host.input_devices()?;
-                }
+        if is_output_device {
+            if let Ok(screen_capture_host) = cpal::host_from_id(cpal::HostId::ScreenCaptureKit) {
+                devices = screen_capture_host.input_devices()?;
             }
         }
 
-        devices.find(|x| {
-            x.name()
-                .map(|y| {
-                    y == audio_device
-                        .to_string()
-                        .replace(" (input)", "")
-                        .replace(" (output)", "")
-                        .trim()
-                })
-                .unwrap_or(false)
-        })
+        devices.find(|x| x.name().map(|y| y == device_name).unwrap_or(false))
     }
     .ok_or_else(|| anyhow!("Audio device not found"))?;
 
-    // if output device and windows, using output config
     let config = if is_output_device && !is_display {
         cpal_audio_device.default_output_config()?
     } else {
         cpal_audio_device.default_input_config()?
     };
+
     Ok((cpal_audio_device, config))
 }
 
