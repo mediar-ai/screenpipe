@@ -43,8 +43,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-# TO-DO: change it to "0.3.3" when released
-xcap = { package = "xcap", git = "https://github.com/ologbonowiwi/xcap", rev = "ae0dab1" }
+xcap = "0.3.3"
 
 once_cell = { workspace = true }
 base64 = "0.22.1"

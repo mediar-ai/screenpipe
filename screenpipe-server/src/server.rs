@@ -21,7 +21,7 @@ use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
 use crate::{
-    db_types::{ContentType, FrameData, SearchResult, Speaker, TagContentType},
+    db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
@@ -1381,20 +1381,6 @@ struct InputControlResponse {
     success: bool,
 }
 
-#[derive(Deserialize, PartialEq)]
-enum Order {
-    #[serde(rename = "ascending")]
-    Ascending,
-    #[serde(rename = "descending")]
-    Descending,
-}
-
-impl Order {
-    fn default() -> Self {
-        Order::Descending
-    }
-}
-
 // Add this new struct
 #[derive(Deserialize)]
 pub struct StreamFramesRequest {
@@ -2066,6 +2052,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
+        .route("/pipes/build-status/:pipe_id", get(get_pipe_build_status))
+        .route("/search/keyword", get(keyword_search_handler))
         // .route("/vision/start", post(start_vision_device))
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
@@ -2078,6 +2066,127 @@ pub fn create_router() -> Router<Arc<AppState>> {
     }
 
     router
+}
+
+async fn get_pipe_build_status(
+    Path(pipe_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
+    let pipe_dir = state.screenpipe_dir.join("pipes").join(&pipe_id);
+    let temp_dir = pipe_dir.with_extension("_temp");
+
+    // First check temp directory if it exists
+    if temp_dir.exists() {
+        let temp_pipe_json = temp_dir.join("pipe.json");
+        if temp_pipe_json.exists() {
+            let pipe_json = tokio::fs::read_to_string(&temp_pipe_json)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        JsonResponse(
+                            json!({"error": format!("Failed to read temp pipe config: {}", e)}),
+                        ),
+                    )
+                })?;
+
+            let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(
+                        json!({"error": format!("Failed to parse temp pipe config: {}", e)}),
+                    ),
+                )
+            })?;
+
+            info!("{:?}", pipe_config);
+            let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
+            return Ok(JsonResponse(json!({ "buildStatus": build_status })));
+        }
+    }
+
+    // If no temp directory or no pipe.json in temp, check the main pipe directory
+    let pipe_json_path = pipe_dir.join("pipe.json");
+    if !pipe_json_path.exists() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            JsonResponse(json!({"error": "Pipe not found"})),
+        ));
+    }
+
+    let pipe_json = tokio::fs::read_to_string(&pipe_json_path)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": format!("Failed to read pipe config: {}", e)})),
+            )
+        })?;
+
+    let pipe_config: Value = serde_json::from_str(&pipe_json).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to parse pipe config: {}", e)})),
+        )
+    })?;
+
+    let build_status = pipe_config.get("buildStatus").unwrap_or(&Value::Null);
+    Ok(JsonResponse(json!({ "buildStatus": build_status })))
+}
+
+async fn keyword_search_handler(
+    Query(query): Query<KeywordSearchRequest>,
+    State(state): State<Arc<AppState>>,
+) -> Result<JsonResponse<Vec<SearchMatch>>, (StatusCode, JsonResponse<Value>)> {
+    let matches = state
+        .db
+        .search_with_text_positions(
+            &query.query,
+            query.limit,
+            query.offset,
+            query.start_time,
+            query.end_time,
+            query.fuzzy_match,
+            query.order,
+            query.app_names,
+        )
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                JsonResponse(json!({"error": e.to_string()})),
+            )
+        })?;
+
+    Ok(JsonResponse(matches))
+}
+
+fn from_comma_separated_string<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    Ok(s.map(|s| s.split(',').map(String::from).collect()))
+}
+
+#[derive(Deserialize)]
+pub struct KeywordSearchRequest {
+    query: String,
+    #[serde(default = "default_limit")]
+    limit: u32,
+    #[serde(default)]
+    offset: u32,
+    #[serde(default)]
+    start_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    end_time: Option<DateTime<Utc>>,
+    #[serde(default)]
+    fuzzy_match: bool,
+    #[serde(default)]
+    order: Order,
+    #[serde(default)]
+    #[serde(deserialize_with = "from_comma_separated_string")]
+    app_names: Option<Vec<String>>,
 }
 
 pub async fn get_frame_data(
@@ -2453,8 +2562,7 @@ pub struct RestartAudioDevicesResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PurgePipeRequest {
-}
+pub struct PurgePipeRequest {}
 
 // async fn restart_audio_devices(
 //     State(state): State<Arc<AppState>>,

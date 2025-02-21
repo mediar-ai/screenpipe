@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+// @bun
 import { createRequire } from "node:module";
 var __create = Object.create;
 var __getProtoOf = Object.getPrototypeOf;
@@ -11244,7 +11245,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     csibm863: "cp863",
     cp864: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$٪&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~°·∙√▒─│┼┤┬├┴┐┌└┘β∞φ±½¼≈«»ﻷﻸ��ﻻﻼ� ­ﺂ£¤ﺄ��ﺎﺏﺕﺙ،ﺝﺡﺥ٠١٢٣٤٥٦٧٨٩ﻑ؛ﺱﺵﺹ؟¢ﺀﺁﺃﺅﻊﺋﺍﺑﺓﺗﺛﺟﺣﺧﺩﺫﺭﺯﺳﺷﺻﺿﻁﻅﻋﻏ¦¬÷×ﻉـﻓﻗﻛﻟﻣﻧﻫﻭﻯﻳﺽﻌﻎﻍﻡﹽّﻥﻩﻬﻰﻲﻐﻕﻵﻶﻝﻙﻱ■�`
     },
     ibm864: "cp864",
@@ -11383,7 +11384,7 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     tcvn: {
       type: "_sbcs",
-      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b\t
+      chars: `\x00ÚỤ\x03ỪỬỮ\x07\b	
 \v\f\r\x0E\x0F\x10ỨỰỲỶỸÝỴ\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ÀẢÃÁẠẶẬÈẺẼÉẸỆÌỈĨÍỊÒỎÕÓỌỘỜỞỠỚỢÙỦŨ ĂÂÊÔƠƯĐăâêôơưđẶ̀̀̉̃́àảãáạẲằẳẵắẴẮẦẨẪẤỀặầẩẫấậèỂẻẽéẹềểễếệìỉỄẾỒĩíịòỔỏõóọồổỗốộờởỡớợùỖủũúụừửữứựỳỷỹýỵỐ`
     },
     georgianacademy: {
@@ -11400,17 +11401,17 @@ var require_sbcs_data_generated = __commonJS((exports, module) => {
     },
     viscii: {
       type: "_sbcs",
-      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b\t
+      chars: `\x00\x01Ẳ\x03\x04ẴẪ\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13Ỷ\x15\x16\x17\x18Ỹ\x1A\x1B\x1C\x1DỴ\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}~ẠẮẰẶẤẦẨẬẼẸẾỀỂỄỆỐỒỔỖỘỢỚỜỞỊỎỌỈỦŨỤỲÕắằặấầẩậẽẹếềểễệốồổỗỠƠộờởịỰỨỪỬơớƯÀÁÂÃẢĂẳẵÈÉÊẺÌÍĨỳĐứÒÓÔạỷừửÙÚỹỵÝỡưàáâãảăữẫèéêẻìíĩỉđựòóôõỏọụùúũủýợỮ`
     },
     iso646cn: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#¥%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     iso646jp: {
       type: "_sbcs",
-      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b\t
+      chars: `\x00\x01\x02\x03\x04\x05\x06\x07\b	
 \v\f\r\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[¥]^_\`abcdefghijklmnopqrstuvwxyz{|}‾��������������������������������������������������������������������������������������������������������������������������������`
     },
     hproman8: {
@@ -26031,13 +26032,6 @@ var require_cli_spinners = __commonJS((exports, module) => {
   module.exports = spinners;
 });
 
-// node_modules/emoji-regex/index.js
-var require_emoji_regex2 = __commonJS((exports, module) => {
-  module.exports = () => {
-    return /[#*0-9]\uFE0F?\u20E3|[\xA9\xAE\u203C\u2049\u2122\u2139\u2194-\u2199\u21A9\u21AA\u231A\u231B\u2328\u23CF\u23ED-\u23EF\u23F1\u23F2\u23F8-\u23FA\u24C2\u25AA\u25AB\u25B6\u25C0\u25FB\u25FC\u25FE\u2600-\u2604\u260E\u2611\u2614\u2615\u2618\u2620\u2622\u2623\u2626\u262A\u262E\u262F\u2638-\u263A\u2640\u2642\u2648-\u2653\u265F\u2660\u2663\u2665\u2666\u2668\u267B\u267E\u267F\u2692\u2694-\u2697\u2699\u269B\u269C\u26A0\u26A7\u26AA\u26B0\u26B1\u26BD\u26BE\u26C4\u26C8\u26CF\u26D1\u26E9\u26F0-\u26F5\u26F7\u26F8\u26FA\u2702\u2708\u2709\u270F\u2712\u2714\u2716\u271D\u2721\u2733\u2734\u2744\u2747\u2757\u2763\u27A1\u2934\u2935\u2B05-\u2B07\u2B1B\u2B1C\u2B55\u3030\u303D\u3297\u3299]\uFE0F?|[\u261D\u270C\u270D](?:\uD83C[\uDFFB-\uDFFF]|\uFE0F)?|[\u270A\u270B](?:\uD83C[\uDFFB-\uDFFF])?|[\u23E9-\u23EC\u23F0\u23F3\u25FD\u2693\u26A1\u26AB\u26C5\u26CE\u26D4\u26EA\u26FD\u2705\u2728\u274C\u274E\u2753-\u2755\u2795-\u2797\u27B0\u27BF\u2B50]|\u26D3\uFE0F?(?:\u200D\uD83D\uDCA5)?|\u26F9(?:\uD83C[\uDFFB-\uDFFF]|\uFE0F)?(?:\u200D[\u2640\u2642]\uFE0F?)?|\u2764\uFE0F?(?:\u200D(?:\uD83D\uDD25|\uD83E\uDE79))?|\uD83C(?:[\uDC04\uDD70\uDD71\uDD7E\uDD7F\uDE02\uDE37\uDF21\uDF24-\uDF2C\uDF36\uDF7D\uDF96\uDF97\uDF99-\uDF9B\uDF9E\uDF9F\uDFCD\uDFCE\uDFD4-\uDFDF\uDFF5\uDFF7]\uFE0F?|[\uDF85\uDFC2\uDFC7](?:\uD83C[\uDFFB-\uDFFF])?|[\uDFC4\uDFCA](?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D[\u2640\u2642]\uFE0F?)?|[\uDFCB\uDFCC](?:\uD83C[\uDFFB-\uDFFF]|\uFE0F)?(?:\u200D[\u2640\u2642]\uFE0F?)?|[\uDCCF\uDD8E\uDD91-\uDD9A\uDE01\uDE1A\uDE2F\uDE32-\uDE36\uDE38-\uDE3A\uDE50\uDE51\uDF00-\uDF20\uDF2D-\uDF35\uDF37-\uDF43\uDF45-\uDF4A\uDF4C-\uDF7C\uDF7E-\uDF84\uDF86-\uDF93\uDFA0-\uDFC1\uDFC5\uDFC6\uDFC8\uDFC9\uDFCF-\uDFD3\uDFE0-\uDFF0\uDFF8-\uDFFF]|\uDDE6\uD83C[\uDDE8-\uDDEC\uDDEE\uDDF1\uDDF2\uDDF4\uDDF6-\uDDFA\uDDFC\uDDFD\uDDFF]|\uDDE7\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEF\uDDF1-\uDDF4\uDDF6-\uDDF9\uDDFB\uDDFC\uDDFE\uDDFF]|\uDDE8\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDEE\uDDF0-\uDDF7\uDDFA-\uDDFF]|\uDDE9\uD83C[\uDDEA\uDDEC\uDDEF\uDDF0\uDDF2\uDDF4\uDDFF]|\uDDEA\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDED\uDDF7-\uDDFA]|\uDDEB\uD83C[\uDDEE-\uDDF0\uDDF2\uDDF4\uDDF7]|\uDDEC\uD83C[\uDDE6\uDDE7\uDDE9-\uDDEE\uDDF1-\uDDF3\uDDF5-\uDDFA\uDDFC\uDDFE]|\uDDED\uD83C[\uDDF0\uDDF2\uDDF3\uDDF7\uDDF9\uDDFA]|\uDDEE\uD83C[\uDDE8-\uDDEA\uDDF1-\uDDF4\uDDF6-\uDDF9]|\uDDEF\uD83C[\uDDEA\uDDF2\uDDF4\uDDF5]|\uDDF0\uD83C[\uDDEA\uDDEC-\uDDEE\uDDF2\uDDF3\uDDF5\uDDF7\uDDFC\uDDFE\uDDFF]|\uDDF1\uD83C[\uDDE6-\uDDE8\uDDEE\uDDF0\uDDF7-\uDDFB\uDDFE]|\uDDF2\uD83C[\uDDE6\uDDE8-\uDDED\uDDF0-\uDDFF]|\uDDF3\uD83C[\uDDE6\uDDE8\uDDEA-\uDDEC\uDDEE\uDDF1\uDDF4\uDDF5\uDDF7\uDDFA\uDDFF]|\uDDF4\uD83C\uDDF2|\uDDF5\uD83C[\uDDE6\uDDEA-\uDDED\uDDF0-\uDDF3\uDDF7-\uDDF9\uDDFC\uDDFE]|\uDDF6\uD83C\uDDE6|\uDDF7\uD83C[\uDDEA\uDDF4\uDDF8\uDDFA\uDDFC]|\uDDF8\uD83C[\uDDE6-\uDDEA\uDDEC-\uDDF4\uDDF7-\uDDF9\uDDFB\uDDFD-\uDDFF]|\uDDF9\uD83C[\uDDE6\uDDE8\uDDE9\uDDEB-\uDDED\uDDEF-\uDDF4\uDDF7\uDDF9\uDDFB\uDDFC\uDDFF]|\uDDFA\uD83C[\uDDE6\uDDEC\uDDF2\uDDF3\uDDF8\uDDFE\uDDFF]|\uDDFB\uD83C[\uDDE6\uDDE8\uDDEA\uDDEC\uDDEE\uDDF3\uDDFA]|\uDDFC\uD83C[\uDDEB\uDDF8]|\uDDFD\uD83C\uDDF0|\uDDFE\uD83C[\uDDEA\uDDF9]|\uDDFF\uD83C[\uDDE6\uDDF2\uDDFC]|\uDF44(?:\u200D\uD83D\uDFEB)?|\uDF4B(?:\u200D\uD83D\uDFE9)?|\uDFC3(?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D(?:[\u2640\u2642]\uFE0F?(?:\u200D\u27A1\uFE0F?)?|\u27A1\uFE0F?))?|\uDFF3\uFE0F?(?:\u200D(?:\u26A7\uFE0F?|\uD83C\uDF08))?|\uDFF4(?:\u200D\u2620\uFE0F?|\uDB40\uDC67\uDB40\uDC62\uDB40(?:\uDC65\uDB40\uDC6E\uDB40\uDC67|\uDC73\uDB40\uDC63\uDB40\uDC74|\uDC77\uDB40\uDC6C\uDB40\uDC73)\uDB40\uDC7F)?)|\uD83D(?:[\uDC3F\uDCFD\uDD49\uDD4A\uDD6F\uDD70\uDD73\uDD76-\uDD79\uDD87\uDD8A-\uDD8D\uDDA5\uDDA8\uDDB1\uDDB2\uDDBC\uDDC2-\uDDC4\uDDD1-\uDDD3\uDDDC-\uDDDE\uDDE1\uDDE3\uDDE8\uDDEF\uDDF3\uDDFA\uDECB\uDECD-\uDECF\uDEE0-\uDEE5\uDEE9\uDEF0\uDEF3]\uFE0F?|[\uDC42\uDC43\uDC46-\uDC50\uDC66\uDC67\uDC6B-\uDC6D\uDC72\uDC74-\uDC76\uDC78\uDC7C\uDC83\uDC85\uDC8F\uDC91\uDCAA\uDD7A\uDD95\uDD96\uDE4C\uDE4F\uDEC0\uDECC](?:\uD83C[\uDFFB-\uDFFF])?|[\uDC6E\uDC70\uDC71\uDC73\uDC77\uDC81\uDC82\uDC86\uDC87\uDE45-\uDE47\uDE4B\uDE4D\uDE4E\uDEA3\uDEB4\uDEB5](?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D[\u2640\u2642]\uFE0F?)?|[\uDD74\uDD90](?:\uD83C[\uDFFB-\uDFFF]|\uFE0F)?|[\uDC00-\uDC07\uDC09-\uDC14\uDC16-\uDC25\uDC27-\uDC3A\uDC3C-\uDC3E\uDC40\uDC44\uDC45\uDC51-\uDC65\uDC6A\uDC79-\uDC7B\uDC7D-\uDC80\uDC84\uDC88-\uDC8E\uDC90\uDC92-\uDCA9\uDCAB-\uDCFC\uDCFF-\uDD3D\uDD4B-\uDD4E\uDD50-\uDD67\uDDA4\uDDFB-\uDE2D\uDE2F-\uDE34\uDE37-\uDE41\uDE43\uDE44\uDE48-\uDE4A\uDE80-\uDEA2\uDEA4-\uDEB3\uDEB7-\uDEBF\uDEC1-\uDEC5\uDED0-\uDED2\uDED5-\uDED7\uDEDC-\uDEDF\uDEEB\uDEEC\uDEF4-\uDEFC\uDFE0-\uDFEB\uDFF0]|\uDC08(?:\u200D\u2B1B)?|\uDC15(?:\u200D\uD83E\uDDBA)?|\uDC26(?:\u200D(?:\u2B1B|\uD83D\uDD25))?|\uDC3B(?:\u200D\u2744\uFE0F?)?|\uDC41\uFE0F?(?:\u200D\uD83D\uDDE8\uFE0F?)?|\uDC68(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D(?:[\uDC68\uDC69]\u200D\uD83D(?:\uDC66(?:\u200D\uD83D\uDC66)?|\uDC67(?:\u200D\uD83D[\uDC66\uDC67])?)|[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uDC66(?:\u200D\uD83D\uDC66)?|\uDC67(?:\u200D\uD83D[\uDC66\uDC67])?)|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]))|\uD83C(?:\uDFFB(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D\uDC68\uD83C[\uDFFC-\uDFFF])))?|\uDFFC(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D\uDC68\uD83C[\uDFFB\uDFFD-\uDFFF])))?|\uDFFD(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D\uDC68\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF])))?|\uDFFE(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D\uDC68\uD83C[\uDFFB-\uDFFD\uDFFF])))?|\uDFFF(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?\uDC68\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D\uDC68\uD83C[\uDFFB-\uDFFE])))?))?|\uDC69(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:\uDC8B\u200D\uD83D)?[\uDC68\uDC69]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D(?:[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uDC66(?:\u200D\uD83D\uDC66)?|\uDC67(?:\u200D\uD83D[\uDC66\uDC67])?|\uDC69\u200D\uD83D(?:\uDC66(?:\u200D\uD83D\uDC66)?|\uDC67(?:\u200D\uD83D[\uDC66\uDC67])?))|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]))|\uD83C(?:\uDFFB(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:[\uDC68\uDC69]|\uDC8B\u200D\uD83D[\uDC68\uDC69])\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D[\uDC68\uDC69]\uD83C[\uDFFC-\uDFFF])))?|\uDFFC(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:[\uDC68\uDC69]|\uDC8B\u200D\uD83D[\uDC68\uDC69])\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D[\uDC68\uDC69]\uD83C[\uDFFB\uDFFD-\uDFFF])))?|\uDFFD(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:[\uDC68\uDC69]|\uDC8B\u200D\uD83D[\uDC68\uDC69])\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D[\uDC68\uDC69]\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF])))?|\uDFFE(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:[\uDC68\uDC69]|\uDC8B\u200D\uD83D[\uDC68\uDC69])\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D[\uDC68\uDC69]\uD83C[\uDFFB-\uDFFD\uDFFF])))?|\uDFFF(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D\uD83D(?:[\uDC68\uDC69]|\uDC8B\u200D\uD83D[\uDC68\uDC69])\uD83C[\uDFFB-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83D[\uDC68\uDC69]\uD83C[\uDFFB-\uDFFE])))?))?|\uDC6F(?:\u200D[\u2640\u2642]\uFE0F?)?|\uDD75(?:\uD83C[\uDFFB-\uDFFF]|\uFE0F)?(?:\u200D[\u2640\u2642]\uFE0F?)?|\uDE2E(?:\u200D\uD83D\uDCA8)?|\uDE35(?:\u200D\uD83D\uDCAB)?|\uDE36(?:\u200D\uD83C\uDF2B\uFE0F?)?|\uDE42(?:\u200D[\u2194\u2195]\uFE0F?)?|\uDEB6(?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D(?:[\u2640\u2642]\uFE0F?(?:\u200D\u27A1\uFE0F?)?|\u27A1\uFE0F?))?)|\uD83E(?:[\uDD0C\uDD0F\uDD18-\uDD1F\uDD30-\uDD34\uDD36\uDD77\uDDB5\uDDB6\uDDBB\uDDD2\uDDD3\uDDD5\uDEC3-\uDEC5\uDEF0\uDEF2-\uDEF8](?:\uD83C[\uDFFB-\uDFFF])?|[\uDD26\uDD35\uDD37-\uDD39\uDD3D\uDD3E\uDDB8\uDDB9\uDDCD\uDDCF\uDDD4\uDDD6-\uDDDD](?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D[\u2640\u2642]\uFE0F?)?|[\uDDDE\uDDDF](?:\u200D[\u2640\u2642]\uFE0F?)?|[\uDD0D\uDD0E\uDD10-\uDD17\uDD20-\uDD25\uDD27-\uDD2F\uDD3A\uDD3F-\uDD45\uDD47-\uDD76\uDD78-\uDDB4\uDDB7\uDDBA\uDDBC-\uDDCC\uDDD0\uDDE0-\uDDFF\uDE70-\uDE7C\uDE80-\uDE89\uDE8F-\uDEC2\uDEC6\uDECE-\uDEDC\uDEDF-\uDEE9]|\uDD3C(?:\u200D[\u2640\u2642]\uFE0F?|\uD83C[\uDFFB-\uDFFF])?|\uDDCE(?:\uD83C[\uDFFB-\uDFFF])?(?:\u200D(?:[\u2640\u2642]\uFE0F?(?:\u200D\u27A1\uFE0F?)?|\u27A1\uFE0F?))?|\uDDD1(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1|\uDDD1\u200D\uD83E\uDDD2(?:\u200D\uD83E\uDDD2)?|\uDDD2(?:\u200D\uD83E\uDDD2)?))|\uD83C(?:\uDFFB(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1\uD83C[\uDFFC-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1\uD83C[\uDFFB-\uDFFF])))?|\uDFFC(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1\uD83C[\uDFFB\uDFFD-\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1\uD83C[\uDFFB-\uDFFF])))?|\uDFFD(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1\uD83C[\uDFFB-\uDFFF])))?|\uDFFE(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1\uD83C[\uDFFB-\uDFFD\uDFFF]|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1\uD83C[\uDFFB-\uDFFF])))?|\uDFFF(?:\u200D(?:[\u2695\u2696\u2708]\uFE0F?|\u2764\uFE0F?\u200D(?:\uD83D\uDC8B\u200D)?\uD83E\uDDD1\uD83C[\uDFFB-\uDFFE]|\uD83C[\uDF3E\uDF73\uDF7C\uDF84\uDF93\uDFA4\uDFA8\uDFEB\uDFED]|\uD83D[\uDCBB\uDCBC\uDD27\uDD2C\uDE80\uDE92]|\uD83E(?:[\uDDAF\uDDBC\uDDBD](?:\u200D\u27A1\uFE0F?)?|[\uDDB0-\uDDB3]|\uDD1D\u200D\uD83E\uDDD1\uD83C[\uDFFB-\uDFFF])))?))?|\uDEF1(?:\uD83C(?:\uDFFB(?:\u200D\uD83E\uDEF2\uD83C[\uDFFC-\uDFFF])?|\uDFFC(?:\u200D\uD83E\uDEF2\uD83C[\uDFFB\uDFFD-\uDFFF])?|\uDFFD(?:\u200D\uD83E\uDEF2\uD83C[\uDFFB\uDFFC\uDFFE\uDFFF])?|\uDFFE(?:\u200D\uD83E\uDEF2\uD83C[\uDFFB-\uDFFD\uDFFF])?|\uDFFF(?:\u200D\uD83E\uDEF2\uD83C[\uDFFB-\uDFFE])?))?)/g;
-  };
-});
-
 // node_modules/minimatch/lib/path.js
 var require_path = __commonJS((exports, module) => {
   var isWindows = typeof process === "object" && process && process.platform === "win32";
@@ -26817,7 +26811,7 @@ globstar while`, file, fr, pattern, pr, swallowee);
 var require_readdir_glob = __commonJS((exports, module) => {
   module.exports = readdirGlob;
   var fs3 = __require("fs");
-  var { EventEmitter } = __require("events");
+  var { EventEmitter: EventEmitter2 } = __require("events");
   var { Minimatch } = require_minimatch();
   var { resolve } = __require("path");
   function readdir(dir, strict) {
@@ -26924,7 +26918,7 @@ var require_readdir_glob = __commonJS((exports, module) => {
     };
   }
 
-  class ReaddirGlob extends EventEmitter {
+  class ReaddirGlob extends EventEmitter2 {
     constructor(cwd, options, cb) {
       super();
       if (typeof options === "function") {
@@ -27041,7 +27035,7 @@ var require_async2 = __commonJS((exports, module) => {
     var hasQueueMicrotask = typeof queueMicrotask === "function" && queueMicrotask;
     var hasSetImmediate = typeof setImmediate === "function" && setImmediate;
     var hasNextTick = typeof process === "object" && typeof process.nextTick === "function";
-    function fallback2(fn) {
+    function fallback(fn) {
       setTimeout(fn, 0);
     }
     function wrap(defer2) {
@@ -27055,7 +27049,7 @@ var require_async2 = __commonJS((exports, module) => {
     } else if (hasNextTick) {
       _defer$1 = process.nextTick;
     } else {
-      _defer$1 = fallback2;
+      _defer$1 = fallback;
     }
     var setImmediate$1 = wrap(_defer$1);
     function asyncify(func) {
@@ -27449,8 +27443,8 @@ var require_async2 = __commonJS((exports, module) => {
           return callback(null, results);
         }
         while (readyTasks.length && runningTasks < concurrency) {
-          var run = readyTasks.shift();
-          run();
+          var run2 = readyTasks.shift();
+          run2();
         }
       }
       function addListener(taskName, fn) {
@@ -28286,7 +28280,7 @@ Source:
     } else if (hasSetImmediate) {
       _defer = setImmediate;
     } else {
-      _defer = fallback2;
+      _defer = fallback;
     }
     var nextTick = wrap(_defer);
     var _parallel = awaitify((eachfn, tasks, callback) => {
@@ -34125,7 +34119,7 @@ var require_utils = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/end-of-stream.js
 var require_end_of_stream = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var { AbortError, codes } = require_errors();
   var { ERR_INVALID_ARG_TYPE, ERR_STREAM_PREMATURE_CLOSE } = codes;
   var { kEmptyObject, once } = require_util2();
@@ -34263,17 +34257,17 @@ var require_end_of_stream = __commonJS((exports, module) => {
     }
     stream.on("close", onclose);
     if (closed) {
-      process11.nextTick(onclose);
+      process5.nextTick(onclose);
     } else if (wState !== null && wState !== undefined && wState.errorEmitted || rState !== null && rState !== undefined && rState.errorEmitted) {
       if (!willEmitClose) {
-        process11.nextTick(onclosed);
+        process5.nextTick(onclosed);
       }
     } else if (!readable && (!willEmitClose || isReadable(stream)) && (writableFinished || isWritable(stream) === false)) {
-      process11.nextTick(onclosed);
+      process5.nextTick(onclosed);
     } else if (!writable && (!willEmitClose || isWritable(stream)) && (readableFinished || isReadable(stream) === false)) {
-      process11.nextTick(onclosed);
+      process5.nextTick(onclosed);
     } else if (rState && stream.req && stream.aborted) {
-      process11.nextTick(onclosed);
+      process5.nextTick(onclosed);
     }
     const cleanup = () => {
       callback = nop;
@@ -34299,7 +34293,7 @@ var require_end_of_stream = __commonJS((exports, module) => {
         }));
       };
       if (options.signal.aborted) {
-        process11.nextTick(abort);
+        process5.nextTick(abort);
       } else {
         addAbortListener = addAbortListener || require_util2().addAbortListener;
         const disposable = addAbortListener(options.signal, abort);
@@ -34323,7 +34317,7 @@ var require_end_of_stream = __commonJS((exports, module) => {
         }));
       };
       if (options.signal.aborted) {
-        process11.nextTick(abort);
+        process5.nextTick(abort);
       } else {
         addAbortListener = addAbortListener || require_util2().addAbortListener;
         const disposable = addAbortListener(options.signal, abort);
@@ -34336,7 +34330,7 @@ var require_end_of_stream = __commonJS((exports, module) => {
     }
     const resolverFn = (...args) => {
       if (!isAborted2) {
-        process11.nextTick(() => callback.apply(stream, args));
+        process5.nextTick(() => callback.apply(stream, args));
       }
     };
     PromisePrototypeThen(stream[kIsClosedPromise].promise, resolverFn, resolverFn);
@@ -34371,7 +34365,7 @@ var require_end_of_stream = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/destroy.js
 var require_destroy2 = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var {
     aggregateTwoErrors,
     codes: { ERR_MULTIPLE_CALLBACK },
@@ -34438,9 +34432,9 @@ var require_destroy2 = __commonJS((exports, module) => {
         cb(err2);
       }
       if (err2) {
-        process11.nextTick(emitErrorCloseNT, self2, err2);
+        process5.nextTick(emitErrorCloseNT, self2, err2);
       } else {
-        process11.nextTick(emitCloseNT, self2);
+        process5.nextTick(emitCloseNT, self2);
       }
     }
     try {
@@ -34525,7 +34519,7 @@ var require_destroy2 = __commonJS((exports, module) => {
         r.errored = err;
       }
       if (sync) {
-        process11.nextTick(emitErrorNT, stream, err);
+        process5.nextTick(emitErrorNT, stream, err);
       } else {
         emitErrorNT(stream, err);
       }
@@ -34547,7 +34541,7 @@ var require_destroy2 = __commonJS((exports, module) => {
     if (stream.listenerCount(kConstruct) > 1) {
       return;
     }
-    process11.nextTick(constructNT, stream);
+    process5.nextTick(constructNT, stream);
   }
   function constructNT(stream) {
     let called = false;
@@ -34571,15 +34565,15 @@ var require_destroy2 = __commonJS((exports, module) => {
       } else if (err) {
         errorOrDestroy(stream, err, true);
       } else {
-        process11.nextTick(emitConstructNT, stream);
+        process5.nextTick(emitConstructNT, stream);
       }
     }
     try {
       stream._construct((err) => {
-        process11.nextTick(onConstruct, err);
+        process5.nextTick(onConstruct, err);
       });
     } catch (err) {
-      process11.nextTick(onConstruct, err);
+      process5.nextTick(onConstruct, err);
     }
   }
   function emitConstructNT(stream) {
@@ -34593,7 +34587,7 @@ var require_destroy2 = __commonJS((exports, module) => {
   }
   function emitErrorCloseLegacy(stream, err) {
     stream.emit("error", err);
-    process11.nextTick(emitCloseLegacy, stream);
+    process5.nextTick(emitCloseLegacy, stream);
   }
   function destroyer(stream, err) {
     if (!stream || isDestroyed(stream)) {
@@ -34614,9 +34608,9 @@ var require_destroy2 = __commonJS((exports, module) => {
     } else if (typeof stream.close === "function") {
       stream.close();
     } else if (err) {
-      process11.nextTick(emitErrorCloseLegacy, stream, err);
+      process5.nextTick(emitErrorCloseLegacy, stream, err);
     } else {
-      process11.nextTick(emitCloseLegacy, stream);
+      process5.nextTick(emitCloseLegacy, stream);
     }
     if (!stream.destroyed) {
       stream[kIsDestroyed] = true;
@@ -35271,7 +35265,7 @@ var require_string_decoder2 = __commonJS((exports) => {
 
 // node_modules/readable-stream/lib/internal/streams/from.js
 var require_from2 = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var { PromisePrototypeThen, SymbolAsyncIterator, SymbolIterator } = require_primordials();
   var { Buffer: Buffer2 } = __require("buffer");
   var { ERR_INVALID_ARG_TYPE, ERR_STREAM_NULL_VALUES } = require_errors().codes;
@@ -35310,7 +35304,7 @@ var require_from2 = __commonJS((exports, module) => {
       }
     };
     readable._destroy = function(error, cb) {
-      PromisePrototypeThen(close(error), () => process11.nextTick(cb, error), (e) => process11.nextTick(cb, e || error));
+      PromisePrototypeThen(close(error), () => process5.nextTick(cb, error), (e) => process5.nextTick(cb, e || error));
     };
     async function close(error) {
       const hadError = error !== undefined && error !== null;
@@ -35357,7 +35351,7 @@ var require_from2 = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/readable.js
 var require_readable2 = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var {
     ArrayPrototypeIndexOf,
     NumberIsInteger,
@@ -35763,7 +35757,7 @@ var require_readable2 = __commonJS((exports, module) => {
     if (!state.emittedReadable) {
       debug("emitReadable", state.flowing);
       state.emittedReadable = true;
-      process11.nextTick(emitReadable_, stream);
+      process5.nextTick(emitReadable_, stream);
     }
   }
   function emitReadable_(stream) {
@@ -35779,7 +35773,7 @@ var require_readable2 = __commonJS((exports, module) => {
   function maybeReadMore(stream, state) {
     if (!state.readingMore && state.constructed) {
       state.readingMore = true;
-      process11.nextTick(maybeReadMore_, stream, state);
+      process5.nextTick(maybeReadMore_, stream, state);
     }
   }
   function maybeReadMore_(stream, state) {
@@ -35806,10 +35800,10 @@ var require_readable2 = __commonJS((exports, module) => {
     }
     state.pipes.push(dest);
     debug("pipe count=%d opts=%j", state.pipes.length, pipeOpts);
-    const doEnd = (!pipeOpts || pipeOpts.end !== false) && dest !== process11.stdout && dest !== process11.stderr;
+    const doEnd = (!pipeOpts || pipeOpts.end !== false) && dest !== process5.stdout && dest !== process5.stderr;
     const endFn = doEnd ? onend : unpipe;
     if (state.endEmitted)
-      process11.nextTick(endFn);
+      process5.nextTick(endFn);
     else
       src.once("end", endFn);
     dest.on("unpipe", onunpipe);
@@ -35965,7 +35959,7 @@ var require_readable2 = __commonJS((exports, module) => {
         if (state.length) {
           emitReadable(this);
         } else if (!state.reading) {
-          process11.nextTick(nReadingNextTick, this);
+          process5.nextTick(nReadingNextTick, this);
         }
       }
     }
@@ -35975,7 +35969,7 @@ var require_readable2 = __commonJS((exports, module) => {
   Readable.prototype.removeListener = function(ev, fn) {
     const res = Stream.prototype.removeListener.call(this, ev, fn);
     if (ev === "readable") {
-      process11.nextTick(updateReadableListening, this);
+      process5.nextTick(updateReadableListening, this);
     }
     return res;
   };
@@ -35983,7 +35977,7 @@ var require_readable2 = __commonJS((exports, module) => {
   Readable.prototype.removeAllListeners = function(ev) {
     const res = Stream.prototype.removeAllListeners.apply(this, arguments);
     if (ev === "readable" || ev === undefined) {
-      process11.nextTick(updateReadableListening, this);
+      process5.nextTick(updateReadableListening, this);
     }
     return res;
   };
@@ -36015,7 +36009,7 @@ var require_readable2 = __commonJS((exports, module) => {
   function resume(stream, state) {
     if (!state.resumeScheduled) {
       state.resumeScheduled = true;
-      process11.nextTick(resume_, stream, state);
+      process5.nextTick(resume_, stream, state);
     }
   }
   function resume_(stream, state) {
@@ -36293,7 +36287,7 @@ var require_readable2 = __commonJS((exports, module) => {
     debug("endReadable", state.endEmitted);
     if (!state.endEmitted) {
       state.ended = true;
-      process11.nextTick(endReadableNT, state, stream);
+      process5.nextTick(endReadableNT, state, stream);
     }
   }
   function endReadableNT(state, stream) {
@@ -36302,7 +36296,7 @@ var require_readable2 = __commonJS((exports, module) => {
       state.endEmitted = true;
       stream.emit("end");
       if (stream.writable && stream.allowHalfOpen === false) {
-        process11.nextTick(endWritableNT, stream);
+        process5.nextTick(endWritableNT, stream);
       } else if (state.autoDestroy) {
         const wState = stream._writableState;
         const autoDestroy = !wState || wState.autoDestroy && (wState.finished || wState.writable === false);
@@ -36348,7 +36342,7 @@ var require_readable2 = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/writable.js
 var require_writable = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var {
     ArrayPrototypeSlice,
     Error: Error2,
@@ -36515,7 +36509,7 @@ var require_writable = __commonJS((exports, module) => {
       err = new ERR_STREAM_DESTROYED("write");
     }
     if (err) {
-      process11.nextTick(cb, err);
+      process5.nextTick(cb, err);
       errorOrDestroy(stream, err, true);
       return err;
     }
@@ -36612,7 +36606,7 @@ var require_writable = __commonJS((exports, module) => {
         stream._readableState.errored = er;
       }
       if (sync) {
-        process11.nextTick(onwriteError, stream, state, er, cb);
+        process5.nextTick(onwriteError, stream, state, er, cb);
       } else {
         onwriteError(stream, state, er, cb);
       }
@@ -36630,7 +36624,7 @@ var require_writable = __commonJS((exports, module) => {
             stream,
             state
           };
-          process11.nextTick(afterWriteTick, state.afterWriteTickInfo);
+          process5.nextTick(afterWriteTick, state.afterWriteTickInfo);
         }
       } else {
         afterWrite(stream, state, 1, cb);
@@ -36760,7 +36754,7 @@ var require_writable = __commonJS((exports, module) => {
     }
     if (typeof cb === "function") {
       if (err || state.finished) {
-        process11.nextTick(cb, err);
+        process5.nextTick(cb, err);
       } else {
         state[kOnFinished].push(cb);
       }
@@ -36789,7 +36783,7 @@ var require_writable = __commonJS((exports, module) => {
         state.prefinished = true;
         stream.emit("prefinish");
         state.pendingcb++;
-        process11.nextTick(finish, stream, state);
+        process5.nextTick(finish, stream, state);
       }
     }
     state.sync = true;
@@ -36818,7 +36812,7 @@ var require_writable = __commonJS((exports, module) => {
       if (state.pendingcb === 0) {
         if (sync) {
           state.pendingcb++;
-          process11.nextTick((stream2, state2) => {
+          process5.nextTick((stream2, state2) => {
             if (needFinish(state2)) {
               finish(stream2, state2);
             } else {
@@ -36948,7 +36942,7 @@ var require_writable = __commonJS((exports, module) => {
   Writable.prototype.destroy = function(err, cb) {
     const state = this._writableState;
     if (!state.destroyed && (state.bufferedIndex < state.buffered.length || state[kOnFinished].length)) {
-      process11.nextTick(errorBuffer, state);
+      process5.nextTick(errorBuffer, state);
     }
     destroy.call(this, err, cb);
     return this;
@@ -36976,7 +36970,7 @@ var require_writable = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/duplexify.js
 var require_duplexify = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var bufferModule = __require("buffer");
   var {
     isReadable,
@@ -37083,9 +37077,9 @@ var require_duplexify = __commonJS((exports, module) => {
             final(async () => {
               try {
                 await promise;
-                process11.nextTick(cb, null);
+                process5.nextTick(cb, null);
               } catch (err) {
-                process11.nextTick(cb, err);
+                process5.nextTick(cb, err);
               }
             });
           },
@@ -37153,7 +37147,7 @@ var require_duplexify = __commonJS((exports, module) => {
         const _promise = promise;
         promise = null;
         const { chunk, done, cb } = await _promise;
-        process11.nextTick(cb);
+        process5.nextTick(cb);
         if (done)
           return;
         if (signal.aborted)
@@ -37532,7 +37526,7 @@ var require_passthrough2 = __commonJS((exports, module) => {
 
 // node_modules/readable-stream/lib/internal/streams/pipeline.js
 var require_pipeline = __commonJS((exports, module) => {
-  var process11 = require_process();
+  var process5 = require_process();
   var { ArrayIsArray, Promise: Promise2, SymbolAsyncIterator, SymbolDispose } = require_primordials();
   var eos = require_end_of_stream();
   var { once } = require_util2();
@@ -37726,7 +37720,7 @@ var require_pipeline = __commonJS((exports, module) => {
         if (!error) {
           lastStreamCleanup.forEach((fn) => fn());
         }
-        process11.nextTick(callback, error, value);
+        process5.nextTick(callback, error, value);
       }
     }
     let ret;
@@ -37803,10 +37797,10 @@ var require_pipeline = __commonJS((exports, module) => {
               if (end) {
                 pt.end();
               }
-              process11.nextTick(finish);
+              process5.nextTick(finish);
             }, (err) => {
               pt.destroy(err);
-              process11.nextTick(finish, err);
+              process5.nextTick(finish, err);
             });
           } else if (isIterable(ret, true)) {
             finishCount++;
@@ -37878,7 +37872,7 @@ var require_pipeline = __commonJS((exports, module) => {
       }
     }
     if (signal !== null && signal !== undefined && signal.aborted || outerSignal !== null && outerSignal !== undefined && outerSignal.aborted) {
-      process11.nextTick(abort);
+      process5.nextTick(abort);
     }
     return ret;
   }
@@ -37899,7 +37893,7 @@ var require_pipeline = __commonJS((exports, module) => {
       };
       var endFn = endFn2;
       if (isReadableFinished(src)) {
-        process11.nextTick(endFn2);
+        process5.nextTick(endFn2);
       } else {
         src.once("end", endFn2);
       }
@@ -43675,7 +43669,7 @@ var require_commonjs4 = __commonJS((exports) => {
       const dirs = new Set;
       const queue = [entry];
       let processing = 0;
-      const process11 = () => {
+      const process5 = () => {
         let paused = false;
         while (!paused) {
           const dir = queue.shift();
@@ -43716,9 +43710,9 @@ var require_commonjs4 = __commonJS((exports) => {
               }
             }
             if (paused && !results.flowing) {
-              results.once("drain", process11);
+              results.once("drain", process5);
             } else if (!sync) {
-              process11();
+              process5();
             }
           };
           let sync = true;
@@ -43726,7 +43720,7 @@ var require_commonjs4 = __commonJS((exports) => {
           sync = false;
         }
       };
-      process11();
+      process5();
       return results;
     }
     streamSync(entry = this.cwd, opts = {}) {
@@ -43744,7 +43738,7 @@ var require_commonjs4 = __commonJS((exports) => {
       }
       const queue = [entry];
       let processing = 0;
-      const process11 = () => {
+      const process5 = () => {
         let paused = false;
         while (!paused) {
           const dir = queue.shift();
@@ -43778,9 +43772,9 @@ var require_commonjs4 = __commonJS((exports) => {
           }
         }
         if (paused && !results.flowing)
-          results.once("drain", process11);
+          results.once("drain", process5);
       };
-      process11();
+      process5();
       return results;
     }
     chdir(path2 = this.cwd) {
@@ -46555,22 +46549,22 @@ var require_zip_archive_output_stream = __commonJS((exports, module) => {
   };
   ZipArchiveOutputStream.prototype._smartStream = function(ae, callback) {
     var deflate = ae.getMethod() === constants.METHOD_DEFLATED;
-    var process11 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream;
+    var process5 = deflate ? new DeflateCRC32Stream(this.options.zlib) : new CRC32Stream;
     var error = null;
     function handleStuff() {
-      var digest = process11.digest().readUInt32BE(0);
+      var digest = process5.digest().readUInt32BE(0);
       ae.setCrc(digest);
-      ae.setSize(process11.size());
-      ae.setCompressedSize(process11.size(true));
+      ae.setSize(process5.size());
+      ae.setCompressedSize(process5.size(true));
       this._afterAppend(ae);
       callback(error, ae);
     }
-    process11.once("end", handleStuff.bind(this));
-    process11.once("error", function(err) {
+    process5.once("end", handleStuff.bind(this));
+    process5.once("error", function(err) {
       error = err;
     });
-    process11.pipe(this, { end: false });
-    return process11;
+    process5.pipe(this, { end: false });
+    return process5;
   };
   ZipArchiveOutputStream.prototype._writeCentralDirectoryEnd = function() {
     var records = this._entries.length;
@@ -47285,7 +47279,7 @@ var require_text_decoder = __commonJS((exports, module) => {
 
 // node_modules/streamx/index.js
 var require_streamx = __commonJS((exports, module) => {
-  var { EventEmitter } = __require("events");
+  var { EventEmitter: EventEmitter2 } = __require("events");
   var STREAM_DESTROYED = new Error("Stream was destroyed");
   var PREMATURE_CLOSE = new Error("Premature close");
   var queueTick = require_process_next_tick();
@@ -47836,7 +47830,7 @@ var require_streamx = __commonJS((exports, module) => {
     }
   }
 
-  class Stream extends EventEmitter {
+  class Stream extends EventEmitter2 {
     constructor(opts) {
       super();
       this._duplexState = 0;
@@ -51836,7 +51830,7 @@ var require_browser = __commonJS((exports, module) => {
 var require_node2 = __commonJS((exports, module) => {
   var tty2 = __require("tty");
   var util2 = __require("util");
-  exports.init = init;
+  exports.init = init2;
   exports.log = log;
   exports.formatArgs = formatArgs;
   exports.save = save;
@@ -51985,7 +51979,7 @@ var require_node2 = __commonJS((exports, module) => {
   function load2() {
     return process.env.DEBUG;
   }
-  function init(debug) {
+  function init2(debug) {
     debug.inspectOpts = {};
     const keys = Object.keys(exports.inspectOpts);
     for (let i = 0;i < keys.length; i++) {
@@ -52730,8 +52724,520 @@ function customAlphabet(alphabet, size = 21) {
   return customRandom(alphabet, size, random);
 }
 
-// node_modules/ora/index.js
-import process10 from "node:process";
+// node_modules/@topcli/spinner/dist/index.js
+var import_cli_spinners = __toESM(require_cli_spinners(), 1);
+import { EventEmitter } from "events";
+import { performance as performance2 } from "perf_hooks";
+import readline4 from "readline";
+
+// node_modules/ansi-regex/index.js
+function ansiRegex({ onlyFirst = false } = {}) {
+  const ST = "(?:\\u0007|\\u001B\\u005C|\\u009C)";
+  const pattern = [
+    `[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?${ST})`,
+    "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))"
+  ].join("|");
+  return new RegExp(pattern, onlyFirst ? undefined : "g");
+}
+
+// node_modules/strip-ansi/index.js
+var regex = ansiRegex();
+function stripAnsi2(string) {
+  if (typeof string !== "string") {
+    throw new TypeError(`Expected a \`string\`, got \`${typeof string}\``);
+  }
+  return string.replace(regex, "");
+}
+
+// node_modules/@topcli/wcwidth/src/combining.js
+var combining_default = [
+  [768, 879],
+  [1155, 1158],
+  [1160, 1161],
+  [1425, 1469],
+  [1471, 1471],
+  [1473, 1474],
+  [1476, 1477],
+  [1479, 1479],
+  [1536, 1539],
+  [1552, 1557],
+  [1611, 1630],
+  [1648, 1648],
+  [1750, 1764],
+  [1767, 1768],
+  [1770, 1773],
+  [1807, 1807],
+  [1809, 1809],
+  [1840, 1866],
+  [1958, 1968],
+  [2027, 2035],
+  [2305, 2306],
+  [2364, 2364],
+  [2369, 2376],
+  [2381, 2381],
+  [2385, 2388],
+  [2402, 2403],
+  [2433, 2433],
+  [2492, 2492],
+  [2497, 2500],
+  [2509, 2509],
+  [2530, 2531],
+  [2561, 2562],
+  [2620, 2620],
+  [2625, 2626],
+  [2631, 2632],
+  [2635, 2637],
+  [2672, 2673],
+  [2689, 2690],
+  [2748, 2748],
+  [2753, 2757],
+  [2759, 2760],
+  [2765, 2765],
+  [2786, 2787],
+  [2817, 2817],
+  [2876, 2876],
+  [2879, 2879],
+  [2881, 2883],
+  [2893, 2893],
+  [2902, 2902],
+  [2946, 2946],
+  [3008, 3008],
+  [3021, 3021],
+  [3134, 3136],
+  [3142, 3144],
+  [3146, 3149],
+  [3157, 3158],
+  [3260, 3260],
+  [3263, 3263],
+  [3270, 3270],
+  [3276, 3277],
+  [3298, 3299],
+  [3393, 3395],
+  [3405, 3405],
+  [3530, 3530],
+  [3538, 3540],
+  [3542, 3542],
+  [3633, 3633],
+  [3636, 3642],
+  [3655, 3662],
+  [3761, 3761],
+  [3764, 3769],
+  [3771, 3772],
+  [3784, 3789],
+  [3864, 3865],
+  [3893, 3893],
+  [3895, 3895],
+  [3897, 3897],
+  [3953, 3966],
+  [3968, 3972],
+  [3974, 3975],
+  [3984, 3991],
+  [3993, 4028],
+  [4038, 4038],
+  [4141, 4144],
+  [4146, 4146],
+  [4150, 4151],
+  [4153, 4153],
+  [4184, 4185],
+  [4448, 4607],
+  [4959, 4959],
+  [5906, 5908],
+  [5938, 5940],
+  [5970, 5971],
+  [6002, 6003],
+  [6068, 6069],
+  [6071, 6077],
+  [6086, 6086],
+  [6089, 6099],
+  [6109, 6109],
+  [6155, 6157],
+  [6313, 6313],
+  [6432, 6434],
+  [6439, 6440],
+  [6450, 6450],
+  [6457, 6459],
+  [6679, 6680],
+  [6912, 6915],
+  [6964, 6964],
+  [6966, 6970],
+  [6972, 6972],
+  [6978, 6978],
+  [7019, 7027],
+  [7616, 7626],
+  [7678, 7679],
+  [8203, 8207],
+  [8234, 8238],
+  [8288, 8291],
+  [8298, 8303],
+  [8400, 8431],
+  [12330, 12335],
+  [12441, 12442],
+  [43014, 43014],
+  [43019, 43019],
+  [43045, 43046],
+  [64286, 64286],
+  [65024, 65039],
+  [65056, 65059],
+  [65279, 65279],
+  [65529, 65531],
+  [68097, 68099],
+  [68101, 68102],
+  [68108, 68111],
+  [68152, 68154],
+  [68159, 68159],
+  [119143, 119145],
+  [119155, 119170],
+  [119173, 119179],
+  [119210, 119213],
+  [119362, 119364],
+  [917505, 917505],
+  [917536, 917631],
+  [917760, 917999]
+];
+
+// node_modules/@topcli/wcwidth/index.js
+var kDefaultOptions = {
+  nul: 0,
+  control: 0
+};
+function wcswidth(str, opts = kDefaultOptions) {
+  if (typeof str !== "string") {
+    return wcwidth(str, opts);
+  }
+  let width = 0;
+  for (let id = 0;id < str.length; id++) {
+    const charWidth = wcwidth(str.charCodeAt(id), opts);
+    if (charWidth < 0) {
+      return -1;
+    }
+    width += charWidth;
+  }
+  return width;
+}
+function wcwidth(ucs, opts) {
+  if (ucs === 0) {
+    return opts.nul;
+  }
+  if (ucs < 32 || ucs >= 127 && ucs < 160) {
+    return opts.control;
+  }
+  if (bisearch(ucs)) {
+    return 0;
+  }
+  return 1 + (ucs >= 4352 && (ucs <= 4447 || ucs === 9001 || ucs === 9002 || ucs >= 11904 && ucs <= 42191 && ucs !== 12351 || ucs >= 44032 && ucs <= 55203 || ucs >= 63744 && ucs <= 64255 || ucs >= 65040 && ucs <= 65049 || ucs >= 65072 && ucs <= 65135 || ucs >= 65280 && ucs <= 65376 || ucs >= 65504 && ucs <= 65510 || ucs >= 131072 && ucs <= 196605 || ucs >= 196608 && ucs <= 262141));
+}
+function bisearch(ucs) {
+  let min = 0;
+  let max = combining_default.length - 1;
+  if (ucs < combining_default[0][0] || ucs > combining_default[max][1]) {
+    return false;
+  }
+  while (max >= min) {
+    const mid = Math.floor((min + max) / 2);
+    if (ucs > combining_default[mid][1]) {
+      min = mid + 1;
+    } else if (ucs < combining_default[mid][0]) {
+      max = mid - 1;
+    } else {
+      return true;
+    }
+  }
+  return false;
+}
+
+// node_modules/@topcli/spinner/node_modules/kleur/index.mjs
+var FORCE_COLOR;
+var NODE_DISABLE_COLORS;
+var NO_COLOR;
+var TERM;
+var isTTY = true;
+if (typeof process !== "undefined") {
+  ({ FORCE_COLOR, NODE_DISABLE_COLORS, NO_COLOR, TERM } = process.env || {});
+  isTTY = process.stdout && process.stdout.isTTY;
+}
+var $ = {
+  enabled: !NODE_DISABLE_COLORS && NO_COLOR == null && TERM !== "dumb" && (FORCE_COLOR != null && FORCE_COLOR !== "0" || isTTY),
+  reset: init(0, 0),
+  bold: init(1, 22),
+  dim: init(2, 22),
+  italic: init(3, 23),
+  underline: init(4, 24),
+  inverse: init(7, 27),
+  hidden: init(8, 28),
+  strikethrough: init(9, 29),
+  black: init(30, 39),
+  red: init(31, 39),
+  green: init(32, 39),
+  yellow: init(33, 39),
+  blue: init(34, 39),
+  magenta: init(35, 39),
+  cyan: init(36, 39),
+  white: init(37, 39),
+  gray: init(90, 39),
+  grey: init(90, 39),
+  bgBlack: init(40, 49),
+  bgRed: init(41, 49),
+  bgGreen: init(42, 49),
+  bgYellow: init(43, 49),
+  bgBlue: init(44, 49),
+  bgMagenta: init(45, 49),
+  bgCyan: init(46, 49),
+  bgWhite: init(47, 49)
+};
+function run(arr, str) {
+  let i = 0, tmp, beg = "", end = "";
+  for (;i < arr.length; i++) {
+    tmp = arr[i];
+    beg += tmp.open;
+    end += tmp.close;
+    if (!!~str.indexOf(tmp.close)) {
+      str = str.replace(tmp.rgx, tmp.close + tmp.open);
+    }
+  }
+  return beg + str + end;
+}
+function chain(has, keys) {
+  let ctx = { has, keys };
+  ctx.reset = $.reset.bind(ctx);
+  ctx.bold = $.bold.bind(ctx);
+  ctx.dim = $.dim.bind(ctx);
+  ctx.italic = $.italic.bind(ctx);
+  ctx.underline = $.underline.bind(ctx);
+  ctx.inverse = $.inverse.bind(ctx);
+  ctx.hidden = $.hidden.bind(ctx);
+  ctx.strikethrough = $.strikethrough.bind(ctx);
+  ctx.black = $.black.bind(ctx);
+  ctx.red = $.red.bind(ctx);
+  ctx.green = $.green.bind(ctx);
+  ctx.yellow = $.yellow.bind(ctx);
+  ctx.blue = $.blue.bind(ctx);
+  ctx.magenta = $.magenta.bind(ctx);
+  ctx.cyan = $.cyan.bind(ctx);
+  ctx.white = $.white.bind(ctx);
+  ctx.gray = $.gray.bind(ctx);
+  ctx.grey = $.grey.bind(ctx);
+  ctx.bgBlack = $.bgBlack.bind(ctx);
+  ctx.bgRed = $.bgRed.bind(ctx);
+  ctx.bgGreen = $.bgGreen.bind(ctx);
+  ctx.bgYellow = $.bgYellow.bind(ctx);
+  ctx.bgBlue = $.bgBlue.bind(ctx);
+  ctx.bgMagenta = $.bgMagenta.bind(ctx);
+  ctx.bgCyan = $.bgCyan.bind(ctx);
+  ctx.bgWhite = $.bgWhite.bind(ctx);
+  return ctx;
+}
+function init(open, close) {
+  let blk = {
+    open: `\x1B[${open}m`,
+    close: `\x1B[${close}m`,
+    rgx: new RegExp(`\\x1b\\[${close}m`, "g")
+  };
+  return function(txt) {
+    if (this !== undefined && this.has !== undefined) {
+      !!~this.has.indexOf(open) || (this.has.push(open), this.keys.push(blk));
+      return txt === undefined ? this : $.enabled ? run(this.keys, txt + "") : txt + "";
+    }
+    return txt === undefined ? chain([open], [blk]) : $.enabled ? run([blk], txt + "") : txt + "";
+  };
+}
+var kleur_default = $;
+
+// node_modules/@topcli/spinner/dist/index.js
+var __accessCheck = (obj, member, msg) => {
+  if (!member.has(obj))
+    throw TypeError("Cannot " + msg);
+};
+var __privateGet = (obj, member, getter) => {
+  __accessCheck(obj, member, "read from private field");
+  return getter ? getter.call(obj) : member.get(obj);
+};
+var __privateAdd = (obj, member, value) => {
+  if (member.has(obj))
+    throw TypeError("Cannot add the same private member more than once");
+  member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
+};
+var __privateSet = (obj, member, value, setter) => {
+  __accessCheck(obj, member, "write to private field");
+  setter ? setter.call(obj, value) : member.set(obj, value);
+  return value;
+};
+var __privateWrapper = (obj, member, setter, getter) => ({
+  set _(value) {
+    __privateSet(obj, member, value, setter);
+  },
+  get _() {
+    return __privateGet(obj, member, getter);
+  }
+});
+var __privateMethod = (obj, member, method) => {
+  __accessCheck(obj, member, "access private method");
+  return method;
+};
+var internalSpinnerCount = 0;
+var kDefaultSpinnerName = "dots";
+var kLogSymbols = process.platform !== "win32" || process.env.CI || process.env.TERM === "xterm-256color" ? { success: kleur_default.bold().green("✔"), error: kleur_default.bold().red("✖") } : { success: kleur_default.bold().green("√"), error: kleur_default.bold().red("×") };
+var _verbose;
+var _started;
+var _spinner;
+var _text;
+var _prefix;
+var _color;
+var _interval;
+var _frameIndex;
+var _spinnerPos;
+var _startTime;
+var _getSpinnerFrame;
+var getSpinnerFrame_fn;
+var _lineToRender;
+var lineToRender_fn;
+var _renderLine;
+var renderLine_fn;
+var _stop;
+var stop_fn;
+var Spinner = class extends EventEmitter {
+  constructor(options = {}) {
+    super();
+    __privateAdd(this, _getSpinnerFrame);
+    __privateAdd(this, _lineToRender);
+    __privateAdd(this, _renderLine);
+    __privateAdd(this, _stop);
+    this.stream = process.stdout;
+    __privateAdd(this, _verbose, true);
+    __privateAdd(this, _started, false);
+    __privateAdd(this, _spinner, undefined);
+    __privateAdd(this, _text, "");
+    __privateAdd(this, _prefix, "");
+    __privateAdd(this, _color, undefined);
+    __privateAdd(this, _interval, null);
+    __privateAdd(this, _frameIndex, 0);
+    __privateAdd(this, _spinnerPos, 0);
+    __privateAdd(this, _startTime, undefined);
+    __privateSet(this, _verbose, options.verbose ?? true);
+    if (!__privateGet(this, _verbose)) {
+      return;
+    }
+    const { name = kDefaultSpinnerName, color = null } = options;
+    __privateSet(this, _spinner, name in import_cli_spinners.default ? import_cli_spinners.default[name] : import_cli_spinners.default[kDefaultSpinnerName]);
+    if (color === null) {
+      __privateSet(this, _color, (str) => str);
+    } else {
+      __privateSet(this, _color, color in kleur_default ? kleur_default[color] : kleur_default.white);
+    }
+  }
+  static reset() {
+    internalSpinnerCount = 0;
+  }
+  get started() {
+    return __privateGet(this, _started);
+  }
+  get verbose() {
+    return __privateGet(this, _verbose);
+  }
+  get elapsedTime() {
+    return performance2.now() - __privateGet(this, _startTime);
+  }
+  get startTime() {
+    return __privateGet(this, _startTime);
+  }
+  set text(value) {
+    if (typeof value == "string") {
+      __privateSet(this, _text, value.replaceAll(/\r?\n|\r/gm, ""));
+    }
+  }
+  get text() {
+    return __privateGet(this, _text);
+  }
+  start(text, options = {}) {
+    __privateSet(this, _started, true);
+    this.text = text;
+    if (typeof options.withPrefix === "string") {
+      __privateSet(this, _prefix, options.withPrefix);
+    }
+    this.emit("start");
+    __privateSet(this, _spinnerPos, internalSpinnerCount++);
+    __privateSet(this, _startTime, performance2.now());
+    if (!__privateGet(this, _verbose)) {
+      return this;
+    }
+    __privateSet(this, _frameIndex, 0);
+    this.stream.write(__privateMethod(this, _lineToRender, lineToRender_fn).call(this) + `
+`);
+    __privateSet(this, _interval, setInterval(() => __privateMethod(this, _renderLine, renderLine_fn).call(this), __privateGet(this, _spinner).interval));
+    return this;
+  }
+  succeed(text) {
+    if (__privateGet(this, _started)) {
+      __privateMethod(this, _stop, stop_fn).call(this, text);
+      __privateMethod(this, _renderLine, renderLine_fn).call(this, kLogSymbols.success);
+      this.emit("succeed");
+    }
+    return this;
+  }
+  failed(text) {
+    if (__privateGet(this, _started)) {
+      __privateMethod(this, _stop, stop_fn).call(this, text);
+      __privateMethod(this, _renderLine, renderLine_fn).call(this, kLogSymbols.error);
+      this.emit("failed");
+    }
+    return this;
+  }
+};
+_verbose = new WeakMap;
+_started = new WeakMap;
+_spinner = new WeakMap;
+_text = new WeakMap;
+_prefix = new WeakMap;
+_color = new WeakMap;
+_interval = new WeakMap;
+_frameIndex = new WeakMap;
+_spinnerPos = new WeakMap;
+_startTime = new WeakMap;
+_getSpinnerFrame = new WeakSet;
+getSpinnerFrame_fn = function(spinnerSymbol) {
+  if (typeof spinnerSymbol === "string") {
+    return spinnerSymbol;
+  }
+  const { frames } = __privateGet(this, _spinner);
+  const frame = frames[__privateGet(this, _frameIndex)];
+  __privateSet(this, _frameIndex, ++__privateWrapper(this, _frameIndex)._ < frames.length ? __privateGet(this, _frameIndex) : 0);
+  return __privateGet(this, _color).call(this, frame);
+};
+_lineToRender = new WeakSet;
+lineToRender_fn = function(spinnerSymbol) {
+  const terminalCol = this.stream.columns;
+  const defaultRaw = `${__privateMethod(this, _getSpinnerFrame, getSpinnerFrame_fn).call(this, spinnerSymbol)} ${__privateGet(this, _prefix)}${this.text}`;
+  let regexArray = [];
+  let count = 0;
+  while (true) {
+    regexArray = defaultRaw.slice(0, terminalCol + count).match(ansiRegex()) ?? [];
+    if (regexArray.length === count) {
+      break;
+    }
+    count = regexArray.length;
+  }
+  count += regexArray.reduce((prev, curr) => prev + wcswidth(curr), 0);
+  return wcswidth(stripAnsi2(defaultRaw)) > terminalCol ? `${defaultRaw.slice(0, terminalCol + count)}\x1B[0m` : defaultRaw;
+};
+_renderLine = new WeakSet;
+renderLine_fn = function(spinnerSymbol) {
+  if (!__privateGet(this, _verbose)) {
+    return;
+  }
+  const moveCursorPos = internalSpinnerCount - __privateGet(this, _spinnerPos);
+  readline4.moveCursor(this.stream, 0, -moveCursorPos);
+  const line = __privateMethod(this, _lineToRender, lineToRender_fn).call(this, spinnerSymbol);
+  readline4.clearLine(this.stream, 0);
+  this.stream.write(line);
+  readline4.moveCursor(this.stream, -wcswidth(line), moveCursorPos);
+};
+_stop = new WeakSet;
+stop_fn = function(text) {
+  this.text = text;
+  __privateSet(this, _started, false);
+  if (__privateGet(this, _interval) !== null) {
+    clearInterval(__privateGet(this, _interval));
+  }
+};
 
 // node_modules/chalk/source/vendor/ansi-styles/index.js
 var ANSI_BACKGROUND_OFFSET = 10;
@@ -53217,608 +53723,6 @@ var chalk = createChalk();
 var chalkStderr = createChalk({ level: stderrColor ? stderrColor.level : 0 });
 var source_default = chalk;
 
-// node_modules/cli-cursor/index.js
-import process6 from "node:process";
-
-// node_modules/restore-cursor/index.js
-import process5 from "node:process";
-
-// node_modules/mimic-function/index.js
-var copyProperty = (to, from2, property, ignoreNonConfigurable) => {
-  if (property === "length" || property === "prototype") {
-    return;
-  }
-  if (property === "arguments" || property === "caller") {
-    return;
-  }
-  const toDescriptor = Object.getOwnPropertyDescriptor(to, property);
-  const fromDescriptor = Object.getOwnPropertyDescriptor(from2, property);
-  if (!canCopyProperty(toDescriptor, fromDescriptor) && ignoreNonConfigurable) {
-    return;
-  }
-  Object.defineProperty(to, property, fromDescriptor);
-};
-var canCopyProperty = function(toDescriptor, fromDescriptor) {
-  return toDescriptor === undefined || toDescriptor.configurable || toDescriptor.writable === fromDescriptor.writable && toDescriptor.enumerable === fromDescriptor.enumerable && toDescriptor.configurable === fromDescriptor.configurable && (toDescriptor.writable || toDescriptor.value === fromDescriptor.value);
-};
-var changePrototype = (to, from2) => {
-  const fromPrototype = Object.getPrototypeOf(from2);
-  if (fromPrototype === Object.getPrototypeOf(to)) {
-    return;
-  }
-  Object.setPrototypeOf(to, fromPrototype);
-};
-var wrappedToString = (withName, fromBody) => `/* Wrapped ${withName}*/
-${fromBody}`;
-var toStringDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, "toString");
-var toStringName = Object.getOwnPropertyDescriptor(Function.prototype.toString, "name");
-var changeToString = (to, from2, name) => {
-  const withName = name === "" ? "" : `with ${name.trim()}() `;
-  const newToString = wrappedToString.bind(null, withName, from2.toString());
-  Object.defineProperty(newToString, "name", toStringName);
-  const { writable, enumerable, configurable } = toStringDescriptor;
-  Object.defineProperty(to, "toString", { value: newToString, writable, enumerable, configurable });
-};
-function mimicFunction(to, from2, { ignoreNonConfigurable = false } = {}) {
-  const { name } = to;
-  for (const property of Reflect.ownKeys(from2)) {
-    copyProperty(to, from2, property, ignoreNonConfigurable);
-  }
-  changePrototype(to, from2);
-  changeToString(to, from2, name);
-  return to;
-}
-
-// node_modules/onetime/index.js
-var calledFunctions = new WeakMap;
-var onetime = (function_, options = {}) => {
-  if (typeof function_ !== "function") {
-    throw new TypeError("Expected a function");
-  }
-  let returnValue;
-  let callCount = 0;
-  const functionName = function_.displayName || function_.name || "<anonymous>";
-  const onetime2 = function(...arguments_) {
-    calledFunctions.set(onetime2, ++callCount);
-    if (callCount === 1) {
-      returnValue = function_.apply(this, arguments_);
-      function_ = undefined;
-    } else if (options.throw === true) {
-      throw new Error(`Function \`${functionName}\` can only be called once`);
-    }
-    return returnValue;
-  };
-  mimicFunction(onetime2, function_);
-  calledFunctions.set(onetime2, callCount);
-  return onetime2;
-};
-onetime.callCount = (function_) => {
-  if (!calledFunctions.has(function_)) {
-    throw new Error(`The given function \`${function_.name}\` is not wrapped by the \`onetime\` package`);
-  }
-  return calledFunctions.get(function_);
-};
-var onetime_default = onetime;
-
-// node_modules/restore-cursor/index.js
-init_mjs();
-var terminal = process5.stderr.isTTY ? process5.stderr : process5.stdout.isTTY ? process5.stdout : undefined;
-var restoreCursor = terminal ? onetime_default(() => {
-  onExit(() => {
-    terminal.write("\x1B[?25h");
-  }, { alwaysLast: true });
-}) : () => {
-};
-var restore_cursor_default = restoreCursor;
-
-// node_modules/cli-cursor/index.js
-var isHidden = false;
-var cliCursor = {};
-cliCursor.show = (writableStream = process6.stderr) => {
-  if (!writableStream.isTTY) {
-    return;
-  }
-  isHidden = false;
-  writableStream.write("\x1B[?25h");
-};
-cliCursor.hide = (writableStream = process6.stderr) => {
-  if (!writableStream.isTTY) {
-    return;
-  }
-  restore_cursor_default();
-  isHidden = true;
-  writableStream.write("\x1B[?25l");
-};
-cliCursor.toggle = (force, writableStream) => {
-  if (force !== undefined) {
-    isHidden = force;
-  }
-  if (isHidden) {
-    cliCursor.show(writableStream);
-  } else {
-    cliCursor.hide(writableStream);
-  }
-};
-var cli_cursor_default = cliCursor;
-
-// node_modules/ora/index.js
-var import_cli_spinners = __toESM(require_cli_spinners(), 1);
-
-// node_modules/log-symbols/node_modules/is-unicode-supported/index.js
-import process7 from "node:process";
-function isUnicodeSupported2() {
-  if (process7.platform !== "win32") {
-    return process7.env.TERM !== "linux";
-  }
-  return Boolean(process7.env.CI) || Boolean(process7.env.WT_SESSION) || Boolean(process7.env.TERMINUS_SUBLIME) || process7.env.ConEmuTask === "{cmd::Cmder}" || process7.env.TERM_PROGRAM === "Terminus-Sublime" || process7.env.TERM_PROGRAM === "vscode" || process7.env.TERM === "xterm-256color" || process7.env.TERM === "alacritty" || process7.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
-}
-
-// node_modules/log-symbols/index.js
-var main = {
-  info: source_default.blue("ℹ"),
-  success: source_default.green("✔"),
-  warning: source_default.yellow("⚠"),
-  error: source_default.red("✖")
-};
-var fallback = {
-  info: source_default.blue("i"),
-  success: source_default.green("√"),
-  warning: source_default.yellow("‼"),
-  error: source_default.red("×")
-};
-var logSymbols = isUnicodeSupported2() ? main : fallback;
-var log_symbols_default = logSymbols;
-
-// node_modules/ansi-regex/index.js
-function ansiRegex({ onlyFirst = false } = {}) {
-  const ST = "(?:\\u0007|\\u001B\\u005C|\\u009C)";
-  const pattern = [
-    `[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?${ST})`,
-    "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))"
-  ].join("|");
-  return new RegExp(pattern, onlyFirst ? undefined : "g");
-}
-
-// node_modules/strip-ansi/index.js
-var regex = ansiRegex();
-function stripAnsi2(string) {
-  if (typeof string !== "string") {
-    throw new TypeError(`Expected a \`string\`, got \`${typeof string}\``);
-  }
-  return string.replace(regex, "");
-}
-
-// node_modules/get-east-asian-width/lookup.js
-function isAmbiguous(x) {
-  return x === 161 || x === 164 || x === 167 || x === 168 || x === 170 || x === 173 || x === 174 || x >= 176 && x <= 180 || x >= 182 && x <= 186 || x >= 188 && x <= 191 || x === 198 || x === 208 || x === 215 || x === 216 || x >= 222 && x <= 225 || x === 230 || x >= 232 && x <= 234 || x === 236 || x === 237 || x === 240 || x === 242 || x === 243 || x >= 247 && x <= 250 || x === 252 || x === 254 || x === 257 || x === 273 || x === 275 || x === 283 || x === 294 || x === 295 || x === 299 || x >= 305 && x <= 307 || x === 312 || x >= 319 && x <= 322 || x === 324 || x >= 328 && x <= 331 || x === 333 || x === 338 || x === 339 || x === 358 || x === 359 || x === 363 || x === 462 || x === 464 || x === 466 || x === 468 || x === 470 || x === 472 || x === 474 || x === 476 || x === 593 || x === 609 || x === 708 || x === 711 || x >= 713 && x <= 715 || x === 717 || x === 720 || x >= 728 && x <= 731 || x === 733 || x === 735 || x >= 768 && x <= 879 || x >= 913 && x <= 929 || x >= 931 && x <= 937 || x >= 945 && x <= 961 || x >= 963 && x <= 969 || x === 1025 || x >= 1040 && x <= 1103 || x === 1105 || x === 8208 || x >= 8211 && x <= 8214 || x === 8216 || x === 8217 || x === 8220 || x === 8221 || x >= 8224 && x <= 8226 || x >= 8228 && x <= 8231 || x === 8240 || x === 8242 || x === 8243 || x === 8245 || x === 8251 || x === 8254 || x === 8308 || x === 8319 || x >= 8321 && x <= 8324 || x === 8364 || x === 8451 || x === 8453 || x === 8457 || x === 8467 || x === 8470 || x === 8481 || x === 8482 || x === 8486 || x === 8491 || x === 8531 || x === 8532 || x >= 8539 && x <= 8542 || x >= 8544 && x <= 8555 || x >= 8560 && x <= 8569 || x === 8585 || x >= 8592 && x <= 8601 || x === 8632 || x === 8633 || x === 8658 || x === 8660 || x === 8679 || x === 8704 || x === 8706 || x === 8707 || x === 8711 || x === 8712 || x === 8715 || x === 8719 || x === 8721 || x === 8725 || x === 8730 || x >= 8733 && x <= 8736 || x === 8739 || x === 8741 || x >= 8743 && x <= 8748 || x === 8750 || x >= 8756 && x <= 8759 || x === 8764 || x === 8765 || x === 8776 || x === 8780 || x === 8786 || x === 8800 || x === 8801 || x >= 8804 && x <= 8807 || x === 8810 || x === 8811 || x === 8814 || x === 8815 || x === 8834 || x === 8835 || x === 8838 || x === 8839 || x === 8853 || x === 8857 || x === 8869 || x === 8895 || x === 8978 || x >= 9312 && x <= 9449 || x >= 9451 && x <= 9547 || x >= 9552 && x <= 9587 || x >= 9600 && x <= 9615 || x >= 9618 && x <= 9621 || x === 9632 || x === 9633 || x >= 9635 && x <= 9641 || x === 9650 || x === 9651 || x === 9654 || x === 9655 || x === 9660 || x === 9661 || x === 9664 || x === 9665 || x >= 9670 && x <= 9672 || x === 9675 || x >= 9678 && x <= 9681 || x >= 9698 && x <= 9701 || x === 9711 || x === 9733 || x === 9734 || x === 9737 || x === 9742 || x === 9743 || x === 9756 || x === 9758 || x === 9792 || x === 9794 || x === 9824 || x === 9825 || x >= 9827 && x <= 9829 || x >= 9831 && x <= 9834 || x === 9836 || x === 9837 || x === 9839 || x === 9886 || x === 9887 || x === 9919 || x >= 9926 && x <= 9933 || x >= 9935 && x <= 9939 || x >= 9941 && x <= 9953 || x === 9955 || x === 9960 || x === 9961 || x >= 9963 && x <= 9969 || x === 9972 || x >= 9974 && x <= 9977 || x === 9979 || x === 9980 || x === 9982 || x === 9983 || x === 10045 || x >= 10102 && x <= 10111 || x >= 11094 && x <= 11097 || x >= 12872 && x <= 12879 || x >= 57344 && x <= 63743 || x >= 65024 && x <= 65039 || x === 65533 || x >= 127232 && x <= 127242 || x >= 127248 && x <= 127277 || x >= 127280 && x <= 127337 || x >= 127344 && x <= 127373 || x === 127375 || x === 127376 || x >= 127387 && x <= 127404 || x >= 917760 && x <= 917999 || x >= 983040 && x <= 1048573 || x >= 1048576 && x <= 1114109;
-}
-function isFullWidth(x) {
-  return x === 12288 || x >= 65281 && x <= 65376 || x >= 65504 && x <= 65510;
-}
-function isWide(x) {
-  return x >= 4352 && x <= 4447 || x === 8986 || x === 8987 || x === 9001 || x === 9002 || x >= 9193 && x <= 9196 || x === 9200 || x === 9203 || x === 9725 || x === 9726 || x === 9748 || x === 9749 || x >= 9776 && x <= 9783 || x >= 9800 && x <= 9811 || x === 9855 || x >= 9866 && x <= 9871 || x === 9875 || x === 9889 || x === 9898 || x === 9899 || x === 9917 || x === 9918 || x === 9924 || x === 9925 || x === 9934 || x === 9940 || x === 9962 || x === 9970 || x === 9971 || x === 9973 || x === 9978 || x === 9981 || x === 9989 || x === 9994 || x === 9995 || x === 10024 || x === 10060 || x === 10062 || x >= 10067 && x <= 10069 || x === 10071 || x >= 10133 && x <= 10135 || x === 10160 || x === 10175 || x === 11035 || x === 11036 || x === 11088 || x === 11093 || x >= 11904 && x <= 11929 || x >= 11931 && x <= 12019 || x >= 12032 && x <= 12245 || x >= 12272 && x <= 12287 || x >= 12289 && x <= 12350 || x >= 12353 && x <= 12438 || x >= 12441 && x <= 12543 || x >= 12549 && x <= 12591 || x >= 12593 && x <= 12686 || x >= 12688 && x <= 12773 || x >= 12783 && x <= 12830 || x >= 12832 && x <= 12871 || x >= 12880 && x <= 42124 || x >= 42128 && x <= 42182 || x >= 43360 && x <= 43388 || x >= 44032 && x <= 55203 || x >= 63744 && x <= 64255 || x >= 65040 && x <= 65049 || x >= 65072 && x <= 65106 || x >= 65108 && x <= 65126 || x >= 65128 && x <= 65131 || x >= 94176 && x <= 94180 || x === 94192 || x === 94193 || x >= 94208 && x <= 100343 || x >= 100352 && x <= 101589 || x >= 101631 && x <= 101640 || x >= 110576 && x <= 110579 || x >= 110581 && x <= 110587 || x === 110589 || x === 110590 || x >= 110592 && x <= 110882 || x === 110898 || x >= 110928 && x <= 110930 || x === 110933 || x >= 110948 && x <= 110951 || x >= 110960 && x <= 111355 || x >= 119552 && x <= 119638 || x >= 119648 && x <= 119670 || x === 126980 || x === 127183 || x === 127374 || x >= 127377 && x <= 127386 || x >= 127488 && x <= 127490 || x >= 127504 && x <= 127547 || x >= 127552 && x <= 127560 || x === 127568 || x === 127569 || x >= 127584 && x <= 127589 || x >= 127744 && x <= 127776 || x >= 127789 && x <= 127797 || x >= 127799 && x <= 127868 || x >= 127870 && x <= 127891 || x >= 127904 && x <= 127946 || x >= 127951 && x <= 127955 || x >= 127968 && x <= 127984 || x === 127988 || x >= 127992 && x <= 128062 || x === 128064 || x >= 128066 && x <= 128252 || x >= 128255 && x <= 128317 || x >= 128331 && x <= 128334 || x >= 128336 && x <= 128359 || x === 128378 || x === 128405 || x === 128406 || x === 128420 || x >= 128507 && x <= 128591 || x >= 128640 && x <= 128709 || x === 128716 || x >= 128720 && x <= 128722 || x >= 128725 && x <= 128727 || x >= 128732 && x <= 128735 || x === 128747 || x === 128748 || x >= 128756 && x <= 128764 || x >= 128992 && x <= 129003 || x === 129008 || x >= 129292 && x <= 129338 || x >= 129340 && x <= 129349 || x >= 129351 && x <= 129535 || x >= 129648 && x <= 129660 || x >= 129664 && x <= 129673 || x >= 129679 && x <= 129734 || x >= 129742 && x <= 129756 || x >= 129759 && x <= 129769 || x >= 129776 && x <= 129784 || x >= 131072 && x <= 196605 || x >= 196608 && x <= 262141;
-}
-
-// node_modules/get-east-asian-width/index.js
-function validate(codePoint) {
-  if (!Number.isSafeInteger(codePoint)) {
-    throw new TypeError(`Expected a code point, got \`${typeof codePoint}\`.`);
-  }
-}
-function eastAsianWidth(codePoint, { ambiguousAsWide = false } = {}) {
-  validate(codePoint);
-  if (isFullWidth(codePoint) || isWide(codePoint) || ambiguousAsWide && isAmbiguous(codePoint)) {
-    return 2;
-  }
-  return 1;
-}
-
-// node_modules/string-width/index.js
-var import_emoji_regex = __toESM(require_emoji_regex2(), 1);
-var segmenter = new Intl.Segmenter;
-var defaultIgnorableCodePointRegex = /^\p{Default_Ignorable_Code_Point}$/u;
-function stringWidth(string, options = {}) {
-  if (typeof string !== "string" || string.length === 0) {
-    return 0;
-  }
-  const {
-    ambiguousIsNarrow = true,
-    countAnsiEscapeCodes = false
-  } = options;
-  if (!countAnsiEscapeCodes) {
-    string = stripAnsi2(string);
-  }
-  if (string.length === 0) {
-    return 0;
-  }
-  let width = 0;
-  const eastAsianWidthOptions = { ambiguousAsWide: !ambiguousIsNarrow };
-  for (const { segment: character } of segmenter.segment(string)) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint <= 31 || codePoint >= 127 && codePoint <= 159) {
-      continue;
-    }
-    if (codePoint >= 8203 && codePoint <= 8207 || codePoint === 65279) {
-      continue;
-    }
-    if (codePoint >= 768 && codePoint <= 879 || codePoint >= 6832 && codePoint <= 6911 || codePoint >= 7616 && codePoint <= 7679 || codePoint >= 8400 && codePoint <= 8447 || codePoint >= 65056 && codePoint <= 65071) {
-      continue;
-    }
-    if (codePoint >= 55296 && codePoint <= 57343) {
-      continue;
-    }
-    if (codePoint >= 65024 && codePoint <= 65039) {
-      continue;
-    }
-    if (defaultIgnorableCodePointRegex.test(character)) {
-      continue;
-    }
-    if (import_emoji_regex.default().test(character)) {
-      width += 2;
-      continue;
-    }
-    width += eastAsianWidth(codePoint, eastAsianWidthOptions);
-  }
-  return width;
-}
-
-// node_modules/is-interactive/index.js
-function isInteractive({ stream = process.stdout } = {}) {
-  return Boolean(stream && stream.isTTY && process.env.TERM !== "dumb" && !("CI" in process.env));
-}
-
-// node_modules/is-unicode-supported/index.js
-import process8 from "node:process";
-function isUnicodeSupported3() {
-  const { env: env2 } = process8;
-  const { TERM, TERM_PROGRAM } = env2;
-  if (process8.platform !== "win32") {
-    return TERM !== "linux";
-  }
-  return Boolean(env2.WT_SESSION) || Boolean(env2.TERMINUS_SUBLIME) || env2.ConEmuTask === "{cmd::Cmder}" || TERM_PROGRAM === "Terminus-Sublime" || TERM_PROGRAM === "vscode" || TERM === "xterm-256color" || TERM === "alacritty" || TERM === "rxvt-unicode" || TERM === "rxvt-unicode-256color" || env2.TERMINAL_EMULATOR === "JetBrains-JediTerm";
-}
-
-// node_modules/stdin-discarder/index.js
-import process9 from "node:process";
-var ASCII_ETX_CODE = 3;
-
-class StdinDiscarder {
-  #activeCount = 0;
-  start() {
-    this.#activeCount++;
-    if (this.#activeCount === 1) {
-      this.#realStart();
-    }
-  }
-  stop() {
-    if (this.#activeCount <= 0) {
-      throw new Error("`stop` called more times than `start`");
-    }
-    this.#activeCount--;
-    if (this.#activeCount === 0) {
-      this.#realStop();
-    }
-  }
-  #realStart() {
-    if (process9.platform === "win32" || !process9.stdin.isTTY) {
-      return;
-    }
-    process9.stdin.setRawMode(true);
-    process9.stdin.on("data", this.#handleInput);
-    process9.stdin.resume();
-  }
-  #realStop() {
-    if (!process9.stdin.isTTY) {
-      return;
-    }
-    process9.stdin.off("data", this.#handleInput);
-    process9.stdin.pause();
-    process9.stdin.setRawMode(false);
-  }
-  #handleInput(chunk) {
-    if (chunk[0] === ASCII_ETX_CODE) {
-      process9.emit("SIGINT");
-    }
-  }
-}
-var stdinDiscarder = new StdinDiscarder;
-var stdin_discarder_default = stdinDiscarder;
-
-// node_modules/ora/index.js
-var import_cli_spinners2 = __toESM(require_cli_spinners(), 1);
-
-class Ora {
-  #linesToClear = 0;
-  #isDiscardingStdin = false;
-  #lineCount = 0;
-  #frameIndex = -1;
-  #lastSpinnerFrameTime = 0;
-  #options;
-  #spinner;
-  #stream;
-  #id;
-  #initialInterval;
-  #isEnabled;
-  #isSilent;
-  #indent;
-  #text;
-  #prefixText;
-  #suffixText;
-  color;
-  constructor(options) {
-    if (typeof options === "string") {
-      options = {
-        text: options
-      };
-    }
-    this.#options = {
-      color: "cyan",
-      stream: process10.stderr,
-      discardStdin: true,
-      hideCursor: true,
-      ...options
-    };
-    this.color = this.#options.color;
-    this.spinner = this.#options.spinner;
-    this.#initialInterval = this.#options.interval;
-    this.#stream = this.#options.stream;
-    this.#isEnabled = typeof this.#options.isEnabled === "boolean" ? this.#options.isEnabled : isInteractive({ stream: this.#stream });
-    this.#isSilent = typeof this.#options.isSilent === "boolean" ? this.#options.isSilent : false;
-    this.text = this.#options.text;
-    this.prefixText = this.#options.prefixText;
-    this.suffixText = this.#options.suffixText;
-    this.indent = this.#options.indent;
-    if (process10.env.NODE_ENV === "test") {
-      this._stream = this.#stream;
-      this._isEnabled = this.#isEnabled;
-      Object.defineProperty(this, "_linesToClear", {
-        get() {
-          return this.#linesToClear;
-        },
-        set(newValue) {
-          this.#linesToClear = newValue;
-        }
-      });
-      Object.defineProperty(this, "_frameIndex", {
-        get() {
-          return this.#frameIndex;
-        }
-      });
-      Object.defineProperty(this, "_lineCount", {
-        get() {
-          return this.#lineCount;
-        }
-      });
-    }
-  }
-  get indent() {
-    return this.#indent;
-  }
-  set indent(indent = 0) {
-    if (!(indent >= 0 && Number.isInteger(indent))) {
-      throw new Error("The `indent` option must be an integer from 0 and up");
-    }
-    this.#indent = indent;
-    this.#updateLineCount();
-  }
-  get interval() {
-    return this.#initialInterval ?? this.#spinner.interval ?? 100;
-  }
-  get spinner() {
-    return this.#spinner;
-  }
-  set spinner(spinner) {
-    this.#frameIndex = -1;
-    this.#initialInterval = undefined;
-    if (typeof spinner === "object") {
-      if (spinner.frames === undefined) {
-        throw new Error("The given spinner must have a `frames` property");
-      }
-      this.#spinner = spinner;
-    } else if (!isUnicodeSupported3()) {
-      this.#spinner = import_cli_spinners.default.line;
-    } else if (spinner === undefined) {
-      this.#spinner = import_cli_spinners.default.dots;
-    } else if (spinner !== "default" && import_cli_spinners.default[spinner]) {
-      this.#spinner = import_cli_spinners.default[spinner];
-    } else {
-      throw new Error(`There is no built-in spinner named '${spinner}'. See https://github.com/sindresorhus/cli-spinners/blob/main/spinners.json for a full list.`);
-    }
-  }
-  get text() {
-    return this.#text;
-  }
-  set text(value = "") {
-    this.#text = value;
-    this.#updateLineCount();
-  }
-  get prefixText() {
-    return this.#prefixText;
-  }
-  set prefixText(value = "") {
-    this.#prefixText = value;
-    this.#updateLineCount();
-  }
-  get suffixText() {
-    return this.#suffixText;
-  }
-  set suffixText(value = "") {
-    this.#suffixText = value;
-    this.#updateLineCount();
-  }
-  get isSpinning() {
-    return this.#id !== undefined;
-  }
-  #getFullPrefixText(prefixText = this.#prefixText, postfix = " ") {
-    if (typeof prefixText === "string" && prefixText !== "") {
-      return prefixText + postfix;
-    }
-    if (typeof prefixText === "function") {
-      return prefixText() + postfix;
-    }
-    return "";
-  }
-  #getFullSuffixText(suffixText = this.#suffixText, prefix = " ") {
-    if (typeof suffixText === "string" && suffixText !== "") {
-      return prefix + suffixText;
-    }
-    if (typeof suffixText === "function") {
-      return prefix + suffixText();
-    }
-    return "";
-  }
-  #updateLineCount() {
-    const columns = this.#stream.columns ?? 80;
-    const fullPrefixText = this.#getFullPrefixText(this.#prefixText, "-");
-    const fullSuffixText = this.#getFullSuffixText(this.#suffixText, "-");
-    const fullText = " ".repeat(this.#indent) + fullPrefixText + "--" + this.#text + "--" + fullSuffixText;
-    this.#lineCount = 0;
-    for (const line of stripAnsi2(fullText).split(`
-`)) {
-      this.#lineCount += Math.max(1, Math.ceil(stringWidth(line, { countAnsiEscapeCodes: true }) / columns));
-    }
-  }
-  get isEnabled() {
-    return this.#isEnabled && !this.#isSilent;
-  }
-  set isEnabled(value) {
-    if (typeof value !== "boolean") {
-      throw new TypeError("The `isEnabled` option must be a boolean");
-    }
-    this.#isEnabled = value;
-  }
-  get isSilent() {
-    return this.#isSilent;
-  }
-  set isSilent(value) {
-    if (typeof value !== "boolean") {
-      throw new TypeError("The `isSilent` option must be a boolean");
-    }
-    this.#isSilent = value;
-  }
-  frame() {
-    const now = Date.now();
-    if (this.#frameIndex === -1 || now - this.#lastSpinnerFrameTime >= this.interval) {
-      this.#frameIndex = ++this.#frameIndex % this.#spinner.frames.length;
-      this.#lastSpinnerFrameTime = now;
-    }
-    const { frames } = this.#spinner;
-    let frame = frames[this.#frameIndex];
-    if (this.color) {
-      frame = source_default[this.color](frame);
-    }
-    const fullPrefixText = typeof this.#prefixText === "string" && this.#prefixText !== "" ? this.#prefixText + " " : "";
-    const fullText = typeof this.text === "string" ? " " + this.text : "";
-    const fullSuffixText = typeof this.#suffixText === "string" && this.#suffixText !== "" ? " " + this.#suffixText : "";
-    return fullPrefixText + frame + fullText + fullSuffixText;
-  }
-  clear() {
-    if (!this.#isEnabled || !this.#stream.isTTY) {
-      return this;
-    }
-    this.#stream.cursorTo(0);
-    for (let index = 0;index < this.#linesToClear; index++) {
-      if (index > 0) {
-        this.#stream.moveCursor(0, -1);
-      }
-      this.#stream.clearLine(1);
-    }
-    if (this.#indent || this.lastIndent !== this.#indent) {
-      this.#stream.cursorTo(this.#indent);
-    }
-    this.lastIndent = this.#indent;
-    this.#linesToClear = 0;
-    return this;
-  }
-  render() {
-    if (this.#isSilent) {
-      return this;
-    }
-    this.clear();
-    this.#stream.write(this.frame());
-    this.#linesToClear = this.#lineCount;
-    return this;
-  }
-  start(text) {
-    if (text) {
-      this.text = text;
-    }
-    if (this.#isSilent) {
-      return this;
-    }
-    if (!this.#isEnabled) {
-      if (this.text) {
-        this.#stream.write(`- ${this.text}
-`);
-      }
-      return this;
-    }
-    if (this.isSpinning) {
-      return this;
-    }
-    if (this.#options.hideCursor) {
-      cli_cursor_default.hide(this.#stream);
-    }
-    if (this.#options.discardStdin && process10.stdin.isTTY) {
-      this.#isDiscardingStdin = true;
-      stdin_discarder_default.start();
-    }
-    this.render();
-    this.#id = setInterval(this.render.bind(this), this.interval);
-    return this;
-  }
-  stop() {
-    if (!this.#isEnabled) {
-      return this;
-    }
-    clearInterval(this.#id);
-    this.#id = undefined;
-    this.#frameIndex = 0;
-    this.clear();
-    if (this.#options.hideCursor) {
-      cli_cursor_default.show(this.#stream);
-    }
-    if (this.#options.discardStdin && process10.stdin.isTTY && this.#isDiscardingStdin) {
-      stdin_discarder_default.stop();
-      this.#isDiscardingStdin = false;
-    }
-    return this;
-  }
-  succeed(text) {
-    return this.stopAndPersist({ symbol: log_symbols_default.success, text });
-  }
-  fail(text) {
-    return this.stopAndPersist({ symbol: log_symbols_default.error, text });
-  }
-  warn(text) {
-    return this.stopAndPersist({ symbol: log_symbols_default.warning, text });
-  }
-  info(text) {
-    return this.stopAndPersist({ symbol: log_symbols_default.info, text });
-  }
-  stopAndPersist(options = {}) {
-    if (this.#isSilent) {
-      return this;
-    }
-    const prefixText = options.prefixText ?? this.#prefixText;
-    const fullPrefixText = this.#getFullPrefixText(prefixText, " ");
-    const symbolText = options.symbol ?? " ";
-    const text = options.text ?? this.text;
-    const separatorText = symbolText ? " " : "";
-    const fullText = typeof text === "string" ? separatorText + text : "";
-    const suffixText = options.suffixText ?? this.#suffixText;
-    const fullSuffixText = this.#getFullSuffixText(suffixText, " ");
-    const textToWrite = fullPrefixText + symbolText + fullText + fullSuffixText + `
-`;
-    this.stop();
-    this.#stream.write(textToWrite);
-    return this;
-  }
-}
-function ora(options) {
-  return new Ora(options);
-}
-
 // src/utils/colors.ts
 var colors8 = {
   primary: source_default.cyan,
@@ -53872,10 +53776,10 @@ var logger = {
   }
 };
 function spinner(text, options) {
-  return ora({
-    text,
-    isSilent: options?.silent
-  });
+  return new Spinner({
+    verbose: !options?.silent,
+    color: "white"
+  }).start(text);
 }
 
 // node_modules/zod/lib/index.mjs
@@ -54074,8 +53978,8 @@ class ZodError extends Error {
           let i = 0;
           while (i < issue.path.length) {
             const el = issue.path[i];
-            const terminal2 = i === issue.path.length - 1;
-            if (!terminal2) {
+            const terminal = i === issue.path.length - 1;
+            if (!terminal) {
               curr[el] = curr[el] || { _errors: [] };
             } else {
               curr[el] = curr[el] || { _errors: [] };
@@ -54716,7 +54620,7 @@ var jwtRegex = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
 var durationRegex = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
 var emailRegex = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
 var _emojiRegex = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
-var emojiRegex2;
+var emojiRegex;
 var ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
 var ipv4CidrRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
 var ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
@@ -54864,10 +54768,10 @@ class ZodString extends ZodType {
           status.dirty();
         }
       } else if (check2.kind === "emoji") {
-        if (!emojiRegex2) {
-          emojiRegex2 = new RegExp(_emojiRegex, "u");
+        if (!emojiRegex) {
+          emojiRegex = new RegExp(_emojiRegex, "u");
         }
-        if (!emojiRegex2.test(input.data)) {
+        if (!emojiRegex.test(input.data)) {
           ctx = this._getOrReturnCtx(input, ctx);
           addIssueToContext(ctx, {
             validation: "emoji",
@@ -58496,7 +58400,7 @@ var import_debug = __toESM(require_src(), 1);
 var import_promise_deferred = __toESM(require_dist4(), 1);
 var import_promise_deferred2 = __toESM(require_dist4(), 1);
 import { spawn as spawn2 } from "child_process";
-import { EventEmitter } from "node:events";
+import { EventEmitter as EventEmitter2 } from "node:events";
 var __defProp2 = Object.defineProperty;
 var __defProps = Object.defineProperties;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -59333,11 +59237,11 @@ var init_ConfigList = __esm2({
     };
   }
 });
-function asConfigScope(scope, fallback2) {
+function asConfigScope(scope, fallback) {
   if (typeof scope === "string" && GitConfigScope.hasOwnProperty(scope)) {
     return scope;
   }
-  return fallback2;
+  return fallback;
 }
 function addConfigTask(key2, value, append2, scope) {
   const commands = ["config", `--${scope}`];
@@ -61112,15 +61016,15 @@ var init_simple_git_api = __esm2({
         this._executor = _executor;
       }
       _runTask(task, then) {
-        const chain = this._executor.chain();
-        const promise = chain.push(task);
+        const chain2 = this._executor.chain();
+        const promise = chain2.push(task);
         if (then) {
           taskCallback(task, promise, then);
         }
         return Object.create(this, {
           then: { value: promise.then.bind(promise) },
           catch: { value: promise.catch.bind(promise) },
-          _executor: { value: chain }
+          _executor: { value: chain2 }
         });
       }
       add(files) {
@@ -62333,7 +62237,7 @@ init_utils2();
 var PluginStore = class {
   constructor() {
     this.plugins = /* @__PURE__ */ new Set;
-    this.events = new EventEmitter;
+    this.events = new EventEmitter2;
   }
   on(type, listener) {
     this.events.on(type, listener);
@@ -62532,13 +62436,14 @@ welcome to screenpipe! \uD83D\uDE80
   let pipeName = "";
   try {
     pipeName = await esm_default5({
-      message: "what is your pipe name?",
+      message: "> what is your pipe name?",
       default: "my-screenpipe",
       validate: (input) => {
         if (input.trim().length === 0)
           return "pipe name is required";
         return true;
-      }
+      },
+      transformer: (input) => input.trim()
     });
   } catch (error) {
     handleError(error);
@@ -62546,8 +62451,14 @@ welcome to screenpipe! \uD83D\uDE80
   let directory = "";
   try {
     directory = await esm_default5({
-      message: "where would you like to create your pipe?",
-      default: pipeName
+      message: "> where would you like to create your pipe?",
+      default: pipeName,
+      validate: (input) => {
+        if (input.trim().length === 0)
+          return "directory is required";
+        return true;
+      },
+      transformer: (input) => input.trim()
     });
   } catch (error) {
     handleError(error);
@@ -62567,7 +62478,7 @@ welcome to screenpipe! \uD83D\uDE80
       ...PIPE_ADDITIONS.devDependencies
     };
     await import_fs_extra.default.writeJson(pkgPath, pkg, { spaces: 2 });
-    loadingSpinner.succeed(source_default.green("pipe created successfully! \uD83C\uDF89"));
+    loadingSpinner.succeed(source_default.green(`> pipe created successfully! \uD83C\uDF89`));
     console.log(`
 to get started:`);
     console.log(source_default.cyan(`cd ${directory}`));
@@ -62577,7 +62488,7 @@ to get started:`);
 when you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.
 `);
   } catch (error) {
-    loadingSpinner.fail("failed to create pipe");
+    loadingSpinner.failed("failed to create pipe");
     handleError(error);
   }
 });
@@ -62602,7 +62513,7 @@ var createAppCommand = new Command().name("create").description("create a new de
       let { appTypePrompt } = await esm_default12.prompt({
         name: "appTypePrompt",
         type: "select",
-        message: "what type of desktop app would you like to create?",
+        message: "> what type of desktop app would you like to create?",
         choices: [
           { name: "electron", value: "electron" },
           { name: "tauri", value: "tauri" }
@@ -62617,7 +62528,7 @@ var createAppCommand = new Command().name("create").description("create a new de
   if (!name || name.length === 0) {
     try {
       name = await esm_default5({
-        message: "What is your project name?",
+        message: "> what is your project name?",
         default: "my-desktop-app",
         validate: (input) => {
           if (input.trim().length === 0)
@@ -62631,9 +62542,8 @@ var createAppCommand = new Command().name("create").description("create a new de
   }
   const loadingSpinner = spinner("creating your desktop app...");
   try {
-    loadingSpinner.start();
     await esm_default13().clone(TEMPLATE_REPOS[appType], name);
-    loadingSpinner.succeed("Project created successfully! \uD83C\uDF89");
+    loadingSpinner.succeed(`> project created successfully! \uD83C\uDF89`);
     logger.info(`
 credits to the template authors:`);
     if (appType === "electron") {
@@ -62650,7 +62560,7 @@ to get started:`);
 when you're ready, you can deploy your app following the documentation for the respective framework.
 `);
   } catch (error) {
-    loadingSpinner.fail("failed to create project");
+    loadingSpinner.failed("failed to create project");
     handleError(error instanceof Error ? error.message : String(error));
   }
 });
@@ -63074,9 +62984,9 @@ import { spawnSync } from "node:child_process";
 import { debuglog } from "node:util";
 
 // node_modules/execa/lib/utils/standard-stream.js
-import process11 from "node:process";
+import process5 from "node:process";
 var isStandardStream = (stream) => STANDARD_STREAMS.includes(stream);
-var STANDARD_STREAMS = [process11.stdin, process11.stdout, process11.stderr];
+var STANDARD_STREAMS = [process5.stdin, process5.stdout, process5.stderr];
 var STANDARD_STREAMS_ALIASES = ["stdin", "stdout", "stderr"];
 var getStreamName = (fdNumber) => STANDARD_STREAMS_ALIASES[fdNumber] ?? `stdio[${fdNumber}]`;
 
@@ -63211,6 +63121,17 @@ var quoteString = (escapedArgument) => {
   return platform === "win32" ? `"${escapedArgument.replaceAll('"', '""')}"` : `'${escapedArgument.replaceAll("'", "'\\''")}'`;
 };
 var NO_ESCAPE_REGEXP = /^[\w./-]+$/;
+
+// node_modules/is-unicode-supported/index.js
+import process6 from "node:process";
+function isUnicodeSupported2() {
+  const { env: env2 } = process6;
+  const { TERM: TERM2, TERM_PROGRAM } = env2;
+  if (process6.platform !== "win32") {
+    return TERM2 !== "linux";
+  }
+  return Boolean(env2.WT_SESSION) || Boolean(env2.TERMINUS_SUBLIME) || env2.ConEmuTask === "{cmd::Cmder}" || TERM_PROGRAM === "Terminus-Sublime" || TERM_PROGRAM === "vscode" || TERM2 === "xterm-256color" || TERM2 === "alacritty" || TERM2 === "rxvt-unicode" || TERM2 === "rxvt-unicode-256color" || env2.TERMINAL_EMULATOR === "JetBrains-JediTerm";
+}
 
 // node_modules/figures/index.js
 var common2 = {
@@ -63483,7 +63404,7 @@ var specialFallbackSymbols2 = {
 };
 var mainSymbols2 = { ...common2, ...specialMainSymbols2 };
 var fallbackSymbols2 = { ...common2, ...specialFallbackSymbols2 };
-var shouldUseMain2 = isUnicodeSupported3();
+var shouldUseMain2 = isUnicodeSupported2();
 var figures2 = shouldUseMain2 ? mainSymbols2 : fallbackSymbols2;
 var figures_default = figures2;
 var replacements2 = Object.entries(specialMainSymbols2);
@@ -63711,10 +63632,10 @@ var handleCommand = (filePath, rawArguments, rawOptions) => {
 // node_modules/execa/lib/arguments/options.js
 var import_cross_spawn = __toESM(require_cross_spawn(), 1);
 import path9 from "node:path";
-import process14 from "node:process";
+import process9 from "node:process";
 
 // node_modules/npm-run-path/index.js
-import process12 from "node:process";
+import process7 from "node:process";
 import path6 from "node:path";
 
 // node_modules/npm-run-path/node_modules/path-key/index.js
@@ -63755,10 +63676,10 @@ var TEN_MEGABYTES_IN_BYTES = 10 * 1024 * 1024;
 
 // node_modules/npm-run-path/index.js
 var npmRunPath = ({
-  cwd = process12.cwd(),
-  path: pathOption = process12.env[pathKey()],
+  cwd = process7.cwd(),
+  path: pathOption = process7.env[pathKey()],
   preferLocal = true,
-  execPath = process12.execPath,
+  execPath = process7.execPath,
   addExecPath = true
 } = {}) => {
   const cwdPath = path6.resolve(toPath(cwd));
@@ -63786,7 +63707,7 @@ var applyExecPath = (result, pathParts, execPath, cwdPath) => {
     result.push(pathPart);
   }
 };
-var npmRunPathEnv = ({ env: env2 = process12.env, ...options } = {}) => {
+var npmRunPathEnv = ({ env: env2 = process7.env, ...options } = {}) => {
   env2 = { ...env2 };
   const pathName = pathKey({ env: env2 });
   options.path = env2[pathName];
@@ -64361,8 +64282,8 @@ var throwOnStrictDeadlockError = (isSubprocess) => {
 This can be fixed by both sending a message and listening to incoming messages at the same time:
 
 const [receivedMessage] = await Promise.all([
-\t${getMethodName("getOneMessage", isSubprocess)},
-\t${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
+	${getMethodName("getOneMessage", isSubprocess)},
+	${getMethodName("sendMessage", isSubprocess, "message, {strict: true}")},
 ]);`);
 };
 var getStrictResponseError = (error, isSubprocess) => new Error(`${getMethodName("sendMessage", isSubprocess)} failed when sending an acknowledgment response to the ${getOtherProcessName(isSubprocess)}.`, { cause: error });
@@ -64511,7 +64432,7 @@ var incrementMaxListeners = (eventEmitter, maxListenersIncrement, signal) => {
 };
 
 // node_modules/execa/lib/ipc/forward.js
-import { EventEmitter as EventEmitter2 } from "node:events";
+import { EventEmitter as EventEmitter3 } from "node:events";
 
 // node_modules/execa/lib/ipc/incoming.js
 import { once as once2 } from "node:events";
@@ -64593,7 +64514,7 @@ var getIpcEmitter = (anyProcess, channel, isSubprocess) => {
   if (IPC_EMITTERS.has(anyProcess)) {
     return IPC_EMITTERS.get(anyProcess);
   }
-  const ipcEmitter = new EventEmitter2;
+  const ipcEmitter = new EventEmitter3;
   ipcEmitter.connected = true;
   IPC_EMITTERS.set(anyProcess, ipcEmitter);
   forwardEvents({
@@ -65050,14 +64971,14 @@ var serializeEncoding = (encoding) => typeof encoding === "string" ? `"${encodin
 // node_modules/execa/lib/arguments/cwd.js
 import { statSync } from "node:fs";
 import path8 from "node:path";
-import process13 from "node:process";
+import process8 from "node:process";
 var normalizeCwd = (cwd = getDefaultCwd()) => {
   const cwdString = safeNormalizeFileUrl(cwd, 'The "cwd" option');
   return path8.resolve(cwdString);
 };
 var getDefaultCwd = () => {
   try {
-    return process13.cwd();
+    return process8.cwd();
   } catch (error) {
     error.message = `The current directory does not exist.
 ${error.message}`;
@@ -65100,7 +65021,7 @@ var normalizeOptions = (filePath, rawArguments, rawOptions) => {
   options.killSignal = normalizeKillSignal(options.killSignal);
   options.forceKillAfterDelay = normalizeForceKillAfterDelay(options.forceKillAfterDelay);
   options.lines = options.lines.map((lines2, fdNumber) => lines2 && !BINARY_ENCODINGS.has(options.encoding) && options.buffer[fdNumber]);
-  if (process14.platform === "win32" && path9.basename(file, ".exe") === "cmd") {
+  if (process9.platform === "win32" && path9.basename(file, ".exe") === "cmd") {
     commandArguments.unshift("/q");
   }
   return { file, commandArguments, options };
@@ -65141,7 +65062,7 @@ var addDefaultOptions = ({
   serialization
 });
 var getEnv = ({ env: envOption, extendEnv, preferLocal, node, localDirectory, nodePath }) => {
-  const env2 = extendEnv ? { ...process14.env, ...envOption } : envOption;
+  const env2 = extendEnv ? { ...process9.env, ...envOption } : envOption;
   if (preferLocal || node) {
     return npmRunPathEnv({
       env: env2,
@@ -65323,9 +65244,9 @@ var handleStreamEnd = async (stream, controller, state) => {
 var nodeImports = {};
 
 // node_modules/get-stream/source/contents.js
-var getStreamContents = async (stream, { init, convertChunk, getSize, truncateChunk, addChunk, getFinalChunk, finalize }, { maxBuffer = Number.POSITIVE_INFINITY } = {}) => {
+var getStreamContents = async (stream, { init: init2, convertChunk, getSize, truncateChunk, addChunk, getFinalChunk, finalize }, { maxBuffer = Number.POSITIVE_INFINITY } = {}) => {
   const asyncIterable = getAsyncIterable(stream);
-  const state = init();
+  const state = init2();
   state.length = 0;
   try {
     for await (const chunk of asyncIterable) {
@@ -66308,7 +66229,7 @@ var normalizeGenerator = ({ stdioItem, stdioItem: { value }, index, newTransform
 var sortTransforms = (newTransforms, direction) => direction === "input" ? newTransforms.reverse() : newTransforms;
 
 // node_modules/execa/lib/stdio/direction.js
-import process15 from "node:process";
+import process10 from "node:process";
 var getStreamDirection = (stdioItems, fdNumber, optionName) => {
   const directions = stdioItems.map((stdioItem) => getStdioItemDirection(stdioItem, fdNumber));
   if (directions.includes("input") && directions.includes("output")) {
@@ -66350,10 +66271,10 @@ var guessStreamDirection = {
   }
 };
 var getStandardStreamDirection = (value) => {
-  if ([0, process15.stdin].includes(value)) {
+  if ([0, process10.stdin].includes(value)) {
     return "input";
   }
-  if ([1, 2, process15.stdout, process15.stderr].includes(value)) {
+  if ([1, 2, process10.stdout, process10.stderr].includes(value)) {
     return "output";
   }
 };
@@ -67461,7 +67382,7 @@ import { setMaxListeners } from "node:events";
 import { spawn as spawn3 } from "node:child_process";
 
 // node_modules/execa/lib/ipc/methods.js
-import process16 from "node:process";
+import process11 from "node:process";
 
 // node_modules/execa/lib/ipc/get-one.js
 import { once as once5, on as on2 } from "node:events";
@@ -67602,9 +67523,9 @@ var addIpcMethods = (subprocess, { ipc }) => {
   Object.assign(subprocess, getIpcMethods(subprocess, false, ipc));
 };
 var getIpcExport = () => {
-  const anyProcess = process16;
+  const anyProcess = process11;
   const isSubprocess = true;
-  const ipc = process16.channel !== undefined;
+  const ipc = process11.channel !== undefined;
   return {
     ...getIpcMethods(anyProcess, isSubprocess, ipc),
     getCancelSignal: getCancelSignal.bind(undefined, {
@@ -69371,7 +69292,7 @@ var execaSync = createExeca(() => ({ isSync: true }));
 var execaCommand = createExeca(mapCommandAsync);
 var execaCommandSync = createExeca(mapCommandSync);
 var execaNode = createExeca(mapNode);
-var $ = createExeca(mapScriptAsync, {}, deepScriptOptions, setScriptSync);
+var $2 = createExeca(mapScriptAsync, {}, deepScriptOptions, setScriptSync);
 var {
   sendMessage: sendMessage2,
   getOneMessage: getOneMessage2,
@@ -69449,7 +69370,7 @@ async function updateFiles(componentLocations, options) {
     const targetDir = path10.dirname(location.target);
     const existingFile = existsSync(location.target);
     if (existingFile && !options.overwrite) {
-      filesCreatedSpinner.stop();
+      filesCreatedSpinner.succeed("");
       const { overwrite } = await esm_default12.prompt([
         {
           type: "confirm",
@@ -69684,7 +69605,7 @@ componentsCommands.addCommand(registerComponentCommand);
 // src/index.ts
 process.on("SIGINT", () => process.exit(0));
 process.on("SIGTERM", () => process.exit(0));
-async function main2() {
+async function main() {
   const program2 = new Command;
   program2.name("screenpipe-dev").description("screenpipe development CLI tool").version("0.0.1");
   program2.addCommand(loginCommand);
@@ -69694,4 +69615,4 @@ async function main2() {
   program2.addCommand(componentsCommands);
   program2.parse();
 }
-main2();
+main();

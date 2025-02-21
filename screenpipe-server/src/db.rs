@@ -21,8 +21,9 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
-    OCRResultRaw, Speaker, TagContentType,
+    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, FrameRow, OCREntry,
+    OCRResult, OCRResultRaw, OcrTextBlock, Order, SearchMatch, Speaker, TagContentType, TextBounds,
+    TextPosition,
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
@@ -1990,6 +1991,7 @@ impl DatabaseManager {
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
+                frames.name as frame_name,
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
@@ -2146,4 +2148,175 @@ impl DatabaseManager {
             }
         }
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_with_text_positions(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        fuzzy_match: bool,
+        order: Order,
+        app_names: Option<Vec<String>>,
+    ) -> Result<Vec<SearchMatch>, sqlx::Error> {
+        let mut conditions = Vec::new();
+        let mut owned_conditions = Vec::new();
+
+        if start_time.is_some() {
+            conditions.push("f.timestamp >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("f.timestamp <= ?");
+        }
+
+        // Add app names condition if provided
+        if let Some(apps) = &app_names {
+            if !apps.is_empty() {
+                let placeholders = vec!["?"; apps.len()].join(",");
+                let app_condition = format!("o.app_name IN ({})", placeholders);
+                owned_conditions.push(app_condition);
+                conditions.push(owned_conditions.last().unwrap().as_str());
+            }
+        }
+
+        // Create an indexed subquery for FTS matching
+        let search_condition = if !query.is_empty() {
+            let fts_match = if fuzzy_match {
+                query
+                    .split_whitespace()
+                    .map(|word| format!("{}*", word))
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            } else {
+                query.to_string()
+            };
+            conditions.push(
+                "f.id IN (SELECT frame_id FROM ocr_text_fts WHERE text MATCH ? ORDER BY rank)",
+            );
+            fts_match
+        } else {
+            String::new()
+        };
+
+        let sql = format!(
+            r#"
+SELECT
+    f.id,
+    f.timestamp,
+    f.browser_url as url,
+    o.app_name,
+    o.window_name,
+    o.text as ocr_text,
+    o.text_json
+FROM frames f
+INNER JOIN ocr_text o ON f.id = o.frame_id
+WHERE {}
+ORDER BY f.timestamp {}
+LIMIT ? OFFSET ?
+"#,
+            if conditions.is_empty() {
+                "1=1".to_string()
+            } else {
+                conditions.join(" AND ")
+            },
+            match order {
+                Order::Ascending => "ASC",
+                Order::Descending => "DESC",
+            }
+        );
+
+        let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);
+
+        // Bind timestamp parameters first
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+
+        // Bind app names if provided
+        if let Some(apps) = app_names {
+            if !apps.is_empty() {
+                for app in apps {
+                    query_builder = query_builder.bind(app);
+                }
+            }
+        }
+
+        // Bind search condition if query is not empty
+        if !query.is_empty() {
+            query_builder = query_builder.bind(&search_condition);
+        }
+
+        // Bind limit and offset
+        query_builder = query_builder.bind(limit as i64).bind(offset as i64);
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let positions = if !query.is_empty() {
+                    let ocr_blocks: Vec<OcrTextBlock> =
+                        serde_json::from_str(&row.text_json).unwrap_or_default();
+                    find_matching_positions(&ocr_blocks, query)
+                } else {
+                    Vec::new()
+                };
+
+                SearchMatch {
+                    frame_id: row.id,
+                    timestamp: row.timestamp,
+                    text_positions: positions.clone(),
+                    app_name: row.app_name.clone(),
+                    window_name: row.window_name.clone(),
+                    confidence: calculate_confidence(&positions),
+                    text: row.ocr_text.clone(),
+                    url: row.url.clone(),
+                }
+            })
+            .collect())
+    }
+}
+
+pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<TextPosition> {
+    let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let text_lower = block.text.to_lowercase();
+
+            // Check for exact match or any word match
+            let matches = text_lower.contains(&query_lower)
+                || query_words.iter().any(|&word| text_lower.contains(word));
+
+            if matches {
+                Some(TextPosition {
+                    text: block.text.clone(),
+                    confidence: block.conf.parse::<f32>().unwrap_or(0.0),
+                    bounds: TextBounds {
+                        left: block.left.parse::<f32>().unwrap_or(0.0),
+                        top: block.top.parse::<f32>().unwrap_or(0.0),
+                        width: block.width.parse::<f32>().unwrap_or(0.0),
+                        height: block.height.parse::<f32>().unwrap_or(0.0),
+                    },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn calculate_confidence(positions: &[TextPosition]) -> f32 {
+    if positions.is_empty() {
+        return 0.0;
+    }
+
+    positions.iter().map(|pos| pos.confidence).sum::<f32>() / positions.len() as f32
 }

@@ -8,9 +8,13 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Check,
   ChevronsUpDown,
@@ -34,7 +38,7 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
-} from "./ui/command";
+} from "@/components/ui/command";
 import {
   Settings,
   useSettings,
@@ -43,30 +47,30 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { invoke } from "@tauri-apps/api/core";
-import { Badge } from "./ui/badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "./ui/tooltip";
-import { Switch } from "./ui/switch";
-import { Input } from "./ui/input";
-import { Slider } from "./ui/slider";
+} from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { platform } from "@tauri-apps/plugin-os";
 import posthog from "posthog-js";
 import { Language } from "@/lib/language";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
-import { Command as ShellCommand } from "@tauri-apps/plugin-shell";
 import { ToastAction } from "@/components/ui/toast";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
-import { Separator } from "./ui/separator";
+import { Separator } from "@/components/ui/separator";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useSqlAutocomplete } from "@/lib/hooks/use-sql-autocomplete";
 import * as Sentry from "@sentry/react";
 import { defaultOptions } from "tauri-plugin-sentry-api";
+import { useLoginDialog } from "../login-dialog";
 
 type PermissionsStatus = {
   screenRecording: string;
@@ -114,14 +118,11 @@ const createWindowOptions = (
 export function RecordingSettings() {
   const { settings, updateSettings, getDataDir } = useSettings();
   const [openAudioDevices, setOpenAudioDevices] = React.useState(false);
-  const [openMonitors, setOpenMonitors] = React.useState(false);
   const [openLanguages, setOpenLanguages] = React.useState(false);
   const [dataDirInputVisible, setDataDirInputVisible] = React.useState(false);
   const [clickTimeout, setClickTimeout] = useState<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const [windowsForIgnore, setWindowsForIgnore] = useState("");
-  const [windowsForInclude, setWindowsForInclude] = useState("");
 
   const { items: windowItems, isLoading: isWindowItemsLoading } =
     useSqlAutocomplete("window");
@@ -137,9 +138,9 @@ export function RecordingSettings() {
   const { health } = useHealthCheck();
   const isDisabled = health?.status_code === 500;
   const [isMacOS, setIsMacOS] = useState(false);
-  const [isSetupRunning, setIsSetupRunning] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const { credits } = settings.user || {};
+  const { checkLogin } = useLoginDialog();
+
   // Add new state to track if settings have changed
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -341,19 +342,33 @@ export function RecordingSettings() {
     }
   };
 
-  const handleAudioTranscriptionModelChange = (value: string) => {
-    if (value === "screenpipe-cloud" && !settings.user?.cloud_subscribed) {
-      openUrl("https://buy.stripe.com/7sIdRzbym4RA98c7sX");
+  const handleAudioTranscriptionModelChange = (
+    value: string,
+    realtime = false
+  ) => {
+    const isLoggedIn = checkLogin(settings.user);
+    // If trying to use cloud but not logged in
+    if (value === "screenpipe-cloud" && !isLoggedIn) {
       return;
     }
 
-    if (value === "screenpipe-cloud") {
-      handleSettingsChange({
-        audioTranscriptionEngine: value,
-      });
-    } else {
-      handleSettingsChange({ audioTranscriptionEngine: value });
+    // If trying to use cloud but not subscribed
+    if (value === "screenpipe-cloud" && !settings.user?.cloud_subscribed) {
+      const clientRefId = `${
+        settings.user?.id
+      }&customer_email=${encodeURIComponent(settings.user?.email ?? "")}`;
+      openUrl(
+        `https://buy.stripe.com/7sIdRzbym4RA98c7sX?client_reference_id=${clientRefId}`
+      );
+      // Revert back to previous value in the Select component
+      return;
     }
+
+    // Only proceed with the change if all checks pass
+    const newSettings = realtime
+      ? { realtimeAudioTranscriptionEngine: value }
+      : { audioTranscriptionEngine: value };
+    handleSettingsChange(newSettings, true);
   };
 
   const handleOcrModelChange = (value: string) => {
@@ -431,20 +446,11 @@ export function RecordingSettings() {
 
   const handleAnalyticsToggle = (checked: boolean) => {
     const newValue = checked;
-    handleSettingsChange({ analyticsEnabled: newValue });
+    handleSettingsChange({ analyticsEnabled: newValue }, true);
   };
 
-  const handleAutoStartToggle = async (checked: boolean) => {
-    const newValue = checked
-    handleSettingsChange({ autoStartEnabled: newValue});
-  }
-
   const handleChineseMirrorToggle = async (checked: boolean) => {
-    handleSettingsChange({ useChineseMirror: checked });
-    if (checked) {
-      // Trigger setup when the toggle is turned on
-      await runSetup();
-    }
+    handleSettingsChange({ useChineseMirror: checked }, true);
   };
 
   const handleDataDirChange = async () => {
@@ -474,7 +480,7 @@ export function RecordingSettings() {
         // TODO: check permission of selected dir for server to write into
 
         if (selected) {
-          handleSettingsChange({ dataDir: selected });
+          handleSettingsChange({ dataDir: selected }, true);
         } else {
           console.log("canceled");
         }
@@ -526,62 +532,7 @@ export function RecordingSettings() {
       duration: 3000,
     });
 
-    handleSettingsChange({ dataDir: settings.dataDir });
-  };
-
-  const runSetup = async () => {
-    setIsSetupRunning(true);
-    try {
-      const command = ShellCommand.sidecar("screenpipe", ["setup"]);
-      const child = await command.spawn();
-
-      toast({
-        title: "Setting up Chinese mirror",
-        description: "This may take a few minutes...",
-      });
-
-      const outputPromise = new Promise<string>((resolve, reject) => {
-        command.on("close", (data) => {
-          if (data.code !== 0) {
-            reject(new Error(`Command failed with code ${data.code}`));
-          }
-        });
-        command.on("error", (error) => reject(new Error(error)));
-        command.stdout.on("data", (line) => {
-          console.log(line);
-          if (line.includes("screenpipe setup complete")) {
-            resolve("ok");
-          }
-        });
-      });
-
-      const timeoutPromise = new Promise(
-        (_, reject) =>
-          setTimeout(() => reject(new Error("Setup timed out")), 900000) // 15 minutes
-      );
-
-      const result = await Promise.race([outputPromise, timeoutPromise]);
-
-      if (result === "ok") {
-        toast({
-          title: "Chinese mirror setup complete",
-          description: "You can now use the Chinese mirror for downloads.",
-        });
-      } else {
-        throw new Error("Setup failed or timed out");
-      }
-    } catch (error) {
-      console.error("Error setting up Chinese mirror:", error);
-      toast({
-        title: "Error setting up Chinese mirror",
-        description: "Please try again or check the logs for more information.",
-        variant: "destructive",
-      });
-      // Revert the toggle if setup fails
-      handleSettingsChange({ useChineseMirror: false });
-    } finally {
-      setIsSetupRunning(false);
-    }
+    handleSettingsChange({ dataDir: settings.dataDir }, true);
   };
 
   const handleFrameCacheToggle = (checked: boolean) => {
@@ -617,7 +568,7 @@ export function RecordingSettings() {
       }
 
       // Just update the local setting - the update button will handle the restart
-      handleSettingsChange({ enableUiMonitoring: checked });
+      handleSettingsChange({ enableUiMonitoring: checked }, true);
     } catch (error) {
       console.error("failed to toggle ui monitoring:", error);
       toast({
@@ -656,11 +607,14 @@ export function RecordingSettings() {
     } else if (removedValues.length > 0) {
       // Handle removing value
       const removedValue = removedValues[0];
-      handleSettingsChange({
-        ignoredWindows: settings.ignoredWindows.filter(
-          (w) => w !== removedValue
-        ),
-      });
+      handleSettingsChange(
+        {
+          ignoredWindows: settings.ignoredWindows.filter(
+            (w) => w !== removedValue
+          ),
+        },
+        true
+      );
     }
   };
 
@@ -683,21 +637,27 @@ export function RecordingSettings() {
     if (addedValues.length > 0) {
       // Handle adding new value
       const newValue = addedValues[0];
-      handleSettingsChange({
-        includedWindows: [...settings.includedWindows, newValue],
-        // Remove from ignored windows if present
-        ignoredWindows: settings.ignoredWindows.filter(
-          (w) => w.toLowerCase() !== newValue.toLowerCase()
-        ),
-      });
+      handleSettingsChange(
+        {
+          includedWindows: [...settings.includedWindows, newValue],
+          // Remove from ignored windows if present
+          ignoredWindows: settings.ignoredWindows.filter(
+            (w) => w.toLowerCase() !== newValue.toLowerCase()
+          ),
+        },
+        true
+      );
     } else if (removedValues.length > 0) {
       // Handle removing value
       const removedValue = removedValues[0];
-      handleSettingsChange({
-        includedWindows: settings.includedWindows.filter(
-          (w) => w !== removedValue
-        ),
-      });
+      handleSettingsChange(
+        {
+          includedWindows: settings.includedWindows.filter(
+            (w) => w !== removedValue
+          ),
+        },
+        true
+      );
     }
   };
 
@@ -735,7 +695,7 @@ export function RecordingSettings() {
               id="disableVision"
               checked={settings.disableVision}
               onCheckedChange={(checked) =>
-                handleSettingsChange({ disableVision: checked })
+                handleSettingsChange({ disableVision: checked }, true)
               }
             />
           </div>
@@ -780,8 +740,8 @@ export function RecordingSettings() {
                     defaultValue={settings.monitorIds}
                     onValueChange={(values) =>
                       values.length === 0
-                        ? handleSettingsChange({ disableVision: true })
-                        : handleSettingsChange({ monitorIds: values })
+                        ? handleSettingsChange({ disableVision: true }, true)
+                        : handleSettingsChange({ monitorIds: values }, true)
                     }
                     placeholder={
                       settings.useAllMonitors
@@ -989,9 +949,12 @@ export function RecordingSettings() {
                     id="enableRealtimeAudio"
                     checked={settings.enableRealtimeAudioTranscription}
                     onCheckedChange={(checked) =>
-                      handleSettingsChange({
-                        enableRealtimeAudioTranscription: checked,
-                      })
+                      handleSettingsChange(
+                        {
+                          enableRealtimeAudioTranscription: checked,
+                        },
+                        true
+                      )
                     }
                   />
                 </div>
@@ -1008,9 +971,7 @@ export function RecordingSettings() {
                   </Label>
                   <Select
                     onValueChange={(value) =>
-                      handleSettingsChange({
-                        realtimeAudioTranscriptionEngine: value,
-                      })
+                      handleAudioTranscriptionModelChange(value, true)
                     }
                     value={settings.realtimeAudioTranscriptionEngine}
                   >
@@ -1103,9 +1064,12 @@ export function RecordingSettings() {
                         value={settings.deepgramApiKey}
                         onChange={(e) => {
                           const newValue = e.target.value;
-                          handleSettingsChange({
-                            deepgramApiKey: newValue,
-                          });
+                          handleSettingsChange(
+                            {
+                              deepgramApiKey: newValue,
+                            },
+                            true
+                          );
                         }}
                         className="pr-10 w-full"
                         placeholder="enter your Deepgram API key"
@@ -1377,49 +1341,6 @@ export function RecordingSettings() {
 
         <div className="space-y-8 py-4">
           <div className="space-y-6">
-            {/* <div className="flex flex-col space-y-2">
-              <Label
-                htmlFor="restartInterval"
-                className="flex items-center space-x-2"
-              >
-                <span>auto restart interval (minutes)</span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <HelpCircle className="h-4 w-4 cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <p>
-                        automatically restart screenpipe after the specified
-                        interval.
-                        <br />
-                        0 means no automatic restart.
-                        <br />
-                        useful if you face memory issues and ensure stable
-                        recording.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </Label>
-              <div className="flex items-center space-x-4">
-                <Slider
-                  id="restartInterval"
-                  min={0}
-                  max={1440}
-                  step={30}
-                  value={[settings.restartInterval || 0]}
-                  onValueChange={(value) =>
-                    handleSettingsChange({ restartInterval: value[0] })
-                  }
-                  className="flex-grow"
-                />
-                <span className="w-16 text-right">
-                  {settings.restartInterval || 0} min
-                </span>
-              </div>
-            </div> */}
-
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <h4 className="font-medium">
@@ -1481,20 +1402,6 @@ export function RecordingSettings() {
                 id="frame-cache-toggle"
                 checked={settings.enableFrameCache}
                 onCheckedChange={handleFrameCacheToggle}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <h4 className="font-medium">enable autostart</h4>
-                <p className="text-sm text-muted-foreground">
-                  automatically launch Screenpipe at startup
-                </p>
-              </div>
-              <Switch
-                id="auto-start-toggle"
-                checked={settings.autoStartEnabled}
-                onCheckedChange={handleAutoStartToggle}
               />
             </div>
 

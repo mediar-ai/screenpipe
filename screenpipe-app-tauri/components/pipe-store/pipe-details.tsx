@@ -22,6 +22,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { PipeConfigForm } from "../pipe-config-form";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import { Badge } from "../ui/badge";
+import { getBuildStatus } from "./pipe-card";
 
 interface PipeDetailsProps {
   pipe: PipeWithStatus;
@@ -223,7 +224,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
           <div className="max-w-3xl mx-auto p-8 ">
             {pipe.installed_config?.enabled &&
               !buildStatusNotAllows.includes(
-                pipe.installed_config.buildStatus ?? "",
+                getBuildStatus(pipe.installed_config.buildStatus) ?? "",
               ) &&
               pipe.installed_config?.port && (
                 <div>

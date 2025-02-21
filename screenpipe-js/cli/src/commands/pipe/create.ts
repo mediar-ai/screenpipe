@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // Add this at the very top to suppress the Buffer deprecation warning
 process.removeAllListeners("warning");
 
@@ -30,25 +30,26 @@ async function downloadAndExtractSubdir(subdir: string, destPath: string) {
 }
 
 export const createPipeCommand = new Command()
-  .name('create')
-  .description('create a new pipe')
+  .name("create")
+  .description("create a new pipe")
   .action(async () => {
     console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
     logger.log("let's create a new screenpipe pipe.\n");
     logger.log(
       "pipes are plugins that interact with captured screen and audio data."
-    ); 
+    );
     logger.log("build powerful agents, monetize it, etc.\n");
 
     let pipeName = "";
     try {
       pipeName = await input({
-        message: "what is your pipe name?",
+        message: "> what is your pipe name?",
         default: "my-screenpipe",
         validate: (input) => {
           if (input.trim().length === 0) return "pipe name is required";
           return true;
         },
+        transformer: (input) => input.trim(),
       });
     } catch (error) {
       handleError(error);
@@ -57,8 +58,13 @@ export const createPipeCommand = new Command()
     let directory = "";
     try {
       directory = await input({
-        message: "where would you like to create your pipe?",
+        message: "> where would you like to create your pipe?",
         default: pipeName,
+        validate: (input) => {
+          if (input.trim().length === 0) return "directory is required";
+          return true;
+        },
+        transformer: (input) => input.trim(),
       });
     } catch (error) {
       handleError(error);
@@ -68,10 +74,7 @@ export const createPipeCommand = new Command()
 
     try {
       // Download and extract the appropriate template
-      await downloadAndExtractSubdir(
-        "pipes/obsidian",
-        directory
-      );
+      await downloadAndExtractSubdir("pipes/obsidian", directory);
 
       // Update package.json with the pipe name
       const pkgPath = path.join(process.cwd(), directory, "package.json");
@@ -89,7 +92,7 @@ export const createPipeCommand = new Command()
 
       await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 
-      loadingSpinner.succeed(chalk.green("pipe created successfully! 🎉"));
+      loadingSpinner.succeed(chalk.green(`> pipe created successfully! 🎉`));
 
       console.log("\nto get started:");
       console.log(chalk.cyan(`cd ${directory}`));
@@ -104,8 +107,7 @@ export const createPipeCommand = new Command()
         "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
       );
     } catch (error) {
-      loadingSpinner.fail("failed to create pipe");
+      loadingSpinner.failed("failed to create pipe");
       handleError(error);
     }
-  })
-
+  });
