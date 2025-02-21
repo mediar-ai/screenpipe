@@ -48,6 +48,7 @@ let suggestionJob: any = null;
 export async function runBot(
   settings: Settings,
   cookies: CookieParam[],
+  prompt: string,
 ): Promise<boolean> {
   await stopBot();
 
@@ -67,7 +68,7 @@ export async function runBot(
 
   browser = await puppeteer.connect({ browserWSEndpoint });
 
-  launchProcesses(cookies, model);
+  launchProcesses(cookies, prompt, model);
 
   return true;
 }
@@ -143,6 +144,7 @@ export async function postReply(
 
 async function launchProcesses(
   cookies: CookieParam[],
+  prompt: string,
   model: LanguageModel,
 ): Promise<void> {
   await Promise.all([
@@ -150,7 +152,7 @@ async function launchProcesses(
     ocrProcess(model),
     timelineProcess(cookies),
   ]);
-  await Promise.all([summaryProcess(model), suggestionProcess(model)]);
+  await Promise.all([summaryProcess(model), suggestionProcess(prompt, model)]);
 
   profileJob = cron.schedule("*/30 * * * *", () =>
     profileProcess(cookies, model),
@@ -158,7 +160,9 @@ async function launchProcesses(
   ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
   timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
   summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
-  suggestionJob = cron.schedule("*/5 * * * *", () => suggestionProcess(model));
+  suggestionJob = cron.schedule("*/5 * * * *", () =>
+    suggestionProcess(prompt, model),
+  );
 }
 
 async function profileProcess(
@@ -252,7 +256,7 @@ You are an AI assistant analyzing a Twitter user's profile and engagement patter
 ### **Instructions:**
 - Analyze the user's bio, tweets, and engagement style to determine key themes.  
 - Summarize their primary interests in a way that reflects both their focus areas and any unique perspectives they bring.
-- Describe their writing style (e.g., formal, casual, witty, thought-provoking) and how they communicate with their audience.
+- Create a detailed description of their writing style (punctuation, grammar, habits, etc).
 - Mention any repeated hashtags or frequently mentioned accounts, highlighting any notable connections or communities they engage with. 
 - Keep the summary engaging and concise.
 
@@ -454,6 +458,7 @@ You are an AI assistant creating a concise and well-structured summary based on 
 ### **Instructions:**
 - Analyze the provided summaries to identify common themes, key insights, and recurring topics.
 - Eliminate redundant or overly specific details while preserving the most important information.
+- Make sure to include any information about their writing style.
 - Ensure the final summary is clear, engaging, and captures the essence of the original summaries.
 
 ### **User Summaries**
@@ -493,7 +498,10 @@ ${JSON.stringify(summaries, null, 2)}
   eventEmitter.emit("updateProgress", { process: 3, value: 100 });
 }
 
-async function suggestionProcess(model: LanguageModel): Promise<void> {
+async function suggestionProcess(
+  prompt: string,
+  model: LanguageModel,
+): Promise<void> {
   if (!browser || !browser.connected) {
     await stopBot();
     return;
@@ -524,15 +532,7 @@ Use summaries of the user's data to add context and improve relevance.
 Generate recommended replies and timestamps for selected tweets. Return JSON output.
 
 ### **Instructions:**
-- Prioritize tweets that align with the user’s niche, past tweets, and bio.
-- If a tweet is only loosely relevant but has high engagement, consider the visibility benefits.
-- Match the user's writing style (e.g., casual, professional, witty).
-- If the user is an expert, suggest insightful or debate-provoking replies.
-- If the user asks a lot of questions, favor responses that encourage further discussion.
-- Higher scores indicate better relevance, engagement potential, or visibility.
-- Recommend an optimal time to reply. Timestamps should match the format of provided tweet data.
-- Reasons for the suggestion should be in second person.
-- Only include hashtags that match those used by the user in previous tweets.
+${prompt}
 
 ### **User Summaries:**
 \`\`\`json
@@ -572,15 +572,7 @@ Use summaries of the user's data to add context and improve relevance.
 Generate recommended replies and timestamps for selected tweets. Return JSON output.
 
 ### **Instructions:**
-- Prioritize tweets that align with the user’s niche, past tweets, and bio.
-- If a tweet is only loosely relevant but has high engagement, consider the visibility benefits.
-- Match the user's writing style (e.g., casual, professional, witty).
-- If the user is an expert, suggest insightful or debate-provoking replies.
-- If the user asks a lot of questions, favor responses that encourage further discussion.
-- Higher scores indicate better relevance, engagement potential, or visibility.
-- Recommend an optimal time to reply. Timestamps should match the format of provided tweet data.
-- Reasons for the suggestion should be in second person.
-- Only include hashtags that match those used by the user in previous tweets.
+${prompt}
 
 ### **User Summaries:**
 \`\`\`json

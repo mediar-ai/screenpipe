@@ -12,11 +12,7 @@ const STATUSES = [
   "Creating suggestions...",
 ];
 
-interface Props {
-  isRunning: boolean;
-}
-
-export function Status({ isRunning }: Props) {
+export function Status() {
   const [progresses, setProgresses] = useState<number[]>([
     100, 100, 100, 100, 100,
   ]);
@@ -63,8 +59,8 @@ export function Status({ isRunning }: Props) {
 
   return (
     <div>
-      {isRunning && progress < 100 && <Progress value={progress} />}
-      {isRunning && statuses.length > 0 && (
+      {progress < 100 && <Progress value={progress} />}
+      {statuses.length > 0 && (
         <ul className="flex flex-col gap-2 mt-4">
           {statuses.map((status, i) => (
             <li key={i}>{status}</li>

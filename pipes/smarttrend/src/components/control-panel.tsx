@@ -14,6 +14,7 @@ interface Props {
   isConnected: boolean;
   isRunning: boolean;
   setIsRunning: (isRunning: boolean) => void;
+  prompt: string;
 }
 
 export function ControlPanel({
@@ -21,11 +22,12 @@ export function ControlPanel({
   isConnected,
   isRunning,
   setIsRunning,
+  prompt,
 }: Props) {
   const { settings } = useSettings();
 
   const start = async () => {
-    const success = await runBot(settings, cookies);
+    const success = await runBot(settings, cookies, prompt);
     if (success) {
       setIsRunning(true);
     }

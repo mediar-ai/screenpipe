@@ -19,7 +19,11 @@ export async function getBrowserWSEndpoint(
   } catch (e) {
     if (tryAgain) {
       await openApp(apps.chrome, {
-        arguments: ["--remote-debugging-port=9222"],
+        arguments: [
+          "--remote-debugging-port=9222",
+          "--start-minimized",
+          "--no-activation",
+        ],
       });
       await new Promise((resolve) => setTimeout(resolve, 5_000));
       return await getBrowserWSEndpoint(false);
