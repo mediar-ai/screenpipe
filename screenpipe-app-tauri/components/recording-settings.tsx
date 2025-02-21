@@ -1488,7 +1488,7 @@ export function RecordingSettings() {
               <div className="space-y-1">
                 <h4 className="font-medium">enable autostart</h4>
                 <p className="text-sm text-muted-foreground">
-                  allows screenpipe to appear when system starts
+                  automatically launch Screenpipe at startup
                 </p>
               </div>
               <Switch
