@@ -151,9 +151,15 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
 
     if (nextState) {
       if (!GLOBAL_STATE.isInitialized) {
-        // Start transcription logic
-        modeRef.current = mode
-        if (mode === 'browser') {
+        // Use current mode if none specified
+        const currentMode = mode || modeRef.current
+        if (!currentMode) {
+          console.error('transcription-service: no mode available')
+          return
+        }
+        
+        modeRef.current = currentMode
+        if (currentMode === 'browser') {
           startTranscriptionBrowser()
         } else {
           startTranscriptionScreenpipe()
@@ -161,9 +167,9 @@ export function useTranscriptionService(mode?: TranscriptionMode) {
         GLOBAL_STATE.isInitialized = true
       }
     } else {
-      // Stop transcription logic
+      // Stop transcription logic - Fix: Use modeRef.current instead of mode
       if (GLOBAL_STATE.isInitialized) {
-        if (mode === 'browser') {
+        if (modeRef.current === 'browser') {
           stopTranscriptionBrowser()
         } else {
           stopTranscriptionScreenpipe()
