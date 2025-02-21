@@ -25,10 +25,12 @@ export function HistorySidebar() {
     const [todayItems, setTodayItems] = useState<HistoryItem[]>([]);
     const [yesterdayItems, setYesterdayItems] = useState<HistoryItem[]>([]);
     const [previous7DaysItems, setPrevious7DaysItems] = useState<HistoryItem[]>([]);
+    const [searchQuery, setSearchQuery] = useState("");
 
     useEffect(() => {
         const fetchHistory = async () => {
             const history = await listHistory();
+            history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
             const today = new Date();
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
@@ -63,13 +65,24 @@ export function HistorySidebar() {
         window.location.reload();
     };
 
+    const handleNewChat = () => {
+        localStorage.removeItem('historyId');
+        location.reload();
+    };
+    const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(event.target.value);
+    };
+    const filterItems = (items: HistoryItem[]) => {
+        return items.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    };
+
     const renderHistoryItems = (items: HistoryItem[]) => (
-        items.map(item => (
+        filterItems(items).map(item => (
             <SidebarMenuItem key={item.id}>
                 <SidebarMenuButton asChild>
-                    <div>
-                        <a href="#" onClick={() => handleHistoryClick(item.id)}>
-                            <span>{item.title}</span>
+                    <div className="p-1">
+                        <a className="" href="#" onClick={() => handleHistoryClick(item.id)}>
+                            <span>{item.title.substring(0, 30)}...</span>
                         </a>
                         <Trash2
                             className="absolute right-0 ml-2 cursor-pointer"
@@ -84,13 +97,13 @@ export function HistorySidebar() {
     return (
         <Sidebar>
             <SidebarHeader>
-                <SearchForm />
+                <SearchForm onChange={handleSearchChange} />
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
                     <SidebarGroupLabel>Today</SidebarGroupLabel>
-                    <SidebarGroupAction title="Add Project">
-                        <Plus /> <span className="sr-only">Add Project</span>
+                    <SidebarGroupAction title="New Chat" onClick={handleNewChat} >
+                        <Plus /> <span className="sr-only">New Chat</span>
                     </SidebarGroupAction>
                     <SidebarGroupContent>
                         <SidebarMenu>

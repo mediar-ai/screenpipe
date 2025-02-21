@@ -54,15 +54,19 @@ export const saveHistory = async (updated: HistoryItem[]): Promise<void> => {
         if (fs.existsSync(HISTORY_FILE_PATH)) {
             const data = fs.readFileSync(HISTORY_FILE_PATH, 'utf-8');
             history = JSON.parse(data);
+        } else {
+            const dir = path.dirname(HISTORY_FILE_PATH);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(HISTORY_FILE_PATH, JSON.stringify([]));
         }
 
         updated.forEach((updatedItem) => {
             const existingItemIndex = history.findIndex(item => item.id === updatedItem.id);
             if (existingItemIndex !== -1) {
-                // Append messages to the existing history item
                 history[existingItemIndex].messages.push(...updatedItem.messages);
             } else {
-                // Add new history item
                 history.push(updatedItem);
             }
         });

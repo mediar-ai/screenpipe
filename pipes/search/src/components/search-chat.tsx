@@ -75,7 +75,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { SqlAutocompleteInput } from "@/components/sql-autocomplete-input";
-import { cn, removeDuplicateSelections } from "@/lib/utils";
+import { cn, removeDuplicateSelections, generateTitle } from "@/lib/utils";
 import {
     ExampleSearch,
     ExampleSearchCards,
@@ -505,6 +505,7 @@ export function SearchChat() {
         setContentType(newContentType);
         setStartDate(newStartDate);
         setShowExamples(false);
+        const title = await generateTitle(example.query);
 
         handleSearch(0, {
             windowName: newWindowName,
@@ -817,7 +818,7 @@ export function SearchChat() {
                 const history = await loadHistory(historyId);
                 historyItem = history[0] || {
                     id: historyId,
-                    title: floatingInput,
+                    title: await generateTitle(floatingInput, settings),
                     query: floatingInput,
                     timestamp: new Date().toISOString(),
                     searchParams: {
@@ -839,7 +840,7 @@ export function SearchChat() {
             } else {
                 historyItem = {
                     id: uuidv4(),
-                    title: floatingInput,
+                    title: await generateTitle(floatingInput, settings),
                     query: floatingInput,
                     timestamp: new Date().toISOString(),
                     searchParams: {
@@ -876,10 +877,8 @@ export function SearchChat() {
                 content: fullResponse,
                 timestamp: new Date().toISOString(),
             });
-            console.log("updated item, from frontend : ", [historyItem])
 
-            const res = await saveHistory([historyItem]);
-            console.log("res for saveHistory ", res)
+            await saveHistory([historyItem]);
         } catch (error: any) {
             if (error.toString().includes("unauthorized")) {
                 toast({
