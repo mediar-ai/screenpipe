@@ -11,11 +11,8 @@ import {
   ArrowUpCircle,
   Download,
   Loader2,
-  Power,
-  Puzzle,
-  UserIcon,
+  UserIcon
 } from "lucide-react";
-import posthog from "posthog-js";
 import React, { useEffect, useState } from "react";
 import { useLoginCheck } from "../login-dialog";
 import { BuildStatus, PipeState, PipeWithStatus } from "./types";
@@ -23,6 +20,80 @@ import { BuildStatus, PipeState, PipeWithStatus } from "./types";
 interface PipeCardProps {
   pipeProp: PipeWithStatus;
   onClick: (pipe: PipeWithStatus) => void;
+}
+interface PipeButtonProps {
+  pipe: PipeWithStatus;
+  state: PipeState;
+  handleTogglePipe: (pipe: PipeWithStatus) => void;
+  handleOpenWindow: (e: React.MouseEvent) => void;
+  handlePurchasePipe: (pipe: PipeWithStatus) => void;
+  handleInstallPipe: (pipe: PipeWithStatus) => void;
+  settings: { user?: { email?: string } };
+}
+
+function PipeButton({ pipe, state, handleTogglePipe, handleOpenWindow, handlePurchasePipe, handleInstallPipe, settings }: PipeButtonProps) {
+  const renderButton = () => {
+    switch (state) {
+      case "installing":
+        return (
+          <Button size="sm" variant="outline" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Installing
+          </Button>
+        );
+      case "loading":
+        return (
+          <Button size="sm" variant="outline" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading
+          </Button>
+        );
+      case "purchasing":
+        return (
+          <Button size="sm" variant="outline" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Purchasing
+          </Button>
+        );
+      case "building":
+        return (
+          <Button size="sm" variant="outline" disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Building
+          </Button>
+        );
+      default:
+        if (pipe.is_paid && !pipe.has_purchased) {
+          return (
+            <Button
+              size="sm"
+              variant={pipe.is_paid ? "default" : "outline"}
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePurchasePipe(pipe);
+              }}
+            >
+              {`$${pipe.price}`}
+            </Button>
+          )
+        } else {
+          return (
+            <Button
+              size="sm"
+              variant={pipe.is_paid ? "default" : "outline"}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleInstallPipe(pipe);
+              }}
+            >
+              <Download className="h-3.5 w-3.5 mr-2" /> Get
+            </Button >
+          )
+        }
+    }
+  };
+
+  return <div className="flex items-center gap-2 isolate">{renderButton()}</div>;
 }
 
 
@@ -274,105 +345,17 @@ const PipeCardComponent: React.FC<PipeCardProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 isolate">
-            {pipe.is_installed ? (
-              <>
-                {state === "building" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled
-                    className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
-                  >
-                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
-                    building...
-                  </Button>
-                ) : state === "build_error" ? (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTogglePipe(pipe);
-                    }}
-                    className="font-medium no-card-hover"
-                    disabled={state === "build_error"}
-                  >
-                    <ArrowUpCircle className="h-3.5 w-3.5 mr-2" />
-                    retry build
-                  </Button>
-                ) : state === "disabled" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTogglePipe(pipe);
-                    }}
-                    className="hover:bg-muted font-medium relative hover:!bg-muted no-card-hover"
-                    disabled={state !== "disabled" && state === "loading"}
-                  >
-                    <Power className="h-3.5 w-3.5 mr-2" />
-                    enable
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleOpenWindow}
-                    className="hover:bg-muted font-medium relative no-card-hover"
-                    disabled={
-                      pipe.installed_config?.buildStatus &&
-                      pipe.installed_config?.buildStatus === "not_started"
-                    }
-                  >
-                    {pipe.installed_config?.buildStatus === "not_started" ? (
-                      <>wait for app to start building</>
-                    ) : (
-                      <>
-                        <Puzzle className="h-3.5 w-3.5 mr-2" />
-                        open
-                      </>
-                    )}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Button
-                size="sm"
-                variant={pipe.is_paid ? "default" : "outline"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (pipe.is_paid && !pipe.has_purchased) {
-                    handlePurchasePipe(pipe);
-                    posthog.capture("pipe_purchase", {
-                      pipe_id: pipe.id,
-                      email: settings.user?.email,
-                    });
-                  } else {
-                    handleInstallPipe(pipe);
-                    posthog.capture("pipe_install", {
-                      pipe_id: pipe.id,
-                      email: settings.user?.email,
-                    });
-                  }
-                }}
-                className="font-medium no-card-hover"
-                disabled={state === "purchasing" || state === "enabling"}
-              >
-                {state == "purchasing" ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  </>
-                ) : pipe.is_paid && !pipe.has_purchased ? (
-                  `$${pipe.price}`
-                ) : (
-                  <>
-                    <Download className="h-3.5 w-3.5 mr-2" />
-                    get
-                  </>
-                )}
-              </Button>
-            )}
+            {
+              <PipeButton
+                state={state}
+                pipe={pipe}
+                handleInstallPipe={handleInstallPipe}
+                handleOpenWindow={handleOpenWindow}
+                handlePurchasePipe={handlePurchasePipe}
+                handleTogglePipe={handleTogglePipe}
+                settings={settings}
+              />
+            }
           </div>
         </div>
         {pipe.developer_accounts.developer_name && (
