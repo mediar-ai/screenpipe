@@ -372,3 +372,94 @@ The `screenpipe` CLI supports generating shell completions for popular shells. F
 
 
 </MotionDiv> 
+
+<MotionDiv delay={0.5}>
+
+---
+# Environment Variables Usage
+The behavior of screenpipe can be controlled via the following environment variables:
+
+## 1. SCREENPIPE_LOG
+ 
+Configure logging levels for various modules. Accepts a comma-separated list of directives in one of two forms:  
+• Global log level (e.g., `"info"`)  
+• Module-specific level (e.g., `"screenpipe=debug"`)
+
+**Log Levels (Most to Least Verbose):**  
+• trace  
+• debug  
+• info  
+• warn  
+• error
+
+**Modules that can be configured:**  
+• screenpipe  
+• tokenizers  
+• rusty_tesseract  
+• symphonia  
+• hf_hub
+
+**Examples:**
+
+*Linux/macOS:*
+    
+    $ export SCREENPIPE_LOG="info"
+    $ export SCREENPIPE_LOG="screenpipe=debug,tokenizers=error,rusty_tesseract=warn"
+
+*Windows (PowerShell):*
+    
+    > $env:SCREENPIPE_LOG = "screenpipe=debug,tokenizers=error,rusty_tesseract=warn"
+
+*Windows (Command Prompt):*
+    
+    > set SCREENPIPE_LOG=screenpipe=debug,tokenizers=error,rusty_tesseract=warn
+
+---
+
+## 2. SAVE_RESOURCE_USAGE
+
+**Description:**  
+When set, screenpipe logs resource usage data to a timestamped JSON file. This feature is useful for performance monitoring and debugging.
+The JSON file will be saved in your Home directory.
+
+**Usage Examples:**
+
+*Linux/macOS:*
+    
+    $ export SAVE_RESOURCE_USAGE=true
+    $ screenpipe
+    # Expected output (example):
+    # INFO screenpipe_server::resource_monitor: Resource usage data saved to resource_usage_20250221_123834.json
+
+*Windows (PowerShell):*
+    
+    > $env:SAVE_RESOURCE_USAGE = "true"
+    > screenpipe.exe
+
+*Windows (Command Prompt):*
+    
+    > set SAVE_RESOURCE_USAGE=true
+    > screenpipe.exe
+
+---
+
+## 3. HF_ENDPOINT
+
+**Description:**  
+Configures an alternate endpoint for downloading models from Hugging Face. Useful if you require a mirror (for example, when access is restricted).
+
+**Usage Examples:**
+
+*Linux/macOS:*
+    
+    $ export HF_ENDPOINT=https://hf-mirror.com
+
+*Windows (PowerShell):*
+    
+    > $env:HF_ENDPOINT = "https://hf-mirror.com"
+
+*Windows (Command Prompt):*
+    
+    > set HF_ENDPOINT=https://hf-mirror.com
+
+</MotionDiv>
