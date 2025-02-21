@@ -49,6 +49,7 @@ let suggestionJob: any = null;
 export async function runBot(
   settings: Settings,
   cookies: CookieParam[],
+  frequency: number,
   prompt: string,
 ): Promise<boolean> {
   await stopBot();
@@ -69,7 +70,7 @@ export async function runBot(
 
   browser = await puppeteer.connect({ browserWSEndpoint });
 
-  launchProcesses(cookies, prompt, model);
+  launchProcesses(cookies, frequency, prompt, model);
 
   return true;
 }
@@ -109,46 +110,9 @@ export async function stopBot(): Promise<void> {
   }
 }
 
-export async function postReply(
-  cookies: CookieParam[],
-  suggestion: Suggestion,
-): Promise<boolean> {
-  if (!browser || !browser.isConnected()) {
-    await stopBot();
-    return false;
-  }
-
-  const page = await browser.newPage();
-  pages.push(page);
-
-  try {
-    await page.setCookie(...cookies);
-
-    const url = `https://x.com/${suggestion.handle}/status/${suggestion.tweetId}`;
-    console.log(`Replying to ${url}...`);
-    await page.goto(url, { waitUntil: "networkidle2" });
-
-    await page.waitForSelector('div[role="textbox"]', { visible: true });
-    await page.click('div[role="textbox"]');
-    await page.type('div[role="textbox"]', suggestion.reply, { delay: 15 });
-
-    await page.waitForSelector('button[data-testid="tweetButtonInline"]', {
-      visible: true,
-    });
-    await page.click('button[data-testid="tweetButtonInline"]');
-
-    console.log("Reply posted.");
-    await page.close();
-    return true;
-  } catch (e) {
-    console.error("Error posting reply:", e);
-    if (!page.isClosed()) await page.close();
-    return false;
-  }
-}
-
 async function launchProcesses(
   cookies: CookieParam[],
+  frequency: number,
   prompt: string,
   model: LanguageModel,
 ): Promise<void> {
@@ -159,13 +123,18 @@ async function launchProcesses(
   ]);
   await Promise.all([summaryProcess(model), suggestionProcess(prompt, model)]);
 
-  profileJob = cron.schedule("*/30 * * * *", () =>
+  const interval = 5 - frequency + 1;
+  profileJob = cron.schedule(`*/${10 * interval} * * * *`, () =>
     profileProcess(cookies, model),
   );
-  ocrJob = cron.schedule("*/2 * * * *", () => ocrProcess(model));
-  timelineJob = cron.schedule("*/2 * * * *", () => timelineProcess(cookies));
-  summaryJob = cron.schedule("*/5 * * * *", () => summaryProcess(model));
-  suggestionJob = cron.schedule("*/5 * * * *", () =>
+  ocrJob = cron.schedule(`*/${2 * interval} * * * *`, () => ocrProcess(model));
+  timelineJob = cron.schedule(`*/${2 * interval} * * * *`, () =>
+    timelineProcess(cookies),
+  );
+  summaryJob = cron.schedule(`*/${5 * interval} * * * *`, () =>
+    summaryProcess(model),
+  );
+  suggestionJob = cron.schedule(`*/${5 * interval} * * * *`, () =>
     suggestionProcess(prompt, model),
   );
 }

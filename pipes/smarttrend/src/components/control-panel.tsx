@@ -14,6 +14,7 @@ interface Props {
   isConnected: boolean;
   isRunning: boolean;
   setIsRunning: (isRunning: boolean) => void;
+  frequency: number;
   prompt: string;
 }
 
@@ -22,12 +23,13 @@ export function ControlPanel({
   isConnected,
   isRunning,
   setIsRunning,
+  frequency,
   prompt,
 }: Props) {
   const { settings } = useSettings();
 
   const start = async () => {
-    const success = await runBot(settings, cookies, prompt);
+    const success = await runBot(settings, cookies, frequency, prompt);
     if (success) {
       setIsRunning(true);
     }
@@ -41,8 +43,8 @@ export function ControlPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-center font-bold">
-          Control Panel
+        <CardTitle>
+          <h2 className="text-lg text-center font-bold">Control Panel</h2>
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -7,7 +7,8 @@ import { Separator } from "@/components/ui/separator";
 import { TwitterTweetEmbed } from "react-twitter-embed";
 import TextareaAutosize from "react-textarea-autosize";
 import * as store from "@/lib/store";
-import { postReply, type Suggestion } from "@/lib/actions/run-bot";
+import { postReply } from "@/lib/actions/post-reply";
+import type { Suggestion } from "@/lib/actions/run-bot";
 import type { CookieParam } from "puppeteer-core";
 
 interface Props {
@@ -96,7 +97,7 @@ export function SuggestionList({ cookies, isConnected, isRunning }: Props) {
                   variant="outline"
                   size="lg"
                   className="text-base h-12"
-                  disabled={!isConnected || !isRunning}
+                  disabled={!isConnected}
                   onClick={() => post(i)}
                 >
                   <IconShare />

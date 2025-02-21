@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { ConnectionPanel } from "@/components/connection-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { Status } from "@/components/status";
+import { FrequencySlider } from "@/components/frequency-slider";
 import { PromptInput } from "@/components/prompt-input";
 import { SuggestionList } from "@/components/suggestion-list";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +15,7 @@ import type { CookieParam } from "puppeteer-core";
 export default function Page() {
   const [cookies, setCookies] = useState<CookieParam[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [frequency, setFrequency] = useState<number>(5);
   const [prompt, setPrompt] = useState<string>("");
   const { toast } = useToast();
 
@@ -61,9 +63,16 @@ export default function Page() {
             isConnected={isConnected}
             isRunning={isRunning}
             setIsRunning={setIsRunning}
+            frequency={frequency}
             prompt={prompt}
           />
           {isRunning && <Status />}
+          {!isRunning && (
+            <FrequencySlider
+              frequency={frequency}
+              setFrequency={setFrequency}
+            />
+          )}
           {!isRunning && <PromptInput prompt={prompt} setPrompt={setPrompt} />}
         </div>
         <SuggestionList

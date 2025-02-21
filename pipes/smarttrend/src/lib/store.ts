@@ -39,12 +39,23 @@ export async function putCookies(cookies: CookieParam[]) {
 }
 
 export async function getPrompt(): Promise<string> {
-  const data = getData("prompt.json");
-  return data ? data.prompt : DEFAULT_PROMPT;
+  const config = getData("config.json") || {};
+  return config.prompt ? config.prompt : DEFAULT_PROMPT;
 }
 
 export async function putPrompt(prompt: string) {
-  putData("prompt.json", { prompt });
+  const config = getData("config.json") || {};
+  putData("config.json", { ...config, prompt });
+}
+
+export async function getFrequency(): Promise<number> {
+  const config = getData("config.json") || {};
+  return config.frequency ? config.frequency : 5;
+}
+
+export async function putFrequency(frequency: number) {
+  const config = getData("config.json") || {};
+  putData("config.json", { ...config, frequency });
 }
 
 export async function getSummaries(): Promise<string[]> {

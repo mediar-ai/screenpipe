@@ -38,8 +38,10 @@ export function ConnectionPanel({ setCookies, isConnected }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-center font-bold">
-          Authenticate Twitter
+        <CardTitle>
+          <h2 className="text-lg text-center font-bold">
+            Authenticate Twitter
+          </h2>
         </CardTitle>
       </CardHeader>
       <CardContent>
