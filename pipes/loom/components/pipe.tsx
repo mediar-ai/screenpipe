@@ -37,62 +37,6 @@ const Pipe: React.FC = () => {
     setEndTime(now);
   };
   
-  const getMaxLimit = async () => {
-    try {
-      const startTimeStr = startTime.toISOString();
-      const endTimeStr = endTime.toISOString();
-      const results = await pipe.queryScreenpipe({
-        contentType: "all",
-        offset: 0,
-        limit: 30,
-        minLength: 50,
-        maxLength: 10000,
-        startTime: startTimeStr,
-        endTime: endTimeStr,
-      })
-      return results?.pagination.total;
-    } catch (error: any) {
-      console.log("failed to get max limit", error.message)
-      toast({
-        title: "error",
-        variant: "destructive",
-        description: `something went wrong: ${error.message}`,
-      });
-      return;
-    }
-  } 
-
-  const fetchContent = async (
-    startTime: string,
-    endTime: string,
-    contentType: 'ocr' | 'audio' | 'all' | 'ui'
-  ) => {
-    try {
-      const limit = await getMaxLimit()
-      const response = await pipe.queryScreenpipe({
-        offset: 0,
-        minLength: 50,
-        maxLength: 200,
-        limit: limit,
-        contentType: contentType,
-        startTime: startTime,
-        endTime: endTime,
-      })
-      const filePaths = response?.data.map((item: ContentItem) => item.content.filePath);
-      const uniqueFilePaths = [...new Set(filePaths)];
-      setRawData(response?.data);
-      return uniqueFilePaths;
-    } catch (e :any) {
-      toast({
-        title: "error",
-        variant: "destructive",
-        description: `failed to fetch media: ${e.message}`,
-        duration: 3000,
-      });
-      return;
-    }
-  };
-
   const mergeContent = async (contents: string[], type: 'video' | 'audio') => {
     const mergeContentPaths = [...new Set([...contents])];
     const mergePayload = { 
@@ -134,19 +78,36 @@ const Pipe: React.FC = () => {
       const startTimeStr = startTime.toISOString();
       const endTimeStr = endTime.toISOString();
 
-      const videoPaths = await fetchContent(startTimeStr, endTimeStr, type) as string[];
-      console.log("Video Paths", videoPaths)
-      if (videoPaths.length < 2) {
-        toast({
-          title: "insufficient content",
-          variant: "default",
-          description: "insufficient media contents in that time period, please try again!",
-        });
+      try {
+        const response = await pipe.queryScreenpipe({
+          offset: 0,
+          limit: 10000000, // limit is fucking annoying
+          contentType: type,
+          startTime: startTimeStr,
+          endTime: endTimeStr,
+        })
+        const filePaths = response?.data.map((item: ContentItem) => item.content.filePath);
+        const uniqueFilePaths = [...new Set(filePaths)];
+        setRawData(response?.data);
+        if (uniqueFilePaths.length < 2) {
+          toast({
+            title: "insufficient content",
+            variant: "default",
+            description: "insufficient media contents in that time period, please try again!",
+          });
+          setIsMerging(false);
+          return;
+        }
+        await mergeContent(uniqueFilePaths, 'video');
         setIsMerging(false);
-        return;
+      } catch (e :any) {
+        toast({
+          title: "error",
+          variant: "destructive",
+          description: `failed to fetch media: ${e.message}`,
+          duration: 3000,
+        });
       }
-      await mergeContent(videoPaths, 'video');
-      setIsMerging(false);
     } catch (error :any) {
       console.error('error merging videos:', error);
       toast({
@@ -175,14 +136,6 @@ const Pipe: React.FC = () => {
       </div>
 
       <div className="flex mt-8 space-x-2 justify-center">
-        <Badge
-          variant="outline"
-          className="cursor-pointer hover:bg-secondary"
-          onClick={() => handleQuickTimeFilter(15)}
-        >
-          <Clock className="mr-2 h-4 w-4" />
-          last 15m
-        </Badge>
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -215,6 +168,14 @@ const Pipe: React.FC = () => {
           <Clock className="mr-2 h-4 w-4" />
           last 24h
         </Badge>
+        <Badge
+          variant="outline"
+          className="cursor-pointer hover:bg-secondary"
+          onClick={() => handleQuickTimeFilter(24 * 60 * 7)}
+        >
+          <Clock className="mr-2 h-4 w-4" />
+          last 7 days
+        </Badge>
       </div>
       <TooltipProvider>
         <Tooltip>
@@ -236,19 +197,19 @@ const Pipe: React.FC = () => {
               </Button>
             </span>
           </TooltipTrigger>
-          {(aiDisabled || isServerDown || !isAvailable) && (
+          {(aiDisabled || isServerDown || isAvailable) && (
             <TooltipContent>
               <p>{`${
-                (aiDisabled && isServerDown) || !isAvailable
-                  ? "you don't have access of screenpipe-cloud and screenpipe is down!"
-                  : isServerDown
-                  ? "screenpipe is not running..."
-                  : aiDisabled
-                  ? "you don't have access to screenpipe-cloud :( please consider login"
-                  : !isAvailable
-                  ? { error }
-                  : ""
-              }
+                  (aiDisabled && isServerDown) || isAvailable
+                    ? "you don't have access of screenpipe-cloud and screenpipe is down!"
+                    : isServerDown
+                    ? "screenpipe is not running..."
+                    : aiDisabled
+                    ? "you don't have access to screenpipe-cloud :( please consider login"
+                    : isAvailable
+                    ? { error }
+                    : ""
+                }
               `}</p>
             </TooltipContent>
           )}

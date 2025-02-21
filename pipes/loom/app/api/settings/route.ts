@@ -1,46 +1,53 @@
+import path from "path";
+import { promises as fs } from "fs";
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
-import type { Settings } from "@screenpipe/js";
 
 export const runtime = "nodejs";
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-  };
-
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
       throw new Error("settingsManager not found");
     }
-    const rawSettings = await settingsManager.getAll();
-    return NextResponse.json(rawSettings);
+
+    const screenpipeDir = process.env.SCREENPIPE_DIR || process.cwd();
+    const settingsPath = path.join(
+      screenpipeDir,
+      "pipes",
+      "loom",
+      "pipe.json"
+    );
+
+    try {
+      const settingsContent = await fs.readFile(settingsPath, "utf8");
+      const persistedSettings = JSON.parse(settingsContent);
+
+      // Merge with current settings
+      const rawSettings = await settingsManager.getAll();
+      return NextResponse.json({
+        ...rawSettings,
+        customSettings: {
+          ...rawSettings.customSettings,
+          loom: {
+            ...(rawSettings.customSettings?.loom || {}),
+            ...persistedSettings,
+          },
+        },
+      });
+    } catch (err) {
+      // If no persisted settings, return normal settings
+      const rawSettings = await settingsManager.getAll();
+      return NextResponse.json(rawSettings);
+    }
   } catch (error) {
     console.error("failed to get settings:", error);
-    return NextResponse.json(defaultSettings);
+    return NextResponse.json(
+      { error: "failed to get settings" },
+      { status: 500 }
+    );
   }
 }
 
@@ -52,18 +59,37 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { key, value, isPartialUpdate, reset } = body;
+    const { key, value, isPartialUpdate, reset, namespace } = body;
 
     if (reset) {
-      if (key) {
-        await settingsManager.resetKey(key);
+      if (namespace) {
+        if (key) {
+          await settingsManager.setCustomSetting(namespace, key, undefined);
+        } else {
+          await settingsManager.updateNamespaceSettings(namespace, {});
+        }
       } else {
-        await settingsManager.reset();
+        if (key) {
+          await settingsManager.resetKey(key);
+        } else {
+          await settingsManager.reset();
+        }
       }
       return NextResponse.json({ success: true });
     }
 
-    if (isPartialUpdate) {
+    if (namespace) {
+      if (isPartialUpdate) {
+        const currentSettings =
+          (await settingsManager.getNamespaceSettings(namespace)) || {};
+        await settingsManager.updateNamespaceSettings(namespace, {
+          ...currentSettings,
+          ...value,
+        });
+      } else {
+        await settingsManager.setCustomSetting(namespace, key, value);
+      }
+    } else if (isPartialUpdate) {
       const serializedSettings = JSON.parse(JSON.stringify(value));
       await settingsManager.update(serializedSettings);
     } else {
