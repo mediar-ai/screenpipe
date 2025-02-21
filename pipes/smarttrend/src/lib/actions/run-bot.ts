@@ -37,7 +37,8 @@ export interface Suggestion {
 }
 
 let browser: Browser | null = null;
-let pages: Page[] = [];
+let profilePage: Page | null = null;
+let timelinePage: Page | null = null;
 
 let profileJob: any = null;
 let ocrJob: any = null;
@@ -94,11 +95,15 @@ export async function stopBot(): Promise<void> {
     suggestionJob.stop();
     suggestionJob = null;
   }
-  if (browser) {
-    await Promise.all(
-      pages.filter((page) => !page.isClosed()).map((page) => page.close()),
-    );
-    pages.length = 0;
+  if (profilePage && !profilePage.isClosed()) {
+    await profilePage.close();
+    profilePage = null;
+  }
+  if (timelinePage && !timelinePage.isClosed()) {
+    await timelinePage.close();
+    timelinePage = null;
+  }
+  if (browser && browser.isConnected()) {
     await browser.disconnect();
     browser = null;
   }
@@ -108,7 +113,7 @@ export async function postReply(
   cookies: CookieParam[],
   suggestion: Suggestion,
 ): Promise<boolean> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return false;
   }
@@ -170,41 +175,41 @@ async function profileProcess(
   model: LanguageModel,
   scrollLimit: number = 10,
 ): Promise<void> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
   }
 
   eventEmitter.emit("updateProgress", { process: 0, value: 0 });
 
-  const page = await browser.newPage();
-  pages.push(page);
+  if (!profilePage || profilePage.isClosed())
+    profilePage = await browser.newPage();
 
   try {
-    await page.setCookie(...cookies);
-    await page.goto("https://x.com/home", { waitUntil: "networkidle2" });
+    await profilePage.setCookie(...cookies);
+    await profilePage.goto("https://x.com/home", { waitUntil: "networkidle2" });
 
     console.log("Navigating to profile...");
-    await page.waitForSelector('a[aria-label="Profile"]');
+    await profilePage.waitForSelector('a[aria-label="Profile"]');
 
-    const profileUrl = await page.evaluate(() => {
+    const profileUrl = await profilePage.evaluate(() => {
       const profileLink: HTMLLinkElement | null = document.querySelector(
         'a[aria-label="Profile"]',
       );
       return profileLink ? profileLink.href : null;
     });
 
-    await page.goto(`${profileUrl}/with_replies`, {
+    await profilePage.goto(`${profileUrl}/with_replies`, {
       waitUntil: "networkidle2",
     });
 
-    await page.waitForSelector('div[data-testid="UserName"]', {
+    await profilePage.waitForSelector('div[data-testid="UserName"]', {
       visible: true,
     });
 
     console.log("Extracting profile data...");
 
-    const profileData = await page.evaluate(() => {
+    const profileData = await profilePage.evaluate(() => {
       const nameElement: HTMLSpanElement | null = document.querySelector(
         'div[data-testid="UserName"] span',
       );
@@ -231,7 +236,7 @@ async function profileProcess(
       console.log(`Scrolling... (${i + 1}/${scrollLimit})`);
 
       // Extract tweets on the current view
-      const newTweets = await scrapeTweets(page);
+      const newTweets = await scrapeTweets(profilePage);
       newTweets.forEach((tweet) => tweets.add(JSON.stringify(tweet)));
 
       eventEmitter.emit("updateProgress", {
@@ -240,7 +245,7 @@ async function profileProcess(
       });
 
       // Scroll down and wait for new content to load
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await profilePage.evaluate(() => window.scrollBy(0, window.innerHeight));
       await new Promise((resolve) =>
         setTimeout(resolve, 500 + Math.random() * 500),
       );
@@ -300,14 +305,13 @@ ${JSON.stringify(tweetArray, null, 2)}
       });
   }
 
-  if (!page.isClosed()) await page.close();
   eventEmitter.emit("updateProgress", { process: 0, value: 100 });
 }
 
 let lastCheck: Date | null = null;
 
 async function ocrProcess(model: LanguageModel): Promise<void> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
   }
@@ -379,21 +383,23 @@ async function timelineProcess(
   cookies: CookieParam[],
   scrollLimit: number = 10,
 ): Promise<void> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
   }
 
   eventEmitter.emit("updateProgress", { process: 2, value: 0 });
 
-  const page = await browser.newPage();
-  pages.push(page);
+  if (!timelinePage || timelinePage.isClosed())
+    timelinePage = await browser.newPage();
 
   try {
-    await page.setCookie(...cookies);
-    await page.goto("https://x.com/home", { waitUntil: "networkidle2" });
+    await timelinePage.setCookie(...cookies);
+    await timelinePage.goto("https://x.com/home", {
+      waitUntil: "networkidle2",
+    });
 
-    await page.waitForSelector("article");
+    await timelinePage.waitForSelector("article");
     console.log("Extracting tweets...");
 
     let tweets = new Set<string>();
@@ -402,7 +408,7 @@ async function timelineProcess(
       console.log(`Scrolling... (${i + 1}/${scrollLimit})`);
 
       // Extract tweets on the current view
-      const newTweets = await scrapeTweets(page);
+      const newTweets = await scrapeTweets(timelinePage);
       newTweets.forEach((tweet) => tweets.add(JSON.stringify(tweet)));
 
       eventEmitter.emit("updateProgress", {
@@ -411,7 +417,7 @@ async function timelineProcess(
       });
 
       // Scroll down and wait for new content to load
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await timelinePage.evaluate(() => window.scrollBy(0, window.innerHeight));
       await new Promise((resolve) =>
         setTimeout(resolve, 500 + Math.random() * 500),
       );
@@ -433,12 +439,11 @@ async function timelineProcess(
       });
   }
 
-  if (!page.isClosed()) await page.close();
   eventEmitter.emit("updateProgress", { process: 2, value: 100 });
 }
 
 async function summaryProcess(model: LanguageModel): Promise<void> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
   }
@@ -502,7 +507,7 @@ async function suggestionProcess(
   prompt: string,
   model: LanguageModel,
 ): Promise<void> {
-  if (!browser || !browser.connected) {
+  if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
   }
