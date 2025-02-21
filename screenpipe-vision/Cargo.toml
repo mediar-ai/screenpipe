@@ -101,7 +101,7 @@ windows = { version = "0.58", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-cidre = { git = "https://github.com/yury/cidre.git", version = "0.6.0" }
+cidre = { git = "https://github.com/yury/cidre.git" } # idk why cant pin version / rev 
 accessibility-sys = "0.1.3"
 core-foundation = "0.9.4"
 url = "2.5.0"
