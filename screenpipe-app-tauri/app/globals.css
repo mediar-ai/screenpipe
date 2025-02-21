@@ -114,6 +114,12 @@
   }
 }
 
+@layer utilities {
+  .no-select {
+    user-select: none;
+  }
+}
+
 .pf-v6-c-text-input-group__text-input {
   overflow: hidden;
     text-overflow: ellipsis;
@@ -128,6 +134,7 @@
   padding-left: 38px!important;
   padding-right: 16px!important;
   padding-top: 8px!important;
+  user-select: none;
 }
 .pf-v6-c-text-input-group__text-input::placeholder {
   padding-left: 20px!important;
@@ -139,4 +146,11 @@
   position: absolute!important;
 }
 
+div, p, span {
+  user-select: none;
+}
+
+.selectable {
+  user-select: text;
+}
 
