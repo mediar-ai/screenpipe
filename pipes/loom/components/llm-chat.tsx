@@ -31,7 +31,7 @@ interface Data {
 }
 
 interface LLMChatProps {
-  data: Data[];
+  data: Data[] | undefined;
   className?: string;
 }
 

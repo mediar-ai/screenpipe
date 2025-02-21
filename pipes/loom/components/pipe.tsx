@@ -3,7 +3,8 @@ import { useToast } from "@/lib/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { LLMChat } from "@/components/llm-chat";
 import { Button } from '@/components/ui/button';
-import React, { useEffect, useState} from 'react';
+import { pipe, ContentItem } from "@screenpipe/browser"
+import React, { useState} from 'react';
 import { DateTimePicker } from './date-time-picker';
 import { VideoComponent } from "@/components/video-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
@@ -18,7 +19,7 @@ import { useSettings } from "@/lib/hooks/use-settings";
 
 const Pipe: React.FC = () => {
   const { toast } = useToast();
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<any[] | undefined>([]);
   const [endTime, setEndTime] = useState<Date>(new Date());
   const [isMerging, setIsMerging] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<Date>(new Date());
@@ -40,19 +41,22 @@ const Pipe: React.FC = () => {
     try {
       const startTimeStr = startTime.toISOString();
       const endTimeStr = endTime.toISOString();
-      const response = await fetch(`http://localhost:3030/search?content_type=all&limit=30&offset=0&start_time=${startTimeStr}&end_time=${endTimeStr}&min_length=50&max_length=10000`)
-      console.log(`http://localhost:3030/search?content_type=all&limit=30&offset=0&start_time=${startTimeStr}&end_time=${endTimeStr}&min_length=50&max_length=10000`)
-      if (!response.ok) {
-        throw new Error(`http error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      return data.pagination.total;
+      const results = await pipe.queryScreenpipe({
+        contentType: "all",
+        offset: 0,
+        limit: 30,
+        minLength: 50,
+        maxLength: 10000,
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      })
+      return results?.pagination.total;
     } catch (error: any) {
+      console.log("failed to get max limit", error.message)
       toast({
         title: "error",
         variant: "destructive",
         description: `something went wrong: ${error.message}`,
-        duration: 3000,
       });
       return;
     }
@@ -65,15 +69,18 @@ const Pipe: React.FC = () => {
   ) => {
     try {
       const limit = await getMaxLimit()
-      const response = await fetch(`http://localhost:3030/search?q=&limit=${limit}&offset=0&content_type=${contentType}&start_time=${startTime}&end_time=${endTime}&min_length=50&max_length=200`);
-      if (!response.ok) {
-        throw new Error(`http error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      console.log("DATA", data)
-      const filePaths = data.data.map((item: any) => item.content.file_path);
+      const response = await pipe.queryScreenpipe({
+        offset: 0,
+        minLength: 50,
+        maxLength: 200,
+        limit: limit,
+        contentType: contentType,
+        startTime: startTime,
+        endTime: endTime,
+      })
+      const filePaths = response?.data.map((item: ContentItem) => item.content.filePath);
       const uniqueFilePaths = [...new Set(filePaths)];
-      setRawData(data.data);
+      setRawData(response?.data);
       return uniqueFilePaths;
     } catch (e :any) {
       toast({
@@ -132,7 +139,7 @@ const Pipe: React.FC = () => {
       if (videoPaths.length < 2) {
         toast({
           title: "insufficient content",
-          variant: "destructive",
+          variant: "default",
           description: "insufficient media contents in that time period, please try again!",
         });
         setIsMerging(false);

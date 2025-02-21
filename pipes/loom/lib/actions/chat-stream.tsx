@@ -1,6 +1,6 @@
 "use server";
 import { OpenAI } from "openai";
-import { type Settings } from "@screenpipe/browser"
+import { type Settings } from "@screenpipe/js"
 
 
 export async function createChatStream(
