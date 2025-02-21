@@ -755,7 +755,7 @@ async fn main() {
 
             // PostHog analytics setup
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
-            let interval_hours = 1;
+            let interval_hours = 6;
 
             let path = base_dir.join("store.bin");
             if !path.exists() {
