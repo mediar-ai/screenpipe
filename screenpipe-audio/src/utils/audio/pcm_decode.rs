@@ -1,8 +1,9 @@
 use symphonia::core::audio::{AudioBufferRef, Signal};
-use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::codecs::CODEC_TYPE_NULL;
 use symphonia::core::conv::FromSample;
 use tracing::debug;
 
+/// Converts audio samples from any supported format to f32
 fn conv<T>(samples: &mut Vec<f32>, data: std::borrow::Cow<symphonia::core::audio::AudioBuffer<T>>)
 where
     T: symphonia::core::sample::Sample,
@@ -11,56 +12,67 @@ where
     samples.extend(data.chan(0).iter().map(|v| f32::from_sample(*v)))
 }
 
+/// Decodes an audio file to PCM format (f32 samples)
+///
+/// # Arguments
+/// * `path` - Path to the audio file
+///
+/// # Returns
+/// * `Ok((Vec<f32>, u32))` - Tuple containing the PCM samples and sample rate
+/// * `Err(anyhow::Error)` - If decoding fails
+///
+/// # Errors
+/// Returns an error if:
+/// * The file cannot be opened
+/// * No supported audio tracks are found
+/// * Decoding fails
 pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32>, u32)> {
     debug!("Starting PCM decoding for {:?}", path.as_ref());
-    // Open the media source.
-    let src = std::fs::File::open(path)?;
 
-    // Create the media source stream.
+    let src = std::fs::File::open(&path)?;
     let mss = symphonia::core::io::MediaSourceStream::new(Box::new(src), Default::default());
 
-    // Create a probe hint using the file's extension. [Optional]
+    // Create a probe hint and use default options
     let hint = symphonia::core::probe::Hint::new();
-    // hint.with_extension("mp4");
+    let probed = symphonia::default::get_probe().format(
+        &hint,
+        mss,
+        &Default::default(),
+        &Default::default(),
+    )?;
 
-    // Use the default options for metadata and format readers.
-    let meta_opts: symphonia::core::meta::MetadataOptions = Default::default();
-    let fmt_opts: symphonia::core::formats::FormatOptions = Default::default();
-
-    // Probe the media source.
-    let probed = symphonia::default::get_probe().format(&hint, mss, &fmt_opts, &meta_opts)?;
-    // Get the instantiated format reader.
     let mut format = probed.format;
 
-    // Find the first audio track with a known (decodeable) codec.
+    // Find the first decodeable audio track
     let track = format
         .tracks()
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-        .ok_or_else(|| anyhow::anyhow!("no supported audio tracks"))?;
+        .ok_or_else(|| anyhow::anyhow!("no supported audio tracks found"))?;
 
-    // Use the default options for the decoder.
-    let dec_opts: DecoderOptions = Default::default();
-
-    // Create a decoder for the track.
     let mut decoder = symphonia::default::get_codecs()
-        .make(&track.codec_params, &dec_opts)
-        .expect("unsupported codec");
+        .make(&track.codec_params, &Default::default())
+        .map_err(|_| anyhow::anyhow!("unsupported codec"))?;
+
     let track_id = track.id;
-    let sample_rate = track.codec_params.sample_rate.unwrap_or(0);
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or_else(|| anyhow::anyhow!("could not determine sample rate"))?;
+
     let mut pcm_data = Vec::new();
     debug!("Starting decode loop");
-    // The decode loop.
+
     while let Ok(packet) = format.next_packet() {
-        // Consume any new metadata that has been read since the last packet.
+        // Skip metadata and packets from other tracks
         while !format.metadata().is_latest() {
             format.metadata().pop();
         }
-
-        // If the packet does not belong to the selected track, skip over it.
         if packet.track_id() != track_id {
             continue;
         }
+
+        // Decode the packet
         match decoder.decode(&packet)? {
             AudioBufferRef::F32(buf) => pcm_data.extend(buf.chan(0)),
             AudioBufferRef::U8(data) => conv(&mut pcm_data, data),
@@ -74,5 +86,6 @@ pub fn pcm_decode<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<(Vec<f32
             AudioBufferRef::F64(data) => conv(&mut pcm_data, data),
         }
     }
+
     Ok((pcm_data, sample_rate))
 }
