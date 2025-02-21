@@ -6,7 +6,6 @@ import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
 import {
   streamText,
-  generateObject,
   streamObject,
   TypeValidationError,
   type LanguageModel,
@@ -38,6 +37,8 @@ export interface Suggestion {
 }
 
 let browser: Browser | null = null;
+let pages: Page[] = [];
+
 let profileJob: any = null;
 let ocrJob: any = null;
 let timelineJob: any = null;
@@ -93,6 +94,10 @@ export async function stopBot(): Promise<void> {
     suggestionJob = null;
   }
   if (browser) {
+    await Promise.all(
+      pages.filter((page) => !page.isClosed()).map((page) => page.close()),
+    );
+    pages.length = 0;
     await browser.disconnect();
     browser = null;
   }
@@ -108,6 +113,7 @@ export async function postReply(
   }
 
   const page = await browser.newPage();
+  pages.push(page);
 
   try {
     await page.setCookie(...cookies);
@@ -130,7 +136,7 @@ export async function postReply(
     return true;
   } catch (e) {
     console.error("Error posting reply:", e);
-    await page.close();
+    if (!page.isClosed()) await page.close();
     return false;
   }
 }
@@ -168,6 +174,7 @@ async function profileProcess(
   eventEmitter.emit("updateProgress", { process: 0, value: 0 });
 
   const page = await browser.newPage();
+  pages.push(page);
 
   try {
     await page.setCookie(...cookies);
@@ -282,13 +289,14 @@ ${JSON.stringify(tweetArray, null, 2)}
     await store.pushSummary(summary);
   } catch (e) {
     console.error("Error in profile process:", e);
-    eventEmitter.emit("catchError", {
-      title: "Error analyzing profile.",
-      description: "Issue with AI model or browser instance.",
-    });
+    if (browser)
+      eventEmitter.emit("catchError", {
+        title: "Error analyzing profile.",
+        description: "Issue with AI model or browser instance.",
+      });
   }
 
-  await page.close();
+  if (!page.isClosed()) await page.close();
   eventEmitter.emit("updateProgress", { process: 0, value: 100 });
 }
 
@@ -320,10 +328,10 @@ You are an AI assistant analyzing OCR-extracted text to identify key insights, t
 ### **Instructions:**
 - Summarize the main topics detected in the extracted text.
 - Identify recurring themes or keywords and their context.
-- Determine if the content relates to a specific niche, such as technology, politics, finance, gaming, or another domain.  
-- Analyze tone and intent (e.g., is the text informative, promotional, opinion-based, or casual?).  
-- Extract any actionable insights, such as trending discussions, important facts, or engagement opportunities.  
-- If applicable, suggest relevant hashtags, mentions, or follow-up content based on the extracted text.  
+- Determine if the content relates to a specific niche, such as technology, politics, finance, gaming, or another domain.
+- Analyze tone and intent (e.g., is the text informative, promotional, opinion-based, or casual?).
+- Extract any actionable insights, such as trending discussions, important facts, or engagement opportunities.
+- If applicable, suggest relevant hashtags, mentions, or follow-up content based on the extracted text.
 
 ### **Extracted OCR Data**
 \`\`\`json
@@ -353,10 +361,11 @@ ${JSON.stringify(context, null, 2)}
     console.log("Analyzed OCR data.");
   } catch (e) {
     console.error("Error in OCR process:", e);
-    eventEmitter.emit("catchError", {
-      title: "Error analyzing OCR data.",
-      description: "AI model failed to generate a response.",
-    });
+    if (browser)
+      eventEmitter.emit("catchError", {
+        title: "Error analyzing OCR data.",
+        description: "AI model failed to generate a response.",
+      });
   }
 
   eventEmitter.emit("updateProgress", { process: 1, value: 100 });
@@ -374,6 +383,7 @@ async function timelineProcess(
   eventEmitter.emit("updateProgress", { process: 2, value: 0 });
 
   const page = await browser.newPage();
+  pages.push(page);
 
   try {
     await page.setCookie(...cookies);
@@ -412,14 +422,15 @@ async function timelineProcess(
     await store.pushTweets(tweetArray);
   } catch (e) {
     console.error("Error in timeline process:", e);
-    eventEmitter.emit("catchError", {
-      title: "Error reading timeline.",
-      description: "Could not access browser instance.",
-    });
+    if (browser)
+      eventEmitter.emit("catchError", {
+        title: "Error reading timeline.",
+        description: "Could not access browser instance.",
+      });
   }
 
+  if (!page.isClosed()) await page.close();
   eventEmitter.emit("updateProgress", { process: 2, value: 100 });
-  await page.close();
 }
 
 async function summaryProcess(model: LanguageModel): Promise<void> {
@@ -472,10 +483,11 @@ ${JSON.stringify(summaries, null, 2)}
     console.log("Summarized data.");
   } catch (e) {
     console.error("Error in summary process:", e);
-    eventEmitter.emit("catchError", {
-      title: "Error summarizing data.",
-      description: "AI model failed to generate a response.",
-    });
+    if (browser)
+      eventEmitter.emit("catchError", {
+        title: "Error summarizing data.",
+        description: "AI model failed to generate a response.",
+      });
   }
 
   eventEmitter.emit("updateProgress", { process: 3, value: 100 });
@@ -622,10 +634,11 @@ Return in the following JSON format:
     console.log("Created suggestions.");
   } catch (e) {
     console.error("Error in suggestion process:", e);
-    eventEmitter.emit("catchError", {
-      title: "Error creating suggestions.",
-      description: "AI model failed to generate a response.",
-    });
+    if (browser)
+      eventEmitter.emit("catchError", {
+        title: "Error creating suggestions.",
+        description: "AI model failed to generate a response.",
+      });
   }
 
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
@@ -707,8 +720,6 @@ async function scrapeTweets(page: Page): Promise<Tweet[]> {
     return Array.from(tweetElements).map((tweet) => {
       const textElement: HTMLDivElement | null =
         tweet.querySelector("div[lang]");
-      const linkElement: HTMLLinkElement | null =
-        tweet.querySelector("a[role='link']");
       const userElement: HTMLSpanElement | null = tweet.querySelector(
         "a[role='link'] span",
       );
@@ -728,7 +739,9 @@ async function scrapeTweets(page: Page): Promise<Tweet[]> {
           ? tweetLink.href.split("/status/")[1].split("/")[0]
           : null,
         text: textElement ? textElement.innerText : null,
-        handle: linkElement ? linkElement.href.split("/")[1] : null,
+        handle: tweetLink
+          ? tweetLink.href.split("/status/")[0].split("/").slice(-1)[0]
+          : null,
         username: userElement ? userElement.innerText : null,
         timestamp: timestampElement
           ? timestampElement.getAttribute("datetime")
