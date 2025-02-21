@@ -18,24 +18,8 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "connect-src 'self' " + 
-                "wss://api.deepgram.com " +
-                "https://api.deepgram.com " +
-                "wss://*.posthog.com " +
-                "https://*.posthog.com " +
-                "http://localhost:* " +
-                "ws://localhost:* " +
-                "wss://*.ngrok-free.app " +
-                "ws://*.ngrok-free.app " +
-                "https://*.ngrok-free.app " +
-                "wss://founder-button.ngrok.app " +
-                "ws://founder-button.ngrok.app " +
-                "https://founder-button.ngrok.app " +
-                "ipc:* " +
-                "ipc://localhost/* " +
-                "https://ai-proxy.i-f9f.workers.dev " +
-                "https://api.openai.com",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+              "connect-src 'self' ws://localhost:* wss://api.deepgram.com https://*.posthog.com http://localhost:* ipc:* https://ai-proxy.i-f9f.workers.dev https://api.openai.com wss://*.ngrok.app",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://*.posthog.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:"
