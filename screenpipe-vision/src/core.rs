@@ -31,8 +31,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-use xcap::Monitor;
 use crate::browser_utils::create_url_detector;
+use xcap::Monitor;
 
 fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -128,7 +128,9 @@ pub struct OcrTaskData {
     pub result_tx: Sender<CaptureResult>,
 }
 
-const BROWSER_NAMES: [&str; 9] = ["chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera"];
+const BROWSER_NAMES: [&str; 9] = [
+    "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
+];
 
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
@@ -283,12 +285,20 @@ pub async fn process_ocr_task(
 
     for captured_window in window_images {
         let app_name = captured_window.app_name.clone();
-        let browser_url = if cfg!(target_os = "macos") && captured_window.is_focused && 
-            BROWSER_NAMES.iter().any(|&browser| app_name.to_lowercase().contains(browser)) {
-            match tokio::task::spawn_blocking(move || get_active_browser_url_sync(&app_name, captured_window.process_id)).await {
+        let browser_url = if cfg!(target_os = "macos")
+            && captured_window.is_focused
+            && BROWSER_NAMES
+                .iter()
+                .any(|&browser| app_name.to_lowercase().contains(browser))
+        {
+            match tokio::task::spawn_blocking(move || {
+                get_active_browser_url_sync(&app_name, captured_window.process_id)
+            })
+            .await
+            {
                 Ok(Ok(url)) => Some(url),
-                Ok(Err(e)) => {
-                    error!("Failed to get browser URL: {}", e);
+                Ok(Err(_)) => {
+                    // error!("Failed to get browser URL: {}", e);
                     None
                 }
                 Err(e) => {
@@ -468,11 +478,11 @@ fn get_active_browser_url_sync(app_name: &str, process_id: i32) -> Result<String
         Ok(Some(url)) => Ok(url),
         Ok(None) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            "Failed to get browser URL"
+            "Failed to get browser URL",
         )),
         Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("Error getting browser URL: {}", e)
+            format!("Error getting browser URL: {}", e),
         )),
     }
 }
