@@ -74,7 +74,7 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .max_log_files(5)
         .build(local_data_dir)?;
 
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
 
     let env_filter = EnvFilter::from_default_env()
         .add_directive("info".parse().unwrap())
@@ -124,7 +124,7 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
                 .with_writer(std::io::stdout)
                 .with_timer(timer.clone()),
         )
-        .with(fmt::layer().with_writer(non_blocking).with_timer(timer));
+        .with(fmt::layer().with_writer(file_writer).with_timer(timer));
 
     // Build the final registry with conditional Sentry layer
     if !cli.disable_telemetry {
