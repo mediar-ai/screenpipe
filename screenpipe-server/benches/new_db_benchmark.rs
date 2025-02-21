@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use screenpipe_server::DatabaseManager;
+use screenpipe_db::DatabaseManager;
 use screenpipe_vision::OcrEngine;
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -47,7 +47,7 @@ fn bench_insert_ocr_text(c: &mut Criterion) {
                     &text_json,
                     app_name,
                     window_name,
-                    std::sync::Arc::new(ocr_engine),
+                    std::sync::Arc::new(ocr_engine.into()),
                     focused,
                 )
                 .await

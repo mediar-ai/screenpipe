@@ -36,6 +36,7 @@ screenpipe-integrations = { path = "../screenpipe-integrations" }
 
 # Lanuage specification
 screenpipe-core = { path = "../screenpipe-core" }
+screenpipe-db = { path = "../screenpipe-db" }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }

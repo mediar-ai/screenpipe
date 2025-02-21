@@ -21,6 +21,26 @@ impl Default for CustomOcrConfig {
     }
 }
 
+impl From<screenpipe_db::CustomOcrConfig> for CustomOcrConfig {
+    fn from(config: screenpipe_db::CustomOcrConfig) -> Self {
+        CustomOcrConfig {
+            api_url: config.api_url,
+            api_key: config.api_key,
+            timeout_ms: config.timeout_ms,
+        }
+    }
+}
+
+impl From<CustomOcrConfig> for screenpipe_db::CustomOcrConfig {
+    fn from(config: CustomOcrConfig) -> Self {
+        screenpipe_db::CustomOcrConfig {
+            api_url: config.api_url,
+            api_key: config.api_key,
+            timeout_ms: config.timeout_ms,
+        }
+    }
+}
+
 pub async fn perform_ocr_custom(
     image: &DynamicImage,
     languages: Vec<Language>,

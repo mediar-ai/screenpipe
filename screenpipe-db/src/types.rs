@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use screenpipe_audio::core::device::DeviceType;
+// use screenpipe_audio::core::device::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
@@ -197,4 +197,52 @@ pub struct AudioChunksResponse {
     pub end_time: Option<f64>,
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VideoMetadata {
+    pub creation_time: DateTime<Utc>,
+    pub fps: f64,
+    pub duration: f64,
+    pub device_name: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
+pub enum DeviceType {
+    Input,
+    Output,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
+pub struct AudioDevice {
+    pub name: String,
+    pub device_type: DeviceType,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum OcrEngine {
+    Unstructured,
+    #[default]
+    Tesseract,
+    WindowsNative,
+    AppleNative,
+    Custom(CustomOcrConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomOcrConfig {
+    pub api_url: String,
+    pub api_key: String,
+    pub timeout_ms: u64,
+}
+
+impl Default for CustomOcrConfig {
+    fn default() -> Self {
+        CustomOcrConfig {
+            api_url: "http://localhost:8000/ocr".to_string(),
+            api_key: "".to_string(),
+            timeout_ms: 5000,
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -16,10 +16,46 @@ pub enum DeviceType {
     Output,
 }
 
+impl From<screenpipe_db::DeviceType> for DeviceType {
+    fn from(device_type: screenpipe_db::DeviceType) -> Self {
+        match device_type {
+            screenpipe_db::DeviceType::Input => DeviceType::Input,
+            screenpipe_db::DeviceType::Output => DeviceType::Output,
+        }
+    }
+}
+
+impl From<DeviceType> for screenpipe_db::DeviceType {
+    fn from(device_type: DeviceType) -> Self {
+        match device_type {
+            DeviceType::Input => screenpipe_db::DeviceType::Input,
+            DeviceType::Output => screenpipe_db::DeviceType::Output,
+        }
+    }
+}
+
+impl From<DeviceType> for Arc<screenpipe_db::DeviceType> {
+    fn from(device_type: DeviceType) -> Self {
+        Arc::new(match device_type {
+            DeviceType::Input => screenpipe_db::DeviceType::Input,
+            DeviceType::Output => screenpipe_db::DeviceType::Output,
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub struct AudioDevice {
     pub name: String,
     pub device_type: DeviceType,
+}
+
+impl From<screenpipe_db::AudioDevice> for AudioDevice {
+    fn from(device: screenpipe_db::AudioDevice) -> Self {
+        AudioDevice {
+            name: device.name,
+            device_type: device.device_type.into(),
+        }
+    }
 }
 
 impl AudioDevice {

@@ -7,6 +7,7 @@ use crate::monitor::SafeMonitor;
 use image::DynamicImage;
 use image_compare::{Algorithm, Metric, Similarity};
 use log::{debug, error, warn};
+use screenpipe_db::CustomOcrConfig as DBCustomOcrConfig;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
 
@@ -18,6 +19,32 @@ pub enum OcrEngine {
     WindowsNative,
     AppleNative,
     Custom(CustomOcrConfig),
+}
+
+impl From<OcrEngine> for screenpipe_db::OcrEngine {
+    fn from(val: OcrEngine) -> Self {
+        match val {
+            OcrEngine::Unstructured => screenpipe_db::OcrEngine::Unstructured,
+            OcrEngine::Tesseract => screenpipe_db::OcrEngine::Tesseract,
+            OcrEngine::WindowsNative => screenpipe_db::OcrEngine::WindowsNative,
+            OcrEngine::AppleNative => screenpipe_db::OcrEngine::AppleNative,
+            OcrEngine::Custom(config) => {
+                screenpipe_db::OcrEngine::Custom(DBCustomOcrConfig::from(config))
+            }
+        }
+    }
+}
+
+impl From<screenpipe_db::OcrEngine> for OcrEngine {
+    fn from(engine: screenpipe_db::OcrEngine) -> Self {
+        match engine {
+            screenpipe_db::OcrEngine::Unstructured => OcrEngine::Unstructured,
+            screenpipe_db::OcrEngine::Tesseract => OcrEngine::Tesseract,
+            screenpipe_db::OcrEngine::WindowsNative => OcrEngine::WindowsNative,
+            screenpipe_db::OcrEngine::AppleNative => OcrEngine::AppleNative,
+            screenpipe_db::OcrEngine::Custom(config) => OcrEngine::Custom(config.into()),
+        }
+    }
 }
 
 pub fn calculate_hash(image: &DynamicImage) -> u64 {

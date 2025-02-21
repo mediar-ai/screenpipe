@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
-use screenpipe_audio::core::device::{AudioDevice, DeviceType};
-use screenpipe_vision::OcrEngine;
+// use screenpipe_audio::core::device::{AudioDevice, DeviceType};
+// use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
@@ -20,13 +20,14 @@ use tokio::time::{timeout, Duration as TokioDuration};
 
 use zerocopy::AsBytes;
 
-use crate::db_types::{
+use crate::types::VideoMetadata;
+use crate::types::{
     AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
     OCRResultRaw, Speaker, TagContentType,
 };
-use crate::db_types::{ContentType, UiContent};
-use crate::db_types::{SearchResult, TimeSeriesChunk};
-use crate::video_utils::VideoMetadata;
+use crate::types::{ContentType, UiContent};
+use crate::types::{SearchResult, TimeSeriesChunk};
+use crate::{AudioDevice, DeviceType, OcrEngine};
 
 use futures::future::try_join_all;
 

@@ -1,0 +1,1 @@
+ALTER TABLE speakers ADD COLUMN hallucination BOOLEAN DEFAULT FALSE;

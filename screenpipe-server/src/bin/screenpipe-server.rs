@@ -10,6 +10,7 @@ use screenpipe_audio::core::device::{
     AudioDevice, DeviceControl,
 };
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_db::DatabaseManager;
 use screenpipe_server::{
     cli::{
         AudioCommand, Cli, CliAudioTranscriptionEngine, CliOcrEngine, Command, OutputFormat,
@@ -17,7 +18,7 @@ use screenpipe_server::{
     },
     handle_index_command,
     pipe_manager::PipeInfo,
-    start_continuous_recording, watch_pid, DatabaseManager, PipeManager, ResourceMonitor, Server,
+    start_continuous_recording, watch_pid, PipeManager, ResourceMonitor, Server,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]

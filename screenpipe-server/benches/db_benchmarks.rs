@@ -3,7 +3,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
 use screenpipe_audio::core::device::AudioDevice;
-use screenpipe_server::{db_types::ContentType, DatabaseManager};
+use screenpipe_db::{ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -26,7 +26,7 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             &text_json,
             "test_app",
             "test_window",
-            Arc::new(OcrEngine::default()), // Assuming a default implementation
+            Arc::new(OcrEngine::default().into()), // Assuming a default implementation
             false,
         )
         .await
@@ -39,10 +39,10 @@ async fn setup_large_db(size: usize) -> DatabaseManager {
             &audio_text,
             0,
             "test_engine",
-            &AudioDevice::new(
-                "test_device".to_string(),
-                screenpipe_audio::core::device::DeviceType::Input,
-            ),
+            &screenpipe_db::AudioDevice {
+                name: "test_device".to_string(),
+                device_type: screenpipe_db::DeviceType::Input,
+            },
             None,
             None,
             None,

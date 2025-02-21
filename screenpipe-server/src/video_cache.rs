@@ -3,6 +3,7 @@ use bincode;
 use chrono::{DateTime, Duration, Utc};
 use dirs::cache_dir;
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_db::{DatabaseManager, FrameData, OCREntry};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
@@ -14,9 +15,6 @@ use tokio::process::Command;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error};
-
-use crate::db_types::{FrameData, OCREntry};
-use crate::DatabaseManager;
 
 type FrameChannel = mpsc::Sender<TimeSeriesFrame>;
 
@@ -45,8 +43,8 @@ pub struct AudioEntry {
     pub duration_secs: f64,
 }
 
-impl From<crate::db_types::AudioEntry> for AudioEntry {
-    fn from(db_entry: crate::db_types::AudioEntry) -> Self {
+impl From<screenpipe_db::AudioEntry> for AudioEntry {
+    fn from(db_entry: screenpipe_db::AudioEntry) -> Self {
         Self {
             transcription: db_entry.transcription,
             device_name: db_entry.device_name,
