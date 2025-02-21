@@ -120,8 +120,7 @@
           "$APPDATA/**"
         ]
       },
-      "csp": "default-src 'self'; connect-src 'self' wss://api.deepgram.com https://api.deepgram.com wss://*.posthog.com https://*.posthog.com http://localhost:* ws://localhost:* wss://*.ngrok-free.app ws://*.ngrok-free.app https://*.ngrok-free.app wss://founder-button.ngrok.app ws://founder-button.ngrok.app https://founder-button.ngrok.app ipc:* ipc://localhost/* https://ai-proxy.i-f9f.workers.dev https://api.openai.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:",
-      "capabilities": ["main-capability"]
+      "csp": null
     },
     "macOSPrivateApi": true
   }
