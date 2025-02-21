@@ -13,16 +13,13 @@ function isValidURL(url: string) {
 }
 
 export const CurrentFrame = () => {
-	const [openAi, setOpenAi] = useState(false);
 	const { currentResultIndex, searchResults } = useKeywordSearchStore();
 
 	const currentFrame = searchResults[currentResultIndex];
 
 	useEffect(() => {
-		if (!openAi) return;
-
-		setOpenAi(false);
-	}, [currentResultIndex]);
+		console.log(currentFrame);
+	}, [currentFrame]);
 
 	return (
 		<div
