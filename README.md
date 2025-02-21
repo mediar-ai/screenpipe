@@ -143,6 +143,7 @@ screenpipe has a plugin system called "pipe" which lets you create desktop app i
 you can then publish these to our store and make money:
 
 ```bash
+cd foo
 bunx --bun @screenpipe/dev@latest pipe register --name foo [--paid --price 50] # subscription
 bun run build
 bunx --bun @screenpipe/dev@latest pipe publish --name foo

@@ -93,43 +93,47 @@ pub async fn stop_screenpipe(
         }
     }
 
-    // Hard kill the sidecar
-    let kill_result = async {
-        #[cfg(not(target_os = "windows"))]
+    #[cfg(not(target_os = "windows"))]
+    {
+        match tokio::process::Command::new("pkill")
+            .arg("-f")
+            .arg("screenpipe")
+            .output()
+            .await
         {
-            tokio::process::Command::new("pkill")
-                .arg("-f")
-                .arg("screenpipe")
-                .output()
-                .await
-        }
-        #[cfg(target_os = "windows")]
-        {
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            let _ = tokio::process::Command::new("powershell")
-                .arg("-NoProfile")
-                .arg("-WindowStyle")
-                .arg("hidden")
-                .arg("-Command")
-                .arg(format!(
-                    r#"taskkill.exe /F /T /IM screenpipe.exe"#,
-                ))
-                .creation_flags(CREATE_NO_WINDOW)
-                .output()
-                .await;
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to kill screenpipe processes: {}", e);
+                Err(format!("Failed to kill screenpipe processes: {}", e))
+            }
         }
     }
-    .await;
 
-    match kill_result {
-        Ok(_) => {
-            debug!("Successfully killed screenpipe processes");
-            Ok(())
-        }
-        Err(e) => {
-            error!("Failed to kill screenpipe processes: {}", e);
-            Err(format!("Failed to kill screenpipe processes: {}", e))
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        match tokio::process::Command::new("powershell")
+            .arg("-NoProfile")
+            .arg("-WindowStyle")
+            .arg("hidden")
+            .arg("-Command")
+            .arg(r#"taskkill.exe /F /T /IM screenpipe.exe"#)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .await
+        {
+            Ok(_) => {
+                debug!("Successfully killed screenpipe processes");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to kill screenpipe processes: {}", e);
+                Err(format!("Failed to kill screenpipe processes: {}", e))
+            }
         }
     }
 }
@@ -512,8 +516,6 @@ impl SidecarManager {
         }
     }
 
-    
-
     pub async fn spawn(&mut self, app: &tauri::AppHandle) -> Result<(), String> {
         // Update settings from store
         self.update_settings(app).await?;
@@ -521,7 +523,6 @@ impl SidecarManager {
         // Spawn the sidecar
         let child = spawn_sidecar(app)?;
         self.child = Some(child);
-        
 
         Ok(())
     }
@@ -540,5 +541,4 @@ impl SidecarManager {
 
         Ok(())
     }
-
 }

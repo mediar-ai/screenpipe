@@ -745,17 +745,12 @@ async fn main() {
 
             // Autostart setup
             let autostart_manager = app.autolaunch();
-            let _ = autostart_manager.enable();
-            debug!(
-                "registered for autostart? {}",
-                autostart_manager.is_enabled().unwrap()
-            );
 
             info!("Local data directory: {}", base_dir.display());
 
             // PostHog analytics setup
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
-            let interval_hours = 1;
+            let interval_hours = 6;
 
             let path = base_dir.join("store.bin");
             if !path.exists() {
@@ -799,6 +794,23 @@ async fn main() {
                 .unwrap_or(Value::Bool(true))
                 .as_bool()
                 .unwrap_or(true);
+            
+            let is_autostart_enabled = store
+                .get("autoStartEnabled")
+                .unwrap_or(Value::Bool(true))
+                .as_bool()
+                .unwrap_or(true);
+            
+            if is_autostart_enabled {
+                let _ = autostart_manager.enable();
+            } else {
+                let _ = autostart_manager.disable();
+            }
+
+            debug!(
+                "registered for autostart? {}",
+                autostart_manager.is_enabled().unwrap()
+            );
 
             let unique_id = store
                 .get("user.id")

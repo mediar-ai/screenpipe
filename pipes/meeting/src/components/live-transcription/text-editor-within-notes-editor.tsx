@@ -6,6 +6,7 @@ import { MeetingAnalysis } from './hooks/ai-create-all-notes'
 import { ChunkOverlay } from './floating-container-buttons'
 import { useSettings } from "@/lib/hooks/use-settings"
 import { useMeetingContext } from './hooks/storage-for-live-meeting'
+import { useTextEditorAutoScroll } from './hooks/text-editor-auto-scroll'
 
 interface TextEditorProps {
   notes: Note[]
@@ -35,22 +36,44 @@ export function TextEditor({
   const textDebounceRef = useRef<NodeJS.Timeout>()
   const initializedRef = useRef(false)
   
-  // Initialize only once when component mounts
+  const { 
+    textareaRef, 
+    onScroll: autoScrollOnScroll, 
+    isScrolledToBottom,
+    scrollToBottom 
+  } = useTextEditorAutoScroll()
+  
+  // Update localText whenever notes change
   useEffect(() => {
-    // Initialize localText only when notes are available and the editor has not been initialized yet
-    if (!initializedRef.current && notes.length > 0) {
-      console.log('text-editor: initializing localText from updated notes', { notesCount: notes.length });
-      const text = notes
-        .map(note => {
-          const text = note.text || '';
-          // Use bullet point if the note text starts with "- "
-          return text.startsWith('- ') ? '• ' + text.slice(2) : text;
-        })
-        .join('\n');
-      setLocalText(text);
-      initializedRef.current = true;
+    // console.log('text-editor: notes updated', { 
+    //   notesCount: notes.length,
+    //   lastNote: notes[notes.length - 1]?.text?.slice(0, 50),
+    //   isInitialized: initializedRef.current
+    // })
+
+    const text = notes
+      .map(note => {
+        const text = note.text || ''
+        // Use bullet point if the note text starts with "- "
+        return text.startsWith('- ') ? '• ' + text.slice(2) : text
+      })
+      .join('\n')
+
+    // Always update localText when notes change
+    setLocalText(text)
+    
+    // Mark as initialized if not already
+    if (!initializedRef.current) {
+      initializedRef.current = true
     }
-  }, [notes]); // dependency updated to react on changes to `notes`
+  }, [notes]) // React to notes changes
+
+  // Auto-scroll when content changes
+  useEffect(() => {
+    if (isScrolledToBottom) {
+      scrollToBottom()
+    }
+  }, [localText, isScrolledToBottom])
 
   const handleMouseMove = (e: React.MouseEvent, noteId: string) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -132,16 +155,19 @@ export function TextEditor({
     editedAt: undefined
   })
 
+
   return (
     <div 
       ref={scrollRef}
-      onScroll={onScroll}
       className="flex flex-col h-full"
     >
       <textarea
+        ref={textareaRef}
+        onScroll={autoScrollOnScroll}
         value={localText}
         onChange={(e) => {
           const newValue = e.target.value
+          // console.log('textarea onChange:', { newValue: e.target.value });
           setLocalText(newValue)
           
           if (textDebounceRef.current) {

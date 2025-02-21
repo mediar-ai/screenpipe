@@ -1,4 +1,4 @@
-import { OpenAI } from "openai"
+import { callOpenAI, createAiClient } from "./ai-client"
 import type { Settings } from "@screenpipe/browser"
 import { TranscriptionChunk } from "../../meeting-history/types"
 import { VocabularyEntry, getVocabularyEntries } from "./storage-vocabulary"
@@ -16,25 +16,9 @@ export async function improveTranscription(
     context: TranscriptionContext,
     settings: Settings
 ): Promise<string> {
-    const openai = new OpenAI({
-        apiKey: settings.aiProviderType === "screenpipe-cloud" 
-            ? settings.user.token 
-            : settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-        dangerouslyAllowBrowser: true,
-    })
+    const openai = createAiClient(settings)
 
     try {
-        console.log("improving transcription quality:", {
-            text_length: text.length,
-            context: {
-                has_title: !!context.meetingTitle,
-                chunks_count: context.recentChunks.length,
-                notes_count: context.notes?.length || 0,
-                vocab_count: context.vocabulary?.length || 0
-            }
-        })
-
         // Build context from recent chunks
         const recentTranscript = context.recentChunks
             .map(c => `[${c.speaker ?? 'unknown'}]: ${c.text}`)
@@ -53,7 +37,7 @@ export async function improveTranscription(
                 role: "system" as const,
                 content: `you are an expert at improving speech-to-text transcription quality. 
                          focus on fixing common transcription errors while preserving the original meaning.
-                         use provided vocabulary corrections and meeting context to improve accuracy.
+                         use provided vocabulary corrections only for a very obvious very close match.
                          maintain original capitalization and punctuation style.
                          return only the improved text without any quotation marks or additional commentary.`
             },
@@ -76,32 +60,46 @@ export async function improveTranscription(
             }
         ]
 
-        console.log("sending request to openai for transcription improvement")
-        const response = await openai.chat.completions.create({
+        // console.log("sending request to openai for transcription improvement")
+        const response = await callOpenAI(openai, {
             model: settings.aiModel,
             messages,
-            temperature: 0.3, // lower temperature for more consistent corrections
-            max_tokens: text.length * 2, // allow some expansion
+            temperature: 0.3,
+            max_tokens: text.length * 2,
+        }, {
+            maxRetries: 3,
+            initialDelay: 1000
         })
 
-        let improved = response.choices[0]?.message?.content?.trim() || text
+        let improved = 'choices' in response 
+            ? response.choices[0]?.message?.content?.trim() || text
+            : text
         
         // Remove any quotation marks from the response
         improved = improved.replace(/^["']|["']$/g, '').trim()
 
-        console.log("improved transcription:", {
-            original: text,
-            improved
-        })
+        // console.log("improved transcription:", {
+        //     original: text,
+        //     improved
+        // })
 
         return improved
     } catch (error) {
-        console.error("error improving transcription:", error)
+        // Log error details but at debug level
+        console.debug("[transcription-improve] failed:", {
+            error,
+            text_length: text.length,
+            context: {
+                title: context.meetingTitle,
+                chunks: context.recentChunks.length
+            }
+        })
+        // Silently fallback to original text
         return text
     }
 }
 
-// Helper to improve multiple chunks in parallel
+// Update batch processing to use throttling
 export async function improveTranscriptionBatch(
     chunks: TranscriptionChunk[],
     meeting: Meeting,
@@ -109,9 +107,10 @@ export async function improveTranscriptionBatch(
 ): Promise<Record<number, string>> {
     const results: Record<number, string> = {}
     const vocabulary = await getVocabularyEntries()
+    const openai = createAiClient(settings)
 
-    // Process in parallel with concurrency limit
-    const concurrencyLimit = 3
+    // Process in smaller batches with built-in throttling
+    const concurrencyLimit = 2 // Reduced from 3
     const batches = []
     
     for (let i = 0; i < chunks.length; i += concurrencyLimit) {
@@ -127,8 +126,17 @@ export async function improveTranscriptionBatch(
                 vocabulary
             }
 
-            const improved = await improveTranscription(chunk.text, context, settings)
-            results[idx] = improved
+            try {
+                const improved = await improveTranscription(chunk.text, context, settings)
+                results[idx] = improved
+            } catch (error) {
+                // Log at debug level for troubleshooting
+                console.debug("[transcription-batch] chunk failed:", {
+                    chunk_idx: idx,
+                    error
+                })
+                results[idx] = chunk.text // Silently fallback to original
+            }
         })
 
         await Promise.all(promises)

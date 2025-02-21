@@ -1049,4 +1049,117 @@ mod tests {
 
         assert_eq!(count, 2, "Should count both matching frames");
     }
+
+    #[tokio::test]
+    async fn test_insert_and_search_ui_monitoring() {
+        let db = setup_test_db().await;
+
+        // Insert UI monitoring data
+        sqlx::query(
+            r#"
+            INSERT INTO ui_monitoring (
+                text_output,
+                timestamp,
+                app,
+                window,
+                initial_traversal_at
+            ) VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind("Hello from UI monitoring")
+        .bind(Utc::now())
+        .bind("test_app")
+        .bind("test_window")
+        .bind(Utc::now())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Test search with app name filter
+        let results = db
+            .search(
+                "Hello",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                Some("test_app"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        if let SearchResult::UI(ui_result) = &results[0] {
+            assert_eq!(ui_result.text, "Hello from UI monitoring");
+            assert_eq!(ui_result.app_name, "test_app");
+            assert_eq!(ui_result.window_name, "test_window");
+        } else {
+            panic!("Expected UI result");
+        }
+
+        // Test search with window name filter
+        let results = db
+            .search(
+                "Hello",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                Some("test_window"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+
+        // Test search with no matches
+        let results = db
+            .search(
+                "nonexistent",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 0);
+
+        // Test search with empty query (should return all UI entries)
+        let results = db
+            .search(
+                "",
+                ContentType::UI,
+                100,
+                0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+    }
 }
