@@ -1,9 +1,25 @@
 import { PipeStorePlugin } from "@/lib/api/store";
 
-export type BuildStatus = "not_started" | "in_progress" | "success" | "error";
+export type BuildStatus =
+  | string
+  | {
+      status: "in_progress" | "error" | "success" | "not_started";
+      step: string;
+      progress?: number;
+      error?: string;
+    };
+
+export interface InstalledConfig {
+  port?: number;
+  enabled?: boolean;
+  version?: string;
+  buildStatus?: BuildStatus;
+  is_nextjs?: boolean;
+  source?: string;
+}
 
 export interface InstalledPipe {
-  config: {
+  config: InstalledConfig & {
     id?: string;
     enabled?: boolean;
     is_nextjs: boolean;
@@ -15,7 +31,6 @@ export interface InstalledPipe {
     }[];
     fields?: Record<string, any>;
     version?: string;
-    buildStatus?: BuildStatus;
   };
   desc: string;
   id: string;

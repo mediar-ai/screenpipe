@@ -103,9 +103,9 @@ export const PipeStore: React.FC = () => {
       // Create PipeWithStatus objects for store plugins
       const storePluginsWithStatus = await Promise.all(
         plugins.map(async (plugin) => {
-          const installedPipe = installedPipes.find(
-            (p) => p.config?.id === plugin.id,
-          );
+          const installedPipe = installedPipes.find((p) => {
+            return p.id?.replace("._temp", "") === plugin.name;
+          });
           const currentVersion = installedPipe?.config?.version;
 
           let has_update = false;
@@ -136,7 +136,12 @@ export const PipeStore: React.FC = () => {
       );
 
       const customPipes = installedPipes
-        .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
+        .filter(
+          (p) =>
+            !plugins.find(
+              (plugin) => plugin.name === p.id?.replace("._temp", ""),
+            ),
+        )
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
           const is_local = p.id.endsWith("_local");
@@ -318,30 +323,18 @@ export const PipeStore: React.FC = () => {
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
 
       const t = toast({
-        title: "downloading pipe",
+        title: "creating pipe",
         description: (
           <div className="space-y-2">
             <Progress value={0} className="h-1" />
-            <p className="text-xs">downloading from server...</p>
+            <p className="text-xs">creating pipe...</p>
           </div>
         ),
-        duration: 100000,
+        duration: 10000,
       });
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.downloadPipe(pipe.id);
-
-      t.update({
-        id: t.id,
-        title: "installing pipe",
-        description: (
-          <div className="space-y-2">
-            <Progress value={50} className="h-1" />
-            <p className="text-xs">installing dependencies...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
 
       const downloadResponse = await fetch(
         "http://localhost:3030/pipes/download-private",
@@ -365,23 +358,15 @@ export const PipeStore: React.FC = () => {
 
       await fetchInstalledPipes();
 
-      t.update({
-        id: t.id,
-        title: "pipe installed",
-        description: (
-          <div className="space-y-2">
-            <Progress value={100} className="h-1" />
-            <p className="text-xs">completed successfully</p>
-          </div>
-        ),
-        duration: 2000,
-      });
-
       // Update the pipe's status after successful installation
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
           p.id === pipe.id
-            ? { ...p, is_installed: true, is_installing: false }
+            ? {
+                ...p,
+                is_installed: true,
+                is_installing: false,
+              }
             : p,
         ),
       );
@@ -913,7 +898,7 @@ export const PipeStore: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchInstalledPipes();
-    }, 1000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
