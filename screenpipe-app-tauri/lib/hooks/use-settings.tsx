@@ -89,6 +89,7 @@ export type Settings = {
   languages: Language[];
   enableBeta: boolean;
   isFirstTimeUser: boolean;
+  autoStartEnabled: boolean
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
@@ -148,6 +149,7 @@ const DEFAULT_SETTINGS: Settings = {
   },
   enableBeta: false,
   isFirstTimeUser: true,
+  autoStartEnabled: true,
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line

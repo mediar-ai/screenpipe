@@ -745,11 +745,6 @@ async fn main() {
 
             // Autostart setup
             let autostart_manager = app.autolaunch();
-            let _ = autostart_manager.enable();
-            debug!(
-                "registered for autostart? {}",
-                autostart_manager.is_enabled().unwrap()
-            );
 
             info!("Local data directory: {}", base_dir.display());
 
@@ -799,6 +794,23 @@ async fn main() {
                 .unwrap_or(Value::Bool(true))
                 .as_bool()
                 .unwrap_or(true);
+            
+            let is_autostart_enabled = store
+                .get("autoStartEnabled")
+                .unwrap_or(Value::Bool(true))
+                .as_bool()
+                .unwrap_or(true);
+            
+            if is_autostart_enabled {
+                let _ = autostart_manager.enable();
+            } else {
+                let _ = autostart_manager.disable();
+            }
+
+            debug!(
+                "registered for autostart? {}",
+                autostart_manager.is_enabled().unwrap()
+            );
 
             let unique_id = store
                 .get("user.id")
