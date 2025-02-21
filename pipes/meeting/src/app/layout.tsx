@@ -2,10 +2,9 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
-import PostHogProvider from "@/components/providers/posthog-provider"
 import { Analytics } from "@vercel/analytics/react"
 import { ChatButton } from "@/components/chat-button"
-import { SettingsProvider } from "@/lib/hooks/use-settings"
+import { RootProvider } from "@/components/providers/root-provider"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Meeting • Screenpipe",
-  description: "The AI notepad for people in back-to-back meetings",
+  description: "The AI notepad for people in back-to-back meetings"
 }
 
 export default function RootLayout({
@@ -33,16 +32,15 @@ export default function RootLayout({
         suppressHydrationWarning={true}
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen`}
       >
-        <PostHogProvider>
-          <SettingsProvider>
-            <main className="h-full p-4 overflow-hidden">
-              {children}
-            </main>
-            <Toaster />
-            <ChatButton />
-            <Analytics mode={process.env.NODE_ENV === "development" ? "development" : "production"} />
-          </SettingsProvider>
-        </PostHogProvider>
+        <RootProvider>
+          <main className="h-full p-4 overflow-hidden">
+            {children}
+          </main>
+          <Toaster />
+          <ChatButton />
+          {/* Comment this out temporarily for testing */}
+          {/* <Analytics mode={process.env.NODE_ENV === "development" ? "development" : "production"} /> */}
+        </RootProvider>
       </body>
     </html>
   )

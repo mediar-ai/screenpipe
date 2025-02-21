@@ -1,20 +1,22 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react'
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback, useRef } from 'react'
 import { TranscriptionChunk, Note, MeetingSegment } from "../../meeting-history/types"
 import { MeetingAnalysis } from "./ai-create-all-notes"
 import localforage from "localforage"
+import { useSettings } from "@/lib/hooks/use-settings"
+import { createHandleNewChunk } from './handle-new-chunk'
+import { ImprovedChunk } from './handle-new-chunk'
 
-// Storage setup
-export const liveStore = localforage.createInstance({
+// Single store for all meetings
+export const meetingStore = localforage.createInstance({
     name: "live-meetings",
-    storeName: "transcriptions"
+    storeName: "meetings"  // All meetings live here
 })
 
-// Export the key
-export const LIVE_MEETING_KEY = 'current-live-meeting'
-
 export interface LiveMeetingData {
-    chunks: TranscriptionChunk[]
-    editedChunks: Record<number, string>
+    id: string  // Add explicit ID field
+    chunks: TranscriptionChunk[]  // Keep raw chunks
+    mergedChunks: TranscriptionChunk[]  // Add merged chunks
+    editedMergedChunks: Record<number, ImprovedChunk>  // Change type to include diffs
     speakerMappings: Record<string, string>
     lastProcessedIndex: number
     startTime: string
@@ -24,6 +26,34 @@ export interface LiveMeetingData {
     analysis: MeetingAnalysis | null
     deviceNames: Set<string>
     selectedDevices: Set<string>
+    // New fields
+    agenda?: string
+    participants_invited?: string[]
+    recurrence?: string
+    participants?: string[] | null
+    guestCount?: number
+    confirmedCount?: number
+    organizer?: string
+    aiPrep?: {
+        previousContext: {
+            lastInteraction: string
+            personContext: Record<string, {
+                personality: string
+                communicationStyle: string
+                pastDecisions: string[]
+                strengths: string[]
+                challenges: string[]
+            }>
+            agreedNextSteps: string[]
+        }
+        suggestedPrep: {
+            reviewPoints: string[]
+            discussionTopics: string[]
+            meetingTips: string[]
+        }
+    }
+    isArchived?: boolean // Add optional flag
+    isAiNotesEnabled: boolean  // Add this field
 }
 
 // Context type
@@ -38,7 +68,13 @@ interface MeetingContextType {
     setAnalysis: (analysis: MeetingAnalysis | null) => Promise<void>
     isLoading: boolean
     data: LiveMeetingData | null
-    updateStore: (newData: LiveMeetingData) => Promise<void>
+    updateStore: (newData: LiveMeetingData) => Promise<boolean>
+    reloadData: () => Promise<void>
+    onNewChunk: (chunk: TranscriptionChunk) => Promise<void>
+    improvingChunks: Record<number, boolean>
+    setImprovingChunks: (chunks: Record<number, boolean>) => void
+    recentlyImproved: Record<number, boolean>
+    setRecentlyImproved: (chunks: Record<number, boolean>) => void
 }
 
 // Context creation
@@ -47,108 +83,87 @@ const MeetingContext = createContext<MeetingContextType | undefined>(undefined)
 export function MeetingProvider({ children }: { children: ReactNode }) {
     const [data, setData] = useState<LiveMeetingData | null>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const latestChunksRef = useRef<TranscriptionChunk[]>([])
+    const { settings } = useSettings()
+    const [improvingChunks, setImprovingChunks] = useState<Record<number, boolean>>({})
+    const [recentlyImproved, setRecentlyImproved] = useState<Record<number, boolean>>({})
 
-    useEffect(() => {
-        const loadData = async () => {
-            try {
-                console.log('MeetingProvider: loading data')
-                const stored = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-                console.log('MeetingProvider: loaded data:', {
-                    exists: !!stored,
-                    chunks: stored?.chunks?.length,
-                    title: stored?.title,
-                    notes: stored?.notes?.length,
-                    notesData: stored?.notes?.map(n => ({
-                        id: n.id,
-                        text: n.text?.slice(0, 50),
-                        timestamp: n.timestamp
-                    }))
-                })
-                
-                if (!stored) {
-                    console.log('MeetingProvider: no stored data, initializing new')
+    // Single source of truth for loading data
+    const loadData = async () => {
+        try {
+            let activeMeeting: LiveMeetingData | null = null
+            
+            // Get all meetings and find the first non-archived one
+            const allMeetings = await meetingStore.keys()
+            for (const key of allMeetings) {
+                const meeting = await meetingStore.getItem<LiveMeetingData>(key)
+                if (meeting && !meeting.isArchived) {
+                    activeMeeting = meeting
+                    break
                 }
-                
-                setData(stored || {
+            }
+
+            console.log('MeetingProvider: loaded data:', {
+                exists: !!activeMeeting,
+                id: activeMeeting?.id,
+                chunks: activeMeeting?.chunks?.length,
+                title: activeMeeting?.title,
+            })
+            
+            if (!activeMeeting) {
+                const startTime = new Date().toISOString()
+                const newData: LiveMeetingData = {
+                    id: `live-meeting-${startTime}`,
                     chunks: [],
-                    editedChunks: {},
+                    mergedChunks: [],
+                    editedMergedChunks: {},
                     speakerMappings: {},
                     lastProcessedIndex: -1,
-                    startTime: new Date().toISOString(),
+                    startTime,
                     title: null,
                     notes: [],
                     analysis: null,
-                    deviceNames: new Set(),
-                    selectedDevices: new Set()
-                })
-            } catch (error) {
-                console.error('MeetingProvider: failed to load meeting data:', error)
-            } finally {
-                setIsLoading(false)
+                    deviceNames: new Set<string>(),
+                    selectedDevices: new Set<string>(),
+                    isAiNotesEnabled: true,  // Default to enabled
+                    isArchived: false
+                }
+                await meetingStore.setItem(newData.id, newData)
+                setData(newData)
+            } else {
+                setData(activeMeeting)
             }
+            
+            return activeMeeting
+        } catch (error) {
+            console.error('MeetingProvider: failed to load:', error)
+            return null
+        } finally {
+            setIsLoading(false)
         }
+    }
+
+    // Expose reload function through context
+    const reloadData = async () => {
+        setIsLoading(true)
+        await loadData()
+    }
+
+    useEffect(() => {
+        console.log('meeting provider mounted')
         loadData()
+        return () => console.log('meeting provider unmounted')
     }, [])
 
     const updateStore = async (newData: LiveMeetingData) => {
-        // Debug: log current and new notes details
-        console.log('updateStore: checking changes', {
-            currentNotes: data?.notes?.length,
-            newNotes: newData.notes?.length,
-            currentNotesData: data?.notes?.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            newNotesData: newData.notes?.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            stack: new Error().stack?.split('\n').slice(1, 3)
-        });
-
-        // Debug: log title differences for clarity
-        console.log('updateStore: checking title change', {
-            currentTitle: data?.title,
-            newTitle: newData.title,
-            titleChanged: data?.title !== newData.title
-        });
-
-        // If no previous data, always update
-        if (!data) {
-            console.log('updateStore: no previous data, saving');
-            await liveStore.setItem(LIVE_MEETING_KEY, newData);
-            setData(newData);
-            return;
-        }
-
-        // Determine if notes have changed
-        const notesChanged =
-            data.notes.length !== newData.notes.length ||
-            JSON.stringify(data.notes) !== JSON.stringify(newData.notes);
-
-        // Determine if title has changed
-        const titleChanged = data.title !== newData.title;
-
-        // If neither notes nor title changed, skip saving
-        if (!notesChanged && !titleChanged) {
-            console.log('updateStore: no changes detected', { notesChanged, titleChanged });
-            return;
-        }
-
-        console.log('updateStore: saving changes', {
-            currentNotes: data.notes.length,
-            newNotes: newData.notes.length,
-            notesChanged,
-            titleChanged
-        });
-
-        try {
-            await liveStore.setItem(LIVE_MEETING_KEY, newData);
-            setData(newData);
+        try {            
+            await meetingStore.setItem(newData.id, newData)
+            setData(newData)
+            latestChunksRef.current = newData.chunks
+            return true
         } catch (error) {
-            console.error('updateStore: failed:', error);
+            console.error('updateStore: failed:', error)
+            return false
         }
     };
 
@@ -168,31 +183,23 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
 
     const setNotes = async (notes: Note[]) => {
         if (!data) return
-        console.log('setting notes:', {
-            count: notes.length,
-            notes: notes.map(n => ({
-                text: n.text?.slice(0, 50),
-                timestamp: n.timestamp,
-                id: n.id
-            })),
-            stack: new Error().stack?.split('\n').slice(1,3)
+        // console.log('setting notes:', {
+        //     count: notes.length,
+        //     notes: notes.map(n => ({
+        //         text: n.text?.slice(0, 50),
+        //         timestamp: n.timestamp,
+        //         id: n.id
+        //     })),
+        //     currentTitle: data.title,
+        //     stack: new Error().stack?.split('\n').slice(1,3)
+        // })
+        await updateStore({ 
+            ...data,
+            notes,
+            title: data.title,
+            startTime: data.startTime,
+            id: data.id
         })
-        await updateStore({ ...data, notes })
-    }
-
-    const setSegments = async (segments: MeetingSegment[]) => {
-        if (!data) return
-        console.log('setting segments:', segments.length)
-        const chunks = segments.map((seg, index) => ({
-            id: Date.now() + index,
-            timestamp: seg.timestamp,
-            text: seg.transcription,
-            deviceName: seg.deviceName,
-            speaker: seg.speaker,
-            isInput: seg.deviceName?.toLowerCase().includes('input') || false,
-            device: seg.deviceName || 'unknown',
-        }))
-        await updateStore({ ...data, chunks })
     }
 
     const setAnalysis = async (analysis: MeetingAnalysis | null) => {
@@ -201,6 +208,24 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         await updateStore({ ...data, analysis })
     }
 
+    const handleNewChunk = useCallback(
+        createHandleNewChunk({
+            setData,
+            setImprovingChunks,
+            setRecentlyImproved,
+            updateStore,
+            settings
+        }),
+        [settings]
+    )
+
+    // Initialize ref when data loads
+    useEffect(() => {
+        if (data) {
+            latestChunksRef.current = data.chunks
+        }
+    }, [data])
+
     const value = useMemo(() => ({
         title: data?.title || '',
         setTitle,
@@ -208,17 +233,23 @@ export function MeetingProvider({ children }: { children: ReactNode }) {
         setNotes,
         segments: (data?.chunks || []).map(chunk => ({
             timestamp: chunk.timestamp,
-            transcription: data?.editedChunks[chunk.id] || chunk.text,
+            transcription: data?.editedMergedChunks[chunk.id]?.text || chunk.text,
             deviceName: chunk.deviceName || '',
             speaker: data?.speakerMappings[chunk.speaker || 'speaker_0'] || chunk.speaker || 'speaker_0'
         })),
-        setSegments,
+        setSegments: async () => {},
         analysis: data?.analysis || null,
         setAnalysis,
         isLoading,
         data,
-        updateStore
-    }), [data, isLoading])
+        updateStore,
+        reloadData,
+        onNewChunk: handleNewChunk,
+        improvingChunks,
+        setImprovingChunks,
+        recentlyImproved,
+        setRecentlyImproved,
+    }), [data, isLoading, handleNewChunk, improvingChunks, recentlyImproved])
 
     return (
         <MeetingContext.Provider value={value}>
@@ -235,95 +266,125 @@ export function useMeetingContext() {
     return context
 }
 
-// Storage operations
-export const getCurrentKey = () => LIVE_MEETING_KEY
-
-export const clearCurrentKey = () => {
-    liveStore.removeItem(LIVE_MEETING_KEY)
-    console.log('cleared live meeting data')
-}
-
-export async function storeLiveChunks(chunks: TranscriptionChunk[]): Promise<void> {
+// Rename function to better reflect its purpose
+export async function archiveLiveMeeting(): Promise<LiveMeetingData | null> {
     try {
-        const existing = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-        const data: LiveMeetingData = {
-            chunks,
-            editedChunks: existing?.editedChunks ?? {},
-            speakerMappings: existing?.speakerMappings ?? {},
-            lastProcessedIndex: existing?.lastProcessedIndex ?? -1,
-            startTime: existing?.startTime ?? new Date().toISOString(),
-            title: existing?.title ?? null,
-            notes: existing?.notes ?? [],
-            analysis: existing?.analysis ?? null,
-            deviceNames: existing?.deviceNames ?? new Set(),
-            selectedDevices: existing?.selectedDevices ?? new Set()
+        // Find active meeting
+        const allMeetings = await meetingStore.keys()
+        for (const key of allMeetings) {
+            const meeting = await meetingStore.getItem<LiveMeetingData>(key)
+            if (meeting && !meeting.isArchived) {
+                console.log('archiving active meeting:', {
+                    id: meeting.id,
+                    title: meeting.title
+                })
+                const archivedMeeting = {
+                    ...meeting,
+                    isArchived: true,
+                    endTime: new Date().toISOString()
+                }
+                await meetingStore.setItem(key, archivedMeeting)
+                return archivedMeeting
+            }
         }
-        console.log('storing live meeting data')
-        await liveStore.setItem(LIVE_MEETING_KEY, data)
+        return null
     } catch (error) {
-        console.error('failed to store live meeting:', error)
+        console.error('failed to archive meeting data:', error)
+        throw error
     }
 }
 
-export async function getLiveMeetingData(): Promise<LiveMeetingData | null> {
+
+// Add function to delete an archived meeting by its start time
+export async function deleteArchivedMeeting(startTime: string): Promise<void> {
+  try {
+    let keyToDelete: string | null = null
+    
+    // Find the meeting with matching start time
+    await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData, key: string) => {
+      if (value.startTime === startTime) {
+        keyToDelete = key
+        return
+      }
+    })
+
+    if (keyToDelete) {
+      console.log('deleting archived meeting:', {
+        key: keyToDelete,
+        startTime
+      })
+      await meetingStore.removeItem(keyToDelete)
+    } else {
+      console.log('meeting not found for deletion:', startTime)
+    }
+  } catch (error) {
+    console.error('failed to delete archived meeting:', error)
+    throw error
+  }
+}
+
+// Add function to update an archived meeting
+export async function updateArchivedMeeting(id: string, update: Partial<LiveMeetingData>) {
     try {
-        console.log('getLiveMeetingData: loading')
-        const data = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-        
-        // Ensure dates are properly restored
-        if (data?.notes) {
-            data.notes = data.notes.map(note => ({
-                ...note,
-                timestamp: new Date(note.timestamp),
-                editedAt: note.editedAt ? new Date(note.editedAt) : undefined
-            }))
+        const meeting = await meetingStore.getItem<LiveMeetingData>(id)
+        if (!meeting) {
+            console.error('meeting not found for update:', { id })
+            return null
         }
         
-        console.log('getLiveMeetingData: result:', {
-            exists: !!data,
-            chunks: data?.chunks?.length,
-            title: data?.title,
-            notes: data?.notes?.length,
-            firstNote: data?.notes?.[0]?.text?.slice(0, 50)
+        // Create updated meeting data - preserve existing fields
+        const updated = { 
+            ...meeting,  // First spread existing meeting
+            ...update,   // Then apply updates
+            // Explicitly preserve critical fields unless intentionally updated
+            title: update.title ?? meeting.title,
+            startTime: update.startTime ?? meeting.startTime,
+            id: meeting.id, // Never allow id to be changed
+            isArchived: true // Always keep archived status
+        }
+        
+        console.log('updating archived meeting:', { 
+            id,
+            oldTitle: meeting.title,
+            newTitle: updated.title,
+            preservedFields: {
+                notes: updated.notes?.length,
+                chunks: updated.chunks?.length,
+                startTime: updated.startTime
+            },
+            fullUpdate: update
         })
-        return data
+        
+        await meetingStore.setItem(id, updated)
+        return updated
     } catch (error) {
-        console.error('getLiveMeetingData: failed:', error)
+        console.error('failed to update archived meeting:', error)
         return null
     }
 }
 
-export async function clearLiveMeetingData(): Promise<void> {
+export async function getAllMeetings(): Promise<LiveMeetingData[]> {
     try {
-        const currentData = await liveStore.getItem<LiveMeetingData>(LIVE_MEETING_KEY)
-        console.log('clearing live meeting data:', {
-            had_title: !!currentData?.title,
-            notes_count: currentData?.notes.length,
-            chunks_count: currentData?.chunks.length,
-            analysis: !!currentData?.analysis,
-            start_time: currentData?.startTime,
+        const meetings: LiveMeetingData[] = []
+        
+        await meetingStore.iterate<LiveMeetingData, void>((value: LiveMeetingData) => {
+            meetings.push(value)
         })
-        
-        // Create empty state
-        const emptyState: LiveMeetingData = {
-            chunks: [],
-            editedChunks: {},
-            speakerMappings: {},
-            lastProcessedIndex: -1,
-            startTime: new Date().toISOString(),
-            title: null,
-            notes: [],
-            analysis: null,
-            deviceNames: new Set(),
-            selectedDevices: new Set()
-        }
-        
-        // Set empty state first, then remove
-        await liveStore.setItem(LIVE_MEETING_KEY, emptyState)
-        await liveStore.removeItem(LIVE_MEETING_KEY)
-        console.log('live meeting data cleared successfully')
+
+        // Sort by start time, newest first
+        meetings.sort((a, b) => 
+            new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
+        )
+
+        console.log('loaded all meetings:', {
+            count: meetings.length,
+            live: meetings.find(m => !m.isArchived)?.title,
+            archived: meetings.filter(m => m.isArchived).length
+        })
+
+        return meetings
     } catch (error) {
-        console.error('failed to clear live meeting data:', error)
-        throw error
+        console.error('failed to get meetings:', error)
+        return []
     }
 } 
