@@ -114,9 +114,12 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         env_filter
     };
 
+    let timer =
+        tracing_subscriber::fmt::time::ChronoLocal::new("%Y-%m-%dT%H:%M:%S%.6fZ".to_string());
+
     let registry = tracing_subscriber::registry()
         .with(env_filter)
-        .with(fmt::layer().with_writer(std::io::stdout))
+        .with(fmt::layer().with_writer(std::io::stdout).with_timer(timer))
         .with(fmt::layer().with_writer(non_blocking));
 
     // Build the final registry with conditional Sentry layer
