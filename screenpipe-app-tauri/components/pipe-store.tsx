@@ -83,7 +83,18 @@ export const PipeStore: React.FC = () => {
     }, 1000); // Debounce for 1 second
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, filteredPipes.length]);
+  }, [searchQuery, filteredPipes.length])
+
+  useEffect(() => {
+    const unlisten = listen("update-all-pipes", async () => {    
+      if (!checkLogin(settings.user, false)) return;
+      await handleUpdateAllPipes(true);
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [pipes, setPipes, setInstalledPipes, setLoadingInstalls, settings.user]);
 
   useEffect(() => {
     const unsubscribePromise = listen("update-all-pipes", async () => {
