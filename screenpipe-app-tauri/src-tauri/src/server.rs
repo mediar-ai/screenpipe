@@ -1,4 +1,4 @@
-use crate::window_api::show_specific_window;
+use crate::window_api::{close_window, show_specific_window};
 use crate::{get_base_dir, get_store};
 use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
@@ -165,6 +165,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/sidecar/start", axum::routing::post(start_sidecar))
         .route("/sidecar/stop", axum::routing::post(stop_sidecar))
         .route("/window", axum::routing::post(show_specific_window))
+        .route("/window/close", axum::routing::post(close_window))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()

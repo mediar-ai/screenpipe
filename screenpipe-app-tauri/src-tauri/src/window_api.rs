@@ -96,3 +96,36 @@ pub async fn show_specific_window(
         }
     }
 }
+
+#[derive(Deserialize, Debug)]
+pub struct CloseWindowPayload {
+    title: String,
+}
+
+pub async fn close_window(
+    State(state): State<ServerState>,
+    Json(payload): Json<CloseWindowPayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received window close request: {:?}", payload);
+
+    if let Some(window) = state.app_handle.get_webview_window(&payload.title) {
+        match window.destroy() {
+            Ok(_) => Ok(Json(ApiResponse {
+                success: true,
+                message: "window closed successfully".to_string(),
+            })),
+            Err(e) => {
+                error!("failed to close window: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to close window: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            format!("window with title '{}' not found", payload.title),
+        ))
+    }
+}
