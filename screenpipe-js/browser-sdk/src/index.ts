@@ -11,7 +11,18 @@ import type {
   VisionStreamResponse,
 } from "../../common/types";
 import { toSnakeCase, convertToCamelCase } from "../../common/utils";
-import { captureEvent, captureMainFeatureEvent } from "../../common/analytics";
+import {
+  captureEvent,
+  captureMainFeatureEvent,
+  setAnalyticsClient,
+} from "../../common/analytics";
+import posthog from "posthog-js";
+
+setAnalyticsClient({
+  init: posthog.init.bind(posthog),
+  identify: posthog.identify.bind(posthog),
+  capture: posthog.capture.bind(posthog),
+});
 import { PipesManager } from "../../common/PipesManager";
 
 type Result<T> = { success: true; data: T } | { success: false; error: any };
@@ -29,7 +40,10 @@ async function* wsEvents(
   let ws = includeImages ? wsWithImages : wsWithoutImages;
 
   if (!ws || ws.readyState === WebSocket.CLOSED) {
-    console.log("creating new websocket connection, includeImages:", includeImages)
+    console.log(
+      "creating new websocket connection, includeImages:",
+      includeImages
+    );
     ws = new WebSocket(`${WS_URL}?images=${includeImages}`);
     if (includeImages) {
       wsWithImages = ws;
@@ -40,11 +54,11 @@ async function* wsEvents(
     // Wait for connection to establish
     await new Promise((resolve, reject) => {
       const onOpen = () => {
-        console.log("websocket connected")
+        console.log("websocket connected");
         resolve(undefined);
       };
       const onError = (error: Event) => {
-        console.error("websocket connection error:", error)
+        console.error("websocket connection error:", error);
         reject(error);
       };
       ws!.addEventListener("open", onOpen, { once: true });
@@ -76,7 +90,7 @@ async function* wsEvents(
           resolveMessage = resolve;
         }
       });
-      
+
       yield JSON.parse(message.data);
     }
   } finally {
@@ -138,12 +152,12 @@ export interface BrowserPipe {
     list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
-    delete: (pipeId: string,) => Promise<boolean>;
+    delete: (pipeId: string) => Promise<boolean>;
     download: (url: string) => Promise<Result<Record<string, any>>>;
     info: (pipeId: string) => Promise<Result<Record<string, any>>>;
     update: (
       pipeId: string,
-      config: { [key: string]: string },
+      config: { [key: string]: string }
     ) => Promise<boolean>;
     downloadPrivate: (
       url: string,
@@ -151,6 +165,10 @@ export interface BrowserPipe {
       pipeId: string
     ) => Promise<Result<Record<string, any>>>;
   };
+  deduplicateText(texts: string[]): Promise<{
+    groups: { text: string; similar: string[] }[];
+    error?: string;
+  }>;
 }
 
 class BrowserPipeImpl implements BrowserPipe {
@@ -310,12 +328,12 @@ class BrowserPipeImpl implements BrowserPipe {
     list: () => Promise<Result<string[]>>;
     enable: (pipeId: string) => Promise<boolean>;
     disable: (pipeId: string) => Promise<boolean>;
-    delete: (pipeId: string,) => Promise<boolean>;
+    delete: (pipeId: string) => Promise<boolean>;
     download: (url: string) => Promise<Result<Record<string, any>>>;
     info: (pipeId: string) => Promise<Result<Record<string, any>>>;
     update: (
       pipeId: string,
-      config: { [key: string]: string },
+      config: { [key: string]: string }
     ) => Promise<boolean>;
     downloadPrivate: (
       url: string,
@@ -332,7 +350,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
         if (!response.ok) {
           throw new Error(`http error! status: ${response.status}`);
-        }   
+        }
 
         const data = await response.json();
         return { success: true, data: data.data };
@@ -353,7 +371,7 @@ class BrowserPipeImpl implements BrowserPipe {
 
         if (!response.ok) {
           throw new Error(`http error! status: ${response.status}`);
-        }   
+        }
 
         const data: Record<string, any> = await response.json();
         return { success: true, data: data.data };
@@ -396,8 +414,8 @@ class BrowserPipeImpl implements BrowserPipe {
     },
     update: async (
       pipeId: string,
-      config: { [key: string]: string 
-      }): Promise<boolean> => {
+      config: { [key: string]: string }
+    ): Promise<boolean> => {
       try {
         const response = await fetch(`http://localhost:3030/pipes/update`, {
           method: "POST",
@@ -406,7 +424,7 @@ class BrowserPipeImpl implements BrowserPipe {
             pipe_id: pipeId,
             config,
           }),
-        }); 
+        });
 
         return response.ok;
       } catch (error) {
@@ -416,10 +434,13 @@ class BrowserPipeImpl implements BrowserPipe {
     },
     info: async (pipeId: string): Promise<Result<Record<string, any>>> => {
       try {
-        const response = await fetch(`http://localhost:3030/pipes/info/${pipeId}`, {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        });
+        const response = await fetch(
+          `http://localhost:3030/pipes/info/${pipeId}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
 
         if (!response.ok) {
           throw new Error(`http error! status: ${response.status}`);
@@ -438,7 +459,8 @@ class BrowserPipeImpl implements BrowserPipe {
       pipeId: string
     ): Promise<Result<Record<string, any>>> => {
       try {
-        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const apiUrl =
+          process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
         const response = await fetch(`${apiUrl}/pipes/download-private`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -462,7 +484,8 @@ class BrowserPipeImpl implements BrowserPipe {
     },
     delete: async (pipeId: string): Promise<boolean> => {
       try {
-        const apiUrl = process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
+        const apiUrl =
+          process.env.SCREENPIPE_SERVER_URL || "http://localhost:3030";
         const response = await fetch(`${apiUrl}/pipes/delete`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -476,7 +499,7 @@ class BrowserPipeImpl implements BrowserPipe {
         console.error("failed to delete pipe:", error);
         return false;
       }
-    }
+    },
   };
 
   async *streamTranscriptions(): AsyncGenerator<
@@ -570,6 +593,78 @@ class BrowserPipeImpl implements BrowserPipe {
       wsWithoutImages = null;
     }
   }
+
+  async deduplicateText(texts: string[]): Promise<{
+    groups: { text: string; similar: string[] }[];
+    error?: string;
+  }> {
+    // Early return for empty arrays
+    if (texts.length === 0) {
+      return { groups: [], error: undefined };
+    }
+
+    try {
+      const response = await fetch("http://localhost:3035/v1/embeddings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "all-MiniLM-L6-v2",
+          // Send as Multiple variant even for single strings to be consistent
+          input: texts.length === 1 ? texts[0] : texts,
+          encoding_format: "float",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `http error! status: ${response.status}, error: ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      const embeddings = data.data.map((d: any) => d.embedding);
+
+      // group similar texts using cosine similarity
+      const similarityThreshold = 0.9;
+      const groups: { text: string; similar: string[] }[] = [];
+      const used = new Set<number>();
+
+      for (let i = 0; i < texts.length; i++) {
+        if (used.has(i)) continue;
+
+        const group = { text: texts[i], similar: [] as string[] };
+        used.add(i);
+
+        for (let j = i + 1; j < texts.length; j++) {
+          if (used.has(j)) continue;
+
+          const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
+          if (similarity > similarityThreshold) {
+            group.similar.push(texts[j]);
+            used.add(j);
+          }
+        }
+
+        if (group.similar.length > 0) {
+          groups.push(group);
+        }
+      }
+
+      return { groups };
+    } catch (error) {
+      console.error("failed to deduplicate texts:", error);
+      return { groups: [], error: error?.toString() };
+    }
+  }
+}
+
+// Helper function to compute cosine similarity between two vectors
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (normA * normB);
 }
 
 const pipeImpl = new BrowserPipeImpl();
