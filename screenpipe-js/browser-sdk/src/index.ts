@@ -604,7 +604,7 @@ class BrowserPipeImpl implements BrowserPipe {
     }
 
     try {
-      const response = await fetch("http://localhost:3035/v1/embeddings", {
+      const response = await fetch("http://localhost:3030/v1/embeddings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
