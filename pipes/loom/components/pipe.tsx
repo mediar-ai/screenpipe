@@ -1,4 +1,5 @@
 import { Clock, Loader2 } from "lucide-react";
+import { IconCheck, IconCopy } from "@/components/ui/icons";
 import { useToast } from "@/lib/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { LLMChat } from "@/components/llm-chat";
@@ -9,6 +10,7 @@ import { DateTimePicker } from './date-time-picker';
 import { VideoComponent } from "@/components/video-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
+
 import {
   Tooltip,
   TooltipContent,
@@ -17,18 +19,27 @@ import {
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
 
+const Divider = () => (
+  <div className="flex my-2 justify-center">
+    <div className="h-[1px] w-[400px] rounded-full bg-gradient-to-l from-slate-500/30 to-transparent"></div>
+    <div className="h-[1px] w-[400px] rounded-full bg-gradient-to-r from-slate-500/30 to-transparent"></div>
+  </div>
+);
+
 const Pipe: React.FC = () => {
   const { toast } = useToast();
+  const { settings} = useSettings();
+  const { isServerDown } = useHealthCheck()
+  const [isCopied, setIsCopied] = React.useState<Boolean>(false);
+  const { isAvailable, error } = useAiProvider(settings);
   const [rawData, setRawData] = useState<any[] | undefined>([]);
   const [endTime, setEndTime] = useState<Date>(new Date());
   const [isMerging, setIsMerging] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<Date>(new Date());
   const [mergedVideoPath, setMergedVideoPath] = useState<string>('');
-  const { isServerDown } = useHealthCheck()
-  const { settings} = useSettings();
+
   const aiDisabled =
     settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
-  const { isAvailable, error } = useAiProvider(settings);
 
   const handleQuickTimeFilter = (minutes: number) => {
     const now = new Date();
@@ -98,7 +109,7 @@ const Pipe: React.FC = () => {
           setIsMerging(false);
           return;
         }
-        await mergeContent(uniqueFilePaths, 'video');
+        await mergeContent(uniqueFilePaths.reverse(), 'video');
         setIsMerging(false);
       } catch (e :any) {
         toast({
@@ -118,6 +129,38 @@ const Pipe: React.FC = () => {
       setIsMerging(false);
     }
   };
+
+  const copyMediaToClipboard = async () => {
+    if (mergedVideoPath) {
+      try {
+        setIsCopied(false);
+        const response = await fetch(`/api/copy?path=${encodeURIComponent(mergedVideoPath)}`);
+        const result = await response.json();
+        if (!response.ok) {
+          setIsCopied(false);
+          throw new Error(result.error || "Failed to copy video to clipboard");
+        }
+        toast({
+          title: "media copied to your clipboard",
+          variant: "default",
+          duration: 3000,
+        });
+        setIsCopied(true);
+        setTimeout(() => {
+          setIsCopied(false);
+        }, 3000);
+      } catch (err) {
+        console.error("failed to copy media: ", err);
+        setIsCopied(true);
+        toast({
+          title: "failed to copy media to clipboard",
+          variant: "default",
+          duration: 3000,
+        });
+      }
+    }
+  };
+
 
   return (
     <div className="w-full mt-4 flex flex-col justify-center items-center">
@@ -217,11 +260,21 @@ const Pipe: React.FC = () => {
       </TooltipProvider>
 
       {mergedVideoPath && (
-        <div className="border-2 mt-16 w-[1400px] rounded-lg flex-col flex items-center justify-center" >
+        <div className="border-2 mt-16 w-[1200px] relative rounded-lg flex-col flex items-center justify-center" >
+          <Button
+            variant={"outline"} 
+            size={"icon"}
+            onClick={copyMediaToClipboard}
+            className="mt-4 absolute !border-none right-5 top-5"
+          >
+            {isCopied ? <IconCheck /> : <IconCopy />}
+            <span className="sr-only">Copy video</span>
+          </Button>
           <VideoComponent
             filePath={mergedVideoPath}
             className="text-center m-8 "
           />
+          <Divider />
           <LLMChat data={rawData} />
         </div>
       )}
@@ -231,3 +284,4 @@ const Pipe: React.FC = () => {
 
 export default Pipe;
 
+            // filePath={"C:\\Users\\eirae\\.screenpipe\\videos\\output_28b50b43-cf63-43f3-88f0-8e5dd9e5910e.mp4"}

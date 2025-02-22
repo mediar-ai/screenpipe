@@ -36,9 +36,7 @@ interface LLMChatProps {
 }
 
 export function LLMChat({ data, className }: LLMChatProps) {
-
   const { toast } = useToast();
-  const { health } = useHealthCheck();
   const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
   const [isAiLoading, setIsAiLoading] = useState(false);

@@ -140,7 +140,8 @@ pub async fn merge_videos(
         ));
     }
 
-    let output_filename = format!("output_{}.mp4", Uuid::new_v4());
+    let current_time = chrono::Local::now().format("%Y_%m_%d_%H_%M_%S").to_string();
+    let output_filename = format!("loom_{}.mp4", current_time);
     let output_path = output_dir.join(&output_filename);
 
     // create a temporary file to store the list of input videos

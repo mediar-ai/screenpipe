@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import { getMediaFile } from "@/lib/actions/video-actions";
 import { memo, useCallback, useEffect, useState } from "react";
 import MediaThemeSutro from 'player.style/sutro/react';
 
@@ -33,17 +32,6 @@ export const VideoComponent = memo(function VideoComponent({
     </div>
   );
 
-  const validateMedia = async(path: string): Promise<string> => {
-    try {
-      const response = await fetch(`http://localhost:3030/experimental/validate/media?file_path=${encodeURIComponent(path)}`);
-      const result = await response.json();
-      return result.status;
-    } catch (error) {
-      console.error("Failed to validate media:", error);
-      return "Failed to validate media";
-    }
-  };
-
   useEffect(() => {
     async function loadMedia() {
       try {
@@ -53,29 +41,17 @@ export const VideoComponent = memo(function VideoComponent({
           throw new Error("Invalid file path");
         }
 
-        const validationStatus = await validateMedia(sanitizedPath);
-        console.log("Media file:", validationStatus)
-
-        if (validationStatus === "valid media file") {
-          setIsAudio(
-            sanitizedPath.toLowerCase().includes("input") ||
-            sanitizedPath.toLowerCase().includes("output")
-          );
-          const { data, mimeType } = await getMediaFile(sanitizedPath);
-          const binaryData = atob(data);
-          const bytes = new Uint8Array(binaryData.length);
-          for (let i = 0; i < binaryData.length; i++) {
-            bytes[i] = binaryData.charCodeAt(i);
-          }
-          const blob = new Blob([bytes], { type: mimeType });
-          setMediaSrc(URL.createObjectURL(blob));
-        } else if (validationStatus.startsWith("media file does not exist")) {
-            throw new Error(`${isAudio ? "audio" : "video" } file does not exist, it might get deleted`);
-        } else if (validationStatus.startsWith("invalid media file")) {
-            throw new Error(`the ${isAudio ? "audio" : "video" } file is not written completely, please try again later`);
-        } else { 
-            throw new Error("unknown media validation status"); 
+        const response = await fetch(`/api/file?path=${encodeURIComponent(sanitizedPath)}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch media file");
         }
+        const blob = await response.blob();
+        setMediaSrc(URL.createObjectURL(blob));
+
+        setIsAudio(
+          sanitizedPath.toLowerCase().includes("input") ||
+          sanitizedPath.toLowerCase().includes("output")
+        );
       } catch (error) {
         console.error("Failed to load media:", error);
         setError(
@@ -121,13 +97,16 @@ export const VideoComponent = memo(function VideoComponent({
 
   return (
     <div className={cn("flex flex-col items-center justify-center", className)}>
-      <MediaThemeSutro className="w-[60%]">
-        <video 
-          slot="media"
-          src={mediaSrc}
-          >
-        </video>
-      </MediaThemeSutro>
+      <div className="rounded-xl block w-[80%] overflow-hidden">
+        <MediaThemeSutro className="w-full h-full">
+          <video 
+            className="!mb-[-5px]"
+            slot="media"
+            src={mediaSrc}
+            >
+          </video>
+        </MediaThemeSutro>
+      </div>
       {/* {renderFileLink()} */}
     </div>
   );
