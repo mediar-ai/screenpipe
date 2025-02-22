@@ -1,3 +1,4 @@
+use crate::window_api::show_specific_window;
 use crate::{get_base_dir, get_store};
 use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
@@ -23,6 +24,7 @@ use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -33,7 +35,7 @@ struct LogEntry {
 
 #[derive(Clone)]
 pub struct ServerState {
-    app_handle: tauri::AppHandle,
+    pub app_handle: tauri::AppHandle,
     settings_tx: broadcast::Sender<String>,
 }
 
@@ -162,6 +164,7 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/sse/settings", axum::routing::get(settings_stream))
         .route("/sidecar/start", axum::routing::post(start_sidecar))
         .route("/sidecar/stop", axum::routing::post(stop_sidecar))
+        .route("/window", axum::routing::post(show_specific_window))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
