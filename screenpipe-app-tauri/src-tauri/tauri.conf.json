@@ -85,8 +85,6 @@
         "title": "screenpipe",
         "width": 1200,
         "height": 850,
-        "minWidth": 850,
-        "minHeight": 800,
         "resizable": true
       }
     ],

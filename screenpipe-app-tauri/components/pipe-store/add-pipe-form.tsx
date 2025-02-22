@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Plus, FolderOpen, Puzzle } from 'lucide-react';
-import { open } from '@tauri-apps/plugin-dialog';
-import { PublishDialog } from '../publish-dialog';
-import { PipeStorePlugin } from '@/lib/api/store';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Plus, FolderOpen, Puzzle } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { PublishDialog } from "../publish-dialog";
+import { PipeStorePlugin } from "@/lib/api/store";
 
 interface AddPipeFormProps {
   onAddPipe: (url: string) => Promise<any>;
@@ -17,18 +17,18 @@ export const AddPipeForm: React.FC<AddPipeFormProps> = ({
   onLoadFromLocalFolder,
   isHealthy,
 }) => {
-  const [newRepoUrl, setNewRepoUrl] = useState('');
+  const [newRepoUrl, setNewRepoUrl] = useState("");
 
   return (
-    <div className="border rounded-lg p-4 space-y-3 w-[50%] mx-auto">
+    <div className="border rounded-lg p-4 space-y-3 md:w-[50%] w-full mx-auto">
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Input
             type="url"
             placeholder={
               !isHealthy
-                ? 'screenpipe not running...'
-                : 'enter github url or local path'
+                ? "screenpipe not running..."
+                : "enter github url or local path"
             }
             value={newRepoUrl}
             onChange={(e) => setNewRepoUrl(e.target.value)}
@@ -68,4 +68,4 @@ export const AddPipeForm: React.FC<AddPipeFormProps> = ({
       </div>
     </div>
   );
-}; 
+};
