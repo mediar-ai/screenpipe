@@ -174,7 +174,7 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Update version in Cargo.toml
-        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
+        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.os_type == 'windows'
         shell: pwsh
         run: |
           $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.tomlUpdate .github/workflows/release-app.yml
@@ -182,7 +182,7 @@ jobs:
           $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
 
       - name: Update version in Cargo.toml
-        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform == 'macos-latest'
+        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.os_type != 'windows'
         shell: bash
         run: |
           sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
