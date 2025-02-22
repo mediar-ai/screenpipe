@@ -58,9 +58,18 @@ export const PipeStore: React.FC = () => {
       (pipe) =>
         pipe.id.toLowerCase().includes(searchQuery.toLowerCase()) &&
         (!showInstalledOnly || pipe.is_installed) &&
-        !pipe.is_installing
+        !pipe.is_installing,
     )
-    .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+    .sort((a, b) => {
+      // Sort by downloads count first
+      const downloadsA = a.plugin_analytics?.downloads_count || 0;
+      const downloadsB = b.plugin_analytics?.downloads_count || 0;
+      if (downloadsB !== downloadsA) {
+        return downloadsB - downloadsA;
+      }
+      // Then by creation date
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   // Add debounced search tracking
   useEffect(() => {
