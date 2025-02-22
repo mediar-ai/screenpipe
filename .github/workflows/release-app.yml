@@ -640,7 +640,7 @@ jobs:
             screenpipe-app-tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.dmg,
             screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
             screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.dmg"
-
+screenpipe-app-tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
   retry-win:
     needs: publish-tauri
     if: ${{ always() && contains(needs.publish-tauri.result, 'failure') }}
