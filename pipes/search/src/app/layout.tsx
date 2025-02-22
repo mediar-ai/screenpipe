@@ -35,9 +35,9 @@ export default function RootLayout({
           <div className="flex w-full h-full">
             <div className="absolute left-0 top-0 h-full">
               <HistorySidebar />
-              <div className="absolute right-[-40px] top-5 z-[1000]  ">
-                <SidebarTrigger />
-              </div>
+            </div>
+            <div className="fixed left-0 top-2  z-[10000]  ">
+              <SidebarTrigger />
             </div>
             <div className="flex-1 overflow-auto">
               {children}

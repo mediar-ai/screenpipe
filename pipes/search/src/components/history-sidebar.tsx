@@ -106,7 +106,9 @@ export function HistorySidebar() {
   return (
     <Sidebar >
       <SidebarHeader>
-        <SearchForm onChange={handleSearchChange} />
+        <div className="pl-4">
+          <SearchForm onChange={handleSearchChange} />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
