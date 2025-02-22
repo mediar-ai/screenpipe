@@ -22,6 +22,7 @@ use screenpipe_events::{send_event, subscribe_to_all_events, Event as Screenpipe
 
 use crate::{
     db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
+    embedding::embedding_endpoint::create_embeddings,
     pipe_manager::PipeManager,
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
@@ -914,7 +915,6 @@ impl Server {
     pub fn new(
         db: Arc<DatabaseManager>,
         addr: SocketAddr,
-        // device_manager: Arc<DeviceManager>,
         screenpipe_dir: PathBuf,
         pipe_manager: Arc<PipeManager>,
         vision_disabled: bool,
@@ -924,7 +924,6 @@ impl Server {
         Server {
             db,
             addr,
-            // device_manager,
             screenpipe_dir,
             pipe_manager,
             vision_disabled,
@@ -2009,7 +2008,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
             axum::http::header::CACHE_CONTROL,
         ]); // Important for SSE
 
-    let router = Router::new()
+    #[allow(unused_mut)]
+    let mut router = Router::new()
         .route("/search", get(search))
         .route("/audio/list", get(api_list_audio_devices))
         .route("/vision/list", get(api_list_monitors))
@@ -2054,6 +2054,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/frames/:frame_id", get(get_frame_data))
         .route("/pipes/build-status/:pipe_id", get(get_pipe_build_status))
         .route("/search/keyword", get(keyword_search_handler))
+        .route("/v1/embeddings", axum::routing::post(create_embeddings))
         // .route("/vision/start", post(start_vision_device))
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
@@ -2064,7 +2065,6 @@ pub fn create_router() -> Router<Arc<AppState>> {
     {
         router = router.route("/experimental/input_control", post(input_control_handler));
     }
-
     router
 }
 

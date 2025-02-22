@@ -120,6 +120,8 @@ lru = "0.13.0"
 tokio-util = { version = "0.7", features = ["io"] }
 
 dashmap = "6.1.0"
+
+once_cell = { workspace = true }
 [dev-dependencies]
 env_logger = "0.10"
 tempfile = "3.3.0"
@@ -144,8 +146,7 @@ default = []
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-pipes = ["screenpipe-core/pipes", "url"]
-llm = ["screenpipe-core/llm"]
+llm = []
 beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
 experimental = ["enigo"]
 debug-console = ["console-subscriber"]
