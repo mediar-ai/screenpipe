@@ -11,7 +11,6 @@ edition = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
 reqwest = { workspace = true }
-which = "7.0.0"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -101,7 +100,6 @@ objc = "0.2.7"
 tempfile = "3.3.0"
 infer = "0.15"
 criterion = { workspace = true }
-memory-stats = "1.0"
 strsim = "0.10.0"
 futures = "0.3.31"
 tracing-subscriber = "0.3.16"

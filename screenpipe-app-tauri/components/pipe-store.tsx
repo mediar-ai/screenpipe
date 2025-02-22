@@ -68,7 +68,7 @@ export const PipeStore: React.FC = () => {
         return downloadsB - downloadsA;
       }
       // Then by creation date
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime();
     });
 
   // Add debounced search tracking

@@ -17,7 +17,6 @@ screenpipe-events = { path = "../screenpipe-events" }
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
-screenpipe-actions = { path = "../screenpipe-actions", optional = true }
 killport = { version = "1.1.0" }
 
 # Image processing
@@ -131,7 +130,6 @@ tokio-tungstenite = "0.19.0"
 criterion = { workspace = true }
 rand = "0.8"
 
-axum-test = "15.3.0"
 
 [[bench]]
 name = "db_benchmarks"
@@ -147,7 +145,6 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 llm = []
-beta = ["screenpipe-core/beta", "dep:screenpipe-actions"]
 experimental = ["enigo"]
 debug-console = ["console-subscriber"]
 

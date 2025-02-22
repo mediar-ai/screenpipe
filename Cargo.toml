@@ -5,7 +5,6 @@ members = [
     "screenpipe-audio",
     "screenpipe-server",
     "screenpipe-integrations",
-    "screenpipe-actions",
     "screenpipe-events",
 ]
 exclude = ["screenpipe-app-tauri/src-tauri"]

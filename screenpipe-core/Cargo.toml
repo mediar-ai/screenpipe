@@ -22,9 +22,7 @@ hf-hub = { workspace = true, features = [
     "tokio",
     "native-tls",
 ] }
-screenpipe-actions = { path = "../screenpipe-actions", optional = true }
 http-cache-reqwest = "0.15.0"
-reqwest = { workspace = true }
 reqwest-middleware = "0.4.0"
 tokio = { workspace = true }
 
@@ -51,11 +49,13 @@ sentry = { workspace = true }
 zip = "0.6.2"
 tokio-stream = "0.1.17"
 
+[dev-dependencies]
+reqwest = { workspace = true }
+
 [features]
 default = ["security"]
 security = ["dep:regex", "dep:lazy_static"]
 metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
-beta = ["dep:screenpipe-actions"]
 llm = []

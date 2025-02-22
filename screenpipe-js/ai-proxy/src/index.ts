@@ -598,7 +598,7 @@ export default Sentry.withSentry(
 /*
 terminal 1
 
-cd screenpipe-actions/ai-proxy
+cd screenpipe-js/ai-proxy
 wrangler dev
 
 
