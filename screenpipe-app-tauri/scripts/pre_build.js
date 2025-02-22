@@ -204,6 +204,7 @@ if (platform == 'linux') {
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
+                path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
