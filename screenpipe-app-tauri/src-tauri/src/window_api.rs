@@ -46,7 +46,7 @@ pub async fn show_specific_window(
         .app_handle
         .set_activation_policy(tauri::ActivationPolicy::Accessory);
     let url = format!("http://localhost:{}{}", payload.port, payload.path);
-    let window = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &state.app_handle,
         &payload.title,
         tauri::WebviewUrl::External(url.parse().unwrap()),
@@ -54,12 +54,17 @@ pub async fn show_specific_window(
     .title(&payload.title)
     .transparent(payload.transparent.unwrap_or(true))
     .decorations(payload.decorations.unwrap_or(false))
-    .hidden_title(payload.hidden_title.unwrap_or(true))
     .focused(payload.is_focused.unwrap_or(true))
     .inner_size(payload.width, payload.height)
     .always_on_top(payload.always_on_top.unwrap_or(true))
-    .visible_on_all_workspaces(payload.visible_on_all_workspaces.unwrap_or(true))
-    .build();
+    .visible_on_all_workspaces(payload.visible_on_all_workspaces.unwrap_or(true));
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        builder = builder.hidden_title(payload.hidden_title.unwrap_or(true));
+    }
+
+    let window = builder.build();
 
     match window {
         Ok(window) => {
