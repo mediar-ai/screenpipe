@@ -30,7 +30,8 @@ export interface HistoryItem {
     }[];
 }
 
-const HISTORY_FILE_PATH = path.join(process.cwd(), 'data', 'chat-history.json');
+
+const HISTORY_FILE_PATH = path.join(process.env.SCREENPIPE_DIR || process.cwd(), 'chat-history.json');
 
 export const loadHistory = async (historyId?: string): Promise<HistoryItem[]> => {
     try {
@@ -86,12 +87,12 @@ export const deleteHistoryItem = async (id: string): Promise<void> => {
         console.error('Failed to delete history item:', error);
     }
 };
-export const listHistory = async (): Promise<{ id: string; title: string; timestamp: string }[]> => {
+export const listHistory = async (): Promise<HistoryItem[]> => {
     try {
         if (fs.existsSync(HISTORY_FILE_PATH)) {
             const data = fs.readFileSync(HISTORY_FILE_PATH, 'utf-8');
             const history: HistoryItem[] = JSON.parse(data);
-            return history.map(item => ({ id: item.id, title: item.title, timestamp: item.timestamp }));
+            return history;
         }
         return [];
     } catch (error) {

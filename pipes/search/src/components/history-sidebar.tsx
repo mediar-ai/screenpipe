@@ -15,11 +15,6 @@ import {
 import { SearchForm } from "@/components/search-form";
 import { listHistory, HistoryItem, deleteHistoryItem } from "@/hooks/actions/history";
 
-// Add this function to handle delete action
-const handleDeleteHistory = async (id: string) => {
-    await deleteHistoryItem(id);
-    window.location.reload();
-};
 
 export function HistorySidebar() {
     const [todayItems, setTodayItems] = useState<HistoryItem[]>([]);
@@ -27,39 +22,43 @@ export function HistorySidebar() {
     const [previous7DaysItems, setPrevious7DaysItems] = useState<HistoryItem[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
 
+    const fetchHistory = async () => {
+        const history: HistoryItem[] = await listHistory();
+        history.sort((a: HistoryItem, b: HistoryItem) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        const today = new Date();
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(today.getDate() - 7);
+
+        const todayItems: HistoryItem[] = [];
+        const yesterdayItems: HistoryItem[] = [];
+        const previous7DaysItems: HistoryItem[] = [];
+
+        history.forEach((item: HistoryItem) => {
+            const itemDate = new Date(item.timestamp);
+            if (itemDate.toDateString() === today.toDateString()) {
+                todayItems.push(item);
+            } else if (itemDate.toDateString() === yesterday.toDateString()) {
+                yesterdayItems.push(item);
+            } else if (itemDate >= sevenDaysAgo && itemDate < today) {
+                previous7DaysItems.push(item);
+            }
+        });
+
+        setTodayItems(todayItems);
+        setYesterdayItems(yesterdayItems);
+        setPrevious7DaysItems(previous7DaysItems);
+    };
+
     useEffect(() => {
-        const fetchHistory = async () => {
-            const history = await listHistory();
-            history.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            const sevenDaysAgo = new Date(today);
-            sevenDaysAgo.setDate(today.getDate() - 7);
-
-            const todayItems: HistoryItem[] = [];
-            const yesterdayItems: HistoryItem[] = [];
-            const previous7DaysItems: HistoryItem[] = [];
-
-            history.forEach(item => {
-                const itemDate = new Date(item.timestamp);
-                if (itemDate.toDateString() === today.toDateString()) {
-                    todayItems.push(item);
-                } else if (itemDate.toDateString() === yesterday.toDateString()) {
-                    yesterdayItems.push(item);
-                } else if (itemDate >= sevenDaysAgo && itemDate < today) {
-                    previous7DaysItems.push(item);
-                }
-            });
-
-            setTodayItems(todayItems);
-            setYesterdayItems(yesterdayItems);
-            setPrevious7DaysItems(previous7DaysItems);
-        };
-
         fetchHistory();
     }, []);
 
+    const handleDeleteHistory = async (id: string) => {
+        await deleteHistoryItem(id);
+        fetchHistory();
+    };
     const handleHistoryClick = (id: string) => {
         localStorage.setItem("historyId", id);
         window.location.reload();
@@ -69,8 +68,9 @@ export function HistorySidebar() {
         localStorage.removeItem('historyId');
         location.reload();
     };
-    const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setSearchQuery(event.target.value);
+    const handleSearchChange = (event: React.FormEvent<HTMLFormElement>) => {
+        const target = event.target as HTMLInputElement;
+        setSearchQuery(target.value);
     };
     const filterItems = (items: HistoryItem[]) => {
         return items.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -110,20 +110,28 @@ export function HistorySidebar() {
                             {renderHistoryItems(todayItems)}
                         </SidebarMenu>
                     </SidebarGroupContent>
-                    <SidebarGroupLabel>Yesterday</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {renderHistoryItems(yesterdayItems)}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                    <SidebarGroupLabel>Previous 7 days</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            {renderHistoryItems(previous7DaysItems)}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
+                    {yesterdayItems.length > 0 && (
+                        <>
+                            <SidebarGroupLabel>Yesterday</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {renderHistoryItems(yesterdayItems)}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </>
+                    )}
+                    {previous7DaysItems.length > 0 && (
+                        <>
+                            < SidebarGroupLabel > Previous 7 days</SidebarGroupLabel>
+                            <SidebarGroupContent>
+                                <SidebarMenu>
+                                    {renderHistoryItems(previous7DaysItems)}
+                                </SidebarMenu>
+                            </SidebarGroupContent>
+                        </>
+                    )}
                 </SidebarGroup>
             </SidebarContent>
-        </Sidebar>
+        </Sidebar >
     );
 }
