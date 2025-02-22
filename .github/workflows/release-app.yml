@@ -177,7 +177,7 @@ jobs:
         if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.os_type == 'windows'
         shell: pwsh
         run: |
-          $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.tomlUpdate .github/workflows/release-app.yml
+          $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
           $content = $content -replace '^version = ".*"', ('version = "' + '${{ github.event.inputs.version }}' + '"')
           $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
 
