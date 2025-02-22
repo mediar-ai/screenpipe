@@ -62426,7 +62426,7 @@ async function downloadAndExtractSubdir(subdir, destPath) {
 }
 var createPipeCommand = new Command().name("create").description("create a new pipe").action(async () => {
   console.log(source_default.bold(`
-welcome to screenpipe! \uD83D\uDE80
+welcome to screenpipe!
 `));
   logger.log(`let's create a new screenpipe pipe.
 `);
@@ -62478,7 +62478,7 @@ welcome to screenpipe! \uD83D\uDE80
       ...PIPE_ADDITIONS.devDependencies
     };
     await import_fs_extra.default.writeJson(pkgPath, pkg, { spaces: 2 });
-    loadingSpinner.succeed(source_default.green(`> pipe created successfully! \uD83C\uDF89`));
+    loadingSpinner.succeed(source_default.green(`> pipe created successfully!`));
     console.log(`
 to get started:`);
     console.log(source_default.cyan(`cd ${directory}`));

@@ -33,7 +33,7 @@ export const createPipeCommand = new Command()
   .name("create")
   .description("create a new pipe")
   .action(async () => {
-    console.log(chalk.bold("\nwelcome to screenpipe! 🚀\n"));
+    console.log(chalk.bold("\nwelcome to screenpipe!\n"));
     logger.log("let's create a new screenpipe pipe.\n");
     logger.log(
       "pipes are plugins that interact with captured screen and audio data."
@@ -92,7 +92,7 @@ export const createPipeCommand = new Command()
 
       await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 
-      loadingSpinner.succeed(chalk.green(`> pipe created successfully! 🎉`));
+      loadingSpinner.succeed(chalk.green(`> pipe created successfully!`));
 
       console.log("\nto get started:");
       console.log(chalk.cyan(`cd ${directory}`));
