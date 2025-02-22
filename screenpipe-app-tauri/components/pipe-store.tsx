@@ -42,15 +42,15 @@ export const PipeStore: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showInstalledOnly, setShowInstalledOnly] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
-    []
+    [],
   );
   const { checkLogin } = useLoginDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
   const filteredPipes = pipes
@@ -120,21 +120,21 @@ export const PipeStore: React.FC = () => {
             is_installed: !!installedPipe,
             installed_config: installedPipe?.config,
             has_purchased: purchaseHistory.some(
-              (p) => p.plugin_id === plugin.id
+              (p) => p.plugin_id === plugin.id,
             ),
             is_core_pipe: corePipes.includes(plugin.name),
             is_enabled: installedPipe?.config?.enabled ?? false,
             has_update: false,
           };
-        })
+        }),
       );
 
       const customPipes = installedPipes
         .filter(
           (p) =>
             !plugins.find(
-              (plugin) => plugin.name === p.id?.replace("._temp", "")
-            )
+              (plugin) => plugin.name === p.id?.replace("._temp", ""),
+            ),
         )
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
@@ -175,7 +175,7 @@ export const PipeStore: React.FC = () => {
 
   const handlePurchasePipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -302,7 +302,7 @@ export const PipeStore: React.FC = () => {
 
   const handleInstallPipe = async (
     pipe: PipeWithStatus,
-    onComplete?: () => void
+    onComplete?: () => void,
   ) => {
     try {
       if (!checkLogin(settings.user)) return;
@@ -310,8 +310,8 @@ export const PipeStore: React.FC = () => {
       // Keep the pipe in its current position by updating its status
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: true } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: true } : p,
+        ),
       );
 
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
@@ -342,7 +342,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.id,
             url: response.download_url,
           }),
-        }
+        },
       );
 
       const data = await downloadResponse.json();
@@ -361,8 +361,8 @@ export const PipeStore: React.FC = () => {
                 is_installed: true,
                 is_installing: false,
               }
-            : p
-        )
+            : p,
+        ),
       );
 
       onComplete?.();
@@ -371,8 +371,8 @@ export const PipeStore: React.FC = () => {
       // Reset the pipe's status on error
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
-          p.id === pipe.id ? { ...p, is_installing: false } : p
-        )
+          p.id === pipe.id ? { ...p, is_installing: false } : p,
+        ),
       );
       if ((error as Error).cause === PipeDownloadError.PURCHASE_REQUIRED) {
         return toast({
@@ -488,7 +488,7 @@ export const PipeStore: React.FC = () => {
 
       // Filter installed pipes that have updates available
       const pipesToUpdate = pipes.filter(
-        (pipe) => pipe.is_installed && pipe.has_update
+        (pipe) => pipe.is_installed && pipe.has_update,
       );
 
       if (pipesToUpdate.length === 0) {
@@ -572,7 +572,7 @@ export const PipeStore: React.FC = () => {
 
   const handleTogglePipe = async (
     pipe: PipeWithStatus,
-    onComplete: () => void
+    onComplete: () => void,
   ) => {
     try {
       const t = toast({
@@ -629,7 +629,7 @@ export const PipeStore: React.FC = () => {
         `Failed to ${
           pipe.installed_config?.enabled ? "disable" : "enable"
         } pipe:`,
-        error
+        error,
       );
       toast({
         title: "error toggling pipe",
@@ -640,7 +640,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleLoadFromLocalFolder = async (
-    setNewRepoUrl: (url: string) => void
+    setNewRepoUrl: (url: string) => void,
   ) => {
     try {
       const selectedFolder = await open({
@@ -843,7 +843,7 @@ export const PipeStore: React.FC = () => {
             pipe_id: pipe.name,
             source: responseDownload.download_url,
           }),
-        }
+        },
       );
 
       const data = await response.json();
@@ -902,9 +902,8 @@ export const PipeStore: React.FC = () => {
         return;
       }
       // Get last check time from local storage
-      const lastCheckTime = await localforage.getItem<number>(
-        "lastUpdateCheck"
-      );
+      const lastCheckTime =
+        await localforage.getItem<number>("lastUpdateCheck");
       const now = Date.now();
 
       // Check if 5 minutes have passed since last check
@@ -921,7 +920,7 @@ export const PipeStore: React.FC = () => {
       for (const pipe of installedPipes) {
         const update = await storeApi.checkUpdate(
           pipe.id,
-          pipe.installed_config?.version!
+          pipe.installed_config?.version!,
         );
         if (update.has_update) {
           await handleUpdatePipe(pipe);
@@ -1025,11 +1024,11 @@ export const PipeStore: React.FC = () => {
   }
 
   return (
-    <div className="overflow-hidden flex flex-col space-y-4 min-w-[800px]">
-      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4 min-w-[800px]">
-        <div className="space-y-4 min-w-[800px]">
-          <div className="flex flex-col gap-4 w-[50%]">
-            <div className="flex-1 relative">
+    <div className="overflow-hidden flex flex-col space-y-4">
+      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 md:w-[50%] w-full">
+            <div className="flex-1 relative py-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="search community pipes..."
@@ -1073,7 +1072,7 @@ export const PipeStore: React.FC = () => {
                       className="flex items-center gap-2"
                       disabled={
                         !pipes.some(
-                          (pipe) => pipe.is_installed && pipe.has_update
+                          (pipe) => pipe.is_installed && pipe.has_update,
                         )
                       }
                     >
@@ -1090,7 +1089,7 @@ export const PipeStore: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredPipes.map((pipe) => (
               <PipeCard
                 key={pipe.id}
@@ -1098,7 +1097,7 @@ export const PipeStore: React.FC = () => {
                 setPipe={(updatedPipe) => {
                   setPipes((prevPipes) => {
                     return prevPipes.map((p) =>
-                      p.id === updatedPipe.id ? updatedPipe : p
+                      p.id === updatedPipe.id ? updatedPipe : p,
                     );
                   });
                 }}
