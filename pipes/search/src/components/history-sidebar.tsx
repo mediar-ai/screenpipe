@@ -21,7 +21,15 @@ export function HistorySidebar() {
     const [yesterdayItems, setYesterdayItems] = useState<HistoryItem[]>([]);
     const [previous7DaysItems, setPrevious7DaysItems] = useState<HistoryItem[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-
+    useEffect(() => {
+        const handleHistoryUpdate = () => {
+            fetchHistory();
+        };
+        window.addEventListener("historyCreated", handleHistoryUpdate);
+        return () => {
+            window.removeEventListener("historyCreated", handleHistoryUpdate);
+        };
+    }, []);
     const fetchHistory = async () => {
         const history: HistoryItem[] = await listHistory();
         history.sort((a: HistoryItem, b: HistoryItem) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -61,7 +69,7 @@ export function HistorySidebar() {
     };
     const handleHistoryClick = (id: string) => {
         localStorage.setItem("historyId", id);
-        window.location.reload();
+        window.dispatchEvent(new Event("historyUpdated"));
     };
 
     const handleNewChat = () => {

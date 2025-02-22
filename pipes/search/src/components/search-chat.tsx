@@ -505,7 +505,6 @@ export function SearchChat() {
         setContentType(newContentType);
         setStartDate(newStartDate);
         setShowExamples(false);
-        const title = await generateTitle(example.query);
 
         handleSearch(0, {
             windowName: newWindowName,
@@ -688,12 +687,20 @@ export function SearchChat() {
                     );
                 }
             }
+            scrollToBottom();
         }
     };
 
-    // Load chat history when the component mounts
     useEffect(() => {
+        const handleChatUpdate = () => {
+            loadChatHistory();
+        };
+        window.addEventListener("historyUpdated", handleChatUpdate);
+        // Load chat history when the component mounts
         loadChatHistory();
+        return () => {
+            window.removeEventListener("historyUpdated", handleChatUpdate);
+        };
     }, []);
 
     const handleFloatingInputSubmit = async (e: React.FormEvent) => {
@@ -840,7 +847,7 @@ export function SearchChat() {
             } else {
                 historyItem = {
                     id: uuidv4(),
-                    title: await generateTitle(floatingInput, settings),
+                    title: floatingInput,
                     query: floatingInput,
                     timestamp: new Date().toISOString(),
                     searchParams: {
@@ -860,6 +867,7 @@ export function SearchChat() {
                     messages: [],
                 };
                 localStorage.setItem("historyId", historyItem.id);
+
             }
 
             // Add human message to history
@@ -879,6 +887,8 @@ export function SearchChat() {
             });
 
             await saveHistory([historyItem]);
+            window.dispatchEvent(new Event("historyCreated"));
+
         } catch (error: any) {
             if (error.toString().includes("unauthorized")) {
                 toast({
@@ -1326,7 +1336,7 @@ export function SearchChat() {
 
     return (
         <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-            <div className="z-50 flex items-center gap-2">
+            <div className="flex items-center justify-center mb-16">
                 {/* <SidebarTrigger className="h-8 w-8" /> */}
             </div>
 

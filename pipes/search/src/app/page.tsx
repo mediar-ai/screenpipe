@@ -5,7 +5,8 @@ import { Terminal } from "lucide-react";
 import { SearchChat } from "@/components/search-chat";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { HistorySidebar } from "@/components/history-sidebar"
-
+import { useState, createContext, useContext } from "react";
+export const SidebarContext = createContext({ reloadSidebar: () => { } });
 
 export default function SearchPage() {
 
