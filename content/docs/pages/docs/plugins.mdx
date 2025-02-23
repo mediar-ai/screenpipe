@@ -30,11 +30,11 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 #### killer features
 - **ai flexibility**: OpenAI, local LLMs (ollama), Anthropic, Gemini, etc.
 - **rich APIs**: 
-  - `pipe.input` for keyboard/mouse control
   - `pipe.queryScreenpipe` for context
   - `pipe.settings` for app settings
-  - experimental `pipe.streamTranscriptions` for audio transcription streaming (atm uses a lot of RAM, make sure to enable it in settings/CLI)
-  - experimental `pipe.streamVision` for OCR/Accessibility streaming (atm uses a lot of RAM)
+  - experimental `pipe.streamTranscriptions` for audio transcription streaming (make sure to enable it in settings)
+  - experimental `pipe.streamVision` for OCR/Accessibility/Frames/browser URL streaming 
+  - experimental `pipe.input` for keyboard/mouse control
 - **sandboxed & cross-platform**: safe execution on all OS
 - **real-time**: process screen & audio as it happens
 - **cron jobs**: schedule your pipes to run at specific times, same API as Vercel
@@ -46,12 +46,14 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 
 <MotionDiv delay={0.5}>
 
+we recommend using `bun`, [install](https://bun.sh/docs/installation) or make sure it's up to date.
+
 The fastest way to create a new pipe is using our CLI:
 
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-bunx --bun @screenpipe/dev@latest pipe create
+  bunx --bun @screenpipe/dev@latest pipe create
     ```
   </Tab>
   <Tab>
@@ -126,12 +128,12 @@ when you're ready to deploy, send a PR to the [screenpipe repo](https://github.c
 
 | **pipe**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **obsidian logs** | automate your second brain by logging activities to obsidian | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) |
 | **memories gallery** | google-photo like gallery of your screen recordings with AI insights | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/memories) |
 | **data table** | explore your data in a powerful table view with filtering and sorting | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/data-table) |
 | **search** | search through your screen recordings and audio transcripts with AI | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/search) |
 | **rewind** | visualize your day with AI-powered timeline of activities | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/rewind) |
 | **speaker identification** | automatically identify and label different speakers using AI | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers) |
-| **obsidian logs** | automate your second brain by logging activities to obsidian | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) |
 | **meeting assistant** | organize and summarize meetings with AI - get transcripts and insights | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting) |
 | **linkedin ai agent** | automate business development on linkedin | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant) |
 
@@ -146,6 +148,7 @@ paste these links into your Cursor chat for context:
 - https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
 - https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts
 - https://github.com/mediar-ai/screenpipe/blob/main/pipes/search/src/components/search-chat.tsx
+- https://github.com/mediar-ai/screenpipe/blob/main/pipes/rewind/src/lib/hooks/use-app-name-suggestion.tsx
 - https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs
 - https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs
 
