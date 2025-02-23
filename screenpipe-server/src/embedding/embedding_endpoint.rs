@@ -74,27 +74,51 @@ pub async fn get_or_initialize_model() -> anyhow::Result<Arc<Mutex<EmbeddingMode
 pub async fn create_embeddings(
     Json(request): Json<EmbeddingRequest>,
 ) -> Result<Json<EmbeddingResponse>, (axum::http::StatusCode, String)> {
-    let model = get_or_initialize_model()
-        .await
-        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tracing::debug!("processing embedding request for model: {}", request.model);
+
+    let model = get_or_initialize_model().await.map_err(|e| {
+        tracing::error!("failed to initialize embedding model: {}", e);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to initialize embedding model".to_string(),
+        )
+    })?;
 
     let model = model.lock().await;
 
-    let (texts, _is_single) = match request.input {
-        EmbeddingInput::Single(text) => (vec![text], true),
-        EmbeddingInput::Multiple(texts) => (texts, false),
+    let (texts, _) = match request.input {
+        EmbeddingInput::Single(text) => {
+            tracing::debug!("processing single text embedding, length: {}", text.len());
+            (vec![text], true)
+        }
+        EmbeddingInput::Multiple(texts) => {
+            tracing::debug!("processing batch embedding, count: {}", texts.len());
+            (texts, false)
+        }
     };
 
     // Generate embeddings
     let embeddings = if texts.len() == 1 {
-        vec![model
-            .generate_embedding(&texts[0])
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?]
+        tracing::debug!("generating single embedding");
+        vec![model.generate_embedding(&texts[0]).map_err(|e| {
+            tracing::error!("failed to generate single embedding: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "embedding generation failed".to_string(),
+            )
+        })?]
     } else {
-        model
-            .generate_batch_embeddings(&texts)
-            .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        tracing::debug!("generating batch embeddings");
+        model.generate_batch_embeddings(&texts).map_err(|e| {
+            tracing::error!("failed to generate batch embeddings: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "batch embedding generation failed".to_string(),
+            )
+        })?
     };
+
+    tracing::debug!("successfully generated {} embeddings", embeddings.len());
 
     // Create response
     let data = embeddings

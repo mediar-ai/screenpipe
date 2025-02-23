@@ -109,7 +109,6 @@ impl UpdatesManager {
                 if rx.await? {
                     #[cfg(target_os = "windows")]
                     {
-                        use crate::llm_sidecar::stop_ollama_sidecar;
 
                         self.update_menu_item.set_enabled(false)?;
                         self.update_menu_item
@@ -120,10 +119,6 @@ impl UpdatesManager {
                                 .await
                         {
                             error!("Failed to kill sidecar: {}", err);
-                        }
-                        // llm sidecar only need to kill in windows
-                        if let Err(err) = stop_ollama_sidecar(self.app.clone()).await {
-                            error!("Failed to stop ollama: {}", err);
                         }
 
                         update.download_and_install(|_, _| {}, || {}).await?;
