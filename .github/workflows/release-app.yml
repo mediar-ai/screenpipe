@@ -328,7 +328,6 @@ jobs:
             libayatana-appindicator3-dev \
             libsamplerate-dev \
             libwebrtc-audio-processing-dev \
-            # Add these GTK dependencies
             libgtk-3-dev \
             libwebkit2gtk-4.0-dev \
             librsvg2-dev \

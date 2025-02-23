@@ -270,6 +270,7 @@ export interface VisionEvent {
   timestamp: string;
   app_name?: string;
   window_name?: string;
+  browser_url?: string;
 }
 
 export interface VisionStreamResponse {
