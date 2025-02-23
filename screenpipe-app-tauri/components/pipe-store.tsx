@@ -5,7 +5,6 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Power, Search, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Command } from "@tauri-apps/plugin-shell";
 import {
   PipeApi,
   PipeDownloadError,
@@ -21,7 +20,6 @@ import { useSettings } from "@/lib/hooks/use-settings";
 import posthog from "posthog-js";
 import { Progress } from "./ui/progress";
 import { open } from "@tauri-apps/plugin-dialog";
-import { LoginDialog, useLoginCheck } from "./login-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import {
@@ -31,6 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import localforage from "localforage";
+import { useLoginDialog } from "./login-dialog";
 
 const corePipes: string[] = ["data-table", "search"];
 
@@ -45,7 +44,7 @@ export const PipeStore: React.FC = () => {
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>(
     [],
   );
-  const { showLoginDialog, setShowLoginDialog, checkLogin } = useLoginCheck();
+  const { checkLogin } = useLoginDialog();
   const { open: openStatusDialog } = useStatusDialog();
   const [loadingPurchases, setLoadingPurchases] = useState<Set<string>>(
     new Set(),
@@ -61,7 +60,16 @@ export const PipeStore: React.FC = () => {
         (!showInstalledOnly || pipe.is_installed) &&
         !pipe.is_installing,
     )
-    .sort((a, b) => Number(b.is_paid) - Number(a.is_paid));
+    .sort((a, b) => {
+      // Sort by downloads count first
+      const downloadsA = a.plugin_analytics?.downloads_count || 0;
+      const downloadsB = b.plugin_analytics?.downloads_count || 0;
+      if (downloadsB !== downloadsA) {
+        return downloadsB - downloadsA;
+      }
+      // Then by creation date
+      return new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime();
+    });
 
   // Add debounced search tracking
   useEffect(() => {
@@ -104,10 +112,9 @@ export const PipeStore: React.FC = () => {
       // Create PipeWithStatus objects for store plugins
       const storePluginsWithStatus = await Promise.all(
         plugins.map(async (plugin) => {
-          const installedPipe = installedPipes.find(
-            (p) => p.config?.id === plugin.id,
-          );
-
+          const installedPipe = installedPipes.find((p) => {
+            return p.id?.replace("._temp", "") === plugin.name;
+          });
           return {
             ...plugin,
             is_installed: !!installedPipe,
@@ -123,7 +130,12 @@ export const PipeStore: React.FC = () => {
       );
 
       const customPipes = installedPipes
-        .filter((p) => !plugins.some((plugin) => plugin.id === p.config?.id))
+        .filter(
+          (p) =>
+            !plugins.find(
+              (plugin) => plugin.name === p.id?.replace("._temp", ""),
+            ),
+        )
         .map((p) => {
           const pluginName = p.config?.source?.split("/").pop();
           const is_local = p.id.endsWith("_local");
@@ -305,30 +317,18 @@ export const PipeStore: React.FC = () => {
       setLoadingInstalls((prev) => new Set(prev).add(pipe.id));
 
       const t = toast({
-        title: "downloading pipe",
+        title: "creating pipe",
         description: (
           <div className="space-y-2">
             <Progress value={0} className="h-1" />
-            <p className="text-xs">downloading from server...</p>
+            <p className="text-xs">creating pipe...</p>
           </div>
         ),
-        duration: 100000,
+        duration: 10000,
       });
 
       const pipeApi = await PipeApi.create(settings.user!.token!);
       const response = await pipeApi.downloadPipe(pipe.id);
-
-      t.update({
-        id: t.id,
-        title: "installing pipe",
-        description: (
-          <div className="space-y-2">
-            <Progress value={50} className="h-1" />
-            <p className="text-xs">installing dependencies...</p>
-          </div>
-        ),
-        duration: 100000,
-      });
 
       const downloadResponse = await fetch(
         "http://localhost:3030/pipes/download-private",
@@ -352,23 +352,15 @@ export const PipeStore: React.FC = () => {
 
       await fetchInstalledPipes();
 
-      t.update({
-        id: t.id,
-        title: "pipe installed",
-        description: (
-          <div className="space-y-2">
-            <Progress value={100} className="h-1" />
-            <p className="text-xs">completed successfully</p>
-          </div>
-        ),
-        duration: 2000,
-      });
-
       // Update the pipe's status after successful installation
       setPipes((prevPipes) =>
         prevPipes.map((p) =>
           p.id === pipe.id
-            ? { ...p, is_installed: true, is_installing: false }
+            ? {
+                ...p,
+                is_installed: true,
+                is_installing: false,
+              }
             : p,
         ),
       );
@@ -900,32 +892,36 @@ export const PipeStore: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchInstalledPipes();
-    }, 1000);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     const checkForUpdates = async () => {
-      if(!settings.user.token){
+      if (!settings.user.token) {
         return;
       }
       // Get last check time from local storage
-      const lastCheckTime = await localforage.getItem<number>('lastUpdateCheck');
+      const lastCheckTime =
+        await localforage.getItem<number>("lastUpdateCheck");
       const now = Date.now();
-      
+
       // Check if 5 minutes have passed since last check
       if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
         return;
       }
 
       // Store current time as last check
-      await localforage.setItem('lastUpdateCheck', now);
+      await localforage.setItem("lastUpdateCheck", now);
 
       const installedPipes = pipes.filter((pipe) => pipe.is_installed);
 
       const storeApi = await PipeApi.create(settings.user.token);
       for (const pipe of installedPipes) {
-        const update = await storeApi.checkUpdate(pipe.id, pipe.installed_config?.version!);
+        const update = await storeApi.checkUpdate(
+          pipe.id,
+          pipe.installed_config?.version!,
+        );
         if (update.has_update) {
           await handleUpdatePipe(pipe);
         }
@@ -937,7 +933,7 @@ export const PipeStore: React.FC = () => {
 
     // Set up interval to check every 10 seconds actual check  is done in the function
     const interval = setInterval(checkForUpdates, 10 * 1000);
-    
+
     return () => clearInterval(interval);
   }, [settings.user.token]);
 
@@ -1028,11 +1024,11 @@ export const PipeStore: React.FC = () => {
   }
 
   return (
-    <div className="overflow-hidden flex flex-col space-y-4 min-w-[800px]">
-      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4 min-w-[800px]">
-        <div className="space-y-4 min-w-[800px]">
-          <div className="flex flex-col gap-4 w-[50%]">
-            <div className="flex-1 relative">
+    <div className="overflow-hidden flex flex-col space-y-4">
+      <div className="flex flex-col flex-1 overflow-hidden space-y-4 p-4">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-4 md:w-[50%] w-full">
+            <div className="flex-1 relative py-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="search community pipes..."
@@ -1093,7 +1089,7 @@ export const PipeStore: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredPipes.map((pipe) => (
               <PipeCard
                 key={pipe.id}
@@ -1122,7 +1118,6 @@ export const PipeStore: React.FC = () => {
           onLoadFromLocalFolder={handleLoadFromLocalFolder}
         />
       </div>
-      <LoginDialog open={showLoginDialog} onOpenChange={setShowLoginDialog} />
     </div>
   );
 };

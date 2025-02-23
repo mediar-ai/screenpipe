@@ -33,5 +33,6 @@ export interface Settings {
   logModel: string;
   analysisModel: string;
   analysisTimeWindow: number;
+  deduplicationEnabled: boolean;
   screenpipeAppSettings: ScreenpipeAppSettings;
 }

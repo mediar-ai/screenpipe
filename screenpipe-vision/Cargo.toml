@@ -43,8 +43,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-# TO-DO: change it to "0.3.3" when released
-xcap = { package = "xcap", git = "https://github.com/ologbonowiwi/xcap", rev = "ae0dab1" }
+xcap = "0.3.3"
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -54,9 +53,6 @@ reqwest = { workspace = true }
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
-assert_cmd = "2.0.14"
-predicates = "3.1.0"
-assert_fs = "1.1.1"
 strsim = "0.10.0"
 memory-stats = "1.2.0"
 
@@ -64,9 +60,6 @@ memory-stats = "1.2.0"
 futures-util = "0.3"
 tokio-tungstenite = "0.20"
 serde = "1.0.200"
-
-[build-dependencies]
-cc = "1.0"
 
 [package.metadata.osx]
 framework = ["Vision", "AppKit"]

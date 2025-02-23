@@ -258,6 +258,7 @@ impl PipeManager {
                 "source": "store",
                 "version": version,
                 "id": pipe_id,
+                "enabled": true,
             }),
         )
         .await?;
@@ -281,14 +282,14 @@ impl PipeManager {
             for pipe in pipes {
                 if pipe.enabled {
                     debug!("stopping pipe [{}] before purge", pipe.id);
-                        match self.stop_pipe(&pipe.id).await {
-                            Ok(_) => {
-                                debug!("successfully killed pipe process [{}]", &pipe.id);
-                            }
-                            Err(_) => {
-                                debug!("failed to stop pipe [{}],", &pipe.id);
-                            }
-                        };
+                    match self.stop_pipe(&pipe.id).await {
+                        Ok(_) => {
+                            debug!("successfully killed pipe process [{}]", &pipe.id);
+                        }
+                        Err(_) => {
+                            debug!("failed to stop pipe [{}],", &pipe.id);
+                        }
+                    };
                 }
             }
 
@@ -314,7 +315,10 @@ impl PipeManager {
                     Err(e) => {
                         if retries > 0 {
                             retries -= 1;
-                            debug!("failed to purge pipes, retrying! ({} retries left)", retries);
+                            debug!(
+                                "failed to purge pipes, retrying! ({} retries left)",
+                                retries
+                            );
                         } else {
                             return Err(e.into());
                         }
@@ -443,7 +447,7 @@ impl PipeManager {
                                 );
                             }
                         }
-                        #[cfg(windows)] 
+                        #[cfg(windows)]
                         {
                             const CREATE_NO_WINDOW: u32 = 0x08000000;
                             let output = tokio::process::Command::new("netstat")

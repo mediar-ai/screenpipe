@@ -7,7 +7,6 @@ use commands::save_pipe_config;
 use commands::show_main_window;
 use serde_json::json;
 use serde_json::Value;
-use sidecar::SidecarManager;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -35,19 +34,30 @@ use crate::analytics::start_analytics;
 
 mod commands;
 mod disk_usage;
-mod llm_sidecar;
 mod permissions;
 mod server;
 mod sidecar;
 mod store;
 mod tray;
 mod updates;
+mod window_api;
+
+pub use server::*;
+
+pub use sidecar::*;
+
+pub use icons::*;
+pub use store::*;
+
+mod config;
+pub use config::get_base_dir;
+
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::stop_screenpipe;
 pub use sidecar::spawn_screenpipe;
+pub use sidecar::stop_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
 
@@ -62,7 +72,6 @@ use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
 use tauri_plugin_sentry::sentry;
 mod health;
 use health::start_health_check;
-pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
 #[derive(Debug, Default)]
@@ -351,18 +360,6 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-pub fn get_base_dir(
-    app: &tauri::AppHandle,
-    custom_path: Option<String>,
-) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
-
-    let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
-
-    fs::create_dir_all(local_data_dir.join("data"))?;
-    Ok(local_data_dir)
-}
-
 #[derive(Debug, serde::Serialize)]
 pub struct LogFile {
     name: String,
@@ -451,16 +448,16 @@ use tokio::time::{sleep, Duration};
 #[tauri::command]
 async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
     debug!("Starting upload for file: {}", file_path);
-    
+
     // Read file contents - do this outside retry loop to avoid multiple reads
     let file_contents = match tokio::fs::read(file_path).await {
         Ok(contents) => {
             debug!("Successfully read file of size: {} bytes", contents.len());
             contents
-        },
+        }
         Err(e) => {
             error!("Failed to read file: {}", e);
-            return Err(e.to_string())
+            return Err(e.to_string());
         }
     };
 
@@ -477,7 +474,7 @@ async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, St
             .put(signed_url)
             .body(file_contents.clone())
             .send()
-            .await 
+            .await
         {
             Ok(response) => {
                 if response.status().is_success() {
@@ -486,7 +483,7 @@ async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, St
                 }
                 last_error = format!("Upload failed with status: {}", response.status());
                 error!("{} (attempt {}/{})", last_error, attempt, max_retries);
-            },
+            }
             Err(e) => {
                 last_error = format!("Request failed: {}", e);
                 error!("{} (attempt {}/{})", last_error, attempt, max_retries);
@@ -500,7 +497,10 @@ async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, St
         }
     }
 
-    Err(format!("Upload failed after {} attempts. Last error: {}", max_retries, last_error))
+    Err(format!(
+        "Upload failed after {} attempts. Last error: {}",
+        max_retries, last_error
+    ))
 }
 
 // Helper function to parse shortcut string
@@ -679,11 +679,7 @@ async fn main() {
             reset_all_pipes,
             set_tray_unhealth_icon,
             set_tray_health_icon,
-            llm_sidecar::start_ollama_sidecar,
-            llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
-            commands::show_meetings,
-            commands::show_identify_speakers,
             commands::get_disk_usage,
             commands::open_pipe_window,
             get_log_files,
@@ -794,13 +790,13 @@ async fn main() {
                 .unwrap_or(Value::Bool(true))
                 .as_bool()
                 .unwrap_or(true);
-            
+
             let is_autostart_enabled = store
                 .get("autoStartEnabled")
                 .unwrap_or(Value::Bool(true))
                 .as_bool()
                 .unwrap_or(true);
-            
+
             if is_autostart_enabled {
                 let _ = autostart_manager.enable();
             } else {
@@ -878,7 +874,6 @@ async fn main() {
                     if let Err(e) = manager.spawn(&app_handle).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
-
                 });
             } else {
                 debug!("Dev mode enabled, skipping sidecar spawn and restart");
