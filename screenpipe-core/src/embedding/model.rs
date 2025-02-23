@@ -19,7 +19,7 @@ impl EmbeddingModel {
         let (model_path, tokenizer_path) = if model_path.is_none() || tokenizer_path.is_none() {
             let api = Api::new()?;
             let repo = api.repo(Repo::new(
-                "jinaai/jina-embeddings-v2-base-en".to_string(),
+                "jinaai/jina-embeddings-v3".to_string(),
                 RepoType::Model,
             ));
             (repo.get("model.safetensors")?, repo.get("tokenizer.json")?)

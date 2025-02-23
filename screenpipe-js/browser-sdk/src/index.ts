@@ -604,44 +604,63 @@ class BrowserPipeImpl implements BrowserPipe {
     }
 
     try {
-      const response = await fetch("http://localhost:3030/v1/embeddings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "all-MiniLM-L6-v2",
-          // Send as Multiple variant even for single strings to be consistent
-          input: texts.length === 1 ? texts[0] : texts,
-          encoding_format: "float",
-        }),
-      });
+      const BATCH_SIZE = 50;
+      const batches = [];
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `http error! status: ${response.status}, error: ${errorText}`
-        );
+      // Split into batches of 50
+      for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+        batches.push(texts.slice(i, i + BATCH_SIZE));
       }
 
-      const data = await response.json();
-      const embeddings = data.data.map((d: any) => d.embedding);
+      // Process batches in parallel
+      const batchResults = await Promise.all(
+        batches.map(async (batch) => {
+          const response = await fetch("http://localhost:3030/v1/embeddings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "all-MiniLM-L6-v2",
+              input: batch.length === 1 ? batch[0] : batch,
+              encoding_format: "float",
+            }),
+          });
 
-      // group similar texts using cosine similarity
+          if (!response.ok) {
+            throw new Error(`http error! status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          return data.data.map((d: any) => ({
+            text: batch[data.data.indexOf(d)],
+            embedding: d.embedding,
+          }));
+        })
+      );
+
+      // Flatten batch results
+      const allEmbeddings = batchResults.flat();
+
+      // Group similar texts using cosine similarity
       const similarityThreshold = 0.9;
       const groups: { text: string; similar: string[] }[] = [];
       const used = new Set<number>();
 
-      for (let i = 0; i < texts.length; i++) {
+      for (let i = 0; i < allEmbeddings.length; i++) {
         if (used.has(i)) continue;
 
-        const group = { text: texts[i], similar: [] as string[] };
+        const group = { text: allEmbeddings[i].text, similar: [] as string[] };
         used.add(i);
 
-        for (let j = i + 1; j < texts.length; j++) {
+        for (let j = i + 1; j < allEmbeddings.length; j++) {
           if (used.has(j)) continue;
 
-          const similarity = cosineSimilarity(embeddings[i], embeddings[j]);
+          const similarity = cosineSimilarity(
+            allEmbeddings[i].embedding,
+            allEmbeddings[j].embedding
+          );
+
           if (similarity > similarityThreshold) {
-            group.similar.push(texts[j]);
+            group.similar.push(allEmbeddings[j].text);
             used.add(j);
           }
         }
