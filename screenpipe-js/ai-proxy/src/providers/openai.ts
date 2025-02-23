@@ -68,43 +68,57 @@ export class OpenAIProvider implements AIProvider {
 			messages: this.formatMessages(body.messages),
 			temperature: body.temperature,
 			stream: true,
-			response_format:
-				body.response_format?.type === 'json_object'
-					? { type: 'json_object' }
-					: body.response_format?.type === 'json_schema'
-					? {
-							type: 'json_schema',
-							json_schema: {
-								schema: body.response_format.schema!,
-								name: body.response_format.name || 'default',
-								strict: true,
-							},
-					  }
-					: undefined,
+			response_format: this.formatResponseFormat(body.response_format),
 			tools: body.tools as ChatCompletionCreateParams['tools'],
 		});
-
+	
 		return new ReadableStream({
 			async start(controller) {
 				try {
 					for await (const chunk of stream) {
-						const content = chunk.choices[0]?.delta?.content;
-						if (content) {
-							controller.enqueue(
-								new TextEncoder().encode(
-									`data: ${JSON.stringify({
-										choices: [{ delta: { content } }],
-									})}\n\n`
-								)
-							);
+						if (body.response_format?.type === 'json_object' || body.response_format?.type === 'json_schema') {
+							const content = chunk.choices[0]?.delta?.content;
+							if (content) {
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: { content } }],
+										})}\n\n`
+									)
+								);
+							}
+						} else {
+							const content = chunk.choices[0]?.delta?.content;
+							if (content) {
+								controller.enqueue(
+									new TextEncoder().encode(
+										`data: ${JSON.stringify({
+											choices: [{ delta: { content } }],
+										})}\n\n`
+									)
+								);
+							}
 						}
 					}
+	
 					controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
 					controller.close();
 				} catch (error) {
-					controller.error(error);
+					console.error('Streaming error:', error);
+					if (error instanceof Error) {
+						if (error.name === 'APIConnectionTimeoutError' || error.name === 'APIConnectionError') {
+							controller.error(new Error('Connection error or timeout'));
+						} else {
+							controller.error(error);
+						}
+					} else {
+						controller.error(new Error('Unknown error during streaming'));
+					}
 				}
 			},
+			cancel() {
+				stream.controller.abort();
+			}
 		});
 	}
 
