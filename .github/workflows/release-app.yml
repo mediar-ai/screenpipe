@@ -174,7 +174,7 @@ jobs:
           ref: ${{ github.event.inputs.commit_hash || github.ref }}
 
       - name: Update version in Cargo.toml
-        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform != 'macos-latest'
+        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.os_type == 'windows'
         shell: pwsh
         run: |
           $content = Get-Content screenpipe-app-tauri/src-tauri/Cargo.toml
@@ -182,7 +182,7 @@ jobs:
           $content | Set-Content screenpipe-app-tauri/src-tauri/Cargo.toml -Force
 
       - name: Update version in Cargo.toml
-        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.platform == 'macos-latest'
+        if: github.event.inputs.commit_hash && github.event.inputs.version && matrix.os_type != 'windows'
         shell: bash
         run: |
           sed -i '' 's/^version = ".*"/version = "${{ github.event.inputs.version }}"/' screenpipe-app-tauri/src-tauri/Cargo.toml
@@ -624,6 +624,27 @@ jobs:
           command: release upload ${{ secrets.CN_APP_SLUG }} --framework tauri -vv
           api-key: ${{ secrets.CN_API_KEY }}
           path: ./screenpipe-app-tauri/src-tauri
+
+      - name: Set short git commit SHA
+        id: vars
+        run: |
+          calculatedSha=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+
+      - uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          prerelease: true
+          name: "Screenpipe Beta ${{ env.COMMIT_SHORT_SHA }}"
+          updateOnlyUnreleased: true
+          artifacts: "release.tar.gz,foo/*.txt"
+          artfiacts: >
+            "screenpipe-app-tauri/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe,
+            screenpipe-app-tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app.tar.gz,
+            screenpipe-app-tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.dmg,
+            screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz
+            screenpipe-app-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.dmg,
+            screenpipe-app-tauri/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage"
 
   retry-win:
     needs: publish-tauri
