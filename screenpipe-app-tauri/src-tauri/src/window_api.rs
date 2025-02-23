@@ -59,7 +59,7 @@ pub async fn show_specific_window(
     .always_on_top(payload.always_on_top.unwrap_or(true))
     .visible_on_all_workspaces(payload.visible_on_all_workspaces.unwrap_or(true));
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     {
         builder = builder.hidden_title(payload.hidden_title.unwrap_or(true));
     }

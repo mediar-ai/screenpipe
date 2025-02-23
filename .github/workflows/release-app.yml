@@ -327,7 +327,12 @@ jobs:
             libonig-dev \
             libayatana-appindicator3-dev \
             libsamplerate-dev \
-            libwebrtc-audio-processing-dev
+            libwebrtc-audio-processing-dev \
+            # Add these GTK dependencies
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            librsvg2-dev \
+            patchelf
           curl -fsSL https://bun.sh/install | bash
 
       - name: Install frontend dependencies
