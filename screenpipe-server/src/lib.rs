@@ -15,7 +15,7 @@ pub mod video_cache;
 mod video_db;
 pub mod video_utils;
 pub mod text_embeds;
-
+pub mod embedding;
 pub use auto_destruct::watch_pid;
 pub use cli::Cli;
 pub use core::start_continuous_recording;

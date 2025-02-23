@@ -1,4 +1,3 @@
-use crate::core::RealtimeVisionEvent;
 use crate::UIFrame;
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -131,7 +130,7 @@ pub async fn run_ui() -> Result<()> {
                 frame = UIFrame::read_from_pipe(&mut reader) => {
                     match frame {
                         Ok(frame) => {
-                            let _ = send_event("ui_frame", RealtimeVisionEvent::Ui(frame));
+                            let _ = send_event("ui_frame", frame);
                         }
                         Err(e) => {
                             if let Some(io_err) = e.downcast_ref::<io::Error>() {

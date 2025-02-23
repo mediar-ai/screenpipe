@@ -241,11 +241,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_llm: bool,
 
-    /// Enable beta features
-    #[cfg(feature = "beta")]
-    #[arg(long, default_value_t = false)]
-    pub enable_beta: bool,
-
     /// Enable UI monitoring (macOS only)
     #[arg(long, default_value_t = false)]
     pub enable_ui_monitoring: bool,
@@ -329,11 +324,7 @@ pub enum Command {
         use_embedding: bool,
     },
     /// Setup screenpipe environment
-    Setup {
-        /// Enable beta features
-        #[arg(long, default_value_t = false)]
-        enable_beta: bool,
-    },
+    Setup,
     /// Run database migrations
     Migrate,
          /// Generate shell completions

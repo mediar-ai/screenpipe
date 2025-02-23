@@ -2,7 +2,9 @@ use anyhow::Result;
 use dirs::{self, home_dir};
 use screenpipe_core::Language;
 use screenpipe_server::video_utils::extract_frames_from_video;
-use screenpipe_vision::{capture_screenshot_by_window::CapturedWindow, perform_ocr_apple};
+use screenpipe_vision::capture_screenshot_by_window::CapturedWindow;
+#[cfg(target_os = "macos")]
+use screenpipe_vision::perform_ocr_apple;
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::info;
@@ -42,6 +44,7 @@ async fn create_test_video() -> Result<PathBuf> {
 }
 
 #[tokio::test]
+#[ignore] // only local
 async fn test_extract_frames() -> Result<()> {
     setup_test_env().await?;
     let video_path = create_test_video().await?;
@@ -131,17 +134,20 @@ async fn test_extract_frames_and_ocr() -> Result<()> {
     };
 
     // perform ocr using apple native (macos only)
-    let (text, _, confidence) = perform_ocr_apple(&captured_window.image, &[Language::English]);
+    #[cfg(target_os = "macos")]
+    {
+        let (text, _, confidence) = perform_ocr_apple(&captured_window.image, &[Language::English]);
 
-    println!("ocr confidence: {}", confidence.unwrap_or(0.0));
-    println!("extracted text: {}", text);
+        println!("ocr confidence: {}", confidence.unwrap_or(0.0));
+        println!("extracted text: {}", text);
 
-    // basic validation
-    assert!(!text.is_empty(), "ocr should extract some text");
-    assert!(
-        confidence.unwrap_or(0.0) > 0.0,
-        "confidence should be greater than 0"
-    );
+        // basic validation
+        assert!(!text.is_empty(), "ocr should extract some text");
+        assert!(
+            confidence.unwrap_or(0.0) > 0.0,
+            "confidence should be greater than 0"
+        );
+    }
 
     Ok(())
 }

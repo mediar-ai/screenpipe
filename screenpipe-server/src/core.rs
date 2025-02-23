@@ -12,8 +12,8 @@ use screenpipe_audio::{
 use screenpipe_audio::{start_realtime_recording, AudioStream};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
-use screenpipe_events::send_event;
-use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
+use screenpipe_events::{poll_meetings_events, send_event};
+use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -121,6 +121,10 @@ pub async fn start_continuous_recording(
     };
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
+
+    tokio::spawn(async move {
+        let _ = poll_meetings_events().await;
+    });
 
     let audio_task = if !audio_disabled {
         audio_handle.spawn(async move {
@@ -241,7 +245,7 @@ async fn record_video(
 
                         let _ = send_event(
                             "ocr_result",
-                            RealtimeVisionEvent::Ocr(WindowOcr {
+                            WindowOcr {
                                 image: Some(frame.image.clone()),
                                 text: text.clone(),
                                 text_json: window_result.text_json.clone(),
@@ -250,7 +254,8 @@ async fn record_video(
                                 focused: window_result.focused,
                                 confidence: window_result.confidence,
                                 timestamp: frame.timestamp,
-                            }),
+                                browser_url: window_result.browser_url.clone(),
+                            },
                         );
                         if let Err(e) = db
                             .insert_ocr_text(
