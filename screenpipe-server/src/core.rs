@@ -50,6 +50,9 @@ pub async fn start_continuous_recording(
     capture_unfocused_windows: bool,
     realtime_audio_devices: Vec<Arc<AudioDevice>>,
     realtime_audio_enabled: bool,
+    video_codec: String,
+    video_preset: String,
+    video_crf: u32,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -64,6 +67,11 @@ pub async fn start_continuous_recording(
                 let include_windows_video = include_windows.to_vec();
 
                 let languages = languages.clone();
+                let encoder_settings = Some(crate::video::VideoEncoderSettings {
+                    codec: video_codec.clone(),
+                    preset: video_preset.clone(),
+                    crf: video_crf,
+                });
 
                 debug!("Starting video recording for monitor {}", monitor_id);
                 vision_handle.spawn(async move {
@@ -80,6 +88,7 @@ pub async fn start_continuous_recording(
                         video_chunk_duration,
                         languages.clone(),
                         capture_unfocused_windows,
+                        encoder_settings,
                     )
                     .await
                 })
@@ -188,6 +197,7 @@ async fn record_video(
     video_chunk_duration: Duration,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
+    encoder_settings: Option<crate::video::VideoEncoderSettings>,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -213,6 +223,12 @@ async fn record_video(
         }
     };
 
+    let encoder_settings = encoder_settings.unwrap_or_else(|| crate::video::VideoEncoderSettings {
+        codec: "libx265".to_string(),
+        preset: "ultrafast".to_string(),
+        crf: 23,
+    });
+
     let video_capture = VideoCapture::new(
         &output_path,
         fps,
@@ -224,6 +240,7 @@ async fn record_video(
         include_windows,
         languages,
         capture_unfocused_windows,
+        encoder_settings,
     );
 
     while is_running.load(Ordering::SeqCst) {

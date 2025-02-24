@@ -268,6 +268,22 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    // Add video encoder settings
+    let video_codec = store
+        .get("videoCodec")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("libx265"));
+
+    let video_preset = store
+        .get("videoPreset")
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or(String::from("ultrafast"));
+
+    let video_crf = store
+        .get("videoCrf")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(23);
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -279,6 +295,23 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
     if fps != 0.2 {
         args.push("--fps");
         args.push(fps_str.as_str());
+    }
+
+    // Add video encoder arguments
+    if video_codec != "libx265" {
+        args.push("--video-codec");
+        args.push(&video_codec);
+    }
+
+    if video_preset != "ultrafast" {
+        args.push("--video-preset");
+        args.push(&video_preset);
+    }
+
+    let video_crf_str = video_crf.to_string();
+    if video_crf != 23 {
+        args.push("--video-crf");
+        args.push(&video_crf_str);
     }
 
     if audio_transcription_engine != "default" {

@@ -403,6 +403,18 @@ export function RecordingSettings() {
     handleSettingsChange({ fps: value[0] });
   };
 
+  const handleVideoCodecChange = (value: string) => {
+    handleSettingsChange({ videoCodec: value });
+  };
+
+  const handleVideoPresetChange = (value: string) => {
+    handleSettingsChange({ videoPreset: value });
+  };
+
+  const handleVideoCrfChange = (value: number[]) => {
+    handleSettingsChange({ videoCrf: value[0] });
+  };
+
   const handleVadSensitivityChange = (value: number[]) => {
     const sensitivityMap: { [key: number]: VadSensitivity } = {
       2: "high",
@@ -900,7 +912,77 @@ export function RecordingSettings() {
                   </div>
                 </div>
 
-                {/*  */}
+                <div className="flex flex-col space-y-4">
+                  <Label>video settings</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>fps</Label>
+                      <Slider
+                        defaultValue={[settings.fps || 0.5]}
+                        max={30}
+                        min={0.1}
+                        step={0.1}
+                        onValueChange={handleFpsChange}
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        current: {settings.fps || 0.5} fps
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>video codec</Label>
+                      <Select
+                        value={settings.videoCodec}
+                        onValueChange={handleVideoCodecChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="select video codec" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="libx265">h265/hevc (smaller, slower)</SelectItem>
+                          <SelectItem value="libx264">h264/avc (faster, larger)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>encoder preset</Label>
+                      <Select
+                        value={settings.videoPreset}
+                        onValueChange={handleVideoPresetChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="select encoder preset" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ultrafast">ultrafast (fastest)</SelectItem>
+                          <SelectItem value="superfast">superfast</SelectItem>
+                          <SelectItem value="veryfast">veryfast</SelectItem>
+                          <SelectItem value="faster">faster</SelectItem>
+                          <SelectItem value="fast">fast</SelectItem>
+                          <SelectItem value="medium">medium (balanced)</SelectItem>
+                          <SelectItem value="slow">slow</SelectItem>
+                          <SelectItem value="slower">slower</SelectItem>
+                          <SelectItem value="veryslow">veryslow (smallest)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>quality (crf)</Label>
+                      <Slider
+                        defaultValue={[settings.videoCrf || 23]}
+                        max={51}
+                        min={0}
+                        step={1}
+                        onValueChange={handleVideoCrfChange}
+                      />
+                      <div className="text-xs text-muted-foreground">
+                        current: {settings.videoCrf || 23} (lower = better quality)
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
               <Separator className="my-6" />
             </>

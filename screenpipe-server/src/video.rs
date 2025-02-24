@@ -27,6 +27,12 @@ pub struct VideoCapture {
     pub ocr_frame_queue: Arc<ArrayQueue<Arc<CaptureResult>>>,
 }
 
+pub struct VideoEncoderSettings {
+    pub codec: String,
+    pub preset: String,
+    pub crf: u32,
+}
+
 impl VideoCapture {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -40,6 +46,7 @@ impl VideoCapture {
         include_list: &[String],
         languages: Vec<Language>,
         capture_unfocused_windows: bool,
+        encoder_settings: VideoEncoderSettings,
     ) -> Self {
         let fps = if fps.is_finite() && fps > 0.0 {
             fps
@@ -58,6 +65,7 @@ impl VideoCapture {
         let (result_sender, mut result_receiver) = channel(512);
         let window_filters = Arc::new(WindowFilters::new(ignore_list, include_list));
         let window_filters_clone = Arc::clone(&window_filters);
+        let encoder_settings = Arc::new(encoder_settings);
         let _capture_thread = tokio::spawn(async move {
             continuous_capture(
                 result_sender,
@@ -122,6 +130,7 @@ impl VideoCapture {
         });
 
         let video_frame_queue_clone = video_frame_queue.clone();
+        let encoder_settings_clone = Arc::clone(&encoder_settings);
 
         let output_path = output_path.to_string();
         let _video_thread = tokio::spawn(async move {
@@ -132,6 +141,7 @@ impl VideoCapture {
                 new_chunk_callback_clone,
                 monitor_id,
                 video_chunk_duration,
+                encoder_settings_clone,
             )
             .await;
         });
@@ -143,7 +153,7 @@ impl VideoCapture {
     }
 }
 
-pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, anyhow::Error> {
+pub async fn start_ffmpeg_process(output_file: &str, fps: f64, encoder_settings: &VideoEncoderSettings) -> Result<Child, anyhow::Error> {
     // Overriding fps with max fps if over the max and warning user
     let fps = if fps > MAX_FPS {
         warn!("Overriding FPS from {} to {}", fps, MAX_FPS);
@@ -168,15 +178,14 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64) -> Result<Child, 
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
     ];
 
+    let crf_str = encoder_settings.crf.to_string();
     args.extend_from_slice(&[
         "-vcodec",
-        "libx265",
-        "-tag:v",
-        "hvc1",
+        &encoder_settings.codec,
         "-preset",
-        "ultrafast",
+        &encoder_settings.preset,
         "-crf",
-        "23",
+        &crf_str,
     ]);
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
@@ -218,6 +227,7 @@ async fn save_frames_as_video(
     new_chunk_callback: Arc<dyn Fn(&str) + Send + Sync>,
     monitor_id: u32,
     video_chunk_duration: Duration,
+    encoder_settings: Arc<VideoEncoderSettings>,
 ) {
     debug!("Starting save_frames_as_video function");
     let frames_per_video = (fps * video_chunk_duration.as_secs_f64()).ceil() as usize;
@@ -238,7 +248,7 @@ async fn save_frames_as_video(
             let output_file = create_output_file(output_path, monitor_id);
             new_chunk_callback(&output_file);
 
-            match start_ffmpeg_process(&output_file, fps).await {
+            match start_ffmpeg_process(&output_file, fps, &encoder_settings).await {
                 Ok(mut child) => {
                     let mut stdin = child.stdin.take().expect("Failed to open stdin");
                     spawn_ffmpeg_loggers(child.stderr.take(), child.stdout.take());

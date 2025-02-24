@@ -24,7 +24,7 @@ use crate::{
     db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
     pipe_manager::PipeManager,
-    video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
+    video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS, VideoEncoderSettings},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
         extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
@@ -1150,8 +1150,14 @@ async fn write_frames_to_video(
     frames: &Vec<FrameContent>,
     video_file_path: &str,
     fps: f64,
+    encoder_settings: Option<VideoEncoderSettings>,
 ) -> Result<(), anyhow::Error> {
-    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
+    let encoder_settings = encoder_settings.unwrap_or(VideoEncoderSettings {
+        codec: "libx265".to_string(),
+        preset: "ultrafast".to_string(),
+        crf: 23,
+    });
+    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps, &encoder_settings).await?;
     let mut ffmpeg_stdin = ffmpeg_child
         .stdin
         .take()
@@ -1235,7 +1241,18 @@ pub(crate) async fn add_to_database(
                         ));
                     }
 
-                    if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
+                    if let Err(e) = write_frames_to_video(
+                        frames,
+                        &video_file_path,
+                        MAX_FPS,
+                        Some(VideoEncoderSettings {
+                            codec: "libx265".to_string(),
+                            preset: "ultrafast".to_string(),
+                            crf: 23,
+                        }),
+                    )
+                    .await
+                    {
                         error!(
                             "Failed to write frames to video file {}: {}",
                             video_file_path, e
