@@ -3,6 +3,8 @@ use crate::VideoCapture;
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::future::join_all;
+use screenpipe_audio::audio_manager::audio_manager::AudioManager;
+use screenpipe_audio::audio_manager::{AudioManagerBuilder, AudioManagerOptions};
 use screenpipe_audio::core::device::{AudioDevice, DeviceControl};
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::core::stream::AudioStream;
@@ -94,69 +96,62 @@ pub async fn start_continuous_recording(
         })]
     };
 
-    let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
-        // Create a dummy channel if no audio devices are available, e.g. audio disabled
-        let (input_sender, _): (
-            crossbeam::channel::Sender<AudioInput>,
-            crossbeam::channel::Receiver<AudioInput>,
-        ) = crossbeam::channel::bounded(100);
-        let (_, output_receiver): (
-            crossbeam::channel::Sender<TranscriptionResult>,
-            crossbeam::channel::Receiver<TranscriptionResult>,
-        ) = crossbeam::channel::bounded(100);
-        (
-            input_sender,
-            output_receiver,
-            Arc::new(AtomicBool::new(false)),
-        )
-    } else {
-        create_whisper_channel(
-            audio_transcription_engine.clone(),
-            VadEngineEnum::from(vad_engine),
-            deepgram_api_key.clone(),
-            &PathBuf::from(output_path.as_ref()),
-            VadSensitivity::from(vad_sensitivity),
-            languages.clone(),
-            Some(audio_devices_control.clone()),
-        )
-        .await
-        .map_err(|e| {
-            if e.to_string().contains("ORT API") {
-                anyhow::anyhow!("ONNX Runtime initialization failed. This is likely due to missing Visual C++ Redistributable packages. Please install the latest Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe and restart your computer. For more information, see: https://github.com/mediar-ai/screenpipe/issues/1034")
-            } else {
-                e
-            }
-        })?
-    };
-    let whisper_sender_clone = whisper_sender.clone();
-    let db_manager_audio = Arc::clone(&db);
-
     tokio::spawn(async move {
         let _ = poll_meetings_events().await;
     });
 
-    let audio_task = if !audio_disabled {
-        audio_handle.spawn(async move {
-            record_audio(
-                db_manager_audio,
-                audio_chunk_duration,
-                whisper_sender,
-                whisper_receiver,
-                audio_devices_control,
-                audio_transcription_engine,
-                realtime_audio_enabled,
-                realtime_audio_devices,
-                languages,
-                deepgram_api_key,
-            )
-            .await
-        })
-    } else {
-        audio_handle.spawn(async move {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            Ok(())
-        })
-    };
+    // let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
+    //     // Create a dummy channel if no audio devices are available, e.g. audio disabled
+    //     let (input_sender, _): (
+    //         crossbeam::channel::Sender<AudioInput>,
+    //         crossbeam::channel::Receiver<AudioInput>,
+    //     ) = crossbeam::channel::bounded(100);
+    //     let (_, output_receiver): (
+    //         crossbeam::channel::Sender<TranscriptionResult>,
+    //         crossbeam::channel::Receiver<TranscriptionResult>,
+    //     ) = crossbeam::channel::bounded(100);
+    //     (
+    //         input_sender,
+    //         output_receiver,
+    //         Arc::new(AtomicBool::new(false)),
+    //     )
+    // } else {
+    //     create_whisper_channel(
+    //         audio_transcription_engine.clone(),
+    //         VadEngineEnum::from(vad_engine),
+    //         deepgram_api_key.clone(),
+    //         &PathBuf::from(output_path.as_ref()),
+    //         VadSensitivity::from(vad_sensitivity),
+    //         languages.clone(),
+    //         Some(audio_devices_control.clone()),
+    //     )
+    //     .await?
+    // };
+    // let whisper_sender_clone = whisper_sender.clone();
+    // let db_manager_audio = Arc::clone(&db);
+
+    // let audio_task = if !audio_disabled {
+    //     audio_handle.spawn(async move {
+    //         record_audio(
+    //             db_manager_audio,
+    //             audio_chunk_duration,
+    //             whisper_sender,
+    //             whisper_receiver,
+    //             audio_devices_control,
+    //             audio_transcription_engine,
+    //             realtime_audio_enabled,
+    //             realtime_audio_devices,
+    //             languages,
+    //             deepgram_api_key,
+    //         )
+    //         .await
+    //     })
+    // } else {
+    //     audio_handle.spawn(async move {
+    //         tokio::time::sleep(Duration::from_secs(60)).await;
+    //         Ok(())
+    //     })
+    // };
 
     // Join all video tasks
     let video_results = join_all(video_tasks);
@@ -167,13 +162,13 @@ pub async fn start_continuous_recording(
             error!("Video recording error for monitor {}: {:?}", i, e);
         }
     }
-    if let Err(e) = audio_task.await {
-        error!("Audio recording error: {:?}", e);
-    }
+    // if let Err(e) = audio_task.await {
+    //     error!("Audio recording error: {:?}", e);
+    // }
 
-    // Shutdown the whisper channel
-    whisper_shutdown_flag.store(true, Ordering::Relaxed);
-    drop(whisper_sender_clone); // Close the sender channel
+    // // Shutdown the whisper channel
+    // whisper_shutdown_flag.store(true, Ordering::Relaxed);
+    // drop(whisper_sender_clone); // Close the sender channel
 
     // TODO: process any remaining audio chunks
     // TODO: wait a bit for whisper to finish processing

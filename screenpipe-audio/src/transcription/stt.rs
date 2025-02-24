@@ -72,16 +72,18 @@ pub async fn stt(
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
 ) -> Result<String> {
-    let model = &whisper_model.model;
-
-    debug!("Loading mel filters");
-    let mel_bytes = match model.config().num_mel_bins {
-        80 => include_bytes!("../../models/whisper/melfilters.bytes").as_slice(),
-        128 => include_bytes!("../../models/whisper/melfilters128.bytes").as_slice(),
-        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+    let mel_filters = {
+        let model = whisper_model.model.lock().await;
+        debug!("Loading mel filters");
+        let mel_bytes = match model.config().num_mel_bins {
+            80 => include_bytes!("../../models/whisper/melfilters.bytes").as_slice(),
+            128 => include_bytes!("../../models/whisper/melfilters128.bytes").as_slice(),
+            nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+        };
+        let mut filters = vec![0f32; mel_bytes.len() / 4];
+        <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut filters);
+        filters
     };
-    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
-    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
 
     let transcription: Result<String> = if audio_transcription_engine
         == AudioTranscriptionEngine::Deepgram.into()
@@ -99,21 +101,21 @@ pub async fn stt(
                     device, e
                 );
                 // Fallback to Whisper
-                process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
+                process_with_whisper(whisper_model, audio, &mel_filters, languages.clone()).await
             }
         }
     } else {
         // Existing Whisper implementation
-        process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
+        process_with_whisper(whisper_model, audio, &mel_filters, languages).await
     };
 
     transcription
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn process_audio_input(
+pub async fn process_audio_input(
     audio: AudioInput,
-    whisper_model: &mut WhisperModel,
+    whisper_model: Arc<Mutex<WhisperModel>>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     segmentation_model_path: PathBuf,
     embedding_manager: EmbeddingManager,
@@ -171,6 +173,7 @@ async fn process_audio_input(
     }
 
     while let Some(segment) = segments.recv().await {
+        let mut whisper_model = whisper_model.lock().await;
         let path = new_file_path.clone();
         let transcription_result = if cfg!(target_os = "macos") {
             #[cfg(target_os = "macos")]
@@ -180,7 +183,7 @@ async fn process_audio_input(
                     run_stt(
                         segment,
                         audio.device.clone(),
-                        whisper_model,
+                        &mut whisper_model,
                         audio_transcription_engine.clone(),
                         deepgram_api_key.clone(),
                         languages.clone(),
@@ -197,7 +200,7 @@ async fn process_audio_input(
             run_stt(
                 segment,
                 audio.device.clone(),
-                whisper_model,
+                &mut whisper_model,
                 audio_transcription_engine.clone(),
                 deepgram_api_key.clone(),
                 languages.clone(),
@@ -227,7 +230,7 @@ pub async fn create_whisper_channel(
     crossbeam::channel::Receiver<TranscriptionResult>,
     Arc<AtomicBool>,
 )> {
-    let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
+    let whisper_model = Arc::new(Mutex::new(WhisperModel::new(&audio_transcription_engine)?));
     let (input_sender, input_receiver) = crossbeam::channel::bounded::<AudioInput>(1000);
     let (output_sender, output_receiver) = crossbeam::channel::bounded::<TranscriptionResult>(1000);
 
@@ -278,7 +281,7 @@ pub async fn create_whisper_channel(
 
                             if let Err(e) = process_audio_input(
                                 audio,
-                                &mut whisper_model,
+                                whisper_model.clone(),
                                 vad_engine.clone(),
                                 segmentation_model_path.clone(),
                                 embedding_manager.clone(),

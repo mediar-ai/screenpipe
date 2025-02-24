@@ -24,15 +24,15 @@ lazy_static! {
 ///
 /// # Returns
 /// A string containing the processed transcript
-pub fn process_with_whisper(
+pub async fn process_with_whisper(
     whisper_model: &mut WhisperModel,
     audio: &[f32],
     mel_filters: &[f32],
     languages: Vec<Language>,
 ) -> Result<String> {
-    let model = &mut whisper_model.model;
-    let tokenizer = &whisper_model.tokenizer;
-    let device = &whisper_model.device;
+    let model = &mut whisper_model.model.lock().await;
+    let tokenizer = &whisper_model.tokenizer.lock().await;
+    let device = &whisper_model.device.lock().await;
 
     debug!("converting pcm to mel spectrogram");
     let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);

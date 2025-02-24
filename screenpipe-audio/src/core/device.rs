@@ -140,7 +140,7 @@ pub async fn get_cpal_device_and_config(
 
         devices.find(|x| x.name().map(|y| y == device_name).unwrap_or(false))
     }
-    .ok_or_else(|| anyhow!("Audio device not found"))?;
+    .ok_or_else(|| anyhow!("Audio device not found: {}", device_name))?;
 
     let config = if is_output_device && !is_display {
         cpal_audio_device.default_output_config()?

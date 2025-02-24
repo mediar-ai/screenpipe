@@ -1,18 +1,21 @@
+use std::sync::Arc;
+
 use anyhow::{Error as E, Result};
 use candle::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::whisper::{self as m, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
+use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 use crate::core::engine::AudioTranscriptionEngine;
 
 #[derive(Clone)]
 pub struct WhisperModel {
-    pub model: Model,
-    pub tokenizer: Tokenizer,
-    pub device: Device,
+    pub model: Arc<Mutex<Model>>,
+    pub tokenizer: Arc<Mutex<Tokenizer>>,
+    pub device: Arc<Mutex<Device>>,
 }
 
 impl WhisperModel {
@@ -66,9 +69,9 @@ impl WhisperModel {
 
         debug!("WhisperModel initialization complete");
         Ok(Self {
-            model,
-            tokenizer,
-            device,
+            model: Arc::new(Mutex::new(model)),
+            tokenizer: Arc::new(Mutex::new(tokenizer)),
+            device: Arc::new(Mutex::new(device)),
         })
     }
 }
