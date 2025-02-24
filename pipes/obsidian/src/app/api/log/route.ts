@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { generateObject } from "ai";
+import { embed, generateObject } from "ai";
 import { ollama } from "ollama-ai-provider";
 import { ContentItem } from "@screenpipe/js";
 import { pipe } from "@screenpipe/js";
@@ -94,7 +94,6 @@ async function generateWorkLog(
     schema: workLog,
   });
 
-  console.log("response:", response.object);
   const formatDate = (date: Date) => {
     return date.toLocaleString("en-US", {
       year: "numeric",
@@ -186,16 +185,86 @@ function getObsidianUrl(vaultName: string, filename: string): string {
   )}&file=${encodeURIComponent(filename)}`;
 }
 
+async function deduplicateScreenData(
+  screenData: ContentItem[]
+): Promise<ContentItem[]> {
+  if (!screenData.length) return screenData;
+
+  try {
+    const provider = ollama.embedding("nomic-embed-text");
+    const embeddings: number[][] = [];
+    const uniqueData: ContentItem[] = [];
+    let duplicatesRemoved = 0;
+
+    for (const item of screenData) {
+      const textToEmbed =
+        "content" in item
+          ? typeof item.content === "string"
+            ? item.content
+            : "text" in item.content
+            ? item.content.text
+            : JSON.stringify(item.content)
+          : "";
+
+      if (!textToEmbed.trim()) {
+        uniqueData.push(item);
+        continue;
+      }
+
+      try {
+        const { embedding } = await embed({
+          model: provider,
+          value: textToEmbed,
+        });
+
+        let isDuplicate = false;
+        for (let i = 0; i < embeddings.length; i++) {
+          const similarity = cosineSimilarity(embedding, embeddings[i]);
+          if (similarity > 0.95) {
+            isDuplicate = true;
+            duplicatesRemoved++;
+            break;
+          }
+        }
+
+        if (!isDuplicate) {
+          embeddings.push(embedding);
+          uniqueData.push(item);
+        }
+      } catch (error) {
+        console.warn("embedding failed for item, keeping it:", error);
+        uniqueData.push(item);
+      }
+    }
+
+    console.log(
+      `deduplication: removed ${duplicatesRemoved} duplicates from ${screenData.length} items`
+    );
+    return uniqueData;
+  } catch (error) {
+    console.warn("deduplication failed, using original data:", error);
+    return screenData;
+  }
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (normA * normB);
+}
+
 export async function GET() {
   try {
     const settings = await pipe.settings.getAll();
-    console.log("settings:", settings);
     const interval =
       settings.customSettings?.obsidian?.logTimeWindow || 3600000;
     const obsidianPath = settings.customSettings?.obsidian?.vaultPath;
     const customPrompt = settings.customSettings?.obsidian?.prompt;
     const pageSize = settings.customSettings?.obsidian?.logPageSize || 100;
     const model = settings.customSettings?.obsidian?.logModel;
+    const deduplicationEnabled =
+      settings.customSettings?.obsidian?.deduplicationEnabled;
 
     if (!obsidianPath) {
       return NextResponse.json(
@@ -207,7 +276,7 @@ export async function GET() {
     const now = new Date();
     const oneHourAgo = new Date(now.getTime() - interval);
 
-    const screenData = await pipe.queryScreenpipe({
+    let screenData = await pipe.queryScreenpipe({
       startTime: oneHourAgo.toISOString(),
       endTime: now.toISOString(),
       limit: pageSize,
@@ -216,6 +285,18 @@ export async function GET() {
 
     if (!screenData || screenData.data.length === 0) {
       return NextResponse.json({ message: "no activity detected" });
+    }
+
+    // Only deduplicate if enabled in settings
+    if (deduplicationEnabled) {
+      try {
+        screenData.data = await deduplicateScreenData(screenData.data);
+      } catch (error) {
+        console.warn(
+          "deduplication failed, continuing with original data:",
+          error
+        );
+      }
     }
 
     const logEntry = await generateWorkLog(

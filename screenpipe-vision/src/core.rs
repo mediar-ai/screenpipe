@@ -435,6 +435,7 @@ pub struct WindowOcr {
         deserialize_with = "deserialize_instant"
     )]
     pub timestamp: Instant,
+    pub browser_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

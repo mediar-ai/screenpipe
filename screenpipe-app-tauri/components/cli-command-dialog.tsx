@@ -32,13 +32,41 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     setIsWindows(p === "windows");
   }, []);
 
-  const generateCliCommand = () => {
+  const generateCliCommand = (
+    shell: "cmd" | "powershell" | "bash" = "bash"
+  ) => {
     const cliPath = getCliPath();
     let envVars = [];
     let args = [];
 
     if (settings.useChineseMirror) {
-      envVars.push('HF_ENDPOINT="https://hf-mirror.com"');
+      envVars.push(
+        shell === "cmd"
+          ? "SET HF_ENDPOINT=https://hf-mirror.com"
+          : 'HF_ENDPOINT="https://hf-mirror.com"'
+      );
+    }
+
+    // Add AI proxy env vars for screenpipe cloud
+    if (
+      settings.user.cloud_subscribed &&
+      settings.realtimeAudioTranscriptionEngine === "screenpipe-cloud" &&
+      settings.userId
+    ) {
+      const cmdPrefix = shell === "cmd" ? "SET " : "";
+      const quoteChar = shell === "cmd" ? "" : '"';
+      envVars.push(
+        `${cmdPrefix}DEEPGRAM_API_URL=${quoteChar}https://ai-proxy.i-f9f.workers.dev/v1/listen${quoteChar}`
+      );
+      envVars.push(
+        `${cmdPrefix}DEEPGRAM_WEBSOCKET_URL=${quoteChar}wss://ai-proxy.i-f9f.workers.dev${quoteChar}`
+      );
+      envVars.push(
+        `${cmdPrefix}CUSTOM_DEEPGRAM_API_TOKEN=${quoteChar}${settings.userId}${quoteChar}`
+      );
+      args.push(
+        `--deepgram-api-key ${quoteChar}${settings.userId}${quoteChar}`
+      );
     }
 
     if (settings.audioTranscriptionEngine !== "default") {
@@ -112,8 +140,12 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-realtime-audio-transcription");
     }
 
-    const envVarsStr = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
-    return `${envVarsStr}${cliPath} ${args.join(" ")}`;
+    const envVarsStr =
+      envVars.length > 0
+        ? `${envVars.join(shell === "cmd" ? " && " : " ")} `
+        : "";
+    const cmdPrefix = shell === "cmd" ? "&& " : "";
+    return `${envVarsStr}${cmdPrefix}${cliPath} ${args.join(" ")}`;
   };
 
   const handleCopyCliCommand = () => {
@@ -147,17 +179,20 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
                   <TabsTrigger value="powershell">powershell</TabsTrigger>
                 </TabsList>
                 <TabsContent value="cmd">
-                  <CodeBlock language="bash" value={generateCliCommand()} />
+                  <CodeBlock
+                    language="bash"
+                    value={generateCliCommand("cmd")}
+                  />
                 </TabsContent>
                 <TabsContent value="powershell">
                   <CodeBlock
                     language="powershell"
-                    value={generateCliCommand()}
+                    value={generateCliCommand("powershell")}
                   />
                 </TabsContent>
               </Tabs>
             ) : (
-              <CodeBlock language="bash" value={generateCliCommand()} />
+              <CodeBlock language="bash" value={generateCliCommand("bash")} />
             )}
           </div>
           <DialogFooter>

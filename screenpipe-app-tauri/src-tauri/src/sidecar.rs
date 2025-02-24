@@ -1,5 +1,4 @@
 use crate::get_store;
-use crate::SidecarState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -10,6 +9,8 @@ use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::Store;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
+
+pub struct SidecarState(pub Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserCredits {

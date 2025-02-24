@@ -97,6 +97,19 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for EventSubscription<T> {
     }
 }
 
+impl<T> Drop for EventSubscription<T> {
+    fn drop(&mut self) {
+        // Remove subscription from manager when dropped
+        if let Some(manager) = EVENT_MANAGER
+            .subscriptions
+            .write()
+            .get_mut(&self.event_name)
+        {
+            manager.last_used = Instant::now();
+        }
+    }
+}
+
 impl EventManager {
     fn new() -> Self {
         let (sender, _) = broadcast::channel(10000);
@@ -129,6 +142,7 @@ impl EventManager {
     pub fn send<T: Serialize + 'static>(&self, event: impl Into<String>, data: T) -> Result<()> {
         let event_name = event.into();
         let value = serde_json::to_value(data)?;
+
         tracing::debug!("sending event {} ", event_name);
         match self.sender.send(Event {
             name: event_name.clone(),
@@ -181,6 +195,17 @@ impl EventManager {
             },
         );
         sub
+    }
+
+    pub fn unsubscribe(&self, event: impl Into<String>) {
+        let event_name = event.into();
+        let mut subs = self.subscriptions.write();
+        subs.remove(&event_name);
+    }
+
+    pub fn clear_all_subscriptions(&self) {
+        let mut subs = self.subscriptions.write();
+        subs.clear();
     }
 }
 

@@ -21,8 +21,9 @@ use tokio::time::{timeout, Duration as TokioDuration};
 use zerocopy::AsBytes;
 
 use crate::db_types::{
-    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, OCREntry, OCRResult,
-    OCRResultRaw, Speaker, TagContentType,
+    AudioChunksResponse, AudioEntry, AudioResult, AudioResultRaw, FrameData, FrameRow, OCREntry,
+    OCRResult, OCRResultRaw, OcrTextBlock, Order, SearchMatch, Speaker, TagContentType, TextBounds,
+    TextPosition,
 };
 use crate::db_types::{ContentType, UiContent};
 use crate::db_types::{SearchResult, TimeSeriesChunk};
@@ -728,13 +729,28 @@ impl DatabaseManager {
         max_length: Option<usize>,
         frame_name: Option<&str>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
-        let base_sql = if query.is_empty() {
-            "ocr_text"
-        } else {
-            "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
-        };
+        // combine the individual search aspects into a single fts query string
+        let mut fts_parts = Vec::new();
+        if !query.is_empty() {
+            fts_parts.push(query.to_owned());
+        }
+        if let Some(app) = app_name {
+            if !app.is_empty() {
+                // fts field lookup for app_name using SQLite fts syntax
+                fts_parts.push(format!("app_name:\"{}\"", app));
+            }
+        }
+        if let Some(window) = window_name {
+            if !window.is_empty() {
+                // fts field lookup for window_name
+                fts_parts.push(format!("window_name:\"{}\"", window));
+            }
+        }
+        let combined_query = fts_parts.join(" ");
 
-        let where_clause = if query.is_empty() {
+        // always use the fts table so that the field-specific match works
+        let base_sql = "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id";
+        let where_clause = if combined_query.is_empty() {
             "WHERE 1=1"
         } else {
             "WHERE ocr_text_fts MATCH ?1"
@@ -763,24 +779,24 @@ impl DatabaseManager {
             {}
                 AND (?2 IS NULL OR frames.timestamp >= ?2)
                 AND (?3 IS NULL OR frames.timestamp <= ?3)
-                AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                AND (?6 IS NULL OR COALESCE(ocr_text.text_length,LENGTH(ocr_text.text)) >= ?6)
-                AND (?7 IS NULL OR COALESCE(ocr_text.text_length,LENGTH(ocr_text.text)) <= ?7)
-                AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
+                AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
+                AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+                AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%' COLLATE NOCASE)
             GROUP BY ocr_text.frame_id
             ORDER BY frames.timestamp DESC
-            LIMIT ?9 OFFSET ?10
+            LIMIT ?7 OFFSET ?8
             "#,
             base_sql, where_clause
         );
 
         let raw_results: Vec<OCRResultRaw> = sqlx::query_as(&sql)
-            .bind(query)
+            .bind(if combined_query.is_empty() {
+                "".to_owned()
+            } else {
+                combined_query
+            })
             .bind(start_time)
             .bind(end_time)
-            .bind(app_name)
-            .bind(window_name)
             .bind(min_length.map(|l| l as i64))
             .bind(max_length.map(|l| l as i64))
             .bind(frame_name)
@@ -966,166 +982,181 @@ impl DatabaseManager {
             "[]".to_string()
         };
 
+        // build combined fts queries
+        let (ocr_fts_query, ui_fts_query) = {
+            let mut ocr_parts = vec![];
+            let mut ui_parts = vec![];
+
+            if !query.is_empty() {
+                ocr_parts.push(query.to_owned());
+                ui_parts.push(query.to_owned());
+            }
+
+            if let Some(app) = app_name {
+                ocr_parts.push(format!("app_name:\"{}\"", app));
+                ui_parts.push(format!("app:\"{}\"", app));
+            }
+
+            if let Some(window) = window_name {
+                ocr_parts.push(format!("window_name:\"{}\"", window));
+                ui_parts.push(format!("window:\"{}\"", window));
+            }
+
+            (ocr_parts.join(" "), ui_parts.join(" "))
+        };
+
         let sql = match content_type {
-            ContentType::OCR => {
-                format!(
-                    r#"
-                    SELECT COUNT(DISTINCT frames.id)
-                    FROM {table}
+            ContentType::OCR => format!(
+                r#"SELECT COUNT(DISTINCT frames.id)
+                   FROM {table}
+                   JOIN frames ON ocr_text.frame_id = frames.id
+                   WHERE {match_condition}
+                       AND (?2 IS NULL OR frames.timestamp >= ?2)
+                       AND (?3 IS NULL OR frames.timestamp <= ?3)
+                       AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
+                       AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+                       AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')"#,
+                table = if ocr_fts_query.is_empty() {
+                    "ocr_text"
+                } else {
+                    "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
+                },
+                match_condition = if ocr_fts_query.is_empty() {
+                    "1=1"
+                } else {
+                    "ocr_text_fts MATCH ?1"
+                }
+            ),
+            ContentType::UI => format!(
+                r#"SELECT COUNT(DISTINCT ui_monitoring.id)
+                   FROM {table}
+                   WHERE {match_condition}
+                       AND (?2 IS NULL OR timestamp >= ?2)
+                       AND (?3 IS NULL OR timestamp <= ?3)
+                       AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
+                       AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)"#,
+                table = if ui_fts_query.is_empty() {
+                    "ui_monitoring"
+                } else {
+                    "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
+                },
+                match_condition = if ui_fts_query.is_empty() {
+                    "1=1"
+                } else {
+                    "ui_monitoring_fts MATCH ?1"
+                }
+            ),
+            ContentType::Audio => format!(
+                r#"SELECT COUNT(DISTINCT audio_transcriptions.id)
+                   FROM {table}
+                   WHERE {match_condition}
+                       AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
+                       AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
+                       AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
+                       AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
+                       AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
+                "#,
+                table = if query.is_empty() {
+                    "audio_transcriptions"
+                } else {
+                    "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                },
+                match_condition = if query.is_empty() {
+                    "1=1"
+                } else {
+                    "audio_transcriptions_fts MATCH ?1"
+                }
+            ),
+            ContentType::All => format!(
+                r#"SELECT COUNT(*) FROM (
+                    SELECT DISTINCT frames.id FROM {ocr_table}
                     JOIN frames ON ocr_text.frame_id = frames.id
-                    WHERE {match_condition}
+                    WHERE {ocr_match}
                         AND (?2 IS NULL OR frames.timestamp >= ?2)
                         AND (?3 IS NULL OR frames.timestamp <= ?3)
-                        AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                        AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?6)
-                        AND (?7 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?7)
-                        AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
-                    "#,
-                    table = if query.is_empty() {
-                        "ocr_text"
-                    } else {
-                        "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
-                    },
-                    match_condition = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "ocr_text_fts MATCH ?1"
-                    }
-                )
-            }
-            ContentType::Audio => {
-                format!(
-                    r#"
-                    SELECT COUNT(DISTINCT audio_transcriptions.audio_chunk_id || '_' || COALESCE(audio_transcriptions.start_time, '') || '_' || COALESCE(audio_transcriptions.end_time, ''))
-                    FROM {table}
-                    WHERE {match_condition}
-                        AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
-                        AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
-                        AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
-                    "#,
-                    table = if query.is_empty() {
-                        "audio_transcriptions"
-                    } else {
-                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-                    },
-                    match_condition = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "audio_transcriptions_fts MATCH ?1"
-                    }
-                )
-            }
-            ContentType::UI => {
-                format!(
-                    r#"
-                    SELECT COUNT(DISTINCT ui_monitoring.id)
-                    FROM {table}
-                    WHERE {match_condition}
-                        AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
-                        AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                        AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                        AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                        AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?6)
-                        AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?7)
-                    "#,
-                    table = if query.is_empty() {
-                        "ui_monitoring"
-                    } else {
-                        "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
-                    },
-                    match_condition = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "ui_monitoring_fts MATCH ?1"
-                    }
-                )
-            }
-            ContentType::All => {
-                format!(
-                    r#"
-                    SELECT COUNT(*) FROM (
-                        -- OCR part
-                        SELECT DISTINCT frames.id
-                        FROM {ocr_table}
-                        JOIN frames ON ocr_text.frame_id = frames.id
-                        WHERE {ocr_match}
-                            AND (?2 IS NULL OR frames.timestamp >= ?2)
-                            AND (?3 IS NULL OR frames.timestamp <= ?3)
-                            AND (?4 IS NULL OR ocr_text.app_name LIKE '%' || ?4 || '%')
-                            AND (?5 IS NULL OR ocr_text.window_name LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?6)
-                            AND (?7 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?7)
-                            AND (?8 IS NULL OR frames.name LIKE '%' || ?8 || '%' COLLATE NOCASE)
-                        UNION ALL
-                        -- Audio part
-                        SELECT DISTINCT audio_transcriptions.id
-                        FROM {audio_table}
-                        WHERE {audio_match}
-                            AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
-                            AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                            AND (?6 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?6)
-                            AND (?7 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?7)
-                            AND audio_transcriptions.transcription != ''
-                            AND (json_array_length(?9) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?9)))
-                        UNION ALL
-                        -- UI part
-                        SELECT DISTINCT ui_monitoring.id
-                        FROM {ui_table}
-                        WHERE {ui_match}
-                            AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
-                            AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                            AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                            AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
-                            AND (?6 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?6)
-                            AND (?7 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?7)
-                            AND ui_monitoring.text_output != ''
-                    )"#,
-                    ocr_table = if query.is_empty() {
-                        "ocr_text"
-                    } else {
-                        "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
-                    },
-                    ocr_match = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "ocr_text_fts MATCH ?1"
-                    },
-                    audio_table = if query.is_empty() {
-                        "audio_transcriptions"
-                    } else {
-                        "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-                    },
-                    audio_match = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "audio_transcriptions_fts MATCH ?1"
-                    },
-                    ui_table = if query.is_empty() {
-                        "ui_monitoring"
-                    } else {
-                        "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
-                    },
-                    ui_match = if query.is_empty() {
-                        "1=1"
-                    } else {
-                        "ui_monitoring_fts MATCH ?1"
-                    }
-                )
-            }
+                        AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+                        AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')
+                    UNION ALL
+                    SELECT DISTINCT id FROM {audio_table}
+                    WHERE {audio_match}
+                        AND (?2 IS NULL OR timestamp >= ?2)
+                        AND (?3 IS NULL OR timestamp <= ?3)
+                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(transcription)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(transcription)) <= ?5)
+                        AND (json_array_length(?6) = 0 OR speaker_id IN (SELECT value FROM json_each(?6)))
+                    UNION ALL
+                    SELECT DISTINCT id FROM {ui_table}
+                    WHERE {ui_match}
+                        AND (?2 IS NULL OR timestamp >= ?2)
+                        AND (?3 IS NULL OR timestamp <= ?3)
+                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)
+                )"#,
+                ocr_table = if ocr_fts_query.is_empty() {
+                    "ocr_text"
+                } else {
+                    "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
+                },
+                ocr_match = if ocr_fts_query.is_empty() {
+                    "1=1"
+                } else {
+                    "ocr_text_fts MATCH ?1"
+                },
+                audio_table = if query.is_empty() {
+                    "audio_transcriptions"
+                } else {
+                    "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
+                },
+                audio_match = if query.is_empty() {
+                    "1=1"
+                } else {
+                    "audio_transcriptions_fts MATCH ?1"
+                },
+                ui_table = if ui_fts_query.is_empty() {
+                    "ui_monitoring"
+                } else {
+                    "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
+                },
+                ui_match = if ui_fts_query.is_empty() {
+                    "1=1"
+                } else {
+                    "ui_monitoring_fts MATCH ?1"
+                }
+            ),
             _ => return Ok(0),
         };
 
         let count: i64 = match content_type {
-            ContentType::Audio => {
+            ContentType::OCR => {
                 sqlx::query_scalar(&sql)
-                    .bind(query)
+                    .bind(ocr_fts_query)
                     .bind(start_time)
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
+                    .bind(frame_name)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            ContentType::UI => {
+                sqlx::query_scalar(&sql)
+                    .bind(ui_fts_query)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(min_length.map(|l| l as i64))
+                    .bind(max_length.map(|l| l as i64))
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            ContentType::All => {
+                sqlx::query_scalar(&sql)
+                    .bind(ocr_fts_query)
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(min_length.map(|l| l as i64))
+                    .bind(max_length.map(|l| l as i64))
+                    .bind(frame_name)
                     .bind(json_array)
                     .fetch_one(&self.pool)
                     .await?
@@ -1135,9 +1166,6 @@ impl DatabaseManager {
                     .bind(query)
                     .bind(start_time)
                     .bind(end_time)
-                    .bind(app_name)
-                    .bind(window_name)
-                    .bind(frame_name)
                     .bind(min_length.map(|l| l as i64))
                     .bind(max_length.map(|l| l as i64))
                     .bind(json_array)
@@ -1530,13 +1558,26 @@ impl DatabaseManager {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<UiContent>, sqlx::Error> {
-        let base_sql = if query.is_empty() {
+        // combine search aspects into single fts query
+        let mut fts_parts = Vec::new();
+        if !query.is_empty() {
+            fts_parts.push(query.to_owned());
+        }
+        if let Some(app) = app_name {
+            fts_parts.push(format!("app:\"{}\"", app));
+        }
+        if let Some(window) = window_name {
+            fts_parts.push(format!("window:\"{}\"", window));
+        }
+        let combined_query = fts_parts.join(" ");
+
+        let base_sql = if combined_query.is_empty() {
             "ui_monitoring"
         } else {
             "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
         };
 
-        let where_clause = if query.is_empty() {
+        let where_clause = if combined_query.is_empty() {
             "WHERE 1=1"
         } else {
             "WHERE ui_monitoring_fts MATCH ?1"
@@ -1564,20 +1605,20 @@ impl DatabaseManager {
             {}
                 AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
                 AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
-                AND (?4 IS NULL OR ui_monitoring.app LIKE '%' || ?4 || '%')
-                AND (?5 IS NULL OR ui_monitoring.window LIKE '%' || ?5 || '%')
             ORDER BY ui_monitoring.timestamp DESC
-            LIMIT ?6 OFFSET ?7
+            LIMIT ?4 OFFSET ?5
             "#,
             base_sql, where_clause
         );
 
         sqlx::query_as(&sql)
-            .bind(query)
+            .bind(if combined_query.is_empty() {
+                "".to_owned()
+            } else {
+                combined_query
+            })
             .bind(start_time)
             .bind(end_time)
-            .bind(app_name)
-            .bind(window_name)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
@@ -1990,6 +2031,7 @@ impl DatabaseManager {
                 frames.timestamp,
                 video_chunks.file_path,
                 frames.offset_index,
+                frames.name as frame_name,
                 ocr_text.app_name,
                 ocr_text.ocr_engine,
                 ocr_text.window_name,
@@ -2146,4 +2188,175 @@ impl DatabaseManager {
             }
         }
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_with_text_positions(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        start_time: Option<DateTime<Utc>>,
+        end_time: Option<DateTime<Utc>>,
+        fuzzy_match: bool,
+        order: Order,
+        app_names: Option<Vec<String>>,
+    ) -> Result<Vec<SearchMatch>, sqlx::Error> {
+        let mut conditions = Vec::new();
+        let mut owned_conditions = Vec::new();
+
+        if start_time.is_some() {
+            conditions.push("f.timestamp >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("f.timestamp <= ?");
+        }
+
+        // Add app names condition if provided
+        if let Some(apps) = &app_names {
+            if !apps.is_empty() {
+                let placeholders = vec!["?"; apps.len()].join(",");
+                let app_condition = format!("o.app_name IN ({})", placeholders);
+                owned_conditions.push(app_condition);
+                conditions.push(owned_conditions.last().unwrap().as_str());
+            }
+        }
+
+        // Create an indexed subquery for FTS matching
+        let search_condition = if !query.is_empty() {
+            let fts_match = if fuzzy_match {
+                query
+                    .split_whitespace()
+                    .map(|word| format!("{}*", word))
+                    .collect::<Vec<_>>()
+                    .join(" OR ")
+            } else {
+                query.to_string()
+            };
+            conditions.push(
+                "f.id IN (SELECT frame_id FROM ocr_text_fts WHERE text MATCH ? ORDER BY rank)",
+            );
+            fts_match
+        } else {
+            String::new()
+        };
+
+        let sql = format!(
+            r#"
+SELECT
+    f.id,
+    f.timestamp,
+    f.browser_url as url,
+    o.app_name,
+    o.window_name,
+    o.text as ocr_text,
+    o.text_json
+FROM frames f
+INNER JOIN ocr_text o ON f.id = o.frame_id
+WHERE {}
+ORDER BY f.timestamp {}
+LIMIT ? OFFSET ?
+"#,
+            if conditions.is_empty() {
+                "1=1".to_string()
+            } else {
+                conditions.join(" AND ")
+            },
+            match order {
+                Order::Ascending => "ASC",
+                Order::Descending => "DESC",
+            }
+        );
+
+        let mut query_builder = sqlx::query_as::<_, FrameRow>(&sql);
+
+        // Bind timestamp parameters first
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+
+        // Bind app names if provided
+        if let Some(apps) = app_names {
+            if !apps.is_empty() {
+                for app in apps {
+                    query_builder = query_builder.bind(app);
+                }
+            }
+        }
+
+        // Bind search condition if query is not empty
+        if !query.is_empty() {
+            query_builder = query_builder.bind(&search_condition);
+        }
+
+        // Bind limit and offset
+        query_builder = query_builder.bind(limit as i64).bind(offset as i64);
+
+        let rows = query_builder.fetch_all(&self.pool).await?;
+
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let positions = if !query.is_empty() {
+                    let ocr_blocks: Vec<OcrTextBlock> =
+                        serde_json::from_str(&row.text_json).unwrap_or_default();
+                    find_matching_positions(&ocr_blocks, query)
+                } else {
+                    Vec::new()
+                };
+
+                SearchMatch {
+                    frame_id: row.id,
+                    timestamp: row.timestamp,
+                    text_positions: positions.clone(),
+                    app_name: row.app_name.clone(),
+                    window_name: row.window_name.clone(),
+                    confidence: calculate_confidence(&positions),
+                    text: row.ocr_text.clone(),
+                    url: row.url.clone(),
+                }
+            })
+            .collect())
+    }
+}
+
+pub fn find_matching_positions(blocks: &[OcrTextBlock], query: &str) -> Vec<TextPosition> {
+    let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
+    blocks
+        .iter()
+        .filter_map(|block| {
+            let text_lower = block.text.to_lowercase();
+
+            // Check for exact match or any word match
+            let matches = text_lower.contains(&query_lower)
+                || query_words.iter().any(|&word| text_lower.contains(word));
+
+            if matches {
+                Some(TextPosition {
+                    text: block.text.clone(),
+                    confidence: block.conf.parse::<f32>().unwrap_or(0.0),
+                    bounds: TextBounds {
+                        left: block.left.parse::<f32>().unwrap_or(0.0),
+                        top: block.top.parse::<f32>().unwrap_or(0.0),
+                        width: block.width.parse::<f32>().unwrap_or(0.0),
+                        height: block.height.parse::<f32>().unwrap_or(0.0),
+                    },
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn calculate_confidence(positions: &[TextPosition]) -> f32 {
+    if positions.is_empty() {
+        return 0.0;
+    }
+
+    positions.iter().map(|pos| pos.confidence).sum::<f32>() / positions.len() as f32
 }

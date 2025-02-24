@@ -74,7 +74,7 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .max_log_files(5)
         .build(local_data_dir)?;
 
-    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
 
     let env_filter = EnvFilter::from_default_env()
         .add_directive("info".parse().unwrap())
@@ -114,10 +114,17 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         env_filter
     };
 
+    let timer =
+        tracing_subscriber::fmt::time::ChronoLocal::new("%Y-%m-%dT%H:%M:%S%.6fZ".to_string());
+
     let registry = tracing_subscriber::registry()
         .with(env_filter)
-        .with(fmt::layer().with_writer(std::io::stdout))
-        .with(fmt::layer().with_writer(non_blocking));
+        .with(
+            fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_timer(timer.clone()),
+        )
+        .with(fmt::layer().with_writer(file_writer).with_timer(timer));
 
     // Build the final registry with conditional Sentry layer
     if !cli.disable_telemetry {
@@ -254,21 +261,7 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             #[allow(unused_variables)]
-            Command::Setup { enable_beta } => {
-                #[cfg(feature = "beta")]
-                if enable_beta {
-                    use screenpipe_actions::type_and_animate::trigger_keyboard_permission;
-
-                    // Trigger keyboard permission request
-                    if let Err(e) = trigger_keyboard_permission() {
-                        warn!("failed to trigger keyboard permission: {:?}", e);
-                        warn!("please grant keyboard permission manually in System Preferences.");
-                    } else {
-                        info!(
-                            "keyboard permission requested. please grant permission if prompted."
-                        );
-                    }
-                }
+            Command::Setup {} => {
                 use screenpipe_audio::{
                     trigger_audio_permission, vad_engine::SileroVad, whisper::WhisperModel,
                 };
@@ -1007,32 +1000,6 @@ async fn main() -> anyhow::Result<()> {
 
     let ctrl_c_future = signal::ctrl_c();
     pin_mut!(ctrl_c_future);
-
-    // only in beta and on macos
-    #[cfg(feature = "beta")]
-    {
-        if cli.enable_beta && cfg!(target_os = "macos") {
-            use screenpipe_actions::run;
-
-            info!("beta feature enabled, starting screenpipe actions");
-
-            let shutdown_tx_clone = shutdown_tx.clone();
-            tokio::spawn(async move {
-                let mut shutdown_rx = shutdown_tx_clone.subscribe();
-
-                tokio::select! {
-                    result = run() => {
-                        if let Err(e) = result {
-                            error!("Error running screenpipe actions: {}", e);
-                        }
-                    }
-                    _ = shutdown_rx.recv() => {
-                        info!("Received shutdown signal, stopping screenpipe actions");
-                    }
-                }
-            });
-        }
-    }
 
     // Start the UI monitoring task
     #[cfg(target_os = "macos")]

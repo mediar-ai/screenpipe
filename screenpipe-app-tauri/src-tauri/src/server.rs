@@ -1,4 +1,5 @@
-use crate::{get_base_dir, get_store};
+use crate::window_api::{close_window, show_specific_window};
+use crate::{get_base_dir, get_store, register_shortcut};
 use axum::body::Bytes;
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
@@ -11,6 +12,7 @@ use futures::stream::Stream;
 use http::header::{HeaderValue, CONTENT_TYPE};
 use notify::RecursiveMode;
 use notify::Watcher;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -23,6 +25,7 @@ use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
 use tracing::{error, info};
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct LogEntry {
     pipe_id: String,
@@ -33,7 +36,7 @@ struct LogEntry {
 
 #[derive(Clone)]
 pub struct ServerState {
-    app_handle: tauri::AppHandle,
+    pub app_handle: tauri::AppHandle,
     settings_tx: broadcast::Sender<String>,
 }
 
@@ -91,6 +94,15 @@ struct WindowSizePayload {
     title: String,
     width: f64,
     height: f64,
+}
+
+#[derive(Deserialize, Debug)]
+struct ShortcutRegistrationPayload {
+    shortcut: String,
+    endpoint: String,
+    method: String,
+    #[serde(default)]
+    body: Option<serde_json::Value>,
 }
 
 async fn settings_stream(
@@ -162,6 +174,12 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/sse/settings", axum::routing::get(settings_stream))
         .route("/sidecar/start", axum::routing::post(start_sidecar))
         .route("/sidecar/stop", axum::routing::post(stop_sidecar))
+        .route("/window", axum::routing::post(show_specific_window))
+        .route("/window/close", axum::routing::post(close_window))
+        .route(
+            "/shortcuts/register",
+            axum::routing::post(register_http_shortcut),
+        )
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -403,6 +421,73 @@ async fn stop_sidecar(
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("failed to stop sidecar: {}", e),
+            ))
+        }
+    }
+}
+
+async fn register_http_shortcut(
+    State(state): State<ServerState>,
+    Json(payload): Json<ShortcutRegistrationPayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("registering http shortcut: {:?}", payload);
+
+    let client = Client::new();
+    let endpoint = payload.endpoint.clone();
+    let method = payload.method.clone();
+    let body = payload.body.clone();
+
+    let handler = move |_app: &tauri::AppHandle| {
+        info!("executing http shortcut");
+        let client = client.clone();
+        let endpoint = endpoint.clone();
+        let method = method.clone();
+        let body = body.clone();
+
+        tokio::spawn(async move {
+            let request = match method.to_uppercase().as_str() {
+                "GET" => client.get(&endpoint),
+                "POST" => client.post(&endpoint),
+                "PUT" => client.put(&endpoint),
+                "DELETE" => client.delete(&endpoint),
+                _ => {
+                    error!("unsupported http method: {}", method);
+                    return;
+                }
+            };
+
+            let request = if let Some(body) = body {
+                request.json(&body)
+            } else {
+                request
+            };
+
+            match request.send().await {
+                Ok(response) => {
+                    info!(
+                        "http shortcut request completed with status: {}",
+                        response.status()
+                    );
+                }
+                Err(e) => {
+                    error!("http shortcut request failed: {}", e);
+                }
+            }
+        });
+    };
+
+    // TODO persist in settings?
+
+    match register_shortcut(&state.app_handle, &payload.shortcut, false, handler).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: format!("shortcut {} registered successfully", payload.shortcut),
+        })),
+        Err(e) => {
+            error!("failed to register shortcut: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to register shortcut: {}", e),
             ))
         }
     }

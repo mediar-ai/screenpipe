@@ -238,3 +238,202 @@ check out our [production pipe examples](https://github.com/mediar-ai/screenpipe
 these examples demonstrate best practices and common patterns when building with screenpipe's sdk.
 
 </MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+### settings management
+
+<MotionDiv delay={0.7}>
+
+pipes can access and modify screenpipe app settings through the SDK. this is useful for storing pipe-specific configuration and accessing global app settings.
+
+#### quick start with CLI
+
+the fastest way to add settings management to your pipe is using our CLI:
+
+```bash copy
+bunx --bun @screenpipe/dev@latest components add
+# select "use-pipe-settings" from the menu
+```
+
+this will add the following components to your pipe:
+- `use-pipe-settings` hook for react components
+- `get-screenpipe-app-settings` server action
+- required typescript types
+
+#### manual setup
+
+1. create types for your settings:
+
+```typescript
+// src/lib/types.ts
+import type { Settings as ScreenpipeAppSettings } from '@screenpipe/js'
+
+export interface Settings {
+  // your pipe specific settings
+  customSetting?: string
+  anotherSetting?: number
+  
+  // screenpipe app settings
+  screenpipeAppSettings?: ScreenpipeAppSettings
+}
+```
+
+2. create server action to access settings:
+
+```typescript
+// src/lib/actions/get-screenpipe-app-settings.ts
+import { pipe } from '@screenpipe/js'
+import type { Settings as ScreenpipeAppSettings } from '@screenpipe/js'
+
+export async function getScreenpipeAppSettings() {
+  return await pipe.settings.getAll()
+}
+
+export async function updateScreenpipeAppSettings(
+  newSettings: Partial<ScreenpipeAppSettings>
+) {
+  return await pipe.settings.update(newSettings)
+}
+```
+
+3. create react hook for settings management:
+
+```typescript
+// src/lib/hooks/use-pipe-settings.tsx
+import { useState, useEffect } from 'react'
+import { Settings } from '@/lib/types'
+import {
+  getScreenpipeAppSettings,
+  updateScreenpipeAppSettings,
+} from '@/lib/actions/get-screenpipe-app-settings'
+
+const DEFAULT_SETTINGS: Partial<Settings> = {
+  customSetting: 'default value',
+  anotherSetting: 42,
+}
+
+export function usePipeSettings() {
+  const [settings, setSettings] = useState<Partial<Settings> | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadSettings()
+  }, [])
+
+  const loadSettings = async () => {
+    try {
+      // load screenpipe app settings
+      const screenpipeSettings = await getScreenpipeAppSettings()
+
+      // get pipe specific settings from customSettings
+      const pipeSettings = {
+        ...(screenpipeSettings.customSettings?.yourPipeName && {
+          ...screenpipeSettings.customSettings.yourPipeName,
+        }),
+      }
+
+      // merge everything together
+      setSettings({
+        ...DEFAULT_SETTINGS,
+        ...pipeSettings,
+        screenpipeAppSettings: screenpipeSettings,
+      })
+    } catch (error) {
+      console.error('failed to load settings:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateSettings = async (newSettings: Partial<Settings>) => {
+    try {
+      // split settings
+      const { screenpipeAppSettings, ...pipeSettings } = newSettings
+
+      const mergedPipeSettings = {
+        ...DEFAULT_SETTINGS,
+        ...pipeSettings,
+      }
+
+      // update screenpipe settings if provided
+      await updateScreenpipeAppSettings({
+        ...screenpipeAppSettings,
+        customSettings: {
+          ...screenpipeAppSettings?.customSettings,
+          yourPipeName: pipeSettings,
+        },
+      })
+
+      // update state with everything
+      setSettings({
+        ...mergedPipeSettings,
+        screenpipeAppSettings:
+          screenpipeAppSettings || settings?.screenpipeAppSettings,
+      })
+      return true
+    } catch (error) {
+      console.error('failed to update settings:', error)
+      return false
+    }
+  }
+
+  return { settings, updateSettings, loading }
+}
+```
+
+4. use in your components:
+
+```typescript
+import { usePipeSettings } from '@/lib/hooks/use-pipe-settings'
+
+export function SettingsComponent() {
+  const { settings, updateSettings, loading } = usePipeSettings()
+
+  if (loading) return <div>loading...</div>
+
+  return (
+    <form onSubmit={async (e) => {
+      e.preventDefault()
+      const formData = new FormData(e.target as HTMLFormElement)
+      await updateSettings({
+        customSetting: formData.get('customSetting') as string,
+        anotherSetting: parseInt(formData.get('anotherSetting') as string),
+      })
+    }}>
+      <input 
+        name="customSetting"
+        defaultValue={settings?.customSetting}
+      />
+      <input 
+        name="anotherSetting"
+        type="number"
+        defaultValue={settings?.anotherSetting}
+      />
+      <button type="submit">save</button>
+    </form>
+  )
+}
+```
+
+#### best practices
+
+- store pipe-specific settings under `customSettings.yourPipeName` in screenpipe app settings
+- use typescript for type safety
+- provide default values for all settings
+- handle loading and error states
+- validate settings before saving
+- use server actions for settings operations
+- consider using shadcn/ui components for consistent UI
+
+see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
+
+</MotionDiv>
+
+### LLM links 
+
+paste these links into your Cursor chat for context:
+
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts
+

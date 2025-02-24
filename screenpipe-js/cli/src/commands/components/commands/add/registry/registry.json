@@ -10,6 +10,17 @@
       "@types/lodash"
     ]
   },
+  "update-pipe-config": {
+    "name": "update-pipe-config",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/update-pipe-config.tsx",
+    "target": "./src/lib/actions/update-pipe-config.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "types"
+    ]
+  },
   "use-pipe-settings": {
     "name": "use-pipe-settings",
     "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-pipe-settings.tsx",

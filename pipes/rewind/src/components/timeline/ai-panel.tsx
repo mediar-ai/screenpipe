@@ -231,10 +231,10 @@ export function AIPanel({
 
 			const openai = new OpenAI({
 				apiKey:
-					settings.aiProviderType === "screenpipe-cloud"
-						? settings.user.token
-						: settings.openaiApiKey,
-				baseURL: settings.aiUrl,
+					settings?.aiProviderType === "screenpipe-cloud"
+						? settings?.user?.token
+						: settings?.openaiApiKey,
+				baseURL: settings?.aiUrl,
 				dangerouslyAllowBrowser: true,
 			});
 
@@ -248,7 +248,7 @@ export function AIPanel({
 				relevantFrames,
 				openai,
 				{
-					model: settings.aiModel,
+					model: settings?.aiModel || "",
 					onProgress: (chunk) => {
 						currentResponse = chunk;
 						setChatMessages((prev) => [
@@ -384,7 +384,7 @@ export function AIPanel({
 											<Bot className="h-4 w-4 text-muted-foreground" />
 										</TooltipTrigger>
 										<TooltipContent>
-											<p className="text-xs">using {settings.aiModel}</p>
+											<p className="text-xs">using {settings?.aiModel}</p>
 										</TooltipContent>
 									</Tooltip>
 								</TooltipProvider>

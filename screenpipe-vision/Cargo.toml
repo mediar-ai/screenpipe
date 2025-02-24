@@ -43,8 +43,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-# TO-DO: change it to "0.3.3" when released
-xcap = { package = "xcap", git = "https://github.com/ologbonowiwi/xcap", rev = "ae0dab1" }
+xcap = "0.3.3"
 
 once_cell = { workspace = true }
 base64 = "0.22.1"
@@ -54,9 +53,6 @@ reqwest = { workspace = true }
 [dev-dependencies]
 tempfile = "3.3.0"
 criterion = { workspace = true }
-assert_cmd = "2.0.14"
-predicates = "3.1.0"
-assert_fs = "1.1.1"
 strsim = "0.10.0"
 memory-stats = "1.2.0"
 
@@ -64,9 +60,6 @@ memory-stats = "1.2.0"
 futures-util = "0.3"
 tokio-tungstenite = "0.20"
 serde = "1.0.200"
-
-[build-dependencies]
-cc = "1.0"
 
 [package.metadata.osx]
 framework = ["Vision", "AppKit"]
@@ -98,12 +91,10 @@ windows = { version = "0.58", features = [
   "Storage",
   "Storage_Streams",
 ] }
-# version 0.3.2 on Windows is broken
-# see https://github.com/nashaofu/xcap/issues/194
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "=0.2.164"
-cidre = { git = "https://github.com/yury/cidre.git", version = "0.5.0" }
+cidre = { git = "https://github.com/yury/cidre.git" } # idk why cant pin version / rev 
 accessibility-sys = "0.1.3"
 core-foundation = "0.9.4"
 url = "2.5.0"

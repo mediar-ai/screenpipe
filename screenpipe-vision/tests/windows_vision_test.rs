@@ -65,15 +65,15 @@ mod tests {
         let save_text_files_flag = false;
         let ocr_engine = OcrEngine::WindowsNative;
 
-        // Spawn the continuous_capture function
+        // Spawn the continuous_capture function with corrected parameter order
         let capture_handle = tokio::spawn(continuous_capture(
             result_tx,
             interval,
-            save_text_files_flag,
             ocr_engine,
             monitor,
-            &[],
-            &[],
+            vec![], // window filters as empty vec
+            vec![], // languages as empty vec
+            save_text_files_flag,
         ));
 
         // Wait for a short duration to allow some captures to occur

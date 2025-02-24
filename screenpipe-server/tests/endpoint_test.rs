@@ -653,6 +653,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // only local
     async fn test_recent_tasks_no_bleeding_production_db() {
         // Get home directory safely
         let home = std::env::var("HOME").expect("HOME environment variable not set");
