@@ -19,7 +19,7 @@ pub struct AudioStream {
     transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
     stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
-    is_disconnected: Arc<AtomicBool>,
+    pub is_disconnected: Arc<AtomicBool>,
 }
 
 enum StreamControl {

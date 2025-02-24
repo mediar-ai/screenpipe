@@ -88,9 +88,6 @@ async fn run_record_and_transcribe(
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut receiver = audio_stream.subscribe().await;
-    const OVERLAP_SECONDS: usize = 2;
-    let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
-    let overlap_samples = OVERLAP_SECONDS * sample_rate;
 
     info!(
         "starting continuous recording for {} ({}s segments)",
@@ -98,56 +95,90 @@ async fn run_record_and_transcribe(
         duration.as_secs()
     );
 
-    let mut collected_audio = Vec::new();
-    while is_running.load(Ordering::Relaxed) && !audio_stream.is_disconnected() {
-        if !collect_audio_segment(&mut receiver, &mut collected_audio, duration, &is_running)
-            .await?
-        {
-            continue;
+    const OVERLAP_SECONDS: usize = 2;
+    let overlap_samples = OVERLAP_SECONDS * 16000;
+    let duration_samples = (duration.as_secs_f64() * 16000.0).ceil() as usize;
+    let max_samples = duration_samples + overlap_samples;
+
+    // Pre-allocate buffer with exact capacity
+    let mut collected_audio = Vec::with_capacity(max_samples);
+    let mut overlap_buffer = Vec::with_capacity(overlap_samples);
+
+    while is_running.load(Ordering::Relaxed)
+        && !audio_stream.is_disconnected.load(Ordering::Relaxed)
+    {
+        // Collect until we have enough samples for a full segment
+        while collected_audio.len() < duration_samples && is_running.load(Ordering::Relaxed) {
+            match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
+                Ok(Ok(chunk)) => {
+                    // Maintain fixed memory usage
+                    let available_space = max_samples - collected_audio.len();
+                    let take = chunk.len().min(available_space);
+
+                    // Make space if needed by draining oldest samples
+                    if collected_audio.len() + take > max_samples {
+                        let drain_amount = collected_audio.len() + take - max_samples;
+                        collected_audio.drain(0..drain_amount);
+                    }
+
+                    collected_audio.extend_from_slice(&chunk[..take]);
+                }
+                Ok(Err(e)) => {
+                    error!("error receiving audio data: {}", e);
+                    return Err(anyhow!("Audio stream error: {}", e));
+                }
+                Err(_) => {} // Timeout, continue loop
+            }
         }
 
-        if !collected_audio.is_empty() {
-            process_audio_segment(
-                &mut collected_audio,
-                &whisper_sender,
-                &audio_stream,
-                overlap_samples,
-            )
-            .await?;
+        // Only send if we have enough samples (account for possible early exit)
+        if collected_audio.len() >= duration_samples {
+            // Split into main segment and overlap
+            let mut audio_segment = overlap_buffer.to_vec();
+            audio_segment.extend_from_slice(&collected_audio);
+            // Preserve overlap for next iteration
+            let overlap_start = duration_samples.saturating_sub(overlap_samples);
+            overlap_buffer.clear();
+            let overlap_end = duration_samples.saturating_sub(overlap_buffer.len());
+            overlap_buffer.extend_from_slice(&collected_audio[overlap_start..overlap_end]);
+
+            // Reset buffer with overlap
+            collected_audio.clear();
+            // collected_audio.extend_from_slice(&overlap_buffer);
+
+            // Send the segment
+            debug!("sending audio segment to audio model");
+            match whisper_sender.try_send(AudioInput {
+                data: Arc::new(audio_segment),
+                device: audio_stream.device.clone(),
+                sample_rate: audio_stream.device_config.sample_rate().0,
+                channels: 1,
+            }) {
+                Ok(_) => {
+                    debug!("sent audio segment to audio model");
+                    // Overlap already preserved in buffer
+                }
+                Err(e) => {
+                    // Reset buffers on error
+                    collected_audio.clear();
+                    overlap_buffer.clear();
+                    if e.is_disconnected() {
+                        error!("whisper channel disconnected, restarting recording process");
+                        return Err(anyhow!("Whisper channel disconnected"));
+                    } else if e.is_full() {
+                        warn!("whisper channel full, dropping audio segment");
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    } else {
+                        error!("whisper channel error, restarting recording process: {}", e);
+                        return Err(anyhow!("Whisper channel error"));
+                    }
+                }
+            }
         }
     }
 
     info!("stopped recording for {}", audio_stream.device.to_string());
     Ok(())
-}
-
-async fn collect_audio_segment(
-    receiver: &mut tokio::sync::broadcast::Receiver<Vec<f32>>,
-    collected_audio: &mut Vec<f32>,
-    duration: Duration,
-    is_running: &Arc<AtomicBool>,
-) -> Result<bool> {
-    let start_time = tokio::time::Instant::now();
-    while start_time.elapsed() < duration && is_running.load(Ordering::Relaxed) {
-        match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
-            Ok(Ok(chunk)) => {
-                collected_audio.extend(chunk);
-                LAST_AUDIO_CAPTURE.store(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                    Ordering::Relaxed,
-                );
-            }
-            Ok(Err(e)) => {
-                error!("error receiving audio data: {}", e);
-                return Err(anyhow!("Audio stream error: {}", e));
-            }
-            Err(_) => {} // Timeout, continue loop
-        }
-    }
-    Ok(true)
 }
 
 async fn process_audio_segment(

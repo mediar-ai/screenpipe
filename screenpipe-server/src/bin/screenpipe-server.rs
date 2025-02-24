@@ -15,7 +15,9 @@ use screenpipe_audio::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
         trigger_audio_permission, AudioDevice, DeviceControl,
     },
-    transcription::whisper::model::WhisperModel,
+    transcription::{
+        deepgram::streaming::RealtimeTranscriptionEvent, whisper::model::WhisperModel,
+    },
     vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
@@ -729,8 +731,24 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
-    let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
     let deepgram_api_key = cli.deepgram_api_key.clone();
+
+    let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+    let (realtime_vision_sender, _) =
+        tokio::sync::broadcast::channel::<RealtimeTranscriptionEvent>(1000);
+    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
+    let realtime_vision_sender_clone = realtime_vision_sender.clone();
+
+    let mut audio_manager = AudioManagerBuilder::new()
+        // TODO: Fix this to duration not usize...
+        .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
+        .output_path(PathBuf::from(output_path_clone.clone().to_string()))
+        .build(db.clone())
+        .await
+        .unwrap();
+
+    audio_manager.start().await.unwrap();
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -764,15 +782,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.enable_realtime_audio_transcription,
                     cli.enable_realtime_vision,
                 );
-
-                let mut audio_manager = AudioManagerBuilder::new()
-                    // TODO: Fix this to duration not usize...
-                    .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
-                    .output_path(PathBuf::from(output_path_clone.clone().to_string()))
-                    .build(db.clone())
-                    .await
-                    .unwrap();
-                audio_manager.start().await.unwrap();
 
                 let result = tokio::select! {
                     result = recording_future => result,

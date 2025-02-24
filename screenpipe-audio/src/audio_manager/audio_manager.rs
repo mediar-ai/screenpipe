@@ -12,7 +12,7 @@ use screenpipe_db::DatabaseManager;
 use crate::{
     core::{device::AudioDevice, record_and_transcribe, LAST_AUDIO_CAPTURE},
     device_manager::device_manager::DeviceManager,
-    segmentation_manager::segmentation_manager::SegmentationManager,
+    segmentation::segmentation_manager::SegmentationManager,
     transcription::{stt::process_audio_input, whisper::model::WhisperModel},
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
     AudioInput, TranscriptionResult,

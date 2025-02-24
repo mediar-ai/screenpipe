@@ -180,8 +180,8 @@ impl SegmentIterator {
                         &mut self.embedding_manager,
                     ) {
                         Ok(segment) => segment,
-                        Err(_) => {
-                            return Ok(None);
+                        Err(e) => {
+                            return Err(e);
                         }
                     };
 
