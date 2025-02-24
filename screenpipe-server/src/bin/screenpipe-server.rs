@@ -5,9 +5,16 @@ use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
-use screenpipe_audio::core::device::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice, DeviceControl,
+use screenpipe_audio::{
+    audio_manager::{
+        self,
+        audio_manager::{AudioManager, AudioManagerStatus},
+        AudioManagerBuilder, AudioManagerOptions,
+    },
+    core::device::{
+        default_input_device, default_output_device, list_audio_devices, parse_audio_device,
+        AudioDevice, DeviceControl,
+    },
 };
 use screenpipe_core::find_ffmpeg_path;
 use screenpipe_db::DatabaseManager;
@@ -585,13 +592,27 @@ async fn main() -> anyhow::Result<()> {
                     realtime_vision_sender_clone,
                 );
 
+                let mut audio_manager = AudioManagerBuilder::new()
+                    // TODO: Fix this to duration not usize...
+                    .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
+                    .output_path(PathBuf::from(output_path_clone.clone().to_string()))
+                    .build(db.clone())
+                    .await
+                    .unwrap();
+                audio_manager.start().await.unwrap();
+
                 let result = tokio::select! {
                     result = recording_future => result,
                     _ = shutdown_rx.recv() => {
+                        audio_manager.stop().await.unwrap();
                         info!("received shutdown signal for recording");
                         break;
                     }
                 };
+
+                while audio_manager.status().await == AudioManagerStatus::Running {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
 
                 if let Err(e) = result {
                     error!("continuous recording error: {:?}", e);

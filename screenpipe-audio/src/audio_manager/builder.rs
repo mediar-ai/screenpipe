@@ -1,35 +1,45 @@
+use anyhow::Result;
+use std::{env, path::PathBuf, sync::Arc};
+
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 
 use crate::{
-    core::{device::AudioDevice, engine::AudioTranscriptionEngine},
+    core::engine::AudioTranscriptionEngine,
     vad::{VadEngineEnum, VadSensitivity},
 };
 
 use super::audio_manager::AudioManager;
 
-pub struct AudioManagerOptions<'a> {
-    pub transcription_engine: AudioTranscriptionEngine,
+pub struct AudioManagerOptions {
+    pub transcription_engine: Arc<AudioTranscriptionEngine>,
     pub vad_engine: VadEngineEnum,
-    pub languages: Option<&'a [Language]>,
+    pub languages: Vec<Language>,
     pub deepgram_api_key: Option<String>,
     pub enable_diarization: bool,
     pub enable_realtime: bool,
     pub audio_chunk_duration: usize,
     pub vad_sensitivity: VadSensitivity,
     pub health_check_grace_period: usize,
-    pub enabled_devices: Option<&'a [AudioDevice]>,
+    pub enabled_devices: Option<Vec<String>>,
     pub use_all_devices: bool,
     pub db_path: Option<String>,
+    pub deepgram_url: Option<String>,
+    pub deepgram_websocket_url: Option<String>,
+    pub output_path: Option<PathBuf>,
 }
 
-impl Default for AudioManagerOptions<'_> {
+impl Default for AudioManagerOptions {
     fn default() -> Self {
+        let deepgram_api_key = env::var("DEEPGRAM_API_KEY").ok();
+        let deepgram_websocket_url = env::var("DEEPGRAM_WEBSOCKET_URL").ok();
+        let deepgram_url = env::var("DEEPGRAM_API_URL").ok();
         Self {
-            transcription_engine: AudioTranscriptionEngine::default(),
+            output_path: None,
+            transcription_engine: Arc::new(AudioTranscriptionEngine::default()),
             vad_engine: VadEngineEnum::Silero,
-            languages: None,
-            deepgram_api_key: None,
+            languages: vec![],
+            deepgram_api_key,
             enable_diarization: true,
             enable_realtime: false,
             audio_chunk_duration: 30,
@@ -38,12 +48,14 @@ impl Default for AudioManagerOptions<'_> {
             enabled_devices: None,
             use_all_devices: false,
             db_path: None,
+            deepgram_url,
+            deepgram_websocket_url,
         }
     }
 }
 
 pub struct AudioManagerBuilder {
-    options: AudioManagerOptions<'static>,
+    options: AudioManagerOptions,
 }
 
 impl AudioManagerBuilder {
@@ -54,7 +66,7 @@ impl AudioManagerBuilder {
     }
 
     pub fn transcription_engine(mut self, transcription_engine: AudioTranscriptionEngine) -> Self {
-        self.options.transcription_engine = transcription_engine;
+        self.options.transcription_engine = Arc::new(transcription_engine);
         self
     }
 
@@ -63,8 +75,8 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn languages(mut self, languages: &'static [Language]) -> Self {
-        self.options.languages = Some(languages);
+    pub fn languages(mut self, languages: Vec<Language>) -> Self {
+        self.options.languages = languages;
         self
     }
 
@@ -98,7 +110,7 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn enabled_devices(mut self, enabled_devices: &'static [AudioDevice]) -> Self {
+    pub fn enabled_devices(mut self, enabled_devices: Vec<String>) -> Self {
         self.options.enabled_devices = Some(enabled_devices);
         self
     }
@@ -108,7 +120,44 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub async fn build(self, db: DatabaseManager) -> AudioManager<'static> {
+    pub fn deepgram_url(mut self, deepgram_url: String) -> Self {
+        self.options.deepgram_url = Some(deepgram_url);
+        self
+    }
+
+    pub fn deepgram_websocket_url(mut self, deepgram_websocket_url: String) -> Self {
+        self.options.deepgram_websocket_url = Some(deepgram_websocket_url);
+        self
+    }
+
+    pub async fn build(self, db: Arc<DatabaseManager>) -> Result<AudioManager> {
         AudioManager::new(self.options, db).await
+    }
+
+    pub fn output_path(mut self, output_path: PathBuf) -> Self {
+        self.options.output_path = Some(output_path);
+        self
+    }
+
+    pub async fn validate_options(&self) -> Result<()> {
+        if self.options.transcription_engine == Arc::new(AudioTranscriptionEngine::Deepgram)
+            && self.options.deepgram_api_key.is_none()
+        {
+            return Err(anyhow::anyhow!(
+                "Deepgram API key is required for Deepgram transcription engine"
+            ));
+        }
+
+        if self.options.output_path.is_none() {
+            return Err(anyhow::anyhow!("Output path is required for audio manager"));
+        }
+
+        if self.options.enable_realtime && self.options.deepgram_api_key.is_none() {
+            return Err(anyhow::anyhow!(
+                "Deepgram API key is required for realtime transcription"
+            ));
+        }
+
+        Ok(())
     }
 }
