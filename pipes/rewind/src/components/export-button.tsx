@@ -38,7 +38,8 @@ export function ExportButton() {
 			const data = await response.json();
 			toast({
 				title: "Video exported",
-				description: "Your video has been exported successfully",
+				description:
+					"Your video has been exported successfully. check your desktop",
 			});
 		} catch (error) {
 			toast({
