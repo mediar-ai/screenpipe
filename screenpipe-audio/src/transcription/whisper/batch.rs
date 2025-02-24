@@ -35,7 +35,7 @@ pub async fn process_with_whisper(
     let device = &whisper_model.device.lock().await;
 
     debug!("converting pcm to mel spectrogram");
-    let mel = pcm_to_mel(model.config(), audio, mel_filters);
+    let mel = pcm_to_mel(model.config(), audio, mel_filters).await;
     let mel_len = mel.len();
 
     debug!("creating tensor from mel spectrogram");
