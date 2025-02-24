@@ -6,7 +6,13 @@ import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { MemoizedReactMarkdown } from "@/components/markdown";
-import { IconOpenAI, IconUser, IconOllama } from "@/components/ui/icons";
+import {
+	IconOpenAI,
+	IconUser,
+	IconOllama,
+	IconClaude,
+	IconGemini,
+} from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { VideoComponent } from "./video";
@@ -70,9 +76,12 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 			>
 				{message.role === "user" ? (
 					<IconUser />
-				) : settings?.aiUrl?.includes("openai") ||
-					settings?.aiUrl?.includes("worker") ? (
+				) : settings?.aiModel?.includes("gpt") ? (
 					<IconOpenAI />
+				) : settings?.aiModel?.includes("claude") ? (
+					<IconClaude />
+				) : settings?.aiModel?.includes("gemini") ? (
+					<IconGemini />
 				) : (
 					<>🦙</>
 				)}
