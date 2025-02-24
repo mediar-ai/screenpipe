@@ -16,7 +16,6 @@ use std::time::Duration;
 use tracing::{debug, error, warn};
 
 use std::collections::BTreeMap;
-use tokio::time::{timeout, Duration as TokioDuration};
 
 use zerocopy::AsBytes;
 
@@ -294,6 +293,9 @@ impl DatabaseManager {
         device_name: &str,
         timestamp: Option<DateTime<Utc>>,
         browser_url: Option<&str>,
+        app_name: Option<&str>,
+        window_name: Option<&str>,
+        focused: bool,
     ) -> Result<i64, sqlx::Error> {
         let mut tx = self.pool.begin().await?;
         debug!("insert_frame Transaction started");
@@ -328,15 +330,18 @@ impl DatabaseManager {
 
         let timestamp = timestamp.unwrap_or_else(Utc::now);
 
-        // Insert the new frame with file_path as name
+        // Insert the new frame with file_path as name and app/window metadata
         let id = sqlx::query(
-            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO frames (video_chunk_id, offset_index, timestamp, name, browser_url, app_name, window_name, focused) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .bind(video_chunk_id)
         .bind(offset_index)
         .bind(timestamp)
         .bind(file_path)
-        .bind(browser_url.map(|s| s.to_string()))
+        .bind(browser_url)
+        .bind(app_name)
+        .bind(window_name)
+        .bind(focused)
         .execute(&mut *tx)
         .await?
         .last_insert_rowid();
@@ -348,109 +353,20 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn insert_ocr_text(
         &self,
         frame_id: i64,
         text: &str,
         text_json: &str,
-        app_name: &str,
-        window_name: &str,
         ocr_engine: Arc<OcrEngine>,
-        focused: bool,
-    ) -> Result<(), sqlx::Error> {
-        const MAX_RETRIES: u32 = 3;
-        const TIMEOUT_DURATION: TokioDuration = TokioDuration::from_secs(10);
-
-        for attempt in 1..=MAX_RETRIES {
-            match timeout(
-                TIMEOUT_DURATION,
-                self.insert_ocr_text_old(
-                    frame_id,
-                    text,
-                    text_json,
-                    app_name,
-                    window_name,
-                    Arc::clone(&ocr_engine),
-                    focused,
-                ),
-            )
-            .await
-            {
-                Ok(Ok(())) => {
-                    return Ok(());
-                }
-                Ok(Err(e)) => {
-                    error!("Failed to insert OCR text on attempt {}: {}", attempt, e);
-                }
-                Err(_) => {
-                    warn!(
-                        "Timeout occurred on attempt {} while inserting OCR text for frame_id: {}",
-                        attempt, frame_id
-                    );
-                }
-            }
-
-            if attempt < MAX_RETRIES {
-                warn!(
-                    "Retrying to insert OCR text for frame_id: {} (attempt {}/{})",
-                    frame_id,
-                    attempt + 1,
-                    MAX_RETRIES
-                );
-            } else {
-                error!(
-                    "Failed to insert OCR text for frame_id: {} after {} attempts",
-                    frame_id, MAX_RETRIES
-                );
-                return Err(sqlx::Error::PoolTimedOut);
-            }
-        }
-
-        error!(
-            "Exiting insert_ocr_text for frame_id: {} with PoolTimedOut error",
-            frame_id
-        );
-        Err(sqlx::Error::PoolTimedOut)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn insert_ocr_text_old(
-        &self,
-        frame_id: i64,
-        text: &str,
-        text_json: &str,
-        app_name: &str,
-        window_name: &str,
-        ocr_engine: Arc<OcrEngine>,
-        focused: bool,
     ) -> Result<(), sqlx::Error> {
         let text_length = text.len() as i64;
-        let display_window_name = if window_name.chars().count() > 20 {
-            format!("{}...", window_name.chars().take(20).collect::<String>())
-        } else {
-            window_name.to_string()
-        };
-
-        debug!(
-            "Inserting OCR: frame_id {}, app {}, window {}, focused {}, text {}{}",
-            frame_id,
-            app_name,
-            display_window_name,
-            focused,
-            text.replace('\n', " ").chars().take(60).collect::<String>(),
-            if text.len() > 60 { "..." } else { "" },
-        );
-
         let mut tx = self.pool.begin().await?;
-        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, app_name, ocr_engine, window_name, focused, text_length) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
+        sqlx::query("INSERT INTO ocr_text (frame_id, text, text_json, ocr_engine, text_length) VALUES (?1, ?2, ?3, ?4, ?5)")
             .bind(frame_id)
             .bind(text)
             .bind(text_json)
-            .bind(app_name)
             .bind(format!("{:?}", *ocr_engine))
-            .bind(window_name)
-            .bind(focused)
             .bind(text_length)
             .execute(&mut *tx)
             .await?;
@@ -475,6 +391,8 @@ impl DatabaseManager {
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
         frame_name: Option<&str>,
+        browser_url: Option<&str>,
+        focused: Option<bool>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
 
@@ -495,6 +413,8 @@ impl DatabaseManager {
                                 min_length,
                                 max_length,
                                 frame_name,
+                                browser_url,
+                                focused,
                             ),
                             self.search_audio(
                                 query,
@@ -531,6 +451,8 @@ impl DatabaseManager {
                                 min_length,
                                 max_length,
                                 frame_name,
+                                browser_url,
+                                focused,
                             ),
                             self.search_ui_monitoring(
                                 query,
@@ -564,6 +486,8 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         frame_name,
+                        browser_url,
+                        focused,
                     )
                     .await?;
                 results.extend(ocr_results.into_iter().map(SearchResult::OCR));
@@ -640,6 +564,8 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         frame_name,
+                        browser_url,
+                        focused,
                     )
                     .await?;
                 let ui_results = self
@@ -682,6 +608,8 @@ impl DatabaseManager {
                         min_length,
                         max_length,
                         frame_name,
+                        browser_url,
+                        focused,
                     )
                     .await?;
 
@@ -728,32 +656,48 @@ impl DatabaseManager {
         min_length: Option<usize>,
         max_length: Option<usize>,
         frame_name: Option<&str>,
+        browser_url: Option<&str>,
+        focused: Option<bool>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
-        // combine the individual search aspects into a single fts query string
-        let mut fts_parts = Vec::new();
+        let mut frame_fts_parts = Vec::new();
+        let mut ocr_fts_parts = Vec::new();
+
+        // Split query parts between frame metadata and OCR content
         if !query.is_empty() {
-            fts_parts.push(query.to_owned());
+            ocr_fts_parts.push(query.to_owned()); // Just use the query directly
         }
         if let Some(app) = app_name {
             if !app.is_empty() {
-                // fts field lookup for app_name using SQLite fts syntax
-                fts_parts.push(format!("app_name:\"{}\"", app));
+                frame_fts_parts.push(format!("app_name:{}", app));
             }
         }
         if let Some(window) = window_name {
             if !window.is_empty() {
-                // fts field lookup for window_name
-                fts_parts.push(format!("window_name:\"{}\"", window));
+                frame_fts_parts.push(format!("window_name:{}", window));
             }
         }
-        let combined_query = fts_parts.join(" ");
+        if let Some(browser) = browser_url {
+            if !browser.is_empty() {
+                frame_fts_parts.push(format!("browser_url:{}", browser));
+            }
+        }
+        if let Some(is_focused) = focused {
+            frame_fts_parts.push(format!("focused:{}", if is_focused { "1" } else { "0" }));
+        }
 
-        // always use the fts table so that the field-specific match works
-        let base_sql = "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id";
-        let where_clause = if combined_query.is_empty() {
-            "WHERE 1=1"
-        } else {
-            "WHERE ocr_text_fts MATCH ?1"
+        let frame_query = frame_fts_parts.join(" ");
+        let ocr_query = ocr_fts_parts.join(" ");
+
+        let base_sql = "frames_fts 
+            JOIN frames ON frames_fts.rowid = frames.id 
+            JOIN ocr_text ON frames.id = ocr_text.frame_id
+            JOIN ocr_text_fts ON ocr_text.frame_id = ocr_text_fts.rowid";
+
+        let where_clause = match (frame_query.is_empty(), ocr_query.is_empty()) {
+            (true, true) => "WHERE 1=1".to_owned(),
+            (false, true) => "WHERE frames_fts MATCH ?".to_owned(),
+            (true, false) => "WHERE ocr_text_fts MATCH ?".to_owned(),
+            (false, false) => "WHERE frames_fts MATCH ? AND ocr_text_fts MATCH ?".to_owned(),
         };
 
         let sql = format!(
@@ -766,13 +710,13 @@ impl DatabaseManager {
                 frames.name as frame_name,
                 video_chunks.file_path,
                 frames.offset_index,
-                ocr_text.app_name,
+                frames.app_name,
                 ocr_text.ocr_engine,
-                ocr_text.window_name,
+                frames.window_name,
                 GROUP_CONCAT(tags.name, ',') as tags,
-                frames.browser_url
+                frames.browser_url,
+                frames.focused
             FROM {}
-            JOIN frames ON ocr_text.frame_id = frames.id
             JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
             LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
             LEFT JOIN tags ON vision_tags.tag_id = tags.id
@@ -788,12 +732,11 @@ impl DatabaseManager {
             "#,
             base_sql, where_clause
         );
-
         let raw_results: Vec<OCRResultRaw> = sqlx::query_as(&sql)
-            .bind(if combined_query.is_empty() {
+            .bind(if frame_query.is_empty() && ocr_query.is_empty() {
                 "".to_owned()
             } else {
-                combined_query
+                frame_query
             })
             .bind(start_time)
             .bind(end_time)
@@ -823,6 +766,7 @@ impl DatabaseManager {
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
                 browser_url: raw.browser_url,
+                focused: raw.focused,
             })
             .collect())
     }
@@ -839,28 +783,9 @@ impl DatabaseManager {
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
     ) -> Result<Vec<AudioResult>, sqlx::Error> {
-        let mut json_array: String = "[]".to_string();
-        if let Some(ids) = speaker_ids {
-            if !ids.is_empty() {
-                json_array = serde_json::to_string(&ids).unwrap_or_default();
-            }
-        }
-
-        let base_sql = if query.is_empty() {
-            "audio_transcriptions"
-        } else {
-            "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-        };
-
-        let where_clause = if query.is_empty() {
-            "WHERE 1=1"
-        } else {
-            "WHERE audio_transcriptions_fts MATCH ?1"
-        };
-
-        let sql = format!(
-            r#"
-            SELECT
+        // base query for audio search
+        let mut base_sql = String::from(
+            "SELECT
                 audio_transcriptions.audio_chunk_id,
                 audio_transcriptions.transcription,
                 audio_transcriptions.timestamp,
@@ -873,68 +798,119 @@ impl DatabaseManager {
                 audio_transcriptions.speaker_id,
                 audio_transcriptions.start_time,
                 audio_transcriptions.end_time
-            FROM {}
-            JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
-            LEFT JOIN speakers on audio_transcriptions.speaker_id = speakers.id
-            LEFT JOIN audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
-            LEFT JOIN tags ON audio_tags.tag_id = tags.id
-            {}
-                AND (?2 IS NULL OR audio_transcriptions.timestamp >= ?2)
-                AND (?3 IS NULL OR audio_transcriptions.timestamp <= ?3)
-                AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
-                AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
-                AND (speakers.id IS NULL OR speakers.hallucination = 0)
-                AND (json_array_length(?6) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?6)))
-            GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index
-            ORDER BY audio_transcriptions.timestamp DESC
-            LIMIT ?7 OFFSET ?8
-            "#,
+             FROM audio_transcriptions
+             JOIN audio_chunks ON audio_transcriptions.audio_chunk_id = audio_chunks.id
+             LEFT JOIN speakers ON audio_transcriptions.speaker_id = speakers.id
+             LEFT JOIN audio_tags ON audio_chunks.id = audio_tags.audio_chunk_id
+             LEFT JOIN tags ON audio_tags.tag_id = tags.id",
+        );
+        // if query is provided, join the corresponding fts table
+        if !query.is_empty() {
+            base_sql.push_str(" JOIN audio_transcriptions_fts ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id");
+        }
+
+        // build where clause conditions in order
+        let mut conditions = Vec::new();
+        if !query.is_empty() {
+            conditions.push("audio_transcriptions_fts MATCH ?");
+        }
+        if start_time.is_some() {
+            conditions.push("audio_transcriptions.timestamp >= ?");
+        }
+        if end_time.is_some() {
+            conditions.push("audio_transcriptions.timestamp <= ?");
+        }
+        if min_length.is_some() {
+            conditions.push("COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?");
+        }
+        if max_length.is_some() {
+            conditions.push("COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?");
+        }
+        conditions.push("(speakers.id IS NULL OR speakers.hallucination = 0)");
+        if speaker_ids.is_some() {
+            conditions.push("(json_array_length(?) = 0 OR audio_transcriptions.speaker_id IN (SELECT value FROM json_each(?)))");
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "WHERE 1=1".to_owned()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        // complete sql with group, order, limit and offset
+        let sql = format!(
+            "{} {} GROUP BY audio_transcriptions.audio_chunk_id, audio_transcriptions.offset_index ORDER BY audio_transcriptions.timestamp DESC LIMIT ? OFFSET ?",
             base_sql, where_clause
         );
 
-        let raw_results: Vec<AudioResultRaw> = sqlx::query_as(&sql)
-            .bind(query)
-            .bind(start_time)
-            .bind(end_time)
-            .bind(min_length.map(|l| l as i64))
-            .bind(max_length.map(|l| l as i64))
-            .bind(json_array)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
+        // prepare binding for speaker_ids (if any)
+        let speaker_ids_json = speaker_ids.as_ref().map_or_else(
+            || "[]".to_string(),
+            |ids| serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_string()),
+        );
 
-        let futures = raw_results.into_iter().map(|raw| async move {
-            let speaker = match raw.speaker_id {
-                Some(id) => match self.get_speaker_by_id(id).await {
-                    Ok(speaker) => Some(speaker),
-                    Err(_) => None,
-                },
-                None => None,
-            };
+        let mut query_builder = sqlx::query_as::<_, AudioResultRaw>(&sql);
 
-            Ok::<AudioResult, sqlx::Error>(AudioResult {
-                audio_chunk_id: raw.audio_chunk_id,
-                transcription: raw.transcription,
-                timestamp: raw.timestamp,
-                file_path: raw.file_path,
-                offset_index: raw.offset_index,
-                transcription_engine: raw.transcription_engine,
-                tags: raw
-                    .tags
-                    .map(|t| t.split(',').map(String::from).collect())
-                    .unwrap_or_default(),
-                device_name: raw.device_name,
-                device_type: if raw.is_input_device {
-                    DeviceType::Input
-                } else {
-                    DeviceType::Output
-                },
-                speaker,
-                start_time: raw.start_time,
-                end_time: raw.end_time,
+        // bind parameters in the same order as added to the where clause
+        if !query.is_empty() {
+            query_builder = query_builder.bind(query);
+        }
+        if let Some(start) = start_time {
+            query_builder = query_builder.bind(start);
+        }
+        if let Some(end) = end_time {
+            query_builder = query_builder.bind(end);
+        }
+        if let Some(min) = min_length {
+            query_builder = query_builder.bind(min as i64);
+        }
+        if let Some(max) = max_length {
+            query_builder = query_builder.bind(max as i64);
+        }
+        if speaker_ids.is_some() {
+            query_builder = query_builder
+                .bind(&speaker_ids_json)
+                .bind(&speaker_ids_json);
+        }
+        query_builder = query_builder.bind(limit as i64).bind(offset as i64);
+
+        let results_raw: Vec<AudioResultRaw> = query_builder.fetch_all(&self.pool).await?;
+
+        // map raw results into audio result type
+        let futures: Vec<_> = results_raw
+            .into_iter()
+            .map(|raw| async move {
+                let speaker = match raw.speaker_id {
+                    Some(id) => match self.get_speaker_by_id(id).await {
+                        Ok(speaker) => Some(speaker),
+                        Err(_) => None,
+                    },
+                    None => None,
+                };
+
+                Ok::<AudioResult, sqlx::Error>(AudioResult {
+                    audio_chunk_id: raw.audio_chunk_id,
+                    transcription: raw.transcription,
+                    timestamp: raw.timestamp,
+                    file_path: raw.file_path,
+                    offset_index: raw.offset_index,
+                    transcription_engine: raw.transcription_engine,
+                    tags: raw
+                        .tags
+                        .map(|s| s.split(',').map(|s| s.to_owned()).collect())
+                        .unwrap_or_default(),
+                    device_name: raw.device_name,
+                    device_type: if raw.is_input_device {
+                        DeviceType::Input
+                    } else {
+                        DeviceType::Output
+                    },
+                    speaker,
+                    start_time: raw.start_time,
+                    end_time: raw.end_time,
+                })
             })
-        });
+            .collect();
 
         Ok(try_join_all(futures).await?.into_iter().collect())
     }
@@ -971,6 +947,8 @@ impl DatabaseManager {
         max_length: Option<usize>,
         speaker_ids: Option<Vec<i64>>,
         frame_name: Option<&str>,
+        browser_url: Option<&str>,
+        focused: Option<bool>,
     ) -> Result<usize, sqlx::Error> {
         let json_array = if let Some(ids) = speaker_ids {
             if !ids.is_empty() {
@@ -1002,6 +980,14 @@ impl DatabaseManager {
                 ui_parts.push(format!("window:\"{}\"", window));
             }
 
+            if let Some(browser) = browser_url {
+                ocr_parts.push(format!("browser_url:\"{}\"", browser));
+            }
+
+            if let Some(is_focused) = focused {
+                ocr_parts.push(format!("focused:{}", if is_focused { "1" } else { "0" }));
+            }
+
             (ocr_parts.join(" "), ui_parts.join(" "))
         };
 
@@ -1009,7 +995,8 @@ impl DatabaseManager {
             ContentType::OCR => format!(
                 r#"SELECT COUNT(DISTINCT frames.id)
                    FROM {table}
-                   JOIN frames ON ocr_text.frame_id = frames.id
+                   JOIN frames ON frames_fts.rowid = frames.id
+                   JOIN ocr_text ON frames.id = ocr_text.frame_id
                    WHERE {match_condition}
                        AND (?2 IS NULL OR frames.timestamp >= ?2)
                        AND (?3 IS NULL OR frames.timestamp <= ?3)
@@ -1019,12 +1006,12 @@ impl DatabaseManager {
                 table = if ocr_fts_query.is_empty() {
                     "ocr_text"
                 } else {
-                    "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
+                    "frames_fts"
                 },
                 match_condition = if ocr_fts_query.is_empty() {
                     "1=1"
                 } else {
-                    "ocr_text_fts MATCH ?1"
+                    "frames_fts MATCH ?1"
                 }
             ),
             ContentType::UI => format!(
@@ -1096,12 +1083,12 @@ impl DatabaseManager {
                 ocr_table = if ocr_fts_query.is_empty() {
                     "ocr_text"
                 } else {
-                    "ocr_text_fts JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id"
+                    "frames_fts"
                 },
                 ocr_match = if ocr_fts_query.is_empty() {
                     "1=1"
                 } else {
-                    "ocr_text_fts MATCH ?1"
+                    "frames_fts MATCH ?1"
                 },
                 audio_table = if query.is_empty() {
                     "audio_transcriptions"
@@ -2074,6 +2061,7 @@ impl DatabaseManager {
                     .map(|t| t.split(',').map(String::from).collect())
                     .unwrap_or_default(),
                 browser_url: raw.browser_url,
+                focused: raw.focused,
             })
             .collect())
     }

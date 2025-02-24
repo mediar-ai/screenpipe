@@ -230,7 +230,14 @@ async fn record_video(
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db
-                    .insert_frame(&device_name, None, window_result.browser_url.as_deref())
+                    .insert_frame(
+                        &device_name,
+                        None,
+                        window_result.browser_url.as_deref(),
+                        Some(window_result.app_name.as_str()),
+                        Some(window_result.window_name.as_str()),
+                        window_result.focused,
+                    )
                     .await
                 {
                     Ok(frame_id) => {
@@ -258,15 +265,7 @@ async fn record_video(
                             },
                         );
                         if let Err(e) = db
-                            .insert_ocr_text(
-                                frame_id,
-                                text,
-                                &text_json,
-                                &window_result.app_name,
-                                &window_result.window_name,
-                                Arc::clone(&ocr_engine),
-                                window_result.focused, // Add this line
-                            )
+                            .insert_ocr_text(frame_id, text, &text_json, Arc::clone(&ocr_engine))
                             .await
                         {
                             error!(

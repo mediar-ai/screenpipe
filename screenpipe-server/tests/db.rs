@@ -29,15 +29,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
             "",
-            "test",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -51,6 +51,8 @@ mod tests {
                 None,
                 None,
                 Some("test"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -99,6 +101,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -110,6 +114,8 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -168,6 +174,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -179,6 +187,8 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -208,15 +218,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
             "",
-            "app",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -250,6 +260,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -261,6 +273,8 @@ mod tests {
                 ContentType::All,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -298,15 +312,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -335,15 +349,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -402,6 +416,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -417,6 +433,8 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -448,6 +466,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -462,6 +482,8 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -485,15 +507,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -520,15 +542,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -565,6 +587,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -583,6 +607,8 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -928,29 +954,29 @@ mod tests {
             .unwrap();
 
         // Insert first frame with OCR
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from frame 1",
             "",
-            "test_app",
-            "test_window",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
 
         // Insert second frame with OCR
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from frame 2",
             "",
-            "test_app",
-            "test_window",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -970,6 +996,8 @@ mod tests {
                 None,
                 None,
                 Some("test_video"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -995,6 +1023,8 @@ mod tests {
                 None,
                 None,
                 Some("non_existent"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1020,6 +1050,8 @@ mod tests {
                 None,
                 None,
                 Some("test_video"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1035,6 +1067,8 @@ mod tests {
             .count_search_results(
                 "Hello",
                 ContentType::OCR,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1090,6 +1124,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1117,6 +1153,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1137,6 +1175,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1149,6 +1189,8 @@ mod tests {
                 ContentType::UI,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,

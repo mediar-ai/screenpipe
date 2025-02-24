@@ -37,6 +37,7 @@ pub struct OCRResultRaw {
     pub window_name: String,
     pub tags: Option<String>,
     pub browser_url: Option<String>,
+    pub focused: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -53,6 +54,7 @@ pub struct OCRResult {
     pub window_name: String,
     pub tags: Vec<String>,
     pub browser_url: Option<String>,
+    pub focused: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Default, Clone)]
