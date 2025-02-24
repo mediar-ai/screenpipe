@@ -234,7 +234,7 @@ export default function Home() {
       ) : (
         <>
           <ChangelogDialog />
-          <BreakingChangesInstructionsDialog />
+          {/* <BreakingChangesInstructionsDialog /> */}
           <Header />
           <div className=" w-full">
             <PipeStore />
