@@ -1082,16 +1082,16 @@ impl DatabaseManager {
                     WHERE {audio_match}
                         AND (?2 IS NULL OR timestamp >= ?2)
                         AND (?3 IS NULL OR timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(transcription)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(transcription)) <= ?5)
+                        AND (?4 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(audio_transcriptions.text_length, LENGTH(audio_transcriptions.transcription)) <= ?5)
                         AND (json_array_length(?6) = 0 OR speaker_id IN (SELECT value FROM json_each(?6)))
                     UNION ALL
                     SELECT DISTINCT id FROM {ui_table}
                     WHERE {ui_match}
                         AND (?2 IS NULL OR timestamp >= ?2)
                         AND (?3 IS NULL OR timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)
+                        AND (?4 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?4)
+                        AND (?5 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?5)
                 )"#,
                 ocr_table = if ocr_fts_query.is_empty() {
                     "ocr_text"
