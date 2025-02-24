@@ -557,6 +557,17 @@ async fn main() -> anyhow::Result<()> {
     let (realtime_vision_sender, _) = tokio::sync::broadcast::channel(1000);
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
+
+    let mut audio_manager = AudioManagerBuilder::new()
+        // TODO: Fix this to duration not usize...
+        .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
+        .output_path(PathBuf::from(output_path_clone.clone().to_string()))
+        .build(db.clone())
+        .await
+        .unwrap();
+
+    audio_manager.start().await.unwrap();
+
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -591,15 +602,6 @@ async fn main() -> anyhow::Result<()> {
                     cli.enable_realtime_audio_transcription,
                     realtime_vision_sender_clone,
                 );
-
-                let mut audio_manager = AudioManagerBuilder::new()
-                    // TODO: Fix this to duration not usize...
-                    .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
-                    .output_path(PathBuf::from(output_path_clone.clone().to_string()))
-                    .build(db.clone())
-                    .await
-                    .unwrap();
-                audio_manager.start().await.unwrap();
 
                 let result = tokio::select! {
                     result = recording_future => result,

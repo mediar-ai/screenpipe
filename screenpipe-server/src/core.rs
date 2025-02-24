@@ -14,6 +14,7 @@ use screenpipe_audio::{create_whisper_channel, AudioInput, TranscriptionResult};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_db::{DatabaseManager, Speaker};
+use screenpipe_events::poll_meetings_events;
 use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
