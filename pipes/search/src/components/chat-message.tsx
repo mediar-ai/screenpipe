@@ -1,7 +1,7 @@
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -9,13 +9,13 @@ import { MemoizedReactMarkdown } from "@/components/markdown";
 import {
   IconOpenAI,
   IconUser,
-  IconOllama,
   IconClaude,
   IconGemini,
 } from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { VideoComponent } from "./video";
+import { ArrowDown, ChevronDown } from "lucide-react";
 
 export interface ChatMessageProps {
   message: Message;
@@ -25,6 +25,9 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
   const { settings } = useSettings();
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingContent, setThinkingContent] = useState<string[]>([]);
+  const [thinkingTime, setThinkingTime] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!message?.content) return;
@@ -44,11 +47,24 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
       setIsThinking(true);
     } else if (openTag && closeTag) {
       setIsThinking(true);
+      clearTimeout(timerRef.current ?? undefined);
     } else {
       setIsThinking(false);
       setThinkingContent([]);
+      setThinkingTime(0);
     }
   }, [message.content]);
+
+  useEffect(() => {
+    if (isThinking) {
+      timerRef.current = setInterval(() => {
+        setThinkingTime((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      clearInterval(timerRef.current ?? undefined);
+    };
+  }, [isThinking]);
 
   const processThinkContent = (content: string) => {
     return content.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
@@ -76,11 +92,11 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
       >
         {message.role === "user" ? (
           <IconUser />
-        ) : settings.aiModel.includes("gpt") ? (
+        ) : settings?.aiModel?.includes("gpt") ? (
           <IconOpenAI />
-        ) : settings.aiModel.includes("claude") ? (
+        ) : settings?.aiModel?.includes("claude") ? (
           <IconClaude />
-        ) : settings.aiModel.includes("gemini") ? (
+        ) : settings?.aiModel?.includes("gemini") ? (
           <IconGemini />
         ) : (
           <>🦙</>
@@ -90,21 +106,44 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
         {isThinking && thinkingContent.length > 0 && (
           <div
             className={cn(
-              "my-2 p-3 rounded-lg border transition-all duration-300",
+              "my-2 rounded-lg border transition-all duration-300",
               "bg-muted/50 border-muted-foreground/20 text-muted-foreground",
-              "opacity-100",
             )}
           >
-            <div className="flex items-center gap-2 mb-2">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full p-3 flex items-center gap-2 hover:bg-muted/70 transition-colors"
+            >
               <span className="animate-pulse">💭</span>
-              <span className="text-sm text-muted-foreground">Thinking...</span>
-            </div>
-            <div className="pl-4 border-l-2 border-muted-foreground/20">
-              {thinkingContent.map((content, index) => (
-                <p key={index} className="mb-2 last:mb-0">
-                  {content}
-                </p>
-              ))}
+              <span className="text-sm text-muted-foreground flex-1 text-left">
+                {isThinking
+                  ? `Thinking... (${thinkingTime}s)`
+                  : `Thought for ${thinkingTime}s`}
+              </span>
+              <span
+                className={cn(
+                  "transform transition-transform duration-200",
+                  isExpanded ? "rotate-180" : "",
+                )}
+              >
+                <ChevronDown />
+              </span>
+            </button>
+            <div
+              className={cn(
+                "transition-all duration-300 overflow-hidden",
+                isExpanded ? "opacity-100" : "max-h-0 opacity-0",
+              )}
+            >
+              <div className="p-3 pt-0">
+                <div className="pl-4 border-l-2 border-muted-foreground/20">
+                  {thinkingContent.map((content, index) => (
+                    <p key={index} className="mb-2 last:mb-0">
+                      {content}
+                    </p>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
