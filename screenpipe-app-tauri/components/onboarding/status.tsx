@@ -274,10 +274,13 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       className={`${className} w-full flex justify-between flex-col items-center`}
     >
       <DialogHeader className="flex flex-col px-2 justify-center items-center">
-        <img className="w-24 h-24 " src="/128x128.png" alt="screenpipe-logo" />
+        <img className="w-24 h-24" src="/128x128.png" alt="screenpipe-logo" />
         <DialogTitle className="text-center text-2xl">
           setting up screenpipe
         </DialogTitle>
+        <p className="text-sm text-muted-foreground mt-2">
+          100% local-first • your data never leaves your device
+        </p>
       </DialogHeader>
 
       {isMacOS && (
@@ -365,7 +368,7 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           htmlFor="chinese-mirror-toggle"
           className="flex items-center space-x-2"
         >
-          <span>use chinese mirror for model downloads</span>
+          <span>i am currently in mainland china</span>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger>
@@ -373,11 +376,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
               </TooltipTrigger>
               <TooltipContent side="right">
                 <p>
-                  enable this option to use a chinese mirror for
+                  enable this option to use a chinese cloud for
                   <br />
-                  downloading hugging face models
-                  <br />
-                  (e.g. whisper, embedded llama, etc.)
+                  downloading AI models
                   <br />
                   which are blocked in mainland china.
                 </p>

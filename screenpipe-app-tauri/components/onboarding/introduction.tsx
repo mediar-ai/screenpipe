@@ -37,13 +37,7 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
           welcome to screenpipe, excited to have you here
         </h2>
       </DialogHeader>
-      <video
-        width="600px"
-        className="mt-2 rounded-md"
-        autoPlay
-        controls
-        preload="true"
-      >
+      <video width="600px" className="mt-2 rounded-md" controls preload="true">
         <source src="/onboarding-screenpipe.mp4" type="video/mp4" />
         your browser does not support the video tag.
       </video>

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,65 +7,26 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "./ui/badge";
-import { invoke } from "@tauri-apps/api/core";
 import { toast } from "./ui/use-toast";
 
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, Activity, Power } from "lucide-react";
+import { Lock, Folder, Power, Settings } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
 import { cn } from "@/lib/utils";
-import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
-import { platform } from "@tauri-apps/plugin-os";
-
-type PermissionsStatus = {
-  screenRecording: string;
-  microphone: string;
-  accessibility: string;
-};
+import { PermissionButtons } from "./status/permission-buttons";
 
 const HealthStatus = ({ className }: { className?: string }) => {
   const { health } = useHealthCheck();
   const { isOpen, open, close } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null
-  );
-  const [isMacOS, setIsMacOS] = useState(false);
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-
-        setPermissions({
-          screenRecording: perms.screenRecording,
-          microphone: perms.microphone,
-          accessibility: perms.accessibility,
-        });
-      } catch (error) {
-        console.error("Failed to check permissions:", error);
-      }
-    };
-    checkPermissions();
-  }, []);
-
-  useEffect(() => {
-    const checkPlatform = () => {
-      const currentPlatform = platform();
-      setIsMacOS(currentPlatform === "macos");
-    };
-    checkPlatform();
-  }, []);
 
   const handleOpenDataDir = async () => {
     try {
@@ -159,64 +120,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
     }
   };
 
-  const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility"
-  ) => {
-    const toastId = toast({
-      title: `checking ${type} permissions`,
-      description: "please wait...",
-      duration: Infinity,
-    });
-
-    try {
-      const permissionType =
-        type === "screen"
-          ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
-
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
-
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
-
-      setPermissions({
-        screenRecording: perms.screenRecording,
-        microphone: perms.microphone,
-        accessibility: perms.accessibility,
-      });
-
-      const granted =
-        type === "screen"
-          ? perms.screenRecording === "Granted"
-          : type === "audio"
-          ? perms.microphone === "Granted"
-          : perms.accessibility === "Granted";
-
-      toastId.update({
-        id: toastId.id,
-        title: granted ? "permission granted" : "permission check complete",
-        description: granted
-          ? `${type} permission was successfully granted`
-          : `please try granting ${type} permission again if needed`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error(`failed to handle ${type} permission:`, error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: `failed to handle ${type} permission`,
-        variant: "destructive",
-        duration: 3000,
-      });
-    }
-  };
-
   return (
     <>
       <Badge
@@ -274,27 +177,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     {formatTimestamp(health?.last_frame_timestamp ?? null)}
                   </span>
                 </div>
-                {isMacOS && (
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.screenRecording ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("screen")}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant screen permission
-                    </Button>
-                  </div>
-                )}
+                <div className="flex-shrink-0">
+                  <PermissionButtons type="screen" settings={settings} />
+                </div>
               </div>
 
               {/* Audio Recording Status */}
@@ -323,28 +208,9 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       : formatTimestamp(health?.last_audio_timestamp ?? null)}
                   </span>
                 </div>
-                {isMacOS && (
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.microphone ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("audio")}
-                      disabled={settings.disableAudio}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant audio permission
-                    </Button>
-                  </div>
-                )}
+                <div className="flex-shrink-0">
+                  <PermissionButtons type="audio" settings={settings} />
+                </div>
               </div>
 
               {/* UI Monitoring Status */}
@@ -366,27 +232,12 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       )}
                     </span>
                   </div>
-                  {isMacOS && (
-                    <div className="flex items-center gap-2">
-                      {permissions && (
-                        <span>
-                          {permissions.accessibility ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <X className="h-4 w-4 text-red-500" />
-                          )}
-                        </span>
-                      )}
-                      <Button
-                        variant="outline"
-                        className="w-[260px] text-sm justify-start"
-                        onClick={() => handlePermissionButton("accessibility")}
-                      >
-                        <Lock className="h-4 w-4 mr-2" />
-                        grant accessibility permission
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex-shrink-0">
+                    <PermissionButtons
+                      type="accessibility"
+                      settings={settings}
+                    />
+                  </div>
                 </div>
               )}
             </div>
