@@ -27,8 +27,8 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
-        MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
+        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
@@ -2082,19 +2082,29 @@ pub struct CreateVideoFromFramesRequest {
 #[derive(Debug, Serialize)]
 pub struct CreateVideoFromFramesResponse {
     pub video_path: String,
+    pub skipped_frames: Vec<i64>,
 }
 
 pub async fn create_video_from_frames_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<CreateVideoFromFramesRequest>,
 ) -> Result<JsonResponse<CreateVideoFromFramesResponse>, (StatusCode, JsonResponse<Value>)> {
-    // Get user's desktop directory
-    let output_dir = dirs::desktop_dir().ok_or_else(|| {
+    let desktop_dir = dirs::desktop_dir().ok_or_else(|| {
+        error!("Failed to get desktop directory");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({"error": "Could not find desktop directory"})),
         )
     })?;
+
+    let frames_dir = state.screenpipe_dir.join("frames");
+    if let Err(e) = tokio::fs::create_dir_all(&frames_dir).await {
+        error!("Failed to create frames directory: {}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to create frames directory: {}", e)})),
+        ));
+    }
 
     let output_filename = payload.output_filename.unwrap_or_else(|| {
         format!(
@@ -2102,58 +2112,80 @@ pub async fn create_video_from_frames_handler(
             chrono::Utc::now().format("%Y%m%d_%H%M%S")
         )
     });
-    let output_path = output_dir.join(&output_filename);
+    let output_path = desktop_dir.join(&output_filename);
 
     let mut frames = Vec::new();
+    let mut skipped_frames = Vec::new();
 
-    // Fetch frame data for each frame ID
-    for frame_id in payload.frame_ids {
+    for frame_id in payload.frame_ids.clone() {
         match state.db.get_frame(frame_id).await {
             Ok(Some((file_path, offset_index))) => {
-                match extract_frame_from_video(&file_path, offset_index).await {
-                    Ok(frame_path) => frames.push(FrameContent {
-                        file_path: frame_path,
-                        timestamp: Some(chrono::Utc::now()), // Using current time as we don't need exact timestamps
-                        app_name: None,
-                        window_name: None,
-                        ocr_results: None,
-                        tags: None,
-                    }),
+                match extract_high_quality_frame(&file_path, offset_index, &frames_dir).await {
+                    Ok(frame_path) => {
+                        frames.push(FrameContent {
+                            file_path: frame_path,
+                            timestamp: Some(chrono::Utc::now()),
+                            window_name: None,
+                            app_name: None,
+                            ocr_results: None,
+                            tags: None,
+                        });
+                    }
                     Err(e) => {
-                        debug!(
-                            "Skipping frame {}: {} because failed to extract it",
-                            frame_id, e
-                        );
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        skipped_frames.push(frame_id);
                     }
                 }
             }
             Ok(None) => {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    JsonResponse(json!({"error": format!("Frame {} not found", frame_id)})),
-                ));
+                error!("Frame {} not found in database", frame_id);
+                skipped_frames.push(frame_id);
             }
             Err(e) => {
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    JsonResponse(json!({"error": format!("Database error: {}", e)})),
-                ));
+                error!("Database error for frame {}: {}", frame_id, e);
+                skipped_frames.push(frame_id);
             }
         }
     }
 
-    // Write frames to video
-    if let Err(e) = write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await
-    {
+    if frames.is_empty() {
+        error!(
+            "No valid frames to process from {} frame IDs",
+            payload.frame_ids.len()
+        );
         return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            JsonResponse(json!({"error": format!("Failed to create video: {}", e)})),
+            StatusCode::BAD_REQUEST,
+            JsonResponse(json!({"error": "No valid frames to process"})),
         ));
     }
 
-    Ok(JsonResponse(CreateVideoFromFramesResponse {
-        video_path: output_path.to_string_lossy().into_owned(),
-    }))
+    let result =
+        match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await {
+            Ok(_) => {
+                if let Err(e) = tokio::fs::remove_dir_all(&frames_dir).await {
+                    error!("Failed to clean up frames directory: {}", e);
+                }
+                Ok(JsonResponse(CreateVideoFromFramesResponse {
+                    video_path: output_path.to_string_lossy().into_owned(),
+                    skipped_frames,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to create video: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": format!("Failed to create video: {}", e)})),
+                ))
+            }
+        };
+
+    if result.is_err() {
+        if let Err(e) = tokio::fs::remove_dir_all(&frames_dir).await {
+            error!("Failed to clean up frames directory after error: {}", e);
+        }
+    }
+
+    result
 }
 
 async fn get_pipe_build_status(

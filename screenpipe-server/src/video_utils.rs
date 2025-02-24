@@ -550,7 +550,7 @@ pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Res
             "-i",
             file_path,
             "-vf",
-            "scale=iw*0.75:ih*0.75,format=yuvj420p", // Add format conversion
+            "scale=iw:ih,format=yuvj420p", // Add format conversion
             "-vframes",
             "1",
             "-c:v",
@@ -610,4 +610,56 @@ async fn cleanup_old_frames(frames_dir: &PathBuf) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub async fn extract_high_quality_frame(
+    file_path: &str,
+    offset_index: i64,
+    output_dir: &Path,
+) -> Result<String> {
+    let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
+
+    let source_fps = (get_video_fps(&ffmpeg_path, file_path).await).unwrap_or(1.0);
+
+    let frame_time = offset_index as f64 / source_fps;
+
+    let frame_filename = format!(
+        "frame_{}_{}.png",
+        chrono::Utc::now().timestamp_micros(),
+        offset_index
+    );
+    let output_path = output_dir.join(frame_filename);
+
+    let mut command = Command::new(&ffmpeg_path);
+    command.args([
+        "-y",
+        "-loglevel",
+        "error",
+        "-ss",
+        &frame_time.to_string(),
+        "-i",
+        file_path,
+        "-vframes",
+        "1",
+        "-vf",
+        "scale=3840:2160:flags=lanczos",
+        "-c:v",
+        "png",
+        "-compression_level",
+        "0",
+        "-preset",
+        "veryslow",
+        "-qscale:v",
+        "1",
+        output_path.to_str().unwrap(),
+    ]);
+
+    let output = command.output().await?;
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        error!("FFmpeg failed: {}", error_msg);
+        return Err(anyhow::anyhow!("FFmpeg failed: {}", error_msg));
+    }
+
+    Ok(output_path.to_str().unwrap().to_string())
 }
