@@ -1031,10 +1031,10 @@ impl DatabaseManager {
                 r#"SELECT COUNT(DISTINCT ui_monitoring.id)
                    FROM {table}
                    WHERE {match_condition}
-                       AND (?2 IS NULL OR timestamp >= ?2)
-                       AND (?3 IS NULL OR timestamp <= ?3)
-                       AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
-                       AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)"#,
+                       AND (?2 IS NULL OR ui_monitoring.timestamp >= ?2)
+                       AND (?3 IS NULL OR ui_monitoring.timestamp <= ?3)
+                       AND (?4 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) >= ?4)
+                       AND (?5 IS NULL OR COALESCE(ui_monitoring.text_length, LENGTH(ui_monitoring.text_output)) <= ?5)"#,
                 table = if ui_fts_query.is_empty() {
                     "ui_monitoring"
                 } else {
