@@ -1204,4 +1204,123 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
     }
+
+    #[tokio::test]
+    async fn test_count_search_results_all_content_types() {
+        let db = setup_test_db().await;
+
+        // Insert OCR data
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
+        db.insert_ocr_text(
+            frame_id,
+            "Hello from OCR",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
+
+        // Insert Audio data
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Insert UI monitoring data
+        sqlx::query(
+            r#"
+            INSERT INTO ui_monitoring (
+                text_output,
+                timestamp,
+                app,
+                window,
+                initial_traversal_at
+            ) VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind("Hello from UI")
+        .bind(Utc::now())
+        .bind("test_app")
+        .bind("test_window")
+        .bind(Utc::now())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Test count with All content types
+        let count = db
+            .count_search_results(
+                "Hello",
+                ContentType::All,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 3, "Should count OCR, Audio, and UI results");
+
+        // Test count with specific app filter
+        let count = db
+            .count_search_results(
+                "Hello",
+                ContentType::All,
+                None,
+                None,
+                Some("test_app"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "Should only count UI result with app filter");
+
+        // Test count with non-matching query
+        let count = db
+            .count_search_results(
+                "nonexistent",
+                ContentType::All,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "Should count zero results for non-matching query");
+    }
 }

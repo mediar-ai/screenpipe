@@ -732,11 +732,17 @@ impl DatabaseManager {
             "#,
             base_sql, where_clause
         );
+
         let raw_results: Vec<OCRResultRaw> = sqlx::query_as(&sql)
             .bind(if frame_query.is_empty() && ocr_query.is_empty() {
-                "".to_owned()
+                "*".to_owned()
             } else {
-                frame_query
+                // Use ocr_query if frame_query is empty
+                if frame_query.is_empty() {
+                    ocr_query
+                } else {
+                    frame_query
+                }
             })
             .bind(start_time)
             .bind(end_time)
@@ -950,6 +956,63 @@ impl DatabaseManager {
         browser_url: Option<&str>,
         focused: Option<bool>,
     ) -> Result<usize, sqlx::Error> {
+        if content_type == ContentType::All {
+            // Create boxed futures to avoid infinite size issues with recursion
+            let ocr_future = Box::pin(self.count_search_results(
+                query,
+                ContentType::OCR,
+                start_time,
+                end_time,
+                app_name,
+                window_name,
+                min_length,
+                max_length,
+                None,
+                frame_name,
+                browser_url,
+                focused,
+            ));
+
+            let ui_future = Box::pin(self.count_search_results(
+                query,
+                ContentType::UI,
+                start_time,
+                end_time,
+                app_name,
+                window_name,
+                min_length,
+                max_length,
+                None,
+                None,
+                None,
+                None,
+            ));
+
+            if app_name.is_none() && window_name.is_none() {
+                let audio_future = Box::pin(self.count_search_results(
+                    query,
+                    ContentType::Audio,
+                    start_time,
+                    end_time,
+                    None,
+                    None,
+                    min_length,
+                    max_length,
+                    speaker_ids,
+                    None,
+                    None,
+                    None,
+                ));
+
+                let (ocr_count, audio_count, ui_count) =
+                    tokio::try_join!(ocr_future, audio_future, ui_future)?;
+                return Ok(ocr_count + audio_count + ui_count);
+            } else {
+                let (ocr_count, ui_count) = tokio::try_join!(ocr_future, ui_future)?;
+                return Ok(ocr_count + ui_count);
+            }
+        }
+
         let json_array = if let Some(ids) = speaker_ids {
             if !ids.is_empty() {
                 serde_json::to_string(&ids).unwrap_or_default()
@@ -959,59 +1022,63 @@ impl DatabaseManager {
         } else {
             "[]".to_string()
         };
+        // Build frame and OCR FTS queries
+        let mut frame_fts_parts = Vec::new();
+        let mut ocr_fts_parts = Vec::new();
+        let mut ui_fts_parts = Vec::new();
 
-        // build combined fts queries
-        let (ocr_fts_query, ui_fts_query) = {
-            let mut ocr_parts = vec![];
-            let mut ui_parts = vec![];
-
-            if !query.is_empty() {
-                ocr_parts.push(query.to_owned());
-                ui_parts.push(query.to_owned());
+        // Split query parts between frame metadata and OCR content
+        if !query.is_empty() {
+            ocr_fts_parts.push(query.to_owned()); // Just use the query directly
+            ui_fts_parts.push(query.to_owned());
+        }
+        if let Some(app) = app_name {
+            if !app.is_empty() {
+                frame_fts_parts.push(format!("app_name:{}", app));
+                ui_fts_parts.push(format!("app:\"{}\"", app));
             }
-
-            if let Some(app) = app_name {
-                ocr_parts.push(format!("app_name:\"{}\"", app));
-                ui_parts.push(format!("app:\"{}\"", app));
+        }
+        if let Some(window) = window_name {
+            if !window.is_empty() {
+                frame_fts_parts.push(format!("window_name:{}", window));
+                ui_fts_parts.push(format!("window:\"{}\"", window));
             }
-
-            if let Some(window) = window_name {
-                ocr_parts.push(format!("window_name:\"{}\"", window));
-                ui_parts.push(format!("window:\"{}\"", window));
+        }
+        if let Some(browser) = browser_url {
+            if !browser.is_empty() {
+                frame_fts_parts.push(format!("browser_url:{}", browser));
             }
+        }
+        if let Some(is_focused) = focused {
+            frame_fts_parts.push(format!("focused:{}", if is_focused { "1" } else { "0" }));
+        }
 
-            if let Some(browser) = browser_url {
-                ocr_parts.push(format!("browser_url:\"{}\"", browser));
-            }
-
-            if let Some(is_focused) = focused {
-                ocr_parts.push(format!("focused:{}", if is_focused { "1" } else { "0" }));
-            }
-
-            (ocr_parts.join(" "), ui_parts.join(" "))
-        };
+        let frame_query = frame_fts_parts.join(" ");
+        let ocr_query = ocr_fts_parts.join(" ");
+        let ui_query = ui_fts_parts.join(" ");
 
         let sql = match content_type {
             ContentType::OCR => format!(
                 r#"SELECT COUNT(DISTINCT frames.id)
-                   FROM {table}
-                   JOIN frames ON frames_fts.rowid = frames.id
-                   JOIN ocr_text ON frames.id = ocr_text.frame_id
-                   WHERE {match_condition}
+                   FROM {base_table}
+                   WHERE {where_clause}
                        AND (?2 IS NULL OR frames.timestamp >= ?2)
                        AND (?3 IS NULL OR frames.timestamp <= ?3)
                        AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
                        AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
                        AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')"#,
-                table = if ocr_fts_query.is_empty() {
-                    "ocr_text"
+                base_table = if ocr_query.is_empty() {
+                    "frames 
+                     JOIN ocr_text ON frames.id = ocr_text.frame_id"
                 } else {
-                    "frames_fts"
+                    "ocr_text_fts 
+                     JOIN ocr_text ON ocr_text_fts.rowid = ocr_text.frame_id
+                     JOIN frames ON ocr_text.frame_id = frames.id"
                 },
-                match_condition = if ocr_fts_query.is_empty() {
+                where_clause = if ocr_query.is_empty() {
                     "1=1"
                 } else {
-                    "frames_fts MATCH ?1"
+                    "ocr_text_fts MATCH ?1"
                 }
             ),
             ContentType::UI => format!(
@@ -1020,14 +1087,14 @@ impl DatabaseManager {
                    WHERE {match_condition}
                        AND (?2 IS NULL OR timestamp >= ?2)
                        AND (?3 IS NULL OR timestamp <= ?3)
-                       AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
-                       AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)"#,
-                table = if ui_fts_query.is_empty() {
+                       AND (?4 IS NULL OR COALESCE(text_length, LENGTH(ui_monitoring.text_output)) >= ?4)
+                       AND (?5 IS NULL OR COALESCE(text_length, LENGTH(ui_monitoring.text_output)) <= ?5)"#,
+                table = if ui_query.is_empty() {
                     "ui_monitoring"
                 } else {
                     "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
                 },
-                match_condition = if ui_fts_query.is_empty() {
+                match_condition = if ui_query.is_empty() {
                     "1=1"
                 } else {
                     "ui_monitoring_fts MATCH ?1"
@@ -1054,70 +1121,19 @@ impl DatabaseManager {
                     "audio_transcriptions_fts MATCH ?1"
                 }
             ),
-            ContentType::All => format!(
-                r#"SELECT COUNT(*) FROM (
-                    SELECT DISTINCT frames.id FROM {ocr_table}
-                    JOIN frames ON ocr_text.frame_id = frames.id
-                    WHERE {ocr_match}
-                        AND (?2 IS NULL OR frames.timestamp >= ?2)
-                        AND (?3 IS NULL OR frames.timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
-                        AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')
-                    UNION ALL
-                    SELECT DISTINCT id FROM {audio_table}
-                    WHERE {audio_match}
-                        AND (?2 IS NULL OR timestamp >= ?2)
-                        AND (?3 IS NULL OR timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(transcription)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(transcription)) <= ?5)
-                        AND (json_array_length(?6) = 0 OR speaker_id IN (SELECT value FROM json_each(?6)))
-                    UNION ALL
-                    SELECT DISTINCT id FROM {ui_table}
-                    WHERE {ui_match}
-                        AND (?2 IS NULL OR timestamp >= ?2)
-                        AND (?3 IS NULL OR timestamp <= ?3)
-                        AND (?4 IS NULL OR COALESCE(text_length, LENGTH(text_output)) >= ?4)
-                        AND (?5 IS NULL OR COALESCE(text_length, LENGTH(text_output)) <= ?5)
-                )"#,
-                ocr_table = if ocr_fts_query.is_empty() {
-                    "ocr_text"
-                } else {
-                    "frames_fts"
-                },
-                ocr_match = if ocr_fts_query.is_empty() {
-                    "1=1"
-                } else {
-                    "frames_fts MATCH ?1"
-                },
-                audio_table = if query.is_empty() {
-                    "audio_transcriptions"
-                } else {
-                    "audio_transcriptions_fts JOIN audio_transcriptions ON audio_transcriptions_fts.audio_chunk_id = audio_transcriptions.audio_chunk_id"
-                },
-                audio_match = if query.is_empty() {
-                    "1=1"
-                } else {
-                    "audio_transcriptions_fts MATCH ?1"
-                },
-                ui_table = if ui_fts_query.is_empty() {
-                    "ui_monitoring"
-                } else {
-                    "ui_monitoring_fts JOIN ui_monitoring ON ui_monitoring_fts.ui_id = ui_monitoring.id"
-                },
-                ui_match = if ui_fts_query.is_empty() {
-                    "1=1"
-                } else {
-                    "ui_monitoring_fts MATCH ?1"
-                }
-            ),
             _ => return Ok(0),
         };
 
         let count: i64 = match content_type {
             ContentType::OCR => {
                 sqlx::query_scalar(&sql)
-                    .bind(ocr_fts_query)
+                    .bind(if frame_query.is_empty() && ocr_query.is_empty() {
+                        "*".to_owned()
+                    } else if frame_query.is_empty() {
+                        ocr_query
+                    } else {
+                        frame_query
+                    })
                     .bind(start_time)
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
@@ -1128,7 +1144,7 @@ impl DatabaseManager {
             }
             ContentType::UI => {
                 sqlx::query_scalar(&sql)
-                    .bind(ui_fts_query)
+                    .bind(if ui_query.is_empty() { "*" } else { &ui_query })
                     .bind(start_time)
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
@@ -1136,9 +1152,20 @@ impl DatabaseManager {
                     .fetch_one(&self.pool)
                     .await?
             }
+            ContentType::Audio => {
+                sqlx::query_scalar(&sql)
+                    .bind(if query.is_empty() { "*" } else { query })
+                    .bind(start_time)
+                    .bind(end_time)
+                    .bind(min_length.map(|l| l as i64))
+                    .bind(max_length.map(|l| l as i64))
+                    .bind(json_array)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
             ContentType::All => {
                 sqlx::query_scalar(&sql)
-                    .bind(ocr_fts_query)
+                    .bind(ocr_query)
                     .bind(start_time)
                     .bind(end_time)
                     .bind(min_length.map(|l| l as i64))
