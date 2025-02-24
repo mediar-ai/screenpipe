@@ -370,6 +370,8 @@ export const PipeStore: React.FC = () => {
 
       onComplete?.();
       t.dismiss();
+
+      setSelectedPipe(null);
     } catch (error) {
       // Reset the pipe's status on error
       setPipes((prevPipes) =>
