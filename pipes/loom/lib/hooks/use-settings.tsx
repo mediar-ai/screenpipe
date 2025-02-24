@@ -80,7 +80,7 @@ export function useSettings() {
   };
 
   const updateSettings = async (
-    newSettings: Partial<Settings>,
+    newSettings: Partial<any>,
     namespace?: string
   ) => {
     if (!settings) return;

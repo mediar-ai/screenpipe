@@ -8,10 +8,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, Loader2, Send, Square } from "lucide-react";
 import { ChatMessage } from "@/components/chat-message";
 import { spinner } from "@/components/spinner";
-import { Separator } from "@/components/ui/separator";
-import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { ContentItem } from "@screenpipe/browser";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface LLMChatProps {
   data: ContentItem[] | undefined;
@@ -20,8 +25,9 @@ interface LLMChatProps {
 
 export function LLMChat({ data, className }: LLMChatProps) {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
   const { settings } = useSettings();
+  const [isLoading, setIsLoading] = useState(false);
+  const { isAvailable, error } = useAiProvider(settings);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<Array<Message>>([]);
   const [floatingInput, setFloatingInput] = useState("");
@@ -130,6 +136,7 @@ export function LLMChat({ data, className }: LLMChatProps) {
 
     try {
       console.log("LLM DATA", data)
+      setIsLoading(true);
       const response = await fetch('/api/stream', {
         method: 'POST',
         headers: {
@@ -152,9 +159,11 @@ export function LLMChat({ data, className }: LLMChatProps) {
           variant: "destructive",
           duration: 5000,
         });
+        setIsLoading(false);
         return;
       }
 
+      setIsLoading(false);
       const result = await response.json();
       const fullResponse = result.response;
 
@@ -185,6 +194,7 @@ export function LLMChat({ data, className }: LLMChatProps) {
       }
     } finally {
       setIsAiLoading(false);
+      setIsLoading(false);
       setIsFloatingInputVisible(false);
       setIsStreaming(false);
       if (!isUserScrolling) {
@@ -197,12 +207,7 @@ export function LLMChat({ data, className }: LLMChatProps) {
     !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      {isLoading && (
-        <div className="my-8 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      )}
+    <div className={`w-full max-w-4xl mx-auto p-4 mt-12 ${className}`}>
       <AnimatePresence>
         <motion.div
           initial={{ opacity: 0, y: 50 }}
@@ -215,29 +220,41 @@ export function LLMChat({ data, className }: LLMChatProps) {
             className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
           >
             <div className="relative flex-grow flex items-center space-x-2">
-              <Input
-                ref={floatingInputRef}
-                type="text"
-                placeholder="put prompt to generate description..."
-                value={floatingInput}
-                onChange={(e) => setFloatingInput(e.target.value)}
-                className="flex-1 h-12 focus:outline-none focus:ring-0 border focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
-              />
-              <Button
-                type="submit"
-                className="w-12"
-                title={
-                  isAiDisabled
-                    ? "Please sign in to use AI features"
-                    : undefined
-                }
-              >
-                {isStreaming ? (
-                  <Square className="h-4 w-4" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
+              <TooltipProvider>
+                <Tooltip open={!isAvailable}>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1 flex">
+                      <Input
+                        ref={floatingInputRef}
+                        type="text"
+                        placeholder="ask a question about the results..."
+                        value={floatingInput}
+                        disabled={ isAiDisabled || !isAvailable }
+                        onChange={(e) => setFloatingInput(e.target.value)}
+                        className="flex-1 h-12 focus:outline-none focus:ring-0 border-0 focus:border-black dark:focus:border-white focus:border-b transition-all duration-200"
+                      />
+                      <Button
+                        type="submit"
+                        className="w-12 py-[24px]"
+                        title={
+                          isAiDisabled
+                            ? "Please sign in to use AI features"
+                            : undefined
+                        }
+                      >
+                        {isStreaming ? (
+                          <Square className="h-4 w-4" />
+                        ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-sm text-destructive">{error}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </form>
         </motion.div>

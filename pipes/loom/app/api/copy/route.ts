@@ -4,7 +4,7 @@ import { exec } from 'child_process';
 import { access } from 'fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const path = req.nextUrl.searchParams.get('path');
   if (!path || typeof path !== 'string') {
     return NextResponse.json({ error: 'path is required' }, { status: 400 });

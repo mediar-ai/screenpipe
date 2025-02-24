@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { FileCheck, Laptop } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { SqlAutocompleteInput } from "./sql-autocomplete-input";
+import { Settings } from "@screenpipe/browser";
 import {
   Select,
   SelectContent,
