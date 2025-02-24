@@ -32,7 +32,7 @@ use tracing::{debug, error, info};
 
 use crate::{AudioInput, TranscriptionResult};
 
-pub fn stt_sync(
+pub async fn stt_sync(
     audio: &[f32],
     sample_rate: u32,
     device: &str,
@@ -45,21 +45,17 @@ pub fn stt_sync(
     let audio = audio.to_vec();
 
     let device = device.to_string();
-    let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(stt(
-            &audio,
-            sample_rate,
-            &device,
-            &mut whisper_model,
-            audio_transcription_engine,
-            deepgram_api_key,
-            languages,
-        ))
-    });
-
-    handle.join().unwrap()
+    stt(
+        &audio,
+        sample_rate,
+        &device,
+        &mut whisper_model,
+        audio_transcription_engine,
+        deepgram_api_key,
+        languages,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -191,6 +187,7 @@ pub async fn process_audio_input(
                         timestamp,
                     )
                 })
+                .await?
             }
             #[cfg(not(target_os = "macos"))]
             {
@@ -207,6 +204,7 @@ pub async fn process_audio_input(
                 path,
                 timestamp,
             )
+            .await?
         };
 
         if output_sender.send(transcription_result).is_err() {
@@ -309,7 +307,7 @@ pub async fn create_whisper_channel(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run_stt(
+pub async fn run_stt(
     segment: SpeechSegment,
     device: Arc<AudioDevice>,
     whisper_model: &mut WhisperModel,
@@ -318,7 +316,7 @@ pub fn run_stt(
     languages: Vec<Language>,
     path: String,
     timestamp: u64,
-) -> TranscriptionResult {
+) -> Result<TranscriptionResult> {
     let audio = segment.samples.clone();
     let sample_rate = segment.sample_rate;
     match stt_sync(
@@ -329,8 +327,10 @@ pub fn run_stt(
         audio_transcription_engine.clone(),
         deepgram_api_key.clone(),
         languages.clone(),
-    ) {
-        Ok(transcription) => TranscriptionResult {
+    )
+    .await
+    {
+        Ok(transcription) => Ok(TranscriptionResult {
             input: AudioInput {
                 data: Arc::new(audio),
                 sample_rate,
@@ -344,10 +344,10 @@ pub fn run_stt(
             speaker_embedding: segment.embedding.clone(),
             start_time: segment.start,
             end_time: segment.end,
-        },
+        }),
         Err(e) => {
             error!("STT error for input {}: {:?}", device, e);
-            TranscriptionResult {
+            Ok(TranscriptionResult {
                 input: AudioInput {
                     data: Arc::new(segment.samples),
                     sample_rate: segment.sample_rate,
@@ -361,7 +361,7 @@ pub fn run_stt(
                 speaker_embedding: Vec::new(),
                 start_time: segment.start,
                 end_time: segment.end,
-            }
+            })
         }
     }
 }
