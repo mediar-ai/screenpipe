@@ -139,7 +139,8 @@ async fn run_record_and_transcribe(
             // Preserve overlap for next iteration
             let overlap_start = duration_samples.saturating_sub(overlap_samples);
             overlap_buffer.clear();
-            let overlap_end = duration_samples.saturating_sub(overlap_buffer.len());
+            let overlap_end = overlap_buffer.len();
+            let overlap_end = duration_samples.saturating_sub(overlap_end);
             overlap_buffer.extend_from_slice(&collected_audio[overlap_start..overlap_end]);
 
             // Reset buffer with overlap
