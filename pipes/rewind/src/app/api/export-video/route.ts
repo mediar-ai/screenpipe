@@ -14,16 +14,13 @@ export async function POST(request: Request) {
 			return NextResponse.json({ error: "Invalid frame IDs" }, { status: 400 });
 		}
 
-		const response = await fetch(
-			"http://localhost:3030/api/create-video-from-frames",
-			{
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ frame_ids: frameIds, fps: settings.fps ?? 0.5 }),
+		const response = await fetch("http://localhost:3030/frames/export", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
 			},
-		);
+			body: JSON.stringify({ frame_ids: frameIds, fps: settings.fps ?? 0.5 }),
+		});
 
 		if (!response.ok) {
 			throw new Error("Failed to export video");

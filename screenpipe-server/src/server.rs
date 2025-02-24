@@ -2059,10 +2059,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
         // .route("/vision/restart", post(restart_vision_devices))
-        .route(
-            "/api/create-video-from-frames",
-            post(create_video_from_frames_handler),
-        )
+        .route("/frames/export", post(create_video_from_frames_handler))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
