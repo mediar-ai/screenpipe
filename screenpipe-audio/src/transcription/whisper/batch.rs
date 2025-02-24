@@ -1,9 +1,9 @@
 use super::decoder::{Decoder, Segment};
 use super::detect_language;
 use super::model::WhisperModel;
+use crate::utils::audio::pcm_to_mel;
 use anyhow::Result;
 use candle::Tensor;
-use candle_transformers::models::whisper::audio;
 use lazy_static::lazy_static;
 use regex::Regex;
 use screenpipe_core::Language;
@@ -35,7 +35,7 @@ pub async fn process_with_whisper(
     let device = &whisper_model.device.lock().await;
 
     debug!("converting pcm to mel spectrogram");
-    let mel = audio::pcm_to_mel(model.config(), audio, mel_filters);
+    let mel = pcm_to_mel(model.config(), audio, mel_filters);
     let mel_len = mel.len();
 
     debug!("creating tensor from mel spectrogram");
