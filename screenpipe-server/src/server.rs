@@ -2059,6 +2059,10 @@ pub fn create_router() -> Router<Arc<AppState>> {
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
         // .route("/vision/restart", post(restart_vision_devices))
+        .route(
+            "/api/create-video-from-frames",
+            post(create_video_from_frames_handler),
+        )
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2066,6 +2070,90 @@ pub fn create_router() -> Router<Arc<AppState>> {
         router = router.route("/experimental/input_control", post(input_control_handler));
     }
     router
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateVideoFromFramesRequest {
+    pub frame_ids: Vec<i64>,
+    pub fps: f64,
+    pub output_filename: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateVideoFromFramesResponse {
+    pub video_path: String,
+}
+
+pub async fn create_video_from_frames_handler(
+    State(state): State<Arc<AppState>>,
+    JsonResponse(payload): JsonResponse<CreateVideoFromFramesRequest>,
+) -> Result<JsonResponse<CreateVideoFromFramesResponse>, (StatusCode, JsonResponse<Value>)> {
+    // Get user's desktop directory
+    let output_dir = dirs::desktop_dir().ok_or_else(|| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": "Could not find desktop directory"})),
+        )
+    })?;
+
+    let output_filename = payload.output_filename.unwrap_or_else(|| {
+        format!(
+            "screenpipe_export_{}.mp4",
+            chrono::Utc::now().format("%Y%m%d_%H%M%S")
+        )
+    });
+    let output_path = output_dir.join(&output_filename);
+
+    let mut frames = Vec::new();
+
+    // Fetch frame data for each frame ID
+    for frame_id in payload.frame_ids {
+        match state.db.get_frame(frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_frame_from_video(&file_path, offset_index).await {
+                    Ok(frame_path) => frames.push(FrameContent {
+                        file_path: frame_path,
+                        timestamp: Some(chrono::Utc::now()), // Using current time as we don't need exact timestamps
+                        app_name: None,
+                        window_name: None,
+                        ocr_results: None,
+                        tags: None,
+                    }),
+                    Err(e) => {
+                        debug!(
+                            "Skipping frame {}: {} because failed to extract it",
+                            frame_id, e
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    JsonResponse(json!({"error": format!("Frame {} not found", frame_id)})),
+                ));
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    JsonResponse(json!({"error": format!("Database error: {}", e)})),
+                ));
+            }
+        }
+    }
+
+    // Write frames to video
+    if let Err(e) = write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await
+    {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({"error": format!("Failed to create video: {}", e)})),
+        ));
+    }
+
+    Ok(JsonResponse(CreateVideoFromFramesResponse {
+        video_path: output_path.to_string_lossy().into_owned(),
+    }))
 }
 
 async fn get_pipe_build_status(

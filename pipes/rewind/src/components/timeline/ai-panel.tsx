@@ -18,6 +18,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { ExportButton } from "../export-button";
 
 interface AIPanelProps {
 	position: { x: number; y: number };
@@ -288,7 +289,7 @@ export function AIPanel({
 				left: position.x,
 				top: position.y,
 				width: chatWindowSize.width,
-				height: isExpanded ? chatWindowSize.height : 120,
+				height: isExpanded ? chatWindowSize.height : "auto",
 				cursor: isDraggingPanel ? "grabbing" : "default",
 			}}
 		>
@@ -326,7 +327,7 @@ export function AIPanel({
 				</div>
 
 				{!isExpanded && (
-					<div className="p-4">
+					<div className="p-4 space-y-2">
 						<button
 							className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
 							onClick={(e) => {
@@ -342,6 +343,7 @@ export function AIPanel({
 								{osType === "macos" ? "⌘K" : "Ctrl+K"}
 							</span>
 						</button>
+						<ExportButton />
 					</div>
 				)}
 			</div>

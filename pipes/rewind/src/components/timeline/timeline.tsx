@@ -146,7 +146,7 @@ export const TimelineSlider = ({
 
 		// Set initial selection range
 		const startDate = new Date(frames[index].timestamp);
-		setSelectionRange({ start: startDate, end: startDate });
+		setSelectionRange({ start: startDate, end: startDate, frameIds: [] });
 	};
 
 	// Handle drag over
@@ -162,13 +162,18 @@ export const TimelineSlider = ({
 
 			setSelectedIndices(newSelection);
 
-			// Update selection range
+			// Get frame IDs for the selection
+			const selectedFrameIds = Array.from(newSelection).map(
+				(i) => frames[i].devices[0].frame_id,
+			);
+
+			// Update selection range with frame IDs
 			setSelectionRange({
 				end: new Date(frames[start].timestamp),
 				start: new Date(frames[end].timestamp),
+				frameIds: selectedFrameIds,
 			});
 
-			// Notify parent of selection change
 			if (onSelectionChange) {
 				const selectedFrames = Array.from(newSelection).map((i) => frames[i]);
 				onSelectionChange(selectedFrames);
