@@ -1,6 +1,7 @@
 import { Message } from "ai";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
+import { useState, useEffect } from "react";
 
 import { cn } from "@/lib/utils";
 import { CodeBlock } from "@/components/ui/codeblock";
@@ -16,6 +17,36 @@ export interface ChatMessageProps {
 
 export function ChatMessage({ message, ...props }: ChatMessageProps) {
 	const { settings } = useSettings();
+	const [isThinking, setIsThinking] = useState(false);
+	const [thinkingContent, setThinkingContent] = useState<string[]>([]);
+
+	useEffect(() => {
+		if (!message?.content) return;
+
+		const openTag = /<think>/g.test(message.content);
+		const closeTag = /<\/think>/g.test(message.content);
+
+		const matches = message.content.match(/<think>([\s\S]*?)(?:<\/think>|$)/g);
+		if (matches) {
+			const contents = matches.map((match) =>
+				match.replace(/<think>|<\/think>/g, "").trim(),
+			);
+			setThinkingContent(contents);
+		}
+
+		if (openTag && !closeTag) {
+			setIsThinking(true);
+		} else if (openTag && closeTag) {
+			setIsThinking(true);
+		} else {
+			setIsThinking(false);
+			setThinkingContent([]);
+		}
+	}, [message.content]);
+
+	const processThinkContent = (content: string) => {
+		return content.replace(/<think>[\s\S]*?(<\/think>|$)/g, "").trim();
+	};
 
 	const hasMP4File = (content: string) =>
 		content.trim().toLowerCase().includes(".mp4");
@@ -47,6 +78,27 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 				)}
 			</div>
 			<div className="flex-1 px-1 ml-4 space-y-2 overflow-hidden w-[96em]">
+				{isThinking && thinkingContent.length > 0 && (
+					<div
+						className={cn(
+							"my-2 p-3 rounded-lg border transition-all duration-300",
+							"bg-muted/50 border-muted-foreground/20 text-muted-foreground",
+							"opacity-100",
+						)}
+					>
+						<div className="flex items-center gap-2 mb-2">
+							<span className="animate-pulse">💭</span>
+							<span className="text-sm text-muted-foreground">Thinking...</span>
+						</div>
+						<div className="pl-4 border-l-2 border-muted-foreground/20">
+							{thinkingContent.map((content, index) => (
+								<p key={index} className="mb-2 last:mb-0">
+									{content}
+								</p>
+							))}
+						</div>
+					</div>
+				)}
 				<MemoizedReactMarkdown
 					className="prose break-words dark:prose-invert prose-p:leading-relaxed prose-pre:p-0 w-full"
 					remarkPlugins={[remarkGfm, remarkMath]}
@@ -102,7 +154,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 						},
 					}}
 				>
-					{message.content}
+					{processThinkContent(message.content)}
 				</MemoizedReactMarkdown>
 				<ChatMessageActions message={message} />
 			</div>
