@@ -30,13 +30,15 @@ import {
 } from "@/components/ui/tooltip";
 import localforage from "localforage";
 import { useLoginDialog } from "./login-dialog";
+import { PermissionButtons } from "./status/permission-buttons";
+import { usePlatform } from "@/lib/hooks/use-platform";
 
 const corePipes: string[] = ["data-table", "search"];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
   const [selectedPipe, setSelectedPipe] = useState<PipeWithStatus | null>(null);
-  const { settings, loadUser } = useSettings();
+  const { settings } = useSettings();
   const [pipes, setPipes] = useState<PipeWithStatus[]>([]);
   const [installedPipes, setInstalledPipes] = useState<InstalledPipe[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,7 +54,7 @@ export const PipeStore: React.FC = () => {
   const [loadingInstalls, setLoadingInstalls] = useState<Set<string>>(
     new Set()
   );
-
+  const { isMac: isMacOS } = usePlatform();
   const filteredPipes = pipes
     .filter(
       (pipe) =>
@@ -997,7 +999,7 @@ export const PipeStore: React.FC = () => {
   if (health?.status === "error") {
     return (
       <div className="flex flex-col items-center justify-center h-screen p-4 space-y-4">
-        <div className="text-center space-y-4">
+        <div className="text-center space-y-4 max-w-md mx-auto justify-center items-center">
           <h3 className="text-lg font-medium">screenpipe is not recording</h3>
           <p className="text-sm text-muted-foreground">
             please start the screenpipe service to browse and manage pipes
@@ -1010,6 +1012,17 @@ export const PipeStore: React.FC = () => {
             <Power className="h-4 w-4" />
             check service status
           </Button>
+
+          {isMacOS && (
+            <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
+              <h4 className="text-sm font-medium mb-3">check permissions</h4>
+              <div className="space-y-2">
+                <PermissionButtons settings={settings} type="screen" />
+                <PermissionButtons settings={settings} type="audio" />
+                <PermissionButtons settings={settings} type="accessibility" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
