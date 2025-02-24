@@ -73,10 +73,18 @@ pub async fn prepare_segments(
             embedding_manager,
         )?;
 
-        for segment in segments.flatten() {
-            if let Err(e) = tx.send(segment).await {
-                error!("failed to send segment: {:?}", e);
-                break;
+        for segment in segments {
+            match segment {
+                Ok(segment) => {
+                    if let Err(e) = tx.send(segment).await {
+                        error!("failed to send segment: {:?}", e);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    error!("failed to get segment: {:?}", e);
+                    return Err(e);
+                }
             }
         }
     }

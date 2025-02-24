@@ -3,7 +3,7 @@
 
 use candle::utils::get_num_threads;
 use std::sync::Arc;
-use std::thread;
+use std::sync::Mutex;
 
 // Audio parameters.
 const N_FFT: usize = 400;
@@ -11,7 +11,7 @@ const HOP_LENGTH: usize = 160;
 const CHUNK_LENGTH: usize = 30;
 
 pub trait Float:
-    num_traits::Float + num_traits::FloatConst + num_traits::NumAssign + Send + Sync
+    num_traits::Float + num_traits::FloatConst + num_traits::NumAssign + Send + Sync + std::fmt::Debug
 {
 }
 
@@ -172,7 +172,7 @@ fn log_mel_spectrogram_w<T: Float>(
     mel
 }
 
-pub fn log_mel_spectrogram_<T: Float>(
+pub async fn log_mel_spectrogram_<T: Float + 'static>(
     samples: &[T],
     filters: &[T],
     fft_size: usize,
@@ -212,32 +212,29 @@ pub fn log_mel_spectrogram_<T: Float>(
     let n_threads = std::cmp::max(n_threads, 2);
 
     let hann = Arc::new(hann);
-    let samples = Arc::new(samples);
-    let filters = Arc::new(filters);
+    let samples = Arc::new(samples.to_vec());
+    let filters = Arc::new(filters.to_vec());
 
-    // use scope to allow for non static references to be passed to the threads
-    // and directly collect the results into a single vector
-    let all_outputs = thread::scope(|s| {
-        (0..n_threads)
-            // create threads and return their handles
-            .map(|thread_id| {
-                let hann = Arc::clone(&hann);
-                let samples = Arc::clone(&samples);
-                let filters = Arc::clone(&filters);
-                // spawn new thread and start work
-                s.spawn(move || {
-                    log_mel_spectrogram_w(
-                        thread_id, &hann, &samples, &filters, fft_size, fft_step, speed_up, n_len,
-                        n_mel, n_threads,
-                    )
-                })
-            })
-            .collect::<Vec<_>>()
-            .into_iter()
-            // wait for each thread to finish and collect their results
-            .map(|handle| handle.join().expect("Thread failed"))
-            .collect::<Vec<_>>()
-    });
+    let all_outputs = Arc::new(Mutex::new(vec![vec![zero; n_len * n_mel]; n_threads]));
+
+    let mut handles = vec![];
+    for i in 0..n_threads {
+        let hann = Arc::clone(&hann);
+        let samples = Arc::clone(&samples);
+        let filters = Arc::clone(&filters);
+        let all_outputs = Arc::clone(&all_outputs);
+        handles.push(tokio::spawn(async move {
+            let res = log_mel_spectrogram_w(
+                i, &hann, &samples, &filters, fft_size, fft_step, speed_up, n_len, n_mel, n_threads,
+            );
+            all_outputs.lock().unwrap()[i] = res;
+        }));
+    }
+
+    for handle in handles {
+        handle.await.unwrap();
+    }
+    let all_outputs = Arc::try_unwrap(all_outputs).unwrap().into_inner().unwrap();
 
     let l = all_outputs[0].len();
     let mut mel = vec![zero; l];
@@ -270,12 +267,12 @@ pub fn log_mel_spectrogram_<T: Float>(
     mel
 }
 
-pub fn pcm_to_mel<T: Float>(
+pub async fn pcm_to_mel<T: Float + 'static>(
     cfg: &candle_transformers::models::whisper::Config,
     samples: &[T],
     filters: &[T],
 ) -> Vec<T> {
-    log_mel_spectrogram_(samples, filters, N_FFT, HOP_LENGTH, cfg.num_mel_bins, false)
+    log_mel_spectrogram_(samples, filters, N_FFT, HOP_LENGTH, cfg.num_mel_bins, false).await
 }
 
 #[cfg(test)]
@@ -320,19 +317,19 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_log_mel_spectrogram() {
+    #[tokio::test]
+    async fn test_log_mel_spectrogram() {
         let samples = vec![0.0; 1000];
         let filters = vec![0.0; 1000];
-        let output = log_mel_spectrogram_(&samples, &filters, 100, 10, 10, false);
+        let output = log_mel_spectrogram_(&samples, &filters, 100, 10, 10, false).await;
         assert_eq!(output.len(), 30_000);
     }
 
-    #[test]
-    fn test_tiny_log_mel_spectrogram() {
+    #[tokio::test]
+    async fn test_tiny_log_mel_spectrogram() {
         let samples = vec![0.0; 100];
         let filters = vec![0.0; 100];
-        let output = log_mel_spectrogram_(&samples, &filters, 20, 2, 2, false);
+        let output = log_mel_spectrogram_(&samples, &filters, 20, 2, 2, false).await;
         assert_eq!(output.len(), 6_000);
     }
 }
