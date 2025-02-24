@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { LLMChat } from "@/components/llm-chat";
 import { Button } from '@/components/ui/button';
 import { pipe, ContentItem } from "@screenpipe/browser"
-import React, { useState} from 'react';
+import React, { useState, useEffect} from 'react';
 import { DateTimePicker } from './date-time-picker';
 import { VideoComponent } from "@/components/video-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
+import { OCRContent } from "@screenpipe/browser";
 
 import {
   Tooltip,
@@ -26,14 +27,20 @@ const Divider = () => (
   </div>
 );
 
+function isOCRContent(item: ContentItem): item is { type: "OCR"; content: OCRContent } {
+  return item.type === "OCR";
+}
+
 const Pipe: React.FC = () => {
   const { toast } = useToast();
   const { settings} = useSettings();
   const { isServerDown } = useHealthCheck()
   const [isCopied, setIsCopied] = React.useState<Boolean>(false);
   const { isAvailable, error } = useAiProvider(settings);
-  const [rawData, setRawData] = useState<any[] | undefined>([]);
+  const [rawData, setRawData] = useState<ContentItem[] | undefined>([]);
+  const [ocrText, setOcrText] = useState<string[]>([]);
   const [endTime, setEndTime] = useState<Date>(new Date());
+  const [key, setKey] = useState(0);
   const [isMerging, setIsMerging] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<Date>(new Date());
   const [mergedVideoPath, setMergedVideoPath] = useState<string>('');
@@ -92,15 +99,28 @@ const Pipe: React.FC = () => {
       try {
         const response = await pipe.queryScreenpipe({
           offset: 0,
-          limit: 10000000, // limit is fucking annoying
-          contentType: type,
+          limit: 100000, // limit is fucking annoying
+          contentType:"ocr",
           startTime: startTimeStr,
           endTime: endTimeStr,
+          maxLength: settings.customSettings?.loom?.maxLength || 500,
+          minLength: 50,
         })
-        const filePaths = response?.data.map((item: ContentItem) => item.content.filePath);
-        const uniqueFilePaths = [...new Set(filePaths)];
-        setRawData(response?.data);
-        if (uniqueFilePaths.length < 2) {
+
+        if (response?.data) {
+          setRawData(response.data);
+          const ocrTexts = response.data
+            .filter(isOCRContent)
+            .map((item) => item.content.text);
+          setOcrText(ocrTexts);
+          }
+
+        const videoFiles = response?.data
+          .filter((item: ContentItem) => item.type === "OCR")
+          .map((item: ContentItem) => item.content.filePath);
+        const uniqueVideos = [...new Set(videoFiles)];
+
+        if (uniqueVideos.length < 2) {
           toast({
             title: "insufficient content",
             variant: "default",
@@ -109,7 +129,7 @@ const Pipe: React.FC = () => {
           setIsMerging(false);
           return;
         }
-        await mergeContent(uniqueFilePaths.reverse(), 'video');
+        await mergeContent(uniqueVideos.reverse(), 'video');
         setIsMerging(false);
       } catch (e :any) {
         toast({
@@ -161,6 +181,9 @@ const Pipe: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    setKey(prevKey => prevKey + 1);
+  }, [mergedVideoPath]);
 
   return (
     <div className="w-full mt-4 flex flex-col justify-center items-center">
@@ -240,17 +263,17 @@ const Pipe: React.FC = () => {
               </Button>
             </span>
           </TooltipTrigger>
-          {(aiDisabled || isServerDown || isAvailable) && (
+          {(isServerDown || !isAvailable) && (
             <TooltipContent>
               <p>{`${
-                  (aiDisabled && isServerDown) || isAvailable
-                    ? "you don't have access of screenpipe-cloud and screenpipe is down!"
+                  (!isAvailable && isServerDown)
+                    ? `screenpipe is down, ${error}`
                     : isServerDown
                     ? "screenpipe is not running..."
-                    : aiDisabled
+                    : !isAvailable 
+                    ? `${error}`
+                    : !aiDisabled 
                     ? "you don't have access to screenpipe-cloud :( please consider login"
-                    : isAvailable
-                    ? { error }
                     : ""
                 }
               `}</p>
@@ -275,7 +298,7 @@ const Pipe: React.FC = () => {
             className="text-center m-8 "
           />
           <Divider />
-          <LLMChat data={rawData} />
+          <LLMChat key={key} data={rawData} />
         </div>
       )}
     </div>
@@ -284,4 +307,3 @@ const Pipe: React.FC = () => {
 
 export default Pipe;
 
-            // filePath={"C:\\Users\\eirae\\.screenpipe\\videos\\output_28b50b43-cf63-43f3-88f0-8e5dd9e5910e.mp4"}

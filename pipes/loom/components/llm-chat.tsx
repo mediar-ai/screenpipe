@@ -1,37 +1,20 @@
-import { Separator } from "@/components/ui/separator";
+"use client";
+import { generateId, Message } from "ai";
+import { useToast } from "@/lib/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Loader2, Send, Square } from "lucide-react";
-import { createChatStream } from "@/lib/actions/chat-stream";
-import { useToast } from "@/lib/use-toast";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { generateId, Message } from "ai";
+import { ChevronDown, Loader2, Send, Square } from "lucide-react";
 import { ChatMessage } from "@/components/chat-message";
 import { spinner } from "@/components/spinner";
-import { useDebounce } from "@/lib/hooks/use-debounce";
+import { Separator } from "@/components/ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useSettings } from "@/lib/hooks/use-settings";
-
-interface RawInfo {
-  frame_id: number;
-  text: string;
-  timestamp: string;
-  file_path: string;
-  offset_index: number;
-  app_name: string;
-  window_name: string;
-  tags: string[];
-  frame: any;
-}
-
-interface Data {
-  type: string;
-  content: RawInfo;
-}
+import { ContentItem } from "@screenpipe/browser";
 
 interface LLMChatProps {
-  data: Data[] | undefined;
+  data: ContentItem[] | undefined;
   className?: string;
 }
 
@@ -49,9 +32,6 @@ export function LLMChat({ data, className }: LLMChatProps) {
 
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const lastScrollPosition = useRef(0);
-
-  const MAX_CONTENT_LENGTH = settings.aiMaxContextChars;
-
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -106,15 +86,6 @@ export function LLMChat({ data, className }: LLMChatProps) {
     }
   }, [isFloatingInputVisible]);
 
-
-  const removeDuplicateLines = (textContent: string[])  => {
-    const uniqueLines = Array.from(new Set(textContent));
-    if (uniqueLines.length > MAX_CONTENT_LENGTH) {
-      return uniqueLines.slice(0, MAX_CONTENT_LENGTH)
-    }
-    return uniqueLines;
-  };
-
   const handleStopStreaming = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -126,9 +97,8 @@ export function LLMChat({ data, className }: LLMChatProps) {
   const AGENT = {
     id: "description",
     name: "description generator",
-    description: "analyzes the given text and generate description for the video.",
-    systemPrompt:
-    "you can analyze text which is raw information about a video and provide comprehensive insights.",
+    description: "the raw text you've given is the ocr from a video, analyzes it and create a consise summary for the video",
+    systemPrompt: "you can analyze text which is raw ocr of a video and provide comprehensive description for it",
   }
 
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
@@ -155,16 +125,39 @@ export function LLMChat({ data, className }: LLMChatProps) {
     setFloatingInput("");
     setIsAiLoading(true);
 
-    try {
-      const stream = await createChatStream(
-        settings,
-        chatMessages,
-        floatingInput,
-        data,
-        abortControllerRef,
-      );
+    abortControllerRef.current = new AbortController();
+    setIsStreaming(true);
 
-      let fullResponse = "";
+    try {
+      console.log("LLM DATA", data)
+      const response = await fetch('/api/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          settings,
+          chatMessages,
+          floatingInput,
+          selectedAgent: AGENT,
+          data: data,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if(!response.ok){
+        toast({
+          title: "failed to create description",
+          description: `error: ${response.statusText}`,
+          variant: "destructive",
+          duration: 5000,
+        });
+        return;
+      }
+
+      const result = await response.json();
+      const fullResponse = result.response;
+
       setChatMessages((prevMessages) => [
         ...prevMessages.slice(0, -1),
         { id: generateId(), role: "assistant", content: fullResponse },
@@ -173,17 +166,6 @@ export function LLMChat({ data, className }: LLMChatProps) {
       setIsUserScrolling(false);
       lastScrollPosition.current = window.scrollY;
       scrollToBottom();
-
-      for await (const chunk of stream) {
-        const content = chunk.choices[0]?.delta?.content || "";
-        fullResponse += content;
-        setChatMessages((prevMessages) => [
-          ...prevMessages.slice(0, -1),
-          { id: generateId(), role: "assistant", content: fullResponse },
-        ]);
-        scrollToBottom();
-      }
-
     } catch (error: any) {
       if (error.toString().includes("unauthorized")) {
         toast({

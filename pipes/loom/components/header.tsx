@@ -11,7 +11,7 @@ export default function Header() {
       <Button
         variant="outline"
         onClick={() => setIsDialogSettingOpen(true)}
-        className="absolute right-10 top-[-25px]"
+        className="absolute right-10 top-[-25px] !border-none"
       >
         <SettingsIcon className="h-4 w-4" />
       </Button>
