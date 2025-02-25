@@ -413,8 +413,8 @@ mod tests {
         println!("OCR FTS data: {:?}", ocr_fts_data);
 
         // check if frames_fts is properly indexed
-        let frame_fts_data: Vec<(i64, String)> = sqlx::query_as(
-            "SELECT rowid, browser_url, app_name, window_name, focused FROM frames_fts",
+        let frame_fts_data: Vec<(i64, String, String, String, bool)> = sqlx::query_as(
+            "SELECT id, browser_url, app_name, window_name, focused FROM frames_fts",
         )
         .fetch_all(&db.pool)
         .await

@@ -689,38 +689,58 @@ impl DatabaseManager {
 
         let sql = format!(
             r#"
-            SELECT
-                ocr_text.frame_id,
-                ocr_text.text as ocr_text,
-                ocr_text.text_json,
-                frames.timestamp,
-                frames.name as frame_name,
-                video_chunks.file_path,
-                frames.offset_index,
-                frames.app_name,
-                ocr_text.ocr_engine,
-                frames.window_name,
-                GROUP_CONCAT(tags.name, ',') as tags,
-                frames.browser_url,
-                frames.focused
-            FROM frames_fts
-            JOIN frames ON frames_fts.id = frames.id
-            JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
-            LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
-            LEFT JOIN tags ON vision_tags.tag_id = tags.id
-            JOIN ocr_text ON frames.id = ocr_text.frame_id
-            JOIN ocr_text_fts ON ocr_text.frame_id = ocr_text_fts.frame_id
-            WHERE 
-                (?1 IS NULL OR frames_fts MATCH ?1)
-                AND (?2 IS NULL OR frames.timestamp >= ?2)
-                AND (?3 IS NULL OR frames.timestamp <= ?3)
-                AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
-                AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
-                AND (?6 = '*' OR ocr_text_fts MATCH ?6)
-            GROUP BY frames.id
-            ORDER BY frames.timestamp DESC
-            LIMIT ?7 OFFSET ?8
-            "#,
+        SELECT
+            ocr_text.frame_id,
+            ocr_text.text as ocr_text,
+            ocr_text.text_json,
+            frames.timestamp,
+            frames.name as frame_name,
+            video_chunks.file_path,
+            frames.offset_index,
+            frames.app_name,
+            ocr_text.ocr_engine,
+            frames.window_name,
+            GROUP_CONCAT(tags.name, ',') as tags,
+            frames.browser_url,
+            frames.focused
+        FROM frames
+        JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
+        JOIN ocr_text ON frames.id = ocr_text.frame_id
+        LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
+        LEFT JOIN tags ON vision_tags.tag_id = tags.id
+        {frame_fts_join}
+        {ocr_fts_join}
+        WHERE 1=1
+            {frame_fts_condition}
+            {ocr_fts_condition}
+            AND (?2 IS NULL OR frames.timestamp >= ?2)
+            AND (?3 IS NULL OR frames.timestamp <= ?3)
+            AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
+            AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+        GROUP BY frames.id
+        ORDER BY frames.timestamp DESC
+        LIMIT ?7 OFFSET ?8
+        "#,
+            frame_fts_join = if frame_query.trim().is_empty() {
+                ""
+            } else {
+                "JOIN frames_fts ON frames.id = frames_fts.id"
+            },
+            ocr_fts_join = if query.trim().is_empty() {
+                ""
+            } else {
+                "JOIN ocr_text_fts ON ocr_text.frame_id = ocr_text_fts.frame_id"
+            },
+            frame_fts_condition = if frame_query.trim().is_empty() {
+                ""
+            } else {
+                "AND frames_fts MATCH ?1"
+            },
+            ocr_fts_condition = if query.trim().is_empty() {
+                ""
+            } else {
+                "AND ocr_text_fts MATCH ?6"
+            }
         );
 
         println!("sql: {}", sql);
@@ -738,7 +758,11 @@ impl DatabaseManager {
             .bind(end_time)
             .bind(min_length.map(|l| l as i64))
             .bind(max_length.map(|l| l as i64))
-            .bind(query)
+            .bind(if query.trim().is_empty() {
+                None
+            } else {
+                Some(query)
+            })
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
