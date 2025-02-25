@@ -33,7 +33,7 @@ export default function RootLayout({
       >
         <SidebarProvider defaultOpen={true}>
           <div className="flex w-full h-full">
-            <div className="absolute left-0 top-0 h-full">
+            <div className="absolute left-0 top-0 h-full z-[9000]">
               <HistorySidebar />
             </div>
             <div className="fixed left-0 top-2  z-[10000]  ">
