@@ -116,7 +116,7 @@
   *,
   a,
   button {
-    cursor: default;
+    /* cursor: default; */
     user-select: none;
   }
   :not(input):not(textarea),
@@ -126,7 +126,7 @@
     -moz-user-select: none;    /* Firefox */
    -ms-user-select: none;     /* Internet Explorer/Edge */
     user-select: none;
-    cursor: default;
+    /* cursor: default; */
   }
 }
 

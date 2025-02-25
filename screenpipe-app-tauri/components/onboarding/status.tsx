@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Check, HelpCircle, Lock, Video, X } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Check, HelpCircle, Video, ChevronDown } from "lucide-react";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import OnboardingNavigation from "@/components/onboarding/navigation";
 import { Button } from "../ui/button";
@@ -12,30 +12,22 @@ import {
 } from "../ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { Label } from "../ui/label";
-import { platform } from "@tauri-apps/plugin-os";
 import { LogFileButton } from "../log-file-button";
 import { Separator } from "../ui/separator";
 import { invoke } from "@tauri-apps/api/core";
 import posthog from "posthog-js";
 import { toast } from "@/components/ui/use-toast";
-import localforage from "localforage";
+import { PermissionButtons } from "../status/permission-buttons";
+import { usePlatform } from "@/lib/hooks/use-platform";
+import { pipe } from "@screenpipe/browser";
+import { VisionEvent } from "@screenpipe/browser";
+import Image from "next/image";
 
 interface OnboardingStatusProps {
   className?: string;
   handlePrevSlide: () => void;
   handleNextSlide: () => void;
 }
-
-// Add PermissionsStatus type
-type PermissionsStatus = {
-  screenRecording: string;
-  microphone: string;
-  accessibility: string;
-};
-
-const setRestartPending = async () => {
-  await localforage.setItem("screenPermissionRestartPending", true);
-};
 
 const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   className = "",
@@ -46,47 +38,14 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [useChineseMirror, setUseChineseMirror] = useState(false);
   const { updateSettings } = useSettings();
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null
-  );
-  const [isRestartNeeded, setIsRestartNeeded] = useState(false);
+  const { isMac: isMacOS } = usePlatform();
   const [stats, setStats] = useState<{
     screenshots: number;
     audioSeconds: number;
   } | null>(null);
-  const [isMacOS, setIsMacOS] = useState(false);
-
-  useEffect(() => {
-    const checkRestartStatus = async () => {
-      const restartPending = await localforage.getItem(
-        "screenPermissionRestartPending"
-      );
-      if (restartPending) {
-        // Clear the flag
-        await localforage.removeItem("screenPermissionRestartPending");
-        // Recheck permissions
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-        setPermissions(perms);
-      }
-    };
-    checkRestartStatus();
-  }, []);
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-        setPermissions(perms);
-      } catch (error) {
-        console.error("Failed to check permissions:", error);
-      }
-    };
-    checkPermissions();
-  }, []);
+  const [visionEvent, setVisionEvent] = useState<VisionEvent | null>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -141,78 +100,89 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Add effect for streaming screenshots when recording starts
   useEffect(() => {
-    const checkPlatform = () => {
-      const currentPlatform = platform();
-      setIsMacOS(currentPlatform === "macos");
+    let isActive = false;
+
+    const streamVision = async () => {
+      if (status !== "ok" || isActive) return;
+
+      isActive = true;
+      try {
+        console.log("starting vision stream");
+        for await (const event of pipe.streamVision(true)) {
+          setVisionEvent(event.data);
+          console.log("vision event received");
+
+          // Scroll to bottom when new vision event is received
+          setTimeout(() => {
+            if (containerRef.current) {
+              // Only auto-scroll if already near the bottom
+              const { scrollTop, scrollHeight, clientHeight } =
+                containerRef.current;
+              const isNearBottom =
+                scrollHeight - scrollTop - clientHeight < 150;
+
+              if (isNearBottom) {
+                containerRef.current.scrollTo({
+                  top: containerRef.current.scrollHeight,
+                  behavior: "smooth",
+                });
+              } else if (!showScrollButton) {
+                setShowScrollButton(true);
+              }
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error("vision stream error:", error);
+      } finally {
+        isActive = false;
+      }
     };
-    checkPlatform();
+
+    streamVision();
+
+    return () => {
+      pipe.disconnect();
+    };
+  }, [status, showScrollButton]);
+
+  // Add effect to scroll to bottom when status changes to "ok"
+  useEffect(() => {
+    if (status === "ok" && containerRef.current) {
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: "smooth",
+          });
+        }
+      }, 500); // Give time for the UI to render
+    }
+  }, [status]);
+
+  // Add scroll event listener to show/hide scroll button
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // Show button if not at bottom (with some threshold)
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      setShowScrollButton(!isAtBottom);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility"
-  ) => {
-    const toastId = toast({
-      title: `checking ${type} permissions`,
-      description: "please wait...",
-      duration: Infinity,
-    });
-
-    try {
-      const os = platform();
-      const permissionType =
-        type === "screen"
-          ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
-
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
-
-      // Only handle macOS screen recording special case after requesting permission
-      if (os === "macos" && type === "screen") {
-        setIsRestartNeeded(true);
-        await setRestartPending();
-        toast({
-          title: "restart required",
-          description:
-            "please restart the app after enabling screen recording permission",
-          duration: 10000,
-        });
-        return;
-      }
-
-      // Immediately check permissions after granting
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
-      setPermissions(perms);
-
-      const granted =
-        type === "screen"
-          ? perms.screenRecording.toLowerCase() === "granted"
-          : type === "audio"
-          ? perms.microphone.toLowerCase() === "granted"
-          : perms.accessibility.toLowerCase() === "granted";
-
-      toastId.update({
-        id: toastId.id,
-        title: granted ? "permission granted" : "permission check complete",
-        description: granted
-          ? `${type} permission was successfully granted`
-          : `please try granting ${type} permission again if needed`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error(`failed to handle ${type} permission:`, error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: `failed to handle ${type} permission`,
-        variant: "destructive",
-        duration: 3000,
+  const scrollToBottom = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: "smooth",
       });
     }
   };
@@ -271,9 +241,10 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
 
   return (
     <div
-      className={`${className} w-full flex justify-between flex-col items-center`}
+      ref={containerRef}
+      className={`${className} w-full flex flex-col items-center overflow-y-auto max-h-[80vh] pb-4 relative`}
     >
-      <DialogHeader className="flex flex-col px-2 justify-center items-center">
+      <DialogHeader className="flex flex-col px-2 justify-center items-center sticky top-0 bg-background z-10 w-full pt-4 pb-2">
         <img className="w-24 h-24" src="/128x128.png" alt="screenpipe-logo" />
         <DialogTitle className="text-center text-2xl">
           setting up screenpipe
@@ -284,74 +255,12 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       </DialogHeader>
 
       {isMacOS && (
-        <div className="w-3/4 space-y-4 mt-4 flex flex-col items-center">
-          <div className="flex items-center justify-between mx-auto w-full">
-            <div className="flex items-right gap-2">
-              {permissions && (
-                <span>
-                  {permissions.screenRecording.toLowerCase() === "granted" ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <X className="h-4 w-4 text-red-500" />
-                  )}
-                </span>
-              )}
-              <span className="text-sm">screen recording permission</span>
-            </div>
-            <Button
-              variant="outline"
-              className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("screen")}
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              grant screen permission
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between mx-auto w-full">
-            <div className="flex items-center gap-2">
-              {permissions && (
-                <span>
-                  {permissions.microphone.toLowerCase() === "granted" ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <X className="h-4 w-4 text-red-500" />
-                  )}
-                </span>
-              )}
-              <span className="text-sm">audio recording permission</span>
-            </div>
-            <Button
-              variant="outline"
-              className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("audio")}
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              grant audio permission
-            </Button>
-          </div>
-
-          <div className="flex items-center justify-between mx-auto w-full">
-            <div className="flex items-center gap-2">
-              {permissions && (
-                <span>
-                  {permissions.accessibility.toLowerCase() === "granted" ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <X className="h-4 w-4 text-red-500" />
-                  )}
-                </span>
-              )}
-              <span className="text-sm">accessibility permission</span>
-            </div>
-            <Button
-              variant="outline"
-              className="w-[260px] text-sm justify-start"
-              onClick={() => handlePermissionButton("accessibility")}
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              grant accessibility permission
-            </Button>
+        <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
+          <h4 className="text-sm font-medium mb-3">check permissions</h4>
+          <div className="space-y-2">
+            <PermissionButtons type="screen" />
+            <PermissionButtons type="audio" />
+            <PermissionButtons type="accessibility" />
           </div>
         </div>
       )}
@@ -427,14 +336,59 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
         <LogFileButton />
       </div>
 
-      <OnboardingNavigation
-        handlePrevSlide={handlePrev}
-        handleNextSlide={handleNext}
-        prevBtnText="previous"
-        nextBtnText="next"
-      />
+      {/* Screenshot stream display */}
+      {status === "ok" && (
+        <div
+          className="w-full mt-4 p-4 space-y-3 rounded-lg border bg-card text-card-foreground shadow-sm"
+          id="screenshot-preview"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">live preview</h3>
+            <span className="text-xs text-muted-foreground">
+              {visionEvent ? "streaming..." : "waiting for stream..."}
+            </span>
+          </div>
 
-      {/* Replace stats display with better styling */}
+          {visionEvent?.image ? (
+            <div className="space-y-3">
+              <div className="relative w-full h-[250px] overflow-hidden rounded-md">
+                <Image
+                  src={`data:image/jpeg;base64,${visionEvent.image}`}
+                  alt="screen capture"
+                  fill
+                  style={{ objectFit: "contain" }}
+                  className="rounded-md"
+                  priority
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div>
+                  <span className="font-medium">app:</span>{" "}
+                  {visionEvent.app_name || "unknown"}
+                </div>
+                <div>
+                  <span className="font-medium">window:</span>{" "}
+                  {visionEvent.window_name || "unknown"}
+                </div>
+                <div>
+                  <span className="font-medium">time:</span>{" "}
+                  {new Date(visionEvent.timestamp).toLocaleTimeString()}
+                </div>
+                {visionEvent.browser_url && (
+                  <div className="col-span-2 truncate">
+                    <span className="font-medium">url:</span>{" "}
+                    {visionEvent.browser_url}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="animate-pulse bg-gray-200 rounded-md w-full h-[250px]" />
+          )}
+        </div>
+      )}
+
+      {/* Stats display */}
       {stats && (
         <div className="w-full p-4 space-y-3 rounded-lg border bg-card text-card-foreground shadow-sm">
           <div className="flex items-center justify-between">
@@ -457,6 +411,26 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
           </div>
         </div>
       )}
+
+      {/* Scroll to bottom button */}
+      {showScrollButton && status === "ok" && visionEvent && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-16 right-4 bg-primary text-primary-foreground rounded-full p-2 shadow-md hover:bg-primary/90 transition-opacity z-20"
+          aria-label="Scroll to bottom"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      )}
+
+      <div className="sticky bottom-0 bg-background pt-2 pb-1 w-full">
+        <OnboardingNavigation
+          handlePrevSlide={handlePrev}
+          handleNextSlide={handleNext}
+          prevBtnText="previous"
+          nextBtnText="next"
+        />
+      </div>
     </div>
   );
 };

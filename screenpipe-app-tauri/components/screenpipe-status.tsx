@@ -12,7 +12,7 @@ import { toast } from "./ui/use-toast";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, Power, Settings } from "lucide-react";
+import {  Folder, Power, Settings } from "lucide-react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 
 import { LogFileButton } from "./log-file-button";
@@ -178,7 +178,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   </span>
                 </div>
                 <div className="flex-shrink-0">
-                  <PermissionButtons type="screen" settings={settings} />
+                  <PermissionButtons type="screen" />
                 </div>
               </div>
 
@@ -209,7 +209,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                   </span>
                 </div>
                 <div className="flex-shrink-0">
-                  <PermissionButtons type="audio" settings={settings} />
+                  <PermissionButtons type="audio" />
                 </div>
               </div>
 
@@ -233,10 +233,7 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     </span>
                   </div>
                   <div className="flex-shrink-0">
-                    <PermissionButtons
-                      type="accessibility"
-                      settings={settings}
-                    />
+                    <PermissionButtons type="accessibility" />
                   </div>
                 </div>
               )}

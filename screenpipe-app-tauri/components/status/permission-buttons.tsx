@@ -4,6 +4,8 @@ import { Check, Lock, Settings, X } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { invoke } from "@tauri-apps/api/core";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useSettings } from "@/lib/hooks/use-settings";
+import localforage from "localforage";
 
 // You can add this to a types.ts file in your lib directory
 export enum OSPermissionStatus {
@@ -20,14 +22,13 @@ export interface OSPermissionsCheck {
 }
 
 interface PermissionButtonsProps {
-  settings: any;
   type: "screen" | "audio" | "accessibility";
 }
 
 export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
-  settings,
   type,
 }) => {
+  const { settings } = useSettings();
   const [permissions, setPermissions] = useState<OSPermissionsCheck | null>(
     null
   );
@@ -80,6 +81,18 @@ export const PermissionButtons: React.FC<PermissionButtonsProps> = ({
         initialCheck: false,
       });
       setPermissions(perms);
+
+      // If screen recording permission was requested, set flag and prompt for restart
+      if (type === "screen") {
+        await localforage.setItem("screenPermissionRestartPending", true);
+
+        toast({
+          title: "restart required",
+          description:
+            "please restart the app to apply screen recording permission",
+          duration: 5000,
+        });
+      }
     } catch (error) {
       console.error(`Failed to request ${type} permission:`, error);
       toast({
