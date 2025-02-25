@@ -95,87 +95,105 @@ async fn run_record_and_transcribe(
         duration.as_secs()
     );
 
+    let sample_rate = audio_stream.device_config.sample_rate().0 as usize;
     const OVERLAP_SECONDS: usize = 2;
-    let overlap_samples = OVERLAP_SECONDS * 16000;
-    let duration_samples = (duration.as_secs_f64() * 16000.0).ceil() as usize;
-    let max_samples = duration_samples + overlap_samples;
+    let overlap_len = OVERLAP_SECONDS * sample_rate;
+    let duration_len = (duration.as_secs_f64() * sample_rate as f64).ceil() as usize;
+    let max_len = duration_len + overlap_len;
+    let mut first = true;
 
-    // Pre-allocate buffer with exact capacity
-    let mut collected_audio = Vec::with_capacity(max_samples);
-    let mut overlap_buffer = Vec::with_capacity(overlap_samples);
+    // Pre-allocate fixed-size buffer with exact capacity
+    let mut collected_audio = vec![0.0; max_len]; // Fixed size, never resized
+    let mut overflow_buffer = vec![0.0; duration_len]; // LOL
+    let mut current_samples_len = overlap_len;
+    let mut current_overlap_len = 0;
 
     while is_running.load(Ordering::Relaxed)
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
     {
-        // Collect until we have enough samples for a full segment
-        while collected_audio.len() < duration_samples && is_running.load(Ordering::Relaxed) {
-            match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
-                Ok(Ok(chunk)) => {
-                    // Maintain fixed memory usage
-                    let available_space = max_samples - collected_audio.len();
-                    let take = chunk.len().min(available_space);
+        // Collect audio for the duration period
+        while current_samples_len < max_len && is_running.load(Ordering::Relaxed) {
+            match receiver.recv().await {
+                Ok(chunk) => {
+                    let chunk_len = chunk.len();
+                    let available_space = duration_len
+                        .saturating_sub(current_samples_len)
+                        .saturating_sub(overlap_len);
 
-                    // Make space if needed by draining oldest samples
-                    if collected_audio.len() + take > max_samples {
-                        let drain_amount = collected_audio.len() + take - max_samples;
-                        collected_audio.drain(0..drain_amount);
+                    // Ensure we do not exceed the buffer size
+                    if available_space < chunk_len {
+                        if available_space > 0 {
+                            collected_audio
+                                [current_samples_len..current_samples_len + available_space]
+                                .copy_from_slice(&chunk[..available_space]);
+                        }
+
+                        let overflow_len = chunk_len - available_space;
+                        if overflow_len > 0 {
+                            let len_to_copy = overflow_len.min(overflow_buffer.len());
+                            overflow_buffer[..len_to_copy].copy_from_slice(
+                                &chunk[available_space..available_space + len_to_copy],
+                            );
+                            current_overlap_len += len_to_copy;
+                        }
+                    } else {
+                        collected_audio[current_samples_len..current_samples_len + chunk_len]
+                            .copy_from_slice(&chunk);
                     }
 
-                    collected_audio.extend_from_slice(&chunk[..take]);
+                    current_samples_len += chunk_len;
                 }
-                Ok(Err(e)) => {
+                Err(e) => {
                     error!("error receiving audio data: {}", e);
                     return Err(anyhow!("Audio stream error: {}", e));
                 }
-                Err(_) => {} // Timeout, continue loop
             }
         }
 
-        // Only send if we have enough samples (account for possible early exit)
-        if collected_audio.len() >= duration_samples {
-            // Split into main segment and overlap
-            let mut audio_segment = overlap_buffer.to_vec();
-            audio_segment.extend_from_slice(&collected_audio);
-            // Preserve overlap for next iteration
-            let overlap_start = duration_samples.saturating_sub(overlap_samples);
-            overlap_buffer.clear();
-            let overlap_end = overlap_buffer.len();
-            let overlap_end = duration_samples.saturating_sub(overlap_end);
-            overlap_buffer.extend_from_slice(&collected_audio[overlap_start..overlap_end]);
+        let mut segment = {
+            let mut segment = collected_audio.to_vec();
+            segment.extend_from_slice(&overflow_buffer);
+            segment
+        };
 
-            // Reset buffer with overlap
-            collected_audio.clear();
-            // collected_audio.extend_from_slice(&overlap_buffer);
-
-            // Send the segment
-            debug!("sending audio segment to audio model");
-            match whisper_sender.try_send(AudioInput {
-                data: Arc::new(audio_segment),
-                device: audio_stream.device.clone(),
-                sample_rate: audio_stream.device_config.sample_rate().0,
-                channels: 1,
-            }) {
-                Ok(_) => {
-                    debug!("sent audio segment to audio model");
-                    // Overlap already preserved in buffer
-                }
-                Err(e) => {
-                    // Reset buffers on error
-                    collected_audio.clear();
-                    overlap_buffer.clear();
-                    if e.is_disconnected() {
-                        error!("whisper channel disconnected, restarting recording process");
-                        return Err(anyhow!("Whisper channel disconnected"));
-                    } else if e.is_full() {
-                        warn!("whisper channel full, dropping audio segment");
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    } else {
-                        error!("whisper channel error, restarting recording process: {}", e);
-                        return Err(anyhow!("Whisper channel error"));
-                    }
+        debug!("sending audio segment to audio model");
+        match whisper_sender.try_send(AudioInput {
+            data: Arc::new(segment.clone()),
+            device: audio_stream.device.clone(),
+            sample_rate: audio_stream.device_config.sample_rate().0,
+            channels: 1,
+        }) {
+            Ok(_) => {
+                debug!("sent audio segment to audio model");
+                // Maintain overlap by keeping last overlap_samples
+                let segment_start = current_overlap_len + overlap_len;
+                let segment_len = segment.len();
+                let collected_audio_start = if first { overlap_len } else { 0 };
+                collected_audio[collected_audio_start..collected_audio_start + overlap_len]
+                    .swap_with_slice(
+                        &mut segment[segment_start..segment_len.min(segment_start + overlap_len)],
+                    );
+            }
+            Err(e) => {
+                // Maintain buffer size even when send fails
+                collected_audio.resize(max_len, 0.0);
+                if e.is_disconnected() {
+                    error!("whisper channel disconnected, restarting recording process");
+                    return Err(anyhow!("Whisper channel disconnected"));
+                } else if e.is_full() {
+                    warn!("whisper channel full, dropping audio segment");
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                } else {
+                    error!("whisper channel error, restarting recording process: {}", e);
+                    return Err(anyhow!("Whisper channel error"));
                 }
             }
         }
+
+        // this is the duration length at this point. not including overlap
+        current_samples_len = overlap_len;
+        overflow_buffer.clear();
+        first = false;
     }
 
     info!("stopped recording for {}", audio_stream.device.to_string());

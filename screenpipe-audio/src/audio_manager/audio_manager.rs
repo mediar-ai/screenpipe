@@ -2,7 +2,7 @@ use anyhow::Result;
 use dashmap::DashMap;
 use std::{
     sync::{atomic::Ordering, Arc},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{error, info};
@@ -10,8 +10,8 @@ use tracing::{error, info};
 use screenpipe_db::DatabaseManager;
 
 use crate::{
-    core::{device::AudioDevice, record_and_transcribe, LAST_AUDIO_CAPTURE},
-    device_manager::device_manager::DeviceManager,
+    core::{device::AudioDevice, record_and_transcribe},
+    device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{stt::process_audio_input, whisper::model::WhisperModel},
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
