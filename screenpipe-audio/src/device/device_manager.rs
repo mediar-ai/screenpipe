@@ -75,8 +75,8 @@ impl DeviceManager {
     }
 
     pub fn stop_device(&self, device: &AudioDevice) {
-        if let Some(s) = self.states.get(device) {
-            s.store(false, Ordering::Relaxed)
+        if let Some(is_running) = self.states.get(device) {
+            is_running.store(false, Ordering::Relaxed)
         }
     }
 

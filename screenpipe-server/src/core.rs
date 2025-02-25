@@ -100,59 +100,6 @@ pub async fn start_continuous_recording(
         let _ = poll_meetings_events().await;
     });
 
-    // let (whisper_sender, whisper_receiver, whisper_shutdown_flag) = if audio_disabled {
-    //     // Create a dummy channel if no audio devices are available, e.g. audio disabled
-    //     let (input_sender, _): (
-    //         crossbeam::channel::Sender<AudioInput>,
-    //         crossbeam::channel::Receiver<AudioInput>,
-    //     ) = crossbeam::channel::bounded(100);
-    //     let (_, output_receiver): (
-    //         crossbeam::channel::Sender<TranscriptionResult>,
-    //         crossbeam::channel::Receiver<TranscriptionResult>,
-    //     ) = crossbeam::channel::bounded(100);
-    //     (
-    //         input_sender,
-    //         output_receiver,
-    //         Arc::new(AtomicBool::new(false)),
-    //     )
-    // } else {
-    //     create_whisper_channel(
-    //         audio_transcription_engine.clone(),
-    //         VadEngineEnum::from(vad_engine),
-    //         deepgram_api_key.clone(),
-    //         &PathBuf::from(output_path.as_ref()),
-    //         VadSensitivity::from(vad_sensitivity),
-    //         languages.clone(),
-    //         Some(audio_devices_control.clone()),
-    //     )
-    //     .await?
-    // };
-    // let whisper_sender_clone = whisper_sender.clone();
-    // let db_manager_audio = Arc::clone(&db);
-
-    // let audio_task = if !audio_disabled {
-    //     audio_handle.spawn(async move {
-    //         record_audio(
-    //             db_manager_audio,
-    //             audio_chunk_duration,
-    //             whisper_sender,
-    //             whisper_receiver,
-    //             audio_devices_control,
-    //             audio_transcription_engine,
-    //             realtime_audio_enabled,
-    //             realtime_audio_devices,
-    //             languages,
-    //             deepgram_api_key,
-    //         )
-    //         .await
-    //     })
-    // } else {
-    //     audio_handle.spawn(async move {
-    //         tokio::time::sleep(Duration::from_secs(60)).await;
-    //         Ok(())
-    //     })
-    // };
-
     // Join all video tasks
     let video_results = join_all(video_tasks);
 
@@ -174,7 +121,6 @@ pub async fn start_continuous_recording(
     // TODO: wait a bit for whisper to finish processing
     // TODO: any additional cleanup like device controls to release
 
-    info!("Stopped recording");
     Ok(())
 }
 
@@ -328,8 +274,6 @@ async fn record_audio(
             if handles.contains_key(&device_id) {
                 continue;
             }
-
-            info!("Received audio device: {}", &audio_device);
 
             if !device_control.is_running {
                 info!("Device control signaled stop for device {}", &audio_device);

@@ -739,13 +739,12 @@ async fn main() -> anyhow::Result<()> {
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
 
-    let mut audio_manager = AudioManagerBuilder::new()
+    let audio_manager_builder = AudioManagerBuilder::new()
         // TODO: Fix this to duration not usize...
         .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
-        .output_path(PathBuf::from(output_path_clone.clone().to_string()))
-        .build(db.clone())
-        .await
-        .unwrap();
+        .output_path(PathBuf::from(output_path_clone.clone().to_string()));
+
+    let mut audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
 
     audio_manager.start().await.unwrap();
 
