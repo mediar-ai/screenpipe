@@ -24,6 +24,14 @@ pub enum SearchResult {
 }
 
 #[derive(FromRow, Debug)]
+pub struct Frame {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub browser_url: String,
+    pub app_name: String,
+    pub window_name: String,
+}
+#[derive(FromRow, Debug)]
 pub struct OCRResultRaw {
     pub frame_id: i64,
     pub ocr_text: String,
@@ -128,9 +136,9 @@ pub struct UiContent {
     #[sqlx(rename = "text_output")]
     pub text: String,
     pub timestamp: DateTime<Utc>,
-    #[sqlx(rename = "app")]
+    #[sqlx(rename = "app_name")]
     pub app_name: String,
-    #[sqlx(rename = "window")]
+    #[sqlx(rename = "window_name")]
     pub window_name: String,
     pub initial_traversal_at: Option<DateTime<Utc>>,
     pub file_path: String,

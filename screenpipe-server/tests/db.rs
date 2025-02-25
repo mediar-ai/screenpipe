@@ -5,7 +5,7 @@ mod tests {
     use chrono::Utc;
     use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::{
-        db_types::{ContentType, SearchResult},
+        db_types::{ContentType, Frame, SearchResult},
         DatabaseManager,
     };
     use screenpipe_vision::OcrEngine;
@@ -222,6 +222,15 @@ mod tests {
             .insert_frame("test_device", None, None, Some("test"), Some(""), false)
             .await
             .unwrap();
+
+        // Debug: Check if app_name was inserted correctly
+        let frame_data: Frame = sqlx::query_as("SELECT * FROM frames WHERE id = ?")
+            .bind(frame_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        println!("Inserted frame data: {:?}", frame_data);
+
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
@@ -230,6 +239,16 @@ mod tests {
         )
         .await
         .unwrap();
+
+        // Verify that frames_fts was populated
+        let fts_data: Option<(i64, String, String, String, bool)> = sqlx::query_as(
+            "SELECT rowid, browser_url, app_name, window_name, focused FROM frames_fts WHERE rowid = ?",
+        )
+        .bind(frame_id)
+        .fetch_optional(&db.pool)
+        .await
+        .unwrap();
+        println!("Frames FTS data: {:?}", fts_data);
 
         // Insert Audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
@@ -254,7 +273,7 @@ mod tests {
                 0,
                 None,
                 None,
-                Some("app"),
+                Some("test"),
                 None,
                 None,
                 None,
@@ -362,6 +381,41 @@ mod tests {
         .await
         .unwrap();
 
+        let raw_ocr_text: Vec<(String, Option<i64>)> =
+            sqlx::query_as("SELECT text, frame_id FROM ocr_text")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("Raw OCR text in DB: {:?}", raw_ocr_text);
+        // print raw frames with timestamp
+        let raw_frames: Vec<(Option<i64>, Option<String>)> =
+            sqlx::query_as("SELECT id, timestamp FROM frames")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("Raw frames in DB: {:?}", raw_frames);
+        // Check if OCR text is properly indexed in FTS
+        let ocr_fts_data: Vec<(i64, String)> =
+            sqlx::query_as("SELECT rowid, text FROM ocr_text_fts")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("OCR FTS data: {:?}", ocr_fts_data);
+        let table_info: Vec<(String,)> = sqlx::query_as("PRAGMA table_info(frames_fts)")
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+        println!("frames_fts table info: {:?}", table_info);
+
+        // check if frames_fts is properly indexed
+        let frame_fts_data: Vec<(i64, String)> = sqlx::query_as(
+            "SELECT rowid, browser_url, app_name, window_name, focused FROM frames_fts",
+        )
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+        println!("Frames FTS data: {:?}", frame_fts_data);
+
         let insert_result = db
             .insert_audio_transcription(
                 audio_chunk_id,
@@ -400,6 +454,28 @@ mod tests {
         println!("Audio results for '2': {:?}", audio_results);
 
         let end_time = Utc::now();
+
+        // Debug OCR search with time range
+        let ocr_results = db
+            .search(
+                "Hello",
+                ContentType::OCR,
+                100,
+                0,
+                Some(start_time),
+                Some(end_time),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        println!("OCR time range results: {:?}", ocr_results);
 
         // Test search with full time range
         let results = db

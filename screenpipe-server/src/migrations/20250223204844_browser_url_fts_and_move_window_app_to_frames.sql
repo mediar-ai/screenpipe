@@ -18,13 +18,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS frames_fts USING fts5(
 );
 
 -- Create triggers for frames
-CREATE TRIGGER IF NOT EXISTS frames_ai AFTER INSERT ON frames 
-WHEN (NEW.browser_url IS NOT NULL AND NEW.browser_url != '') 
-   OR (NEW.app_name IS NOT NULL AND NEW.app_name != '')
-   OR (NEW.window_name IS NOT NULL AND NEW.window_name != '')
-   OR (NEW.focused IS NOT NULL)
-BEGIN
-    INSERT OR IGNORE INTO frames_fts(rowid, browser_url, app_name, window_name, focused)
+CREATE TRIGGER IF NOT EXISTS frames_ai AFTER INSERT ON frames BEGIN
+    INSERT INTO frames_fts(rowid, browser_url, app_name, window_name, focused)
     VALUES (
         NEW.id,
         COALESCE(NEW.browser_url, ''),
@@ -40,12 +35,14 @@ WHEN (NEW.browser_url IS NOT NULL AND NEW.browser_url != '')
    OR (NEW.window_name IS NOT NULL AND NEW.window_name != '')
    OR (NEW.focused IS NOT NULL)
 BEGIN
-    UPDATE frames_fts 
-    SET browser_url = COALESCE(NEW.browser_url, ''),
-        app_name = COALESCE(NEW.app_name, ''),
-        window_name = COALESCE(NEW.window_name, ''),
-        focused = COALESCE(NEW.focused, 0)
-    WHERE rowid = OLD.id;
+    INSERT OR REPLACE INTO frames_fts(rowid, browser_url, app_name, window_name, focused)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.browser_url, ''),
+        COALESCE(NEW.app_name, ''),
+        COALESCE(NEW.window_name, ''),
+        COALESCE(NEW.focused, 0)
+    );
 END;
 
 CREATE TRIGGER IF NOT EXISTS frames_ad AFTER DELETE ON frames
