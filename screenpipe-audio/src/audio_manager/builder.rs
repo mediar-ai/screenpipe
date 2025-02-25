@@ -54,6 +54,7 @@ impl Default for AudioManagerOptions {
     }
 }
 
+#[derive(Default)]
 pub struct AudioManagerBuilder {
     options: AudioManagerOptions,
 }

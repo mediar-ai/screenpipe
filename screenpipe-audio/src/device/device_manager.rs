@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use crate::core::{
-    device::{default_input_device, default_output_device, list_audio_devices, AudioDevice},
+    device::{default_input_device, default_output_device, AudioDevice},
     stream::AudioStream,
 };
 use anyhow::Result;
