@@ -115,6 +115,14 @@ async fn run_record_and_transcribe(
         while current_samples_len < max_len && is_running.load(Ordering::Relaxed) {
             match receiver.recv().await {
                 Ok(chunk) => {
+                    LAST_AUDIO_CAPTURE.store(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        Ordering::Relaxed,
+                    );
+
                     let chunk_len = chunk.len();
                     let available_space = duration_len
                         .saturating_sub(current_samples_len)
