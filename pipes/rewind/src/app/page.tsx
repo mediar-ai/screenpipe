@@ -15,6 +15,7 @@ import { TimelineSlider } from "@/components/timeline/timeline";
 import { useTimelineStore } from "@/lib/hooks/use-timeline-store";
 import { hasFramesForDate } from "@/lib/actions/has-frames-date";
 import { CommandShortcut } from "@/components/ui/command";
+import { CurrentFrameTimeline } from "@/components/current-frame-timeline";
 
 export interface StreamTimeSeriesResponse {
 	timestamp: string;
@@ -397,13 +398,7 @@ export default function Timeline() {
 							</div>
 						</div>
 					)}
-					{currentFrame && (
-						<img
-							src={`http://localhost:3030/frames/${currentFrame.devices[0].frame_id}`}
-							className="absolute inset-0 w-4/5 h-auto max-h-[75vh] object-contain mx-auto border rounded-xl p-2 mt-20"
-							alt="Current frame"
-						/>
-					)}
+					{currentFrame && <CurrentFrameTimeline currentFrame={currentFrame} />}
 					{currentFrame && (
 						<AudioTranscript
 							frames={frames}

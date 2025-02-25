@@ -9,7 +9,7 @@ import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { endOfDay, startOfDay } from "date-fns";
 import { useCallback, useEffect, useRef } from "react";
 import { parser } from "@/lib/keyword-parser";
-import { CurrentFrame } from "@/components/current-frame";
+import { CurrentFrame } from "@/components/current-frame-search";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { AppSelect } from "@/components/search-command";
 import { ArrowLeft } from "lucide-react";
