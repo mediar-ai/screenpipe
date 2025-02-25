@@ -33,7 +33,7 @@ import { useLoginDialog } from "./login-dialog";
 import { PermissionButtons } from "./status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
-const corePipes: string[] = ["data-table", "search"];
+const corePipes: string[] = [];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
@@ -1017,9 +1017,9 @@ export const PipeStore: React.FC = () => {
             <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">
               <h4 className="text-sm font-medium mb-3">check permissions</h4>
               <div className="space-y-2">
-                <PermissionButtons settings={settings} type="screen" />
-                <PermissionButtons settings={settings} type="audio" />
-                <PermissionButtons settings={settings} type="accessibility" />
+                <PermissionButtons type="screen" />
+                <PermissionButtons type="audio" />
+                <PermissionButtons type="accessibility" />
               </div>
             </div>
           )}
