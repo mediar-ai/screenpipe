@@ -660,12 +660,7 @@ impl DatabaseManager {
         focused: Option<bool>,
     ) -> Result<Vec<OCRResult>, sqlx::Error> {
         let mut frame_fts_parts = Vec::new();
-        let mut ocr_fts_parts = Vec::new();
 
-        // Split query parts between frame metadata and OCR content
-        if !query.is_empty() {
-            ocr_fts_parts.push(query); // Just use the query directly
-        }
         if let Some(app) = app_name {
             if !app.is_empty() {
                 frame_fts_parts.push(format!("app_name:{}", app));
@@ -684,21 +679,13 @@ impl DatabaseManager {
         if let Some(is_focused) = focused {
             frame_fts_parts.push(format!("focused:{}", if is_focused { "1" } else { "0" }));
         }
+        if let Some(frame_name) = frame_name {
+            if !frame_name.is_empty() {
+                frame_fts_parts.push(format!("name:{}", frame_name));
+            }
+        }
 
         let frame_query = frame_fts_parts.join(" ");
-        let ocr_query = ocr_fts_parts.join(" ");
-
-        let base_sql = "frames_fts 
-            JOIN frames ON frames_fts.rowid = frames.id 
-            JOIN ocr_text ON frames.id = ocr_text.frame_id
-            JOIN ocr_text_fts ON ocr_text.frame_id = ocr_text_fts.rowid";
-
-        let where_clause = match (frame_query.is_empty(), ocr_query.is_empty()) {
-            (true, true) => "WHERE 1=1".to_owned(),
-            (false, true) => "WHERE frames_fts MATCH ?1".to_owned(),
-            (true, false) => "WHERE ocr_text_fts MATCH ?1".to_owned(),
-            (false, false) => "WHERE frames_fts MATCH ?1 AND ocr_text_fts MATCH ?2".to_owned(),
-        };
 
         let sql = format!(
             r#"
@@ -716,56 +703,42 @@ impl DatabaseManager {
                 GROUP_CONCAT(tags.name, ',') as tags,
                 frames.browser_url,
                 frames.focused
-            FROM {}
+            FROM frames_fts
+            JOIN frames ON frames_fts.id = frames.id
             JOIN video_chunks ON frames.video_chunk_id = video_chunks.id
             LEFT JOIN vision_tags ON frames.id = vision_tags.vision_id
             LEFT JOIN tags ON vision_tags.tag_id = tags.id
-            {}
-                AND (?3 IS NULL OR frames.timestamp >= ?3)
-                AND (?4 IS NULL OR frames.timestamp <= ?4)
-                AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?5)
-                AND (?6 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?6)
-                AND (?7 IS NULL OR frames.name LIKE '%' || ?7 || '%' COLLATE NOCASE)
-            GROUP BY ocr_text.frame_id
+            JOIN ocr_text ON frames.id = ocr_text.frame_id
+            JOIN ocr_text_fts ON ocr_text.frame_id = ocr_text_fts.frame_id
+            WHERE 
+                (?1 IS NULL OR frames_fts MATCH ?1)
+                AND (?2 IS NULL OR frames.timestamp >= ?2)
+                AND (?3 IS NULL OR frames.timestamp <= ?3)
+                AND (?4 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) >= ?4)
+                AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
+                AND (?6 = '*' OR ocr_text_fts MATCH ?6)
+            GROUP BY frames.id
             ORDER BY frames.timestamp DESC
-            LIMIT ?8 OFFSET ?9
+            LIMIT ?7 OFFSET ?8
             "#,
-            base_sql, where_clause
         );
 
         println!("sql: {}", sql);
         println!("frame_query: {}", frame_query);
-        println!("ocr_query: {}", ocr_query);
-        println!("start_time: {:?}", start_time);
-        println!("end_time: {:?}", end_time);
-        println!("min_length: {:?}", min_length);
-        println!("max_length: {:?}", max_length);
-        println!("frame_name: {:?}", frame_name);
-        println!("where_clause: {:?}", where_clause);
-        let mut query_builder = sqlx::query_as(&sql);
-
-        // Properly bind parameters based on which queries are present
-        match (frame_query.is_empty(), ocr_query.is_empty()) {
-            (true, true) => {
-                query_builder = query_builder.bind("*".to_owned());
-            }
-            (false, true) => {
-                query_builder = query_builder.bind(&frame_query);
-            }
-            (true, false) => {
-                query_builder = query_builder.bind(&ocr_query);
-            }
-            (false, false) => {
-                query_builder = query_builder.bind(&frame_query).bind(&ocr_query);
-            }
-        }
+        println!("query: {}", query);
+        let query_builder = sqlx::query_as(&sql);
 
         let raw_results: Vec<OCRResultRaw> = query_builder
+            .bind(if frame_query.trim().is_empty() {
+                None
+            } else {
+                Some(&frame_query)
+            })
             .bind(start_time)
             .bind(end_time)
             .bind(min_length.map(|l| l as i64))
             .bind(max_length.map(|l| l as i64))
-            .bind(frame_name)
+            .bind(query)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
@@ -1091,7 +1064,7 @@ impl DatabaseManager {
                      JOIN ocr_text ON frames.id = ocr_text.frame_id"
                 } else {
                     "ocr_text_fts 
-                     JOIN ocr_text ON ocr_text_fts.rowid = ocr_text.frame_id
+                     JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id
                      JOIN frames ON ocr_text.frame_id = frames.id"
                 },
                 where_clause = if ocr_query.is_empty() {

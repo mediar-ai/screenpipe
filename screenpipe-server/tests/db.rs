@@ -11,13 +11,23 @@ mod tests {
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
+        // Initialize tracing for debug output
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .try_init();
+
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
 
-        // Run all migrations
-        sqlx::migrate!("./src/migrations")
-            .run(&db.pool)
-            .await
-            .unwrap();
+        // Run all migrations with better error handling
+        match sqlx::migrate!("./src/migrations").run(&db.pool).await {
+            Ok(_) => {
+                tracing::debug!("Database migrations completed successfully");
+            }
+            Err(e) => {
+                eprintln!("Migration error: {:?}", e);
+                panic!("Database migration failed: {}", e);
+            }
+        }
 
         db
     }
@@ -401,11 +411,6 @@ mod tests {
                 .await
                 .unwrap();
         println!("OCR FTS data: {:?}", ocr_fts_data);
-        let table_info: Vec<(String,)> = sqlx::query_as("PRAGMA table_info(frames_fts)")
-            .fetch_all(&db.pool)
-            .await
-            .unwrap();
-        println!("frames_fts table info: {:?}", table_info);
 
         // check if frames_fts is properly indexed
         let frame_fts_data: Vec<(i64, String)> = sqlx::query_as(
@@ -476,6 +481,8 @@ mod tests {
             .await
             .unwrap();
         println!("OCR time range results: {:?}", ocr_results);
+
+        assert_eq!(ocr_results.len(), 2);
 
         // Test search with full time range
         let results = db

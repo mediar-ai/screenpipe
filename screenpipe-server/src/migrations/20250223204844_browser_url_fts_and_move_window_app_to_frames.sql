@@ -7,21 +7,30 @@ ALTER TABLE frames ADD COLUMN app_name TEXT DEFAULT NULL;
 ALTER TABLE frames ADD COLUMN window_name TEXT DEFAULT NULL;
 ALTER TABLE frames ADD COLUMN focused BOOLEAN DEFAULT NULL;
 
--- Create frames FTS
+-- Update the existing frames_fts table to include new columns
+-- First, drop the existing triggers
+DROP TRIGGER IF EXISTS frames_ai;
+DROP TRIGGER IF EXISTS frames_ad;
+DROP TRIGGER IF EXISTS frames_au;
+
+-- Recreate the FTS table with all columns
+DROP TABLE IF EXISTS frames_fts;
 CREATE VIRTUAL TABLE IF NOT EXISTS frames_fts USING fts5(
+    name,
     browser_url,
     app_name,
     window_name,
     focused,
-    rowid UNINDEXED,
+    id UNINDEXED,
     tokenize='unicode61'
 );
 
--- Create triggers for frames
+-- Create updated triggers for frames
 CREATE TRIGGER IF NOT EXISTS frames_ai AFTER INSERT ON frames BEGIN
-    INSERT INTO frames_fts(rowid, browser_url, app_name, window_name, focused)
+    INSERT INTO frames_fts(rowid, name, browser_url, app_name, window_name, focused)
     VALUES (
         NEW.id,
+        COALESCE(NEW.name, ''),
         COALESCE(NEW.browser_url, ''),
         COALESCE(NEW.app_name, ''),
         COALESCE(NEW.window_name, ''),
@@ -30,14 +39,16 @@ CREATE TRIGGER IF NOT EXISTS frames_ai AFTER INSERT ON frames BEGIN
 END;
 
 CREATE TRIGGER IF NOT EXISTS frames_au AFTER UPDATE ON frames
-WHEN (NEW.browser_url IS NOT NULL AND NEW.browser_url != '') 
+WHEN (NEW.name IS NOT NULL AND NEW.name != '')
+   OR (NEW.browser_url IS NOT NULL AND NEW.browser_url != '') 
    OR (NEW.app_name IS NOT NULL AND NEW.app_name != '')
    OR (NEW.window_name IS NOT NULL AND NEW.window_name != '')
    OR (NEW.focused IS NOT NULL)
 BEGIN
-    INSERT OR REPLACE INTO frames_fts(rowid, browser_url, app_name, window_name, focused)
+    INSERT OR REPLACE INTO frames_fts(rowid, name, browser_url, app_name, window_name, focused)
     VALUES (
         NEW.id,
+        COALESCE(NEW.name, ''),
         COALESCE(NEW.browser_url, ''),
         COALESCE(NEW.app_name, ''),
         COALESCE(NEW.window_name, ''),
