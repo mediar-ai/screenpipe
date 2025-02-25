@@ -74,10 +74,12 @@ impl DeviceManager {
         }
     }
 
-    pub fn stop_device(&self, device: &AudioDevice) {
+    pub fn stop_device(&self, device: &AudioDevice) -> Result<()> {
         if let Some(is_running) = self.states.get(device) {
             is_running.store(false, Ordering::Relaxed)
         }
+
+        Ok(())
     }
 
     pub fn is_running_mut(&self, device: &AudioDevice) -> Option<Arc<AtomicBool>> {

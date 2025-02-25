@@ -28,6 +28,7 @@ impl VadSensitivity {
     }
 }
 
+#[derive(Clone)]
 pub enum VadEngineEnum {
     WebRtc,
     Silero,

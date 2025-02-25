@@ -11,6 +11,7 @@ use crate::{
 
 use super::audio_manager::AudioManager;
 
+#[derive(Clone)]
 pub struct AudioManagerOptions {
     pub transcription_engine: Arc<AudioTranscriptionEngine>,
     pub vad_engine: VadEngineEnum,
