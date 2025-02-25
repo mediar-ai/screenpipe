@@ -39,7 +39,10 @@ fn find_ffmpeg_path_internal() -> Option<PathBuf> {
             debug!("Checking $HOME/.local/bin: {:?}", local_bin);
             let ffmpeg_in_local_bin = local_bin.join(EXECUTABLE_NAME);
             if ffmpeg_in_local_bin.exists() {
-                debug!("Found ffmpeg in $HOME/.local/bin: {:?}", ffmpeg_in_local_bin);
+                debug!(
+                    "Found ffmpeg in $HOME/.local/bin: {:?}",
+                    ffmpeg_in_local_bin
+                );
                 return Some(ffmpeg_in_local_bin);
             }
             debug!("ffmpeg not found in $HOME/.local/bin");
@@ -158,36 +161,51 @@ fn handle_ffmpeg_installation() -> Result<(), anyhow::Error> {
 #[cfg(target_os = "macos")]
 fn get_ffmpeg_install_dir() -> Result<PathBuf, anyhow::Error> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("couldn't find home directory"))?;
-
     let local_bin = home.join(".local").join("bin");
 
     // Create directory if it doesn't exist
     if !local_bin.exists() {
         debug!("creating .local/bin directory");
         std::fs::create_dir_all(&local_bin)?;
+    }
 
-        // Check both .bashrc and .zshrc
-        let shell_configs = vec![
-            home.join(".bashrc"),
-            home.join(".bash_profile"), // macOS often uses .bash_profile instead of .bashrc
-            home.join(".zshrc"),
-        ];
+    // Set directory permissions to 755 (rwxr-xr-x) regardless if it existed or not
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&local_bin, std::fs::Permissions::from_mode(0o755))?;
+    }
 
-        for config in shell_configs {
-            if config.exists() {
-                let content = std::fs::read_to_string(&config)?;
-                if !content.contains(".local/bin") {
-                    debug!("adding .local/bin to PATH in {:?}", config);
-                    std::fs::write(
-                        config,
-                        format!("{}\nexport PATH=\"$HOME/.local/bin:$PATH\"\n", content),
-                    )?;
-                }
+    // Check both .bashrc and .zshrc
+    let shell_configs = vec![
+        home.join(".bashrc"),
+        home.join(".bash_profile"), // macOS often uses .bash_profile instead of .bashrc
+        home.join(".zshrc"),
+    ];
+
+    for config in shell_configs {
+        if config.exists() {
+            let content = std::fs::read_to_string(&config)?;
+            if !content.contains(".local/bin") {
+                debug!("adding .local/bin to PATH in {:?}", config);
+                std::fs::write(
+                    config,
+                    format!("{}\nexport PATH=\"$HOME/.local/bin:$PATH\"\n", content),
+                )?;
             }
         }
     }
 
-    Ok(local_bin)
+    // Ensure the directory is writable
+    let metadata = std::fs::metadata(&local_bin)?;
+    if !metadata.permissions().readonly() {
+        Ok(local_bin)
+    } else {
+        Err(anyhow::anyhow!(
+            "Directory {} is not writable. Please check permissions",
+            local_bin.display()
+        ))
+    }
 }
 
 // For other platforms, keep your existing installation directory logic

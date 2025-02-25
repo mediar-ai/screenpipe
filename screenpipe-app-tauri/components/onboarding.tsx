@@ -153,7 +153,6 @@ const Onboarding: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const { showOnboarding, setShowOnboarding } = useOnboarding();
-  const { updateSettings } = useSettings();
 
   useEffect(() => {
     setIsVisible(true);

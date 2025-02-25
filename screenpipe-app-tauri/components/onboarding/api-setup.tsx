@@ -87,12 +87,28 @@ const OnboardingAPISetup: React.FC<OnboardingAPISetupProps> = ({
         });
       } else {
         const errorData = await response.json();
-        newErrors.openaiApiKey = `invalid api key or model: ${
-          errorData.error?.message.toLowerCase() || "unknown error"
-        }`;
+        console.log("errorData", errorData);
+
+        if (response.status === 401) {
+          if (aiUrl.includes("worker")) {
+            newErrors.openaiApiKey =
+              "unauthorized: please login or check your subscription";
+          } else {
+            newErrors.openaiApiKey = "unauthorized: invalid api key";
+          }
+        } else {
+          newErrors.openaiApiKey = `invalid api key or model: ${
+            errorData.error?.message?.toLowerCase() || "unknown error"
+          }`;
+        }
       }
     } catch (error: any) {
-      newErrors.openaiApiKey = `failed to validate api key: ${error.message.toLowerCase()}`;
+      if (error.message.includes("Failed to fetch")) {
+        newErrors.openaiApiKey =
+          "connection failed: check your internet or ai provider url";
+      } else {
+        newErrors.openaiApiKey = `failed to validate api key: ${error.message.toLowerCase()}`;
+      }
     }
 
     setErrors(newErrors);
