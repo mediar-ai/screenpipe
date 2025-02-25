@@ -1433,30 +1433,20 @@ impl DatabaseManager {
     ) -> Result<TimeSeriesChunk, SqlxError> {
         // Get frames with OCR data, grouped by minute to handle multiple monitors
         let frames_query = r#"
-        WITH MinuteGroups AS (
-            SELECT
-                f.id,
-                f.timestamp,
-                f.offset_index,
-                ot.text,
-                ot.app_name,
-                ot.window_name,
-                vc.device_name as screen_device,
-                vc.file_path as video_path,
-                strftime('%Y-%m-%d %H:%M', f.timestamp) as minute_group,
-                ROW_NUMBER() OVER (
-                    PARTITION BY strftime('%Y-%m-%d %H:%M', f.timestamp), ot.app_name, vc.device_name
-                    ORDER BY f.timestamp DESC
-                ) as rn
-            FROM frames f
-            JOIN video_chunks vc ON f.video_chunk_id = vc.id
-            LEFT JOIN ocr_text ot ON f.id = ot.frame_id
-            WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-        )
-        SELECT *
-        FROM MinuteGroups
-        WHERE rn = 1
-        ORDER BY timestamp DESC, offset_index DESC
+         SELECT
+            f.id,
+            f.timestamp,
+            f.offset_index,
+            ot.text,
+            ot.app_name,
+            ot.window_name,
+            vc.device_name as screen_device,
+            vc.file_path as video_path
+        FROM frames f
+        JOIN video_chunks vc ON f.video_chunk_id = vc.id
+        LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+        WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+        ORDER BY f.timestamp DESC, f.offset_index DESC
     "#;
 
         // Get audio data with proper time windows for synchronization
