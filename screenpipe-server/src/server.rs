@@ -37,8 +37,11 @@ use crate::{
     PipeManager,
 };
 use chrono::{DateTime, Utc};
-use screenpipe_audio::core::device::{
-    default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+use screenpipe_audio::{
+    audio_manager::audio_manager::AudioManager,
+    core::device::{
+        default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
+    },
 };
 use tracing::{debug, error, info};
 
@@ -948,6 +951,7 @@ impl SCServer {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
+        audio_manager: &AudioManager,
     ) -> Self {
         SCServer {
             db,

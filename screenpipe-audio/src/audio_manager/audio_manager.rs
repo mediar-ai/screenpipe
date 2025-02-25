@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use std::{
     sync::{atomic::Ordering, Arc},
@@ -10,7 +10,10 @@ use tracing::{error, info};
 use screenpipe_db::DatabaseManager;
 
 use crate::{
-    core::{device::AudioDevice, record_and_transcribe},
+    core::{
+        device::{parse_audio_device, AudioDevice},
+        record_and_transcribe,
+    },
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{
@@ -29,21 +32,29 @@ pub enum AudioManagerStatus {
     Stopped,
 }
 
+// #[derive(Debug, Clone, Eq, PartialEq)]
+// pub enum AudioManagerHealth {
+//     Healthy,
+//     Unhealthy,
+// }
+
+#[derive(Clone)]
 pub struct AudioManager {
     options: AudioManagerOptions,
     device_manager: Arc<DeviceManager>,
     segmentation_manager: Arc<SegmentationManager>,
-    status: Mutex<AudioManagerStatus>,
+    status: Arc<Mutex<AudioManagerStatus>>,
     db: Arc<DatabaseManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     whisper_model: Arc<Mutex<WhisperModel>>,
-    audio_receiver_handle: Option<JoinHandle<()>>,
+    audio_receiver_handle: Arc<Option<JoinHandle<()>>>,
     recording_handles: DashMap<AudioDevice, Arc<Mutex<tokio::task::JoinHandle<Result<()>>>>>,
     whisper_sender: crossbeam::channel::Sender<AudioInput>,
     whisper_receiver: crossbeam::channel::Receiver<AudioInput>,
     transcription_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     transcription_sender: crossbeam::channel::Sender<TranscriptionResult>,
-    transcription_receiver_handle: Option<JoinHandle<()>>,
+    transcription_receiver_handle: Arc<Option<JoinHandle<()>>>,
+    // health: AudioManagerHealth,
 }
 
 impl AudioManager {
@@ -69,7 +80,7 @@ impl AudioManager {
             options,
             device_manager: Arc::new(device_manager),
             segmentation_manager,
-            status,
+            status: Arc::new(status),
             db,
             vad_engine,
             whisper_model,
@@ -78,8 +89,9 @@ impl AudioManager {
             transcription_receiver,
             transcription_sender,
             recording_handles,
-            audio_receiver_handle: None,
-            transcription_receiver_handle: None,
+            audio_receiver_handle: Arc::new(None),
+            transcription_receiver_handle: Arc::new(None),
+            // health: AudioManagerHealth::Healthy,
         })
     }
 
@@ -105,15 +117,15 @@ impl AudioManager {
         let transcription_receiver = self.transcription_receiver.clone();
         let transcription_sender = self.transcription_sender.clone();
 
-        self.transcription_receiver_handle = Some(
+        self.transcription_receiver_handle = Arc::new(Some(
             self.start_transcription_receiver_handler(transcription_receiver)
                 .await?,
-        );
+        ));
 
-        self.audio_receiver_handle = Some(
+        self.audio_receiver_handle = Arc::new(Some(
             self.start_audio_receiver_handler(transcription_sender)
                 .await?,
-        );
+        ));
 
         Ok(())
     }
@@ -128,25 +140,40 @@ impl AudioManager {
         Ok(devices)
     }
 
-    // pub async fn disable_device(&mut self, device_name: &str) -> Result<()> {
-    //     // Disable specific audio device
-    //     Ok(())
-    // }
+    pub async fn disable_device(&mut self, device_name: &str) -> Result<()> {
+        // Disable specific audio device
+        let device = match parse_audio_device(device_name) {
+            Ok(device) => device,
+            Err(_) => return Err(anyhow!("Device {} not found", device_name)),
+        };
 
-    pub async fn stop(&mut self) -> Result<()> {
+        self.device_manager.stop_device(&device)?;
+
+        if let Some(pair) = self.recording_handles.get(&device) {
+            let handle = pair.value();
+
+            handle.lock().await.abort();
+        }
+
+        self.recording_handles.remove(&device);
+
+        Ok(())
+    }
+
+    // Stop all audio processing
+    pub async fn stop(&self) -> Result<()> {
         self.recording_handles.clear();
         self.device_manager.stop_all_devices();
-        if let Some(handle) = self.audio_receiver_handle.take() {
-            handle.abort()
-        };
 
-        if let Some(handle) = self.transcription_receiver_handle.take() {
-            handle.abort()
-        };
+        if let Some(Some(handle)) = Arc::into_inner(self.audio_receiver_handle.clone()) {
+            handle.abort();
+        }
+        if let Some(Some(handle)) = Arc::into_inner(self.transcription_receiver_handle.clone()) {
+            handle.abort();
+        }
 
         *self.status.lock().await = AudioManagerStatus::Stopped;
 
-        // Stop all audio processing
         Ok(())
     }
 

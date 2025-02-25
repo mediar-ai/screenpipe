@@ -1,23 +1,16 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
-use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
-    audio_manager::{
-        self,
-        audio_manager::{AudioManager, AudioManagerStatus},
-        AudioManagerBuilder, AudioManagerOptions,
-    },
+    audio_manager::{audio_manager::AudioManagerStatus, AudioManagerBuilder},
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-        trigger_audio_permission, AudioDevice, DeviceControl,
+        trigger_audio_permission,
     },
-    transcription::{
-        deepgram::streaming::RealtimeTranscriptionEvent, whisper::model::WhisperModel,
-    },
+    transcription::whisper::model::WhisperModel,
     vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
@@ -38,7 +31,6 @@ use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     env, fs,
     io::Write,
     net::SocketAddr,
@@ -572,8 +564,6 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let mut devices_status = HashMap::new();
-
     if !is_local_ipv4_port_free(cli.port) {
         error!(
             "you're likely already running screenpipe instance in a different environment, e.g. terminal/ide, close it and restart or use different port"
@@ -581,74 +571,32 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("port already in use"));
     }
 
-    let all_audio_devices = list_audio_devices().await?;
-
     let all_monitors = list_monitors().await;
 
     let mut audio_devices = Vec::new();
-
-    let audio_devices_control = Arc::new(DashMap::new());
-    let audio_devices_control_recording = audio_devices_control.clone();
+    let audio_devices_clone = audio_devices.clone();
 
     let mut realtime_audio_devices = Vec::new();
-
-    // Add all available audio devices to the controls
-    for device in &all_audio_devices {
-        let device_control = DeviceControl {
-            is_running: false,
-            is_paused: false,
-        };
-        devices_status.insert(device.clone(), device_control);
-    }
 
     if !cli.disable_audio {
         if cli.audio_device.is_empty() {
             // Use default devices
             if let Ok(input_device) = default_input_device() {
-                audio_devices.push(Arc::new(input_device.clone()));
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                devices_status.insert(input_device, device_control);
+                audio_devices.push(input_device.name);
             }
             if let Ok(output_device) = default_output_device() {
-                audio_devices.push(Arc::new(output_device.clone()));
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                devices_status.insert(output_device, device_control);
+                audio_devices.push(output_device.name);
             }
         } else {
             // Use specified devices
             for d in &cli.audio_device {
                 let device = parse_audio_device(d).expect("failed to parse audio device");
-                audio_devices.push(Arc::new(device.clone()));
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                devices_status.insert(device, device_control);
+                audio_devices.push(device.name);
             }
         }
 
         if audio_devices.is_empty() {
-            eprintln!("no audio devices available. audio recording will be disabled.");
-        } else {
-            for device in &audio_devices {
-                let device_control = DeviceControl {
-                    is_running: true,
-                    is_paused: false,
-                };
-                let device_clone = device.deref().clone();
-                let sender_clone = audio_devices_control.clone();
-                // send signal after everything started
-                tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                    sender_clone.insert(device_clone, device_control);
-                });
-            }
+            warn!("no audio devices available.");
         }
 
         if cli.enable_realtime_audio_transcription {
@@ -711,7 +659,6 @@ async fn main() -> anyhow::Result<()> {
     let vision_runtime = Runtime::new().unwrap();
     let pipes_runtime = Runtime::new().unwrap();
 
-    let audio_handle = audio_runtime.handle().clone();
     let vision_handle = vision_runtime.handle().clone();
     let pipes_handle = pipes_runtime.handle().clone();
 
@@ -731,67 +678,59 @@ async fn main() -> anyhow::Result<()> {
         1.0
     };
 
-    let deepgram_api_key = cli.deepgram_api_key.clone();
-
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
-    let (realtime_vision_sender, _) =
-        tokio::sync::broadcast::channel::<RealtimeTranscriptionEvent>(1000);
-    let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
-    let realtime_vision_sender_clone = realtime_vision_sender.clone();
 
     let audio_manager_builder = AudioManagerBuilder::new()
         // TODO: Fix this to duration not usize...
         .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
+        .vad_engine(vad_engine.into())
+        .vad_sensitivity(cli.vad_sensitivity.into())
+        .languages(languages.clone())
+        .transcription_engine(cli.audio_transcription_engine.into())
+        .realtime(cli.enable_realtime_audio_transcription)
+        .enabled_devices(audio_devices)
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
     let mut audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
 
-    audio_manager.start().await.unwrap();
+    if !cli.disable_audio {
+        audio_manager.start().await.unwrap();
+    }
 
+    let audio_manager_clone = audio_manager.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
             loop {
-                let vad_engine_clone = vad_engine.clone(); // Clone it here for each iteration
                 let mut shutdown_rx = shutdown_tx_clone.subscribe();
                 let recording_future = start_continuous_recording(
                     db_clone.clone(),
                     output_path_clone.clone(),
                     fps,
-                    audio_chunk_duration,
                     Duration::from_secs(cli.video_chunk_duration),
                     vision_control_clone.clone(),
-                    audio_devices_control_recording.clone(),
-                    cli.disable_audio,
-                    Arc::new(cli.audio_transcription_engine.clone().into()),
                     Arc::new(cli.ocr_engine.clone().into()),
                     monitor_ids_clone.clone(),
                     cli.use_pii_removal,
                     cli.disable_vision,
-                    vad_engine_clone,
                     &vision_handle,
-                    &audio_handle,
                     &cli.ignored_windows,
                     &cli.included_windows,
-                    deepgram_api_key.clone(),
-                    cli.vad_sensitivity.clone(),
-                    languages.clone(),
+                    languages_clone.clone(),
                     cli.capture_unfocused_windows,
-                    realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
-                    cli.enable_realtime_vision,
                 );
 
                 let result = tokio::select! {
                     result = recording_future => result,
                     _ = shutdown_rx.recv() => {
-                        audio_manager.stop().await.unwrap();
+                        audio_manager_clone.stop().await.unwrap();
                         info!("received shutdown signal for recording");
                         break;
                     }
                 };
 
-                while audio_manager.status().await == AudioManagerStatus::Running {
+                while audio_manager_clone.status().await == AudioManagerStatus::Running {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
 
@@ -819,8 +758,6 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
 
-    let (audio_devices_tx, _) = broadcast::channel(100);
-
     let server = SCServer::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -829,47 +766,8 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
+        &audio_manager.clone(),
     );
-
-    let mut rx = audio_devices_tx.subscribe();
-    let audio_devices_control_for_spawn = audio_devices_control.clone();
-    tokio::spawn(async move {
-        while let Ok((device, control)) = rx.recv().await {
-            if let Err(e) =
-                handle_device_update(&device, control, &audio_devices_control_for_spawn).await
-            {
-                error!("Device update failed: {}", e);
-                continue;
-            }
-        }
-        info!("Device monitoring task completed");
-    });
-
-    async fn handle_device_update(
-        device: &AudioDevice,
-        control: DeviceControl,
-        devices_control: &DashMap<AudioDevice, DeviceControl>,
-    ) -> anyhow::Result<()> {
-        match list_audio_devices().await {
-            Ok(available_devices) => {
-                if !available_devices.contains(device) {
-                    return Err(anyhow::anyhow!(
-                        "attempted to control non-existent device: {}",
-                        device.name
-                    ));
-                }
-
-                // Update the device state
-                devices_control.insert(device.clone(), control.clone());
-                info!(
-                    "Device state changed: {} - running: {}",
-                    device.name, control.is_running
-                );
-                Ok(())
-            }
-            Err(e) => Err(anyhow::anyhow!("failed to list audio devices: {}", e)),
-        }
-    }
 
     // print screenpipe in gradient
     println!("\n\n{}", DISPLAY.truecolor(147, 112, 219).bold());
@@ -993,11 +891,7 @@ async fn main() -> anyhow::Result<()> {
         println!("│ {:<22} │ {:<34} │", "", "all languages");
     } else {
         let total_languages = cli.language.len();
-        for (_, language) in languages_clone
-            .iter()
-            .enumerate()
-            .take(MAX_ITEMS_TO_DISPLAY)
-        {
+        for (_, language) in languages.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
             let language_str = format!("id: {}", language);
             let formatted_language = format_cell(&language_str, VALUE_WIDTH);
             println!("│ {:<22} │ {:<34} │", "", formatted_language);
@@ -1041,11 +935,15 @@ async fn main() -> anyhow::Result<()> {
 
     if cli.disable_audio {
         println!("│ {:<22} │ {:<34} │", "", "disabled");
-    } else if audio_devices.is_empty() {
+    } else if audio_devices_clone.is_empty() {
         println!("│ {:<22} │ {:<34} │", "", "no devices available");
     } else {
-        let total_devices = audio_devices.len();
-        for (_, device) in audio_devices.iter().enumerate().take(MAX_ITEMS_TO_DISPLAY) {
+        let total_devices = audio_devices_clone.len();
+        for (_, device) in audio_devices_clone
+            .iter()
+            .enumerate()
+            .take(MAX_ITEMS_TO_DISPLAY)
+        {
             let device_str = device.deref().to_string();
             let formatted_device = format_cell(&device_str, VALUE_WIDTH);
 

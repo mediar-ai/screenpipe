@@ -1,24 +1,19 @@
-use crate::cli::{CliVadEngine, CliVadSensitivity};
 use crate::VideoCapture;
 use anyhow::Result;
 use dashmap::DashMap;
 use futures::future::join_all;
-use screenpipe_audio::audio_manager::audio_manager::AudioManager;
-use screenpipe_audio::audio_manager::{AudioManagerBuilder, AudioManagerOptions};
 use screenpipe_audio::core::device::{AudioDevice, DeviceControl};
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::core::stream::AudioStream;
 use screenpipe_audio::core::{record_and_transcribe, start_realtime_recording};
-use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
-use screenpipe_audio::{create_whisper_channel, AudioInput, TranscriptionResult};
+use screenpipe_audio::{AudioInput, TranscriptionResult};
 use screenpipe_core::pii_removal::remove_pii;
 use screenpipe_core::Language;
 use screenpipe_db::{DatabaseManager, Speaker};
 use screenpipe_events::{poll_meetings_events, send_event};
-use screenpipe_vision::core::{RealtimeVisionEvent, WindowOcr};
+use screenpipe_vision::core::WindowOcr;
 use screenpipe_vision::OcrEngine;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,27 +26,17 @@ pub async fn start_continuous_recording(
     db: Arc<DatabaseManager>,
     output_path: Arc<String>,
     fps: f64,
-    audio_chunk_duration: Duration,
     video_chunk_duration: Duration,
     vision_control: Arc<AtomicBool>,
-    audio_devices_control: Arc<DashMap<AudioDevice, DeviceControl>>,
-    audio_disabled: bool,
-    audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     ocr_engine: Arc<OcrEngine>,
     monitor_ids: Vec<u32>,
     use_pii_removal: bool,
     vision_disabled: bool,
-    vad_engine: CliVadEngine,
     vision_handle: &Handle,
-    audio_handle: &Handle,
     ignored_windows: &[String],
     include_windows: &[String],
-    deepgram_api_key: Option<String>,
-    vad_sensitivity: CliVadSensitivity,
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
-    realtime_audio_devices: Vec<Arc<AudioDevice>>,
-    realtime_audio_enabled: bool,
     realtime_vision: bool,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
@@ -109,17 +94,6 @@ pub async fn start_continuous_recording(
             error!("Video recording error for monitor {}: {:?}", i, e);
         }
     }
-    // if let Err(e) = audio_task.await {
-    //     error!("Audio recording error: {:?}", e);
-    // }
-
-    // // Shutdown the whisper channel
-    // whisper_shutdown_flag.store(true, Ordering::Relaxed);
-    // drop(whisper_sender_clone); // Close the sender channel
-
-    // TODO: process any remaining audio chunks
-    // TODO: wait a bit for whisper to finish processing
-    // TODO: any additional cleanup like device controls to release
 
     Ok(())
 }
