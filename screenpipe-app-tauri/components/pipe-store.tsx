@@ -33,7 +33,7 @@ import { useLoginDialog } from "./login-dialog";
 import { PermissionButtons } from "./status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
 
-const corePipes: string[] = ["data-table", "search"];
+const corePipes: string[] = [];
 
 export const PipeStore: React.FC = () => {
   const { health } = useHealthCheck();
