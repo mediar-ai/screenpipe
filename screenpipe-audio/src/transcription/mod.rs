@@ -18,4 +18,5 @@ mod text_utils;
 
 mod transcription_result;
 
+pub use transcription_result::process_transcription_result;
 pub use transcription_result::TranscriptionResult;

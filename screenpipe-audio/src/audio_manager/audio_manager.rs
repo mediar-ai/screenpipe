@@ -13,7 +13,9 @@ use crate::{
     core::{device::AudioDevice, record_and_transcribe},
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
-    transcription::{stt::process_audio_input, whisper::model::WhisperModel},
+    transcription::{
+        process_transcription_result, stt::process_audio_input, whisper::model::WhisperModel,
+    },
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
     AudioInput, TranscriptionResult,
 };
@@ -224,9 +226,54 @@ impl AudioManager {
         &self,
         transcription_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     ) -> Result<JoinHandle<()>> {
+        let db = self.db.clone();
+        let transcription_engine = self.options.transcription_engine.clone();
         Ok(tokio::spawn(async move {
-            while let Ok(transcription) = transcription_receiver.recv() {
-                info!("Received transcription: {:?}", transcription.transcription);
+            let mut previous_transcript = "".to_string();
+            let mut previous_transcript_id: Option<i64> = None;
+            while let Ok(mut transcription) = transcription_receiver.recv() {
+                info!(
+                    "device {} received transcription {:?}",
+                    transcription.input.device, transcription.transcription
+                );
+
+                // Insert the new transcript after fetching
+                let mut current_transcript: Option<String> = transcription.transcription.clone();
+                let mut processed_previous: Option<String> = None;
+                if let Some((previous, current)) =
+                    transcription.cleanup_overlap(previous_transcript.clone())
+                {
+                    if !previous.is_empty() && !current.is_empty() {
+                        if previous != previous_transcript {
+                            processed_previous = Some(previous);
+                        }
+                        if current_transcript.is_some()
+                            && current != current_transcript.clone().unwrap_or_default()
+                        {
+                            current_transcript = Some(current);
+                        }
+                    }
+                }
+
+                transcription.transcription = current_transcript.clone();
+                if current_transcript.is_some() {
+                    previous_transcript = current_transcript.unwrap();
+                } else {
+                    continue;
+                }
+                // Process the transcription result
+                match process_transcription_result(
+                    &db,
+                    transcription,
+                    transcription_engine.clone(),
+                    processed_previous,
+                    previous_transcript_id,
+                )
+                .await
+                {
+                    Err(e) => error!("Error processing audio result: {}", e),
+                    Ok(id) => previous_transcript_id = id,
+                }
             }
         }))
     }
