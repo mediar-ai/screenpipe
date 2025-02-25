@@ -673,6 +673,14 @@ export function RecordingSettings() {
     }
   };
 
+  const handleHwAccelChange = (value: string) => {
+    handleSettingsChange({ hwAccel: value });
+  };
+
+  const handleHwAccelDeviceChange = (value: string) => {
+    handleSettingsChange({ hwAccelDevice: value });
+  };
+
   return (
     <div className="w-full space-y-6 py-4">
       <h1 className="text-2xl font-bold mb-4">recording</h1>
@@ -930,7 +938,25 @@ export function RecordingSettings() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label>video codec</Label>
+                      <Label className="flex items-center space-x-2">
+                        <span>video codec</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <HelpCircle className="h-4 w-4 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>
+                                h264/avc: fast encoding, high compatibility
+                                <br />
+                                h265/hevc: better compression, slower encoding
+                                <br />
+                                av1: best compression, slowest encoding
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
                       <Select
                         value={settings.videoCodec}
                         onValueChange={handleVideoCodecChange}
@@ -939,8 +965,9 @@ export function RecordingSettings() {
                           <SelectValue placeholder="select video codec" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="libx264">h264/avc (fast, compatible)</SelectItem>
                           <SelectItem value="libx265">h265/hevc (smaller, slower)</SelectItem>
-                          <SelectItem value="libx264">h264/avc (faster, larger)</SelectItem>
+                          <SelectItem value="libaom-av1">av1 (best compression, slowest)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -981,6 +1008,39 @@ export function RecordingSettings() {
                         current: {settings.videoCrf || 23} (lower = better quality)
                       </div>
                     </div>
+                    
+                    <div className="space-y-2">
+                      <Label>hardware acceleration</Label>
+                      <Select
+                        value={settings.hwAccel || "none"}
+                        onValueChange={handleHwAccelChange}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="select hardware acceleration" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">none (software)</SelectItem>
+                          <SelectItem value="vaapi">vaapi (intel/amd)</SelectItem>
+                          <SelectItem value="nvenc">nvenc (nvidia)</SelectItem>
+                          <SelectItem value="qsv">qsv (intel quicksync)</SelectItem>
+                          <SelectItem value="videotoolbox">videotoolbox (macos)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {settings.hwAccel === "vaapi" && (
+                      <div className="space-y-2">
+                        <Label>hardware device</Label>
+                        <Input
+                          placeholder="/dev/dri/renderD128"
+                          value={settings.hwAccelDevice || ""}
+                          onChange={(e) => handleHwAccelDeviceChange(e.target.value)}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                          device path for vaapi (e.g., /dev/dri/renderD128)
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

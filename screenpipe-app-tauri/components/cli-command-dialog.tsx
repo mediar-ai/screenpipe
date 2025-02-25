@@ -140,6 +140,25 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-realtime-audio-transcription");
     }
 
+    if (settings.videoCodec) {
+      args.push(`--video-codec ${settings.videoCodec}`);
+    }
+
+    if (settings.videoPreset) {
+      args.push(`--video-preset ${settings.videoPreset}`);
+    }
+
+    if (settings.videoCrf) {
+      args.push(`--video-crf ${settings.videoCrf}`);
+    }
+
+    if (settings.hwAccel) {
+      args.push(`--hw-accel ${settings.hwAccel}`);
+    }
+    if (settings.hwAccelDevice) {
+      args.push(`--hw-accel-device ${settings.hwAccelDevice}`);
+    }
+
     const envVarsStr =
       envVars.length > 0
         ? `${envVars.join(shell === "cmd" ? " && " : " ")} `

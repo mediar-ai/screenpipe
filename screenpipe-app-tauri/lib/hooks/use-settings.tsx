@@ -108,6 +108,8 @@ export type Settings = {
   videoCodec: string;
   videoPreset: string;
   videoCrf: number;
+  hwAccel: string;
+  hwAccelDevice: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -171,6 +173,8 @@ const DEFAULT_SETTINGS: Settings = {
   videoCodec: "libx265",
   videoPreset: "ultrafast",
   videoCrf: 23,
+  hwAccel: "",
+  hwAccelDevice: "",
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [

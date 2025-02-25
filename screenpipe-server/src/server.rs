@@ -1156,6 +1156,8 @@ async fn write_frames_to_video(
         codec: "libx265".to_string(),
         preset: "ultrafast".to_string(),
         crf: 23,
+        hw_accel: None,
+        hw_accel_device: None,
     });
     let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps, &encoder_settings).await?;
     let mut ffmpeg_stdin = ffmpeg_child
@@ -1249,6 +1251,8 @@ pub(crate) async fn add_to_database(
                             codec: "libx265".to_string(),
                             preset: "ultrafast".to_string(),
                             crf: 23,
+                            hw_accel: None,
+                            hw_accel_device: None,
                         }),
                     )
                     .await

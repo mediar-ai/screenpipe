@@ -127,7 +127,10 @@ pub struct Cli {
     #[cfg_attr(target_os = "macos", arg(short, long, default_value_t = 0.5))] 
     pub fps: f64, // ! not crazy about this (inconsistent behaviour across platforms) see https://github.com/mediar-ai/screenpipe/issues/173
     
-    /// Video codec to use for recording (h264/avc or h265/hevc)
+    /// Video codec to use for recording
+    /// libx264 (h264): Fast encoding, high compatibility
+    /// libx265 (h265): Better compression, slower encoding
+    /// libaom-av1 (av1): Best compression, slowest encoding
     #[arg(long, default_value = "libx265")]
     pub video_codec: String,
 
@@ -138,6 +141,14 @@ pub struct Cli {
     /// Video quality (CRF value: 0-51, lower is better quality but larger file size)
     #[arg(long, default_value_t = 23)]
     pub video_crf: u32,
+
+    /// Hardware acceleration method (e.g., vaapi, nvenc, qsv, videotoolbox)
+    #[arg(long)]
+    pub hw_accel: Option<String>,
+    
+    /// Hardware acceleration device (e.g., /dev/dri/renderD128 for vaapi)
+    #[arg(long)]
+    pub hw_accel_device: Option<String>,
 
     /// Audio chunk duration in seconds
     #[arg(short = 'd', long, default_value_t = 30)]

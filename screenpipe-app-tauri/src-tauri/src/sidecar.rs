@@ -284,6 +284,15 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_u64())
         .unwrap_or(23);
 
+    // Add hardware acceleration settings
+    let hw_accel = store
+        .get("hwAccel")
+        .and_then(|v| v.as_str().map(String::from));
+        
+    let hw_accel_device = store
+        .get("hwAccelDevice")
+        .and_then(|v| v.as_str().map(String::from));
+
     let user = User::from_store(&store);
 
     println!("user: {:?}", user);
@@ -433,6 +442,17 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if disable_vision {
         args.push("--disable-vision");
+    }
+
+    // Add hardware acceleration arguments if provided
+    if let Some(hw_accel_value) = &hw_accel {
+        args.push("--hw-accel");
+        args.push(hw_accel_value);
+        
+        if let Some(hw_device_value) = &hw_accel_device {
+            args.push("--hw-accel-device");
+            args.push(hw_device_value);
+        }
     }
 
     // args.push("--debug");

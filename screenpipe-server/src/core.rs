@@ -53,6 +53,8 @@ pub async fn start_continuous_recording(
     video_codec: String,
     video_preset: String,
     video_crf: u32,
+    hw_accel: Option<String>,
+    hw_accel_device: Option<String>,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -71,6 +73,8 @@ pub async fn start_continuous_recording(
                     codec: video_codec.clone(),
                     preset: video_preset.clone(),
                     crf: video_crf,
+                    hw_accel: hw_accel.clone(),
+                    hw_accel_device: hw_accel_device.clone(),
                 });
 
                 debug!("Starting video recording for monitor {}", monitor_id);
@@ -227,6 +231,8 @@ async fn record_video(
         codec: "libx265".to_string(),
         preset: "ultrafast".to_string(),
         crf: 23,
+        hw_accel: None,
+        hw_accel_device: None,
     });
 
     let video_capture = VideoCapture::new(

@@ -31,6 +31,8 @@ pub struct VideoEncoderSettings {
     pub codec: String,
     pub preset: String,
     pub crf: u32,
+    pub hw_accel: Option<String>,
+    pub hw_accel_device: Option<String>,
 }
 
 impl VideoCapture {
@@ -165,7 +167,24 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64, encoder_settings:
     info!("Starting FFmpeg process for file: {}", output_file);
     let fps_str = fps.to_string();
     let mut command = Command::new(find_ffmpeg_path().unwrap());
-    let mut args = vec![
+    let mut args = vec![];
+    
+    // Add hardware acceleration if specified
+    if let Some(hw_accel) = &encoder_settings.hw_accel {
+        if !hw_accel.is_empty() {
+            args.extend_from_slice(&["-hwaccel", hw_accel]);
+            
+            // Add hardware acceleration device if specified
+            if let Some(hw_device) = &encoder_settings.hw_accel_device {
+                if !hw_device.is_empty() {
+                    args.extend_from_slice(&["-hwaccel_device", hw_device]);
+                }
+            }
+        }
+    }
+    
+    // Add input arguments
+    args.extend_from_slice(&[
         "-f",
         "image2pipe",
         "-vcodec",
@@ -176,17 +195,48 @@ pub async fn start_ffmpeg_process(output_file: &str, fps: f64, encoder_settings:
         "-",
         "-vf",
         "pad=width=ceil(iw/2)*2:height=ceil(ih/2)*2",
-    ];
+    ]);
 
     let crf_str = encoder_settings.crf.to_string();
-    args.extend_from_slice(&[
-        "-vcodec",
-        &encoder_settings.codec,
-        "-preset",
-        &encoder_settings.preset,
-        "-crf",
-        &crf_str,
-    ]);
+    
+    // Add codec and encoding parameters based on the selected codec
+    args.push("-vcodec");
+    args.push(&encoder_settings.codec);
+    
+    match encoder_settings.codec.as_str() {
+        "libx264" => {
+            // H.264 specific settings
+            args.extend_from_slice(&[
+                "-preset", &encoder_settings.preset,
+                "-crf", &crf_str,
+            ]);
+        },
+        "libx265" => {
+            // H.265/HEVC specific settings
+            args.extend_from_slice(&[
+                "-tag:v", "hvc1",
+                "-preset", &encoder_settings.preset,
+                "-crf", &crf_str,
+            ]);
+        },
+        "libaom-av1" => {
+            // AV1 specific settings
+            args.extend_from_slice(&[
+                "-strict", "experimental",
+                "-cpu-used", "8", // Speed setting for AV1 (0-8, higher is faster)
+                "-crf", &crf_str,
+                "-row-mt", "1", // Enable row-based multithreading
+            ]);
+        },
+        _ => {
+            // Default to H.265 settings for unknown codecs
+            args.extend_from_slice(&[
+                "-tag:v", "hvc1",
+                "-preset", &encoder_settings.preset,
+                "-crf", &crf_str,
+            ]);
+        }
+    }
 
     args.extend_from_slice(&["-pix_fmt", "yuv420p", output_file]);
 

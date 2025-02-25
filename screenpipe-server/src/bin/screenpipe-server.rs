@@ -579,6 +579,8 @@ async fn main() -> anyhow::Result<()> {
                     cli.video_codec.clone(),
                     cli.video_preset.clone(),
                     cli.video_crf.clone(),
+                    cli.hw_accel.clone(),
+                    cli.hw_accel_device.clone(),
                 );
 
                 let result = tokio::select! {
