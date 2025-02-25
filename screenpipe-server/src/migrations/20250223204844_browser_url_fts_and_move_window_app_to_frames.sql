@@ -25,6 +25,17 @@ CREATE VIRTUAL TABLE IF NOT EXISTS frames_fts USING fts5(
     tokenize='unicode61'
 );
 
+-- DATA_MIGRATION: This migration only handles schema changes.
+-- The actual data migration from ocr_text to frames table should be done 
+-- in a background process to avoid blocking database operations.
+-- 
+-- See the migration worker implementation that:
+-- 1. Runs in a separate thread or process
+-- 2. Uses small batches with transaction boundaries
+-- 3. Has retry logic and progress tracking
+-- 4. Can be paused/resumed if needed
+-- 5. Properly handles new incoming data during migration
+
 -- Create updated triggers for frames
 CREATE TRIGGER IF NOT EXISTS frames_ai AFTER INSERT ON frames BEGIN
     INSERT INTO frames_fts(id, name, browser_url, app_name, window_name, focused)
