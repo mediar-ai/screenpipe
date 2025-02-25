@@ -123,6 +123,16 @@ impl DatabaseManager {
         Ok(id)
     }
 
+    pub async fn count_audio_transcriptions(&self, audio_chunk_id: i64) -> Result<i64, sqlx::Error> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM audio_transcriptions WHERE audio_chunk_id = ?1"
+        )
+        .bind(audio_chunk_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn insert_audio_transcription(
         &self,

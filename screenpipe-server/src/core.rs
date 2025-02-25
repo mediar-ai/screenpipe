@@ -531,11 +531,16 @@ async fn process_audio_result(
                 return Ok(Some(audio_chunk_id));
             }
 
+            let offset_index = db
+                .count_audio_transcriptions(audio_chunk_id)
+                .await
+                .unwrap_or(0);
+            
             if let Err(e) = db
                 .insert_audio_transcription(
                     audio_chunk_id,
                     &transcription,
-                    0,
+                    offset_index,
                     &transcription_engine,
                     &result.input.device,
                     Some(speaker.id),
