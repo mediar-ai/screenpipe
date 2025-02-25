@@ -85,6 +85,7 @@ name = "screenpipe-vision-websocket"
 path = "examples/websocket.rs"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+uiautomation = { version = "0.16.1" }
 windows = { version = "0.58", features = [
   "Graphics_Imaging",
   "Media_Ocr",
