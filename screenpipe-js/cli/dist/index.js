@@ -62418,11 +62418,23 @@ var PIPE_ADDITIONS = {
 };
 async function downloadAndExtractSubdir(subdir, destPath) {
   const tempDir = path3.join(destPath, "_temp");
-  await import_fs_extra.default.ensureDir(tempDir);
-  await esm_default13().clone("https://github.com/mediar-ai/screenpipe", tempDir);
-  const sourcePath = path3.join(tempDir, subdir);
-  await import_fs_extra.default.copy(sourcePath, destPath);
-  await import_fs_extra.default.remove(tempDir);
+  try {
+    await import_fs_extra.default.ensureDir(destPath);
+    await import_fs_extra.default.ensureDir(tempDir);
+    const git = esm_default13();
+    await git.clone("https://github.com/mediar-ai/screenpipe", tempDir);
+    const sourcePath = path3.join(tempDir, subdir);
+    if (!await import_fs_extra.default.pathExists(sourcePath)) {
+      throw new Error(`Template directory '${subdir}' not found in repository`);
+    }
+    await import_fs_extra.default.copy(sourcePath, destPath);
+    await import_fs_extra.default.remove(tempDir);
+  } catch (error) {
+    if (await import_fs_extra.default.pathExists(tempDir)) {
+      await import_fs_extra.default.remove(tempDir);
+    }
+    throw new Error(`Failed to setup pipe: ${error.message}`);
+  }
 }
 var createPipeCommand = new Command().name("create").description("create a new pipe").action(async () => {
   console.log(source_default.bold(`
@@ -62465,8 +62477,9 @@ welcome to screenpipe!
   }
   const loadingSpinner = spinner("creating your pipe...");
   try {
-    await downloadAndExtractSubdir("pipes/obsidian", directory);
-    const pkgPath = path3.join(process.cwd(), directory, "package.json");
+    const absoluteDirectory = path3.resolve(process.cwd(), directory);
+    await downloadAndExtractSubdir("pipes/obsidian", absoluteDirectory);
+    const pkgPath = path3.join(absoluteDirectory, "package.json");
     const pkg = await import_fs_extra.default.readJson(pkgPath);
     pkg.name = pipeName;
     pkg.dependencies = {
@@ -62481,7 +62494,7 @@ welcome to screenpipe!
     loadingSpinner.succeed(source_default.green(`> pipe created successfully!`));
     console.log(`
 to get started:`);
-    console.log(source_default.cyan(`cd ${directory}`));
+    console.log(source_default.cyan(`cd ${absoluteDirectory}`));
     console.log(source_default.cyan("bun install    # or use: npm install, pnpm install, yarn"));
     console.log(source_default.cyan("bun dev      # or use: npm run dev, pnpm dev, yarn dev"));
     console.log(`
@@ -62601,6 +62614,17 @@ var registry_default = {
     ],
     devDependencies: [
       "@types/lodash"
+    ]
+  },
+  "update-pipe-config": {
+    name: "update-pipe-config",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/update-pipe-config.tsx",
+    target: "./src/lib/actions/update-pipe-config.tsx",
+    dependencies: [
+      "@screenpipe/browser"
+    ],
+    registryDependencies: [
+      "types"
     ]
   },
   "use-pipe-settings": {

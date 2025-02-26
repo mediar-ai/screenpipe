@@ -22,11 +22,29 @@ const PIPE_ADDITIONS = {
 
 async function downloadAndExtractSubdir(subdir: string, destPath: string) {
   const tempDir = path.join(destPath, "_temp");
-  await fs.ensureDir(tempDir);
-  await simpleGit().clone("https://github.com/mediar-ai/screenpipe", tempDir);
-  const sourcePath = path.join(tempDir, subdir);
-  await fs.copy(sourcePath, destPath);
-  await fs.remove(tempDir);
+  try {
+    // Ensure the destination path exists first
+    await fs.ensureDir(destPath);
+    await fs.ensureDir(tempDir);
+
+    // Use more specific error handling for git clone
+    const git = simpleGit();
+    await git.clone("https://github.com/mediar-ai/screenpipe", tempDir);
+
+    const sourcePath = path.join(tempDir, subdir);
+    if (!(await fs.pathExists(sourcePath))) {
+      throw new Error(`Template directory '${subdir}' not found in repository`);
+    }
+
+    await fs.copy(sourcePath, destPath);
+    await fs.remove(tempDir);
+  } catch (error: any) {
+    // Clean up temp directory if it exists
+    if (await fs.pathExists(tempDir)) {
+      await fs.remove(tempDir);
+    }
+    throw new Error(`Failed to setup pipe: ${error.message}`);
+  }
 }
 
 export const createPipeCommand = new Command()
@@ -73,11 +91,14 @@ export const createPipeCommand = new Command()
     const loadingSpinner = spinner("creating your pipe...");
 
     try {
+      // Ensure we have an absolute path
+      const absoluteDirectory = path.resolve(process.cwd(), directory);
+
       // Download and extract the appropriate template
-      await downloadAndExtractSubdir("pipes/obsidian", directory);
+      await downloadAndExtractSubdir("pipes/obsidian", absoluteDirectory);
 
       // Update package.json with the pipe name
-      const pkgPath = path.join(process.cwd(), directory, "package.json");
+      const pkgPath = path.join(absoluteDirectory, "package.json");
       const pkg = await fs.readJson(pkgPath);
 
       pkg.name = pipeName;
@@ -95,7 +116,7 @@ export const createPipeCommand = new Command()
       loadingSpinner.succeed(chalk.green(`> pipe created successfully!`));
 
       console.log("\nto get started:");
-      console.log(chalk.cyan(`cd ${directory}`));
+      console.log(chalk.cyan(`cd ${absoluteDirectory}`));
       console.log(
         chalk.cyan("bun install    # or use: npm install, pnpm install, yarn")
       );
