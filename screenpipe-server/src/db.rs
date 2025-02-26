@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
+use nix::NixPath;
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
@@ -1464,8 +1465,8 @@ impl DatabaseManager {
             f.timestamp,
             f.offset_index,
             ot.text,
-            f.app_name,
-            f.window_name,
+            COALESCE(f.app_name, ot.app_name) as app_name,
+            COALESCE(f.window_name, ot.window_name) as window_name,
             vc.device_name as screen_device,
             vc.file_path as video_path
         FROM frames f
@@ -2264,8 +2265,8 @@ SELECT
     f.id,
     f.timestamp,
     f.browser_url as url,
-    f.app_name,
-    f.window_name,
+    COALESCE(f.app_name, o.app_name) as app_name,
+    COALESCE(f.window_name, o.window_name) as window_name,
     o.text as ocr_text,
     o.text_json
 FROM frames f

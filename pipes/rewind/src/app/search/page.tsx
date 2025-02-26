@@ -131,8 +131,11 @@ export default function Page() {
 			) : null}
 
 			{isSearching && searchResults.length === 0 && (
-				<div className="flex flex-row gap-4 p-8" style={{ direction: "rtl" }}>
-					{Array.from({ length: 6 }).map((_, index) => (
+				<div
+					className="flex flex-row gap-4 p-8 overflow-hidden"
+					style={{ direction: "rtl" }}
+				>
+					{Array.from({ length: 8 }).map((_, index) => (
 						<SkeletonCard key={`skeleton-${index}`} />
 					))}
 				</div>
