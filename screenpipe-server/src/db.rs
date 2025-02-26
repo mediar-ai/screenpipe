@@ -743,9 +743,6 @@ impl DatabaseManager {
             }
         );
 
-        println!("sql: {}", sql);
-        println!("frame_query: {}", frame_query);
-        println!("query: {}", query);
         let query_builder = sqlx::query_as(&sql);
 
         let raw_results: Vec<OCRResultRaw> = query_builder
@@ -767,8 +764,6 @@ impl DatabaseManager {
             .bind(offset)
             .fetch_all(&self.pool)
             .await?;
-
-        println!("raw_results: {:?}", raw_results);
 
         Ok(raw_results
             .into_iter()
@@ -1629,13 +1624,6 @@ impl DatabaseManager {
             "#,
             base_sql, where_clause
         );
-
-        println!("sql: {}", sql);
-        println!("combined_query: {}", combined_query);
-        println!("start_time: {:?}", start_time);
-        println!("end_time: {:?}", end_time);
-        println!("limit: {}", limit);
-        println!("offset: {}", offset);
 
         sqlx::query_as(&sql)
             .bind(if combined_query.is_empty() {
