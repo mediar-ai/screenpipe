@@ -152,7 +152,7 @@ export default function Timeline() {
 					const direction = -Math.sign(e.deltaY);
 
 					// Change this if you want limit the index change
-					const limitIndexChange = 15;
+					const limitIndexChange = Infinity;
 
 					// Adjust index change based on scroll intensity
 					const indexChange =
