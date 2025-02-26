@@ -97,7 +97,114 @@ const results = await pipe.queryScreenpipe({
 })
 ```
 
+### common usage patterns
+
+#### fetching recent screen activity
+
+```typescript
+// Get the last hour of screen activity from Chrome
+const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+const now = new Date().toISOString()
+
+const results = await pipe.queryScreenpipe({
+  contentType: "ocr",
+  startTime: oneHourAgo,
+  endTime: now,
+  appName: "chrome",
+  limit: 50,
+  includeFrames: true, // include base64 encoded images
+})
+
+// Process results
+for (const item of results.data) {
+  console.log(`At ${item.content.timestamp}:`)
+  console.log(`Text: ${item.content.text}`)
+  
+  if (item.content.frame) {
+    // You could display or process the base64 image
+    // e.g., <img src={`data:image/png;base64,${item.content.frame}`} />
+  }
+}
+```
+
+#### searching for specific content
+
+```typescript
+// Search for "meeting notes" in all applications
+const results = await pipe.queryScreenpipe({
+  q: "meeting notes",
+  contentType: "all", // search across ocr, audio and ui
+  limit: 20,
+})
+
+// Process results based on content type
+for (const item of results.data) {
+  if (item.type === "OCR") {
+    console.log(`Screen text: ${item.content.text}`)
+  } else if (item.type === "Audio") {
+    console.log(`Audio transcript: ${item.content.transcription}`)
+    console.log(`Speaker: ${item.content.speaker_id}`)
+  } else if (item.type === "UI") {
+    console.log(`UI element: ${item.content.element_type}`)
+  }
+}
+```
+
+#### building a timeline of user activity
+
+```typescript
+// Get a full day of activity
+const startOfDay = new Date()
+startOfDay.setHours(0, 0, 0, 0)
+
+const endOfDay = new Date() 
+endOfDay.setHours(23, 59, 59, 999)
+
+// Get both screen and audio data
+const results = await pipe.queryScreenpipe({
+  contentType: "ocr+audio",
+  startTime: startOfDay.toISOString(),
+  endTime: endOfDay.toISOString(),
+  limit: 1000, // Get a large sample
+})
+
+// Group by hour for timeline visualization
+const timelineByHour = {}
+
+for (const item of results.data) {
+  const timestamp = new Date(item.content.timestamp)
+  const hour = timestamp.getHours()
+  
+  // Initialize hour bucket if needed
+  if (!timelineByHour[hour]) {
+    timelineByHour[hour] = {
+      screenEvents: 0,
+      audioEvents: 0,
+      apps: new Set(),
+    }
+  }
+  
+  // Update counts
+  if (item.type === "OCR") {
+    timelineByHour[hour].screenEvents++
+    
+    if (item.content.app_name) {
+      timelineByHour[hour].apps.add(item.content.app_name)
+    }
+  } else if (item.type === "Audio") {
+    timelineByHour[hour].audioEvents++
+  }
+}
+
+// Now timelineByHour can be used to build a visualization
+console.log(timelineByHour)
+```
+
 ### input control api
+
+requires building the backend with the `experimental` feature flag.
+
+`cargo build --release --features experimental`
 
 ```typescript
 // type text
@@ -111,6 +218,39 @@ await pipe.input.moveMouse(100, 200)
 
 // click
 await pipe.input.click("left") // "left" | "right" | "middle"
+```
+
+#### automating repetitive tasks
+
+```typescript
+// Example: Automate filling a form
+async function fillForm() {
+  // Move to input field and click
+  await pipe.input.moveMouse(300, 200)
+  await pipe.input.click("left")
+  
+  // Type name
+  await pipe.input.type("John Doe")
+  
+  // Tab to next field
+  await pipe.input.press("tab")
+  
+  // Type email
+  await pipe.input.type("john@example.com")
+  
+  // Tab to next field 
+  await pipe.input.press("tab")
+  
+  // Type message
+  await pipe.input.type("This is an automated message")
+  
+  // Submit form
+  await pipe.input.press("tab")
+  await pipe.input.press("enter")
+}
+
+// Call the function
+await fillForm()
 ```
 
 ### realtime streams
@@ -130,20 +270,91 @@ for await (const event of pipe.streamVision(true)) { // true to include images
 }
 ```
 
+#### real-time meeting summarizer
+
+```typescript
+import OpenAI from 'openai'
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+async function summarizeMeeting() {
+  let transcript = ""
+  let summaryBuffer = ""
+  let lastSummaryTime = Date.now()
+  
+  // Stream transcriptions in real-time
+  for await (const chunk of pipe.streamTranscriptions()) {
+    const text = chunk.choices[0].text
+    transcript += text + " "
+    
+    // Generate summary every 30 seconds
+    if (Date.now() - lastSummaryTime > 30000 && transcript.length > 200) {
+      const summary = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You summarize meeting transcripts concisely."
+          },
+          {
+            role: "user",
+            content: `Summarize this meeting transcript: ${transcript}`
+          }
+        ]
+      })
+      
+      summaryBuffer = summary.choices[0].message.content
+      lastSummaryTime = Date.now()
+      
+      // Display or store the summary
+      console.log("Meeting Summary Update:", summaryBuffer)
+    }
+  }
+}
+
+// Start summarizing
+summarizeMeeting().catch(console.error)
+```
+
+#### real-time screen activity monitor
+
+```typescript
+async function monitorScreenActivity() {
+  // Monitor screen content in real-time
+  for await (const event of pipe.streamVision(true)) {
+    // Check if we're looking at important apps
+    const appName = event.data.app_name?.toLowerCase() || ""
+    const text = event.data.text?.toLowerCase() || ""
+    
+    // Example: Detect when looking at email
+    if (
+      appName.includes("outlook") || 
+      appName.includes("gmail") ||
+      text.includes("inbox") ||
+      text.includes("compose email")
+    ) {
+      console.log("Email activity detected at", new Date().toLocaleTimeString())
+      
+      // You could log this, send notifications, etc.
+    }
+    
+    // Example: Track time spent in different applications
+    // This would require keeping state between events
+  }
+}
+
+// Start monitoring
+monitorScreenActivity().catch(console.error)
+```
+
 ### notifications (desktop)
 
 ```typescript
 await pipe.sendDesktopNotification({
   title: "meeting starting",
   body: "your standup begins in 5 minutes",
-  actions: [
-    {
-      id: "join",
-      label: "join meeting"
-    }
-  ],
-  timeout: 5000,
-  persistent: false
 })
 ```
 
@@ -177,7 +388,7 @@ import type {
   NotificationOptions,
   Settings,
   // ... and more
-} from '@screenpipe/js' // or @screenpipe/browser
+} from '@screenpipe/js' // or '@screenpipe/browser'
 ```
 
 key types include:
@@ -224,6 +435,62 @@ try {
 }
 ```
 
+### integrating with llms
+
+```typescript
+import OpenAI from 'openai'
+import { pipe } from '@screenpipe/js'
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+async function getContextAndQueryLLM(query) {
+  // First, get relevant context from screenpipe
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const now = new Date().toISOString()
+  
+  const results = await pipe.queryScreenpipe({
+    q: query, // Use the user's query to find relevant content
+    contentType: "all",
+    startTime: oneHourAgo,
+    endTime: now,
+    limit: 20,
+  })
+  
+  // Extract text from results
+  let contextText = ""
+  for (const item of results.data) {
+    if (item.type === "OCR") {
+      contextText += `[Screen Text]: ${item.content.text}\n`
+    } else if (item.type === "Audio") {
+      contextText += `[Audio Transcript]: ${item.content.transcription}\n`
+    }
+  }
+  
+  // Now query the LLM with context
+  const llmResponse = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [
+      {
+        role: "system",
+        content: "You are a helpful assistant that answers questions based on the user's recent activity."
+      },
+      {
+        role: "user",
+        content: `Here is context from my recent computer activity:\n\n${contextText}\n\nNow, answer this question: ${query}`
+      }
+    ]
+  })
+  
+  return llmResponse.choices[0].message.content
+}
+
+// Example usage
+const answer = await getContextAndQueryLLM("What was that meeting about?")
+console.log(answer)
+```
+
 ### examples
 
 check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) to see real-world usage of the sdk:
@@ -239,7 +506,6 @@ these examples demonstrate best practices and common patterns when building with
 
 </MotionDiv>
 
-<MotionDiv delay={0.7}>
 
 ### settings management
 
