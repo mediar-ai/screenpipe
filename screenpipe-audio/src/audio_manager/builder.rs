@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::{env, path::PathBuf, sync::Arc};
+use tracing::info;
 
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
@@ -82,8 +83,8 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn deepgram_api_key(mut self, deepgram_api_key: String) -> Self {
-        self.options.deepgram_api_key = Some(deepgram_api_key);
+    pub fn deepgram_api_key(mut self, deepgram_api_key: Option<String>) -> Self {
+        self.options.deepgram_api_key = deepgram_api_key;
         self
     }
 
@@ -122,17 +123,18 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn deepgram_url(mut self, deepgram_url: String) -> Self {
-        self.options.deepgram_url = Some(deepgram_url);
+    pub fn deepgram_url(mut self, deepgram_url: Option<String>) -> Self {
+        self.options.deepgram_url = deepgram_url;
         self
     }
 
-    pub fn deepgram_websocket_url(mut self, deepgram_websocket_url: String) -> Self {
-        self.options.deepgram_websocket_url = Some(deepgram_websocket_url);
+    pub fn deepgram_websocket_url(mut self, deepgram_websocket_url: Option<String>) -> Self {
+        self.options.deepgram_websocket_url = deepgram_websocket_url;
         self
     }
 
     pub async fn build(self, db: Arc<DatabaseManager>) -> Result<AudioManager> {
+        self.validate_options()?;
         AudioManager::new(self.options, db).await
     }
 
@@ -141,7 +143,8 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub async fn validate_options(&self) -> Result<()> {
+    // TODO: Make sure the custom urls work
+    pub fn validate_options(&self) -> Result<()> {
         if self.options.transcription_engine == Arc::new(AudioTranscriptionEngine::Deepgram)
             && self.options.deepgram_api_key.is_none()
         {
@@ -159,6 +162,8 @@ impl AudioManagerBuilder {
                 "Deepgram API key is required for realtime transcription"
             ));
         }
+
+        info!("{:?}", self.options.deepgram_api_key);
 
         Ok(())
     }

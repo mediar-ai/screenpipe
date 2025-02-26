@@ -17,6 +17,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::oneshot;
+use tracing::debug;
 use tracing::info;
 
 // Add this near other static/global variables
@@ -193,6 +194,10 @@ async fn handle_transcription(result: StreamResponse, device: Arc<AudioDevice>) 
         channel, is_final, ..
     } = result
     {
+        debug!(
+            "handling realtime transcription for device: {}",
+            device.name
+        );
         let res = channel.alternatives.first().unwrap();
         let text = res.transcript.clone();
         let is_input = device.device_type == DeviceType::Input;

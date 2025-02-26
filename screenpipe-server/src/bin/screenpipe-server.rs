@@ -689,6 +689,7 @@ async fn main() -> anyhow::Result<()> {
         .transcription_engine(cli.audio_transcription_engine.into())
         .realtime(cli.enable_realtime_audio_transcription)
         .enabled_devices(audio_devices)
+        .deepgram_api_key(cli.deepgram_api_key)
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
     let mut audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
