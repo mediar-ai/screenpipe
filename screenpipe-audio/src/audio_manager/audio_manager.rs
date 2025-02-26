@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 use tokio::{join, sync::Mutex, task::JoinHandle};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use screenpipe_db::DatabaseManager;
 
@@ -102,16 +102,15 @@ impl AudioManager {
 
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting audio manager");
-        let devices = if let Some(device_names) = &self.options.enabled_devices {
-            device_names
-                .iter()
-                .flat_map(|name| self.device_manager.device(name))
-                .collect()
-        } else {
-            self.device_manager.devices()
-        };
+        for device_name in &self.options.enabled_devices {
+            let device = match self.device_manager.device(device_name) {
+                Some(device) => device,
+                None => {
+                    warn!("Device {} not found", device_name);
+                    continue;
+                }
+            };
 
-        for device in devices {
             self.start_device(&device).await?;
         }
 
@@ -174,17 +173,24 @@ impl AudioManager {
     // }
 
     // TODO: Make sure stopped or return device already running error
-    pub async fn start_device(&mut self, device: &AudioDevice) -> Result<()> {
+    pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
+        self.device_manager.start_device(device).await?;
         if let Some(is_running) = self.device_manager.is_running_mut(device) {
             is_running.store(true, Ordering::Relaxed);
         }
         let handle = self.record_device(device).await?;
         self.recording_handles
             .insert(device.clone(), Arc::new(Mutex::new(handle)));
+
+        // if let Some(mut enabled_devices) = self.options.enabled_devices.as_mut() {
+        //     if !enabled_devices.contains(&device.name) {
+        //         enabled_devices.push(device.name.clone());
+        //     }
+        // }
         Ok(())
     }
 
-    async fn record_device(&mut self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
+    async fn record_device(&self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
         let stream = self.device_manager.stream(device).unwrap();
         let audio_chunk_duration = self.options.audio_chunk_duration as u64;
         let recording_sender = self.recording_sender.clone();

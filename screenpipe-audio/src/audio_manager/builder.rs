@@ -6,7 +6,10 @@ use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
 
 use crate::{
-    core::engine::AudioTranscriptionEngine,
+    core::{
+        device::{default_input_device, default_output_device},
+        engine::AudioTranscriptionEngine,
+    },
     vad::{VadEngineEnum, VadSensitivity},
 };
 
@@ -23,7 +26,7 @@ pub struct AudioManagerOptions {
     pub audio_chunk_duration: usize,
     pub vad_sensitivity: VadSensitivity,
     pub health_check_grace_period: usize,
-    pub enabled_devices: Option<Vec<String>>,
+    pub enabled_devices: Vec<String>,
     pub use_all_devices: bool,
     pub db_path: Option<String>,
     pub deepgram_url: Option<String>,
@@ -36,6 +39,7 @@ impl Default for AudioManagerOptions {
         let deepgram_api_key = env::var("DEEPGRAM_API_KEY").ok();
         let deepgram_websocket_url = env::var("DEEPGRAM_WEBSOCKET_URL").ok();
         let deepgram_url = env::var("DEEPGRAM_API_URL").ok();
+        let enabled_devices = vec![];
         Self {
             output_path: None,
             transcription_engine: Arc::new(AudioTranscriptionEngine::default()),
@@ -47,7 +51,7 @@ impl Default for AudioManagerOptions {
             audio_chunk_duration: 30,
             vad_sensitivity: VadSensitivity::High,
             health_check_grace_period: 10,
-            enabled_devices: None,
+            enabled_devices,
             use_all_devices: false,
             db_path: None,
             deepgram_url,
@@ -114,7 +118,7 @@ impl AudioManagerBuilder {
     }
 
     pub fn enabled_devices(mut self, enabled_devices: Vec<String>) -> Self {
-        self.options.enabled_devices = Some(enabled_devices);
+        self.options.enabled_devices = enabled_devices;
         self
     }
 
@@ -133,9 +137,16 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub async fn build(self, db: Arc<DatabaseManager>) -> Result<AudioManager> {
+    pub async fn build(&mut self, db: Arc<DatabaseManager>) -> Result<AudioManager> {
         self.validate_options()?;
-        AudioManager::new(self.options, db).await
+        let options = &mut self.options;
+
+        if options.enabled_devices.is_empty() {
+            options.enabled_devices =
+                vec![default_input_device()?.name, default_output_device()?.name];
+        }
+
+        AudioManager::new(options.clone(), db).await
     }
 
     pub fn output_path(mut self, output_path: PathBuf) -> Self {

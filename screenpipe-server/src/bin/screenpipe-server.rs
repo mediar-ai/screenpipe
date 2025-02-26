@@ -512,7 +512,7 @@ async fn main() -> anyhow::Result<()> {
     let realtime_vision_sender = Arc::new(realtime_vision_sender.clone());
     let realtime_vision_sender_clone = realtime_vision_sender.clone();
 
-    let audio_manager_builder = AudioManagerBuilder::new()
+    let mut audio_manager_builder = AudioManagerBuilder::new()
         // TODO: Fix this to duration not usize...
         .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
         .vad_engine(vad_engine.into())
@@ -595,7 +595,6 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let _realtime_vision_sender_clone = realtime_vision_sender_clone.clone();
-    // TODO: Add SSE stream for realtime audio transcription
     let server = Server::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -604,7 +603,7 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
-        &audio_manager.clone(),
+        Arc::new(audio_manager.clone()),
     );
 
     // print screenpipe in gradient

@@ -75,7 +75,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    // pub device_manager: Arc<DeviceManager>,
+    pub audio_manager: Arc<AudioManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -899,7 +899,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct Server {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    // device_manager: Arc<DeviceManager>,
+    audio_manager: Arc<AudioManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -918,7 +918,7 @@ impl Server {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
-        audio_manager: &AudioManager,
+        audio_manager: Arc<AudioManager>,
     ) -> Self {
         Server {
             db,
@@ -929,6 +929,7 @@ impl Server {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
+            audio_manager,
         }
     }
 
@@ -942,7 +943,7 @@ impl Server {
     {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            // device_manager: self.device_manager.clone(),
+            audio_manager: self.audio_manager,
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -2006,6 +2007,46 @@ async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
     debug!("WebSocket connection closed gracefully");
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct AudioDeviceControlRequest {
+    device_name: String,
+}
+
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let device: AudioDevice;
+    // todo Better handling error
+    match AudioDevice::from_name(&payload.device_name) {
+        Ok(audio_device) => device = audio_device,
+        Err(e) => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                JsonResponse(
+                    json!({"error": format!("device {} not found: {}", device_name.clone(), e)}),
+                ),
+            ))
+        }
+    };
+
+    if let Err(e) = state.audio_manager.start_device(&device).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(JsonResponse(json!({
+        "success": true,
+        "mesage": format!("started device: {}", device_name)
+    })))
+}
+
 pub fn create_router() -> Router<Arc<AppState>> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -2053,7 +2094,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/speakers/similar", get(get_similar_speakers_handler))
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
-        // .route("/audio/start", post(start_audio_device))
+        .route("/audio/device/start", post(start_audio_device))
         // .route("/audio/stop", post(stop_audio_device))
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
