@@ -130,11 +130,13 @@ export default function Page() {
 				</div>
 			) : null}
 
-			{isSearching &&
-				searchResults.length === 0 &&
-				Array.from({ length: 6 }).map((_, index) => (
-					<SkeletonCard key={`skeleton-${index}`} />
-				))}
+			{isSearching && searchResults.length === 0 && (
+				<div className="flex flex-row gap-4 p-8" style={{ direction: "rtl" }}>
+					{Array.from({ length: 6 }).map((_, index) => (
+						<SkeletonCard key={`skeleton-${index}`} />
+					))}
+				</div>
+			)}
 
 			{querys.query && !(searchResults.length === 0) ? (
 				<div className="h-64 flex items-end">
