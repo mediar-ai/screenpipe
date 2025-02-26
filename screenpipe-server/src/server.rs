@@ -2013,6 +2013,7 @@ struct AudioDeviceControlRequest {
     device_name: String,
 }
 
+// TODO cleanup to accept &str for device start instead of AUdioDevice
 async fn start_audio_device(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AudioDeviceControlRequest>,
@@ -2043,7 +2044,28 @@ async fn start_audio_device(
 
     Ok(JsonResponse(json!({
         "success": true,
-        "mesage": format!("started device: {}", device_name)
+        "mesage": format!("started recording audio device: {}", device_name)
+    })))
+}
+
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+
+    if let Err(e) = state.audio_manager.stop_device(&device_name).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(JsonResponse(json!({
+        "success": true,
+        "mesage": format!("stopped recording audio device: {}", device_name)
     })))
 }
 
@@ -2095,7 +2117,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/experimental/frames/merge", post(merge_frames_handler))
         .route("/experimental/validate/media", get(validate_media_handler))
         .route("/audio/device/start", post(start_audio_device))
-        // .route("/audio/stop", post(stop_audio_device))
+        .route("/audio/device/stop", post(stop_audio_device))
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
