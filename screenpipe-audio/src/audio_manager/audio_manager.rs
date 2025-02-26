@@ -140,7 +140,7 @@ impl AudioManager {
         Ok(devices)
     }
 
-    pub async fn disable_device(&mut self, device_name: &str) -> Result<()> {
+    pub async fn stop_device(&mut self, device_name: &str) -> Result<()> {
         // Disable specific audio device
         let device = match parse_audio_device(device_name) {
             Ok(device) => device,
@@ -163,17 +163,8 @@ impl AudioManager {
     // Stop all audio processing
     pub async fn stop(&self) -> Result<()> {
         self.recording_handles.clear();
-        self.device_manager.stop_all_devices();
-
-        if let Some(Some(handle)) = Arc::into_inner(self.audio_receiver_handle.clone()) {
-            handle.abort();
-        }
-        if let Some(Some(handle)) = Arc::into_inner(self.transcription_receiver_handle.clone()) {
-            handle.abort();
-        }
-
+        let _ = self.device_manager.stop_all_devices();
         *self.status.lock().await = AudioManagerStatus::Stopped;
-
         Ok(())
     }
 

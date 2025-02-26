@@ -693,10 +693,6 @@ async fn main() -> anyhow::Result<()> {
 
     let mut audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
 
-    if !cli.disable_audio {
-        audio_manager.start().await.unwrap();
-    }
-
     let audio_manager_clone = audio_manager.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
@@ -1053,6 +1049,11 @@ async fn main() -> anyhow::Result<()> {
             .bright_blue()
             .italic()
     );
+
+    // start recording after all this text
+    if !cli.disable_audio {
+        audio_manager.start().await.unwrap();
+    }
 
     // Start pipes
     info!("starting pipes");

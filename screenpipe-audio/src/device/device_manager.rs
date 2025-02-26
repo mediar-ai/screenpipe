@@ -68,10 +68,12 @@ impl DeviceManager {
             .unwrap_or(false)
     }
 
-    pub fn stop_all_devices(&self) {
+    pub fn stop_all_devices(&self) -> Result<()> {
         for device in self.devices.iter() {
-            self.stop_device(device);
+            self.stop_device(device)?;
         }
+
+        Ok(())
     }
 
     pub fn stop_device(&self, device: &AudioDevice) -> Result<()> {
