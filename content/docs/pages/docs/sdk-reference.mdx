@@ -1,9 +1,7 @@
-import MotionDiv from '../../components/motion-div'
 import { Tabs, Tab } from 'nextra/components'
 
 # javascript sdk reference
 
-<MotionDiv>
 
 screenpipe provides two sdk packages:
 - `@screenpipe/js` - for node.js environments (nextjs api routes, etc)
@@ -11,9 +9,6 @@ screenpipe provides two sdk packages:
 
 both sdks provide type-safe interfaces to interact with screenpipe's core functionality.
 
-</MotionDiv>
-
-<MotionDiv delay={0.3}>
 
 ### installation
 
@@ -349,167 +344,8 @@ async function monitorScreenActivity() {
 monitorScreenActivity().catch(console.error)
 ```
 
-### notifications (desktop)
-
-```typescript
-await pipe.sendDesktopNotification({
-  title: "meeting starting",
-  body: "your standup begins in 5 minutes",
-})
-```
-
-### node.js specific features
-
-the node sdk includes additional features not available in the browser:
-
-```typescript
-// settings management
-const settings = await pipe.settings.getAll()
-await pipe.settings.update({ aiModel: "gpt-4" })
-
-// inbox management (node only)
-const messages = await pipe.inbox.getMessages()
-await pipe.inbox.clearMessages()
-```
-
-### typescript types
-
-both sdks export comprehensive typescript types:
-
-```typescript
-import type {
-  ContentType,
-  ScreenpipeQueryParams,
-  ScreenpipeResponse,
-  OCRContent,
-  AudioContent,
-  UiContent,
-  Speaker,
-  NotificationOptions,
-  Settings,
-  // ... and more
-} from '@screenpipe/js' // or '@screenpipe/browser'
-```
-
-key types include:
-
-```typescript
-type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
-
-interface ScreenpipeQueryParams {
-  q?: string
-  contentType?: ContentType
-  limit?: number
-  offset?: number
-  startTime?: string
-  endTime?: string
-  appName?: string
-  windowName?: string
-  includeFrames?: boolean
-  minLength?: number
-  maxLength?: number
-  speakerIds?: number[]
-  frameName?: string
-}
-
-interface ScreenpipeResponse {
-  data: ContentItem[] // OCR | Audio | UI content
-  pagination: {
-    limit: number
-    offset: number
-    total: number
-  }
-}
-```
-
-### error handling
-
-```typescript
-try {
-  const results = await pipe.queryScreenpipe({
-    q: "meeting",
-    contentType: "ocr"
-  })
-} catch (error) {
-  console.error("screenpipe api error:", error)
-}
-```
-
-### integrating with llms
-
-```typescript
-import OpenAI from 'openai'
-import { pipe } from '@screenpipe/js'
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-async function getContextAndQueryLLM(query) {
-  // First, get relevant context from screenpipe
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-  const now = new Date().toISOString()
-  
-  const results = await pipe.queryScreenpipe({
-    q: query, // Use the user's query to find relevant content
-    contentType: "all",
-    startTime: oneHourAgo,
-    endTime: now,
-    limit: 20,
-  })
-  
-  // Extract text from results
-  let contextText = ""
-  for (const item of results.data) {
-    if (item.type === "OCR") {
-      contextText += `[Screen Text]: ${item.content.text}\n`
-    } else if (item.type === "Audio") {
-      contextText += `[Audio Transcript]: ${item.content.transcription}\n`
-    }
-  }
-  
-  // Now query the LLM with context
-  const llmResponse = await openai.chat.completions.create({
-    model: "gpt-4",
-    messages: [
-      {
-        role: "system",
-        content: "You are a helpful assistant that answers questions based on the user's recent activity."
-      },
-      {
-        role: "user",
-        content: `Here is context from my recent computer activity:\n\n${contextText}\n\nNow, answer this question: ${query}`
-      }
-    ]
-  })
-  
-  return llmResponse.choices[0].message.content
-}
-
-// Example usage
-const answer = await getContextAndQueryLLM("What was that meeting about?")
-console.log(answer)
-```
-
-### examples
-
-check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) to see real-world usage of the sdk:
-
-- data visualization pipe
-- linkedin ai assistant
-- meeting summarizer
-- memories gallery
-- obsidian integration
-- search interface
-
-these examples demonstrate best practices and common patterns when building with screenpipe's sdk.
-
-</MotionDiv>
-
-
 ### settings management
 
-<MotionDiv delay={0.7}>
 
 pipes can access and modify screenpipe app settings through the SDK. this is useful for storing pipe-specific configuration and accessing global app settings.
 
@@ -694,7 +530,303 @@ export function SettingsComponent() {
 
 see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
 
-</MotionDiv>
+
+
+### integrating with llms
+
+screenpipe's sdk can be easily integrated with various ai providers to analyze and generate insights from screen activity. here are common patterns for connecting context data with llms.
+
+if the user is using screenpipe-cloud, you can use claude-3-7-sonnet, gemini-2.0-flash-lite or gpt-4o (Anthropic, Google, OpenAI or local models).
+
+#### vercel ai sdk integration
+
+the vercel ai sdk offers a streamlined way to work with llms. this example from the obsidian pipe demonstrates how to generate structured work logs:
+
+```typescript
+import { generateObject, embed } from "ai";
+import { ollama } from "ollama-ai-provider";
+import { pipe } from "@screenpipe/js";
+import { z } from "zod";
+
+// define your output schema
+const workLog = z.object({
+  title: z.string(),
+  description: z.string(),
+  tags: z.array(z.string()),
+  mediaLinks: z.array(z.string()).optional(),
+});
+
+type WorkLog = z.infer<typeof workLog> & {
+  startTime: string;
+  endTime: string;
+};
+
+async function generateWorkLog(screenData, model, startTime, endTime) {
+  // configure the prompt with context and instructions
+  const prompt = `You are analyzing screen recording data from Screenpipe.
+    Based on the following screen data, generate a concise work activity log entry.
+    
+    Screen data: ${JSON.stringify(screenData)}
+    
+    Return a JSON object with:
+    {
+        "title": "Brief title describing the main activity",
+        "description": "Clear description of what was accomplished",
+        "tags": ["#relevant-tool", "#activity-type"],
+        "mediaLinks": ["<video src=\"file:///path/to/video.mp4\" controls></video>"]
+    }`;
+
+  // use ollama provider with vercel ai sdk
+  const provider = ollama(model);
+  const response = await generateObject({
+    model: provider,
+    messages: [{ role: "user", content: prompt }],
+    schema: workLog, // zod schema for type safety
+  });
+
+  return {
+    ...response.object,
+    startTime: formatDate(startTime),
+    endTime: formatDate(endTime),
+  };
+}
+
+// api endpoint implementation
+async function handleRequest() {
+  // get last hour of activity
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 3600000);
+
+  // query context from screenpipe
+  const screenData = await pipe.queryScreenpipe({
+    startTime: oneHourAgo.toISOString(),
+    endTime: now.toISOString(),
+    limit: 100,
+    contentType: "all",
+  });
+
+  // generate structured log with ai
+  const logEntry = await generateWorkLog(
+    screenData.data,
+    "llama3.2", // ollama model name
+    oneHourAgo,
+    now
+  );
+
+  return { message: "log generated successfully", logEntry };
+}
+```
+
+see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for the complete implementation.
+
+or [irs-agent](https://github.com/different-ai/irs-agent/blob/master/src/services/financial-activity-detector.ts) for a more complex example.
+
+#### deduplicating context with embeddings
+
+when working with large amounts of screen data, it's useful to remove duplicates before sending to an llm:
+
+```typescript
+import { embed } from "ai";
+import { ollama } from "ollama-ai-provider";
+import { ContentItem } from "@screenpipe/js";
+
+async function deduplicateScreenData(screenData: ContentItem[]): Promise<ContentItem[]> {
+  if (!screenData.length) return screenData;
+
+  // use ollama's embedding model
+  const provider = ollama.embedding("nomic-embed-text");
+  const embeddings: number[][] = [];
+  const uniqueData: ContentItem[] = [];
+  
+  for (const item of screenData) {
+    // extract text content depending on type
+    const textToEmbed =
+      "content" in item
+        ? typeof item.content === "string"
+          ? item.content
+          : "text" in item.content
+          ? item.content.text
+          : JSON.stringify(item.content)
+        : "";
+
+    if (!textToEmbed.trim()) {
+      uniqueData.push(item);
+      continue;
+    }
+
+    // generate embedding
+    const { embedding } = await embed({
+      model: provider,
+      value: textToEmbed,
+    });
+
+    // check for duplicates using cosine similarity
+    let isDuplicate = false;
+    for (let i = 0; i < embeddings.length; i++) {
+      const similarity = cosineSimilarity(embedding, embeddings[i]);
+      if (similarity > 0.95) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isDuplicate) {
+      embeddings.push(embedding);
+      uniqueData.push(item);
+    }
+  }
+
+  return uniqueData;
+}
+
+// cosine similarity helper
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (normA * normB);
+}
+```
+
+#### streaming transcriptions to llms
+
+for real-time analysis of audio:
+
+```typescript
+import { pipe } from "@screenpipe/js";
+import { OpenAI } from "openai";
+import type { Settings } from "@screenpipe/js";
+
+
+async function streamMeetingInsights(settings: Settings) {
+  const openai = new OpenAI({
+    apiKey:
+      settings?.aiProviderType === "screenpipe-cloud"
+        ? settings?.user?.token
+        : settings?.openaiApiKey,
+    baseURL: settings?.aiUrl,
+    dangerouslyAllowBrowser: true, // for browser environments
+  });
+  let transcript = "";
+  
+  // stream audio transcriptions
+  for await (const chunk of pipe.streamTranscriptions()) {
+    transcript += chunk.choices[0].text + " ";
+    
+    // analyze every 30 seconds
+    if (transcript.length > 200 && transcript.length % 30 === 0) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o", // if user is using screenpipe-cloud, you can also use claude-3-7-sonnet or gemini-2.0-flash-lite
+        messages: [
+          {
+            role: "system",
+            content: "provide brief insights on this ongoing meeting."
+          },
+          {
+            role: "user", 
+            content: transcript
+          }
+        ]
+      });
+      
+      console.log("meeting insight:", response.choices[0].message.content);
+    }
+  }
+}
+```
+
+check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
+
+### notifications (desktop)
+
+```typescript
+await pipe.sendDesktopNotification({
+  title: "meeting starting",
+  body: "your standup begins in 5 minutes",
+})
+```
+
+### node.js specific features
+
+the node sdk includes additional features not available in the browser:
+
+```typescript
+// settings management
+const settings = await pipe.settings.getAll()
+await pipe.settings.update({ aiModel: "gpt-4" })
+
+// inbox management (node only)
+const messages = await pipe.inbox.getMessages()
+await pipe.inbox.clearMessages()
+```
+
+### typescript types
+
+both sdks export comprehensive typescript types:
+
+```typescript
+import type {
+  ContentType,
+  ScreenpipeQueryParams,
+  ScreenpipeResponse,
+  OCRContent,
+  AudioContent,
+  UiContent,
+  Speaker,
+  NotificationOptions,
+  Settings,
+  // ... and more
+} from '@screenpipe/js' // or '@screenpipe/browser'
+```
+
+key types include:
+
+```typescript
+type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
+
+interface ScreenpipeQueryParams {
+  q?: string
+  contentType?: ContentType
+  limit?: number
+  offset?: number
+  startTime?: string
+  endTime?: string
+  appName?: string
+  windowName?: string
+  includeFrames?: boolean
+  minLength?: number
+  maxLength?: number
+  speakerIds?: number[]
+  frameName?: string
+}
+
+interface ScreenpipeResponse {
+  data: ContentItem[] // OCR | Audio | UI content
+  pagination: {
+    limit: number
+    offset: number
+    total: number
+  }
+}
+```
+
+### error handling
+
+```typescript
+try {
+  const results = await pipe.queryScreenpipe({
+    q: "meeting",
+    contentType: "ocr"
+  })
+} catch (error) {
+  console.error("screenpipe api error:", error)
+}
+```
+
+
+
+
+
 
 ### LLM links 
 
