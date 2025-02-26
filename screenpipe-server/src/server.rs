@@ -1032,8 +1032,8 @@ impl SCServer {
             .get("/speakers/similar", get_similar_speakers_handler)
             .post("/experimental/frames/merge", merge_frames_handler)
             .get("/experimental/validate/media", validate_media_handler)
-            // .post("/audio/start", start_audio_device)
-            // .post("/audio/stop", stop_audio_device)
+            .post("/audio/start", start_audio)
+            .post("/audio/stop", stop_audio)
             .get("/semantic-search", semantic_search_handler)
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
@@ -2116,7 +2116,7 @@ async fn start_audio_device(
             return Err((
                 StatusCode::UNPROCESSABLE_ENTITY,
                 JsonResponse(
-                    json!({"error": format!("device {} not found: {}", device_name.clone(), e)}),
+                    json!({"success": false, "message": format!("device {} not found: {}", device_name.clone(), e)}),
                 ),
             ))
         }
@@ -2126,7 +2126,8 @@ async fn start_audio_device(
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({
-                "error": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+                "success": false,
+                "message": format!("Failed to start recording device {}: {}", device_name.clone(), e)
             })),
         ));
     }
@@ -2148,7 +2149,8 @@ async fn stop_audio_device(
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({
-                "error": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+                "success": false,
+                "message": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
             })),
         ));
     }
@@ -2173,6 +2175,38 @@ struct ExportProgress {
     progress: f32,
     video_data: Option<Vec<u8>>,
     error: Option<String>,
+}
+
+#[oasgen]
+async fn start_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.start().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
+}
+
+#[oasgen]
+async fn stop_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.stop().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
 }
 
 pub async fn handle_video_export_ws(
