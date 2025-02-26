@@ -31,6 +31,7 @@ use updates::start_update_check;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
+use tauri_plugin_shell::ShellExt;
 
 mod commands;
 mod disk_usage;
@@ -900,6 +901,116 @@ async fn main() {
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle).await {
                     warn!("Failed to initialize global shortcuts: {}", e);
+                }
+            });
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // spawn async migration worker
+                match app_handle.shell().sidecar("screenpipe") {
+                    Ok(command) => {
+                        match command
+                            .args(&["migrate", "--batch-size", "100000", "start"])
+                            .spawn()
+                        {
+                            Ok((mut rx, _)) => {
+                                info!("Migration worker started successfully");
+                                // stream logs
+                                while let Some(event) = rx.recv().await {
+                                    match event {
+                                        CommandEvent::Stdout(line) => {
+                                            match String::from_utf8(line) {
+                                                Ok(log_line) => {
+                                                    print!("{}", log_line);
+                                                    if let Err(e) =
+                                                        app_handle.emit("sidecar_log", log_line)
+                                                    {
+                                                        error!("Failed to emit sidecar log: {}", e);
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    error!(
+                                                        "Invalid UTF-8 in sidecar stdout: {}",
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        CommandEvent::Stderr(line) => {
+                                            match String::from_utf8(line) {
+                                                Ok(log_line) => {
+                                                    error!("Sidecar stderr: {}", log_line);
+                                                    if let Err(e) = app_handle.emit(
+                                                        "sidecar_log",
+                                                        format!("ERROR: {}", log_line),
+                                                    ) {
+                                                        error!(
+                                                            "Failed to emit sidecar error log: {}",
+                                                            e
+                                                        );
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    error!(
+                                                        "Invalid UTF-8 in sidecar stderr: {}",
+                                                        e
+                                                    );
+                                                }
+                                            }
+                                        }
+                                        CommandEvent::Error(err) => {
+                                            error!("Sidecar command error: {}", err);
+                                            if let Err(e) = app_handle.emit(
+                                                "sidecar_log",
+                                                format!("COMMAND ERROR: {}", err),
+                                            ) {
+                                                error!(
+                                                    "Failed to emit sidecar command error: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
+                                        CommandEvent::Terminated(exit_data) => {
+                                            info!(
+                                                "Migration worker terminated with code: {:?}",
+                                                exit_data.code
+                                            );
+                                            if let Err(e) = app_handle.emit(
+                                                "sidecar_log",
+                                                format!(
+                                                    "Migration process terminated with code: {:?}",
+                                                    exit_data.code
+                                                ),
+                                            ) {
+                                                error!(
+                                                    "Failed to emit sidecar termination event: {}",
+                                                    e
+                                                );
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to spawn migration worker: {}", e);
+                                if let Err(emit_err) = app_handle.emit(
+                                    "sidecar_log",
+                                    format!("ERROR: Failed to spawn migration worker: {}", e),
+                                ) {
+                                    error!("Failed to emit error message: {}", emit_err);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to create sidecar command: {}", e);
+                        if let Err(emit_err) = app_handle.emit(
+                            "sidecar_log",
+                            format!("ERROR: Failed to create sidecar command: {}", e),
+                        ) {
+                            error!("Failed to emit error message: {}", emit_err);
+                        }
+                    }
                 }
             });
             Ok(())

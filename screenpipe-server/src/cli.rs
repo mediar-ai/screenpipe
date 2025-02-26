@@ -337,10 +337,10 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: Option<MigrationSubCommand>,
         /// Output format
-        #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+        #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
         output: OutputFormat,
         /// Batch size for processing records
-        #[arg(long, default_value_t = 1000)]
+        #[arg(long, default_value_t = 100_000)]
         batch_size: i64,
         /// Delay between batches in milliseconds
         #[arg(long, default_value_t = 100)]

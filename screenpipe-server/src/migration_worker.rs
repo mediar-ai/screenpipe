@@ -293,7 +293,6 @@ async fn get_total_records(pool: &SqlitePool) -> Result<i64> {
         WHERE (app_name IS NOT NULL AND app_name != '')
            OR (window_name IS NOT NULL AND window_name != '')
            OR (focused IS NOT NULL)
-           OR (browser_url IS NOT NULL AND browser_url != '')
         "#,
     )
     .fetch_one(pool)
@@ -514,12 +513,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
         SELECT DISTINCT ocr_text.frame_id, 
                ocr_text.app_name, 
                ocr_text.window_name, 
-               ocr_text.focused,
-               (SELECT browser_url FROM ocr_text AS ot 
-                WHERE ot.frame_id = ocr_text.frame_id 
-                  AND ot.browser_url IS NOT NULL 
-                  AND ot.browser_url != '' 
-                LIMIT 1) AS browser_url
+               ocr_text.focused
         FROM ocr_text
         JOIN frames ON ocr_text.frame_id = frames.id
         WHERE ocr_text.frame_id > ?
@@ -527,8 +521,7 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
             -- We need to migrate this data
             (ocr_text.app_name IS NOT NULL AND ocr_text.app_name != '' AND frames.app_name IS NULL) OR
             (ocr_text.window_name IS NOT NULL AND ocr_text.window_name != '' AND frames.window_name IS NULL) OR
-            (ocr_text.focused IS NOT NULL AND frames.focused IS NULL) OR
-            (ot.browser_url IS NOT NULL AND ot.browser_url != '' AND frames.browser_url IS NULL)
+            (ocr_text.focused IS NOT NULL AND frames.focused IS NULL) 
           )
         ORDER BY ocr_text.frame_id
         LIMIT ?
@@ -548,7 +541,6 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
         let app_name: Option<String> = record.try_get("app_name").unwrap_or(None);
         let window_name: Option<String> = record.try_get("window_name").unwrap_or(None);
         let focused: Option<bool> = record.try_get("focused").unwrap_or(None);
-        let browser_url: Option<String> = record.try_get("browser_url").unwrap_or(None);
 
         // Update the frames table
         sqlx::query(
@@ -556,15 +548,13 @@ async fn process_batch(pool: &SqlitePool, last_id: i64, batch_size: i64) -> Resu
             UPDATE frames
             SET app_name = COALESCE(?, app_name),
                 window_name = COALESCE(?, window_name),
-                focused = COALESCE(?, focused),
-                browser_url = COALESCE(?, browser_url)
+                focused = COALESCE(?, focused)
             WHERE id = ?
             "#,
         )
         .bind(app_name)
         .bind(window_name)
         .bind(focused)
-        .bind(browser_url)
         .bind(frame_id)
         .execute(&mut *tx)
         .await?;

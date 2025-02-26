@@ -191,6 +191,10 @@ async fn main() -> anyhow::Result<()> {
             output: OutputFormat::Text,
             ..
         }) => true,
+        Some(Command::Migrate {
+            output: OutputFormat::Text,
+            ..
+        }) => true,
         _ => true,
     };
 
@@ -369,13 +373,13 @@ async fn main() -> anyhow::Result<()> {
                                 println!("{}", serde_json::to_string_pretty(&response.status)?);
                             }
                             OutputFormat::Text => {
-                                println!("Started migration: {}", migration_name);
+                                info!("Started migration: {}", migration_name);
                                 match response.status {
                                     MigrationStatus::Running {
                                         total_records,
                                         processed_records,
                                     } => {
-                                        println!(
+                                        info!(
                                             "Processing records: {}/{} ({:.2}%)",
                                             processed_records,
                                             total_records,
@@ -388,7 +392,7 @@ async fn main() -> anyhow::Result<()> {
                                         );
                                     }
                                     _ => {
-                                        println!("Migration status: {:?}", response.status);
+                                        info!("Migration status: {:?}", response.status);
                                     }
                                 }
                             }
@@ -417,7 +421,7 @@ async fn main() -> anyhow::Result<()> {
                                         total_records,
                                         processed_records,
                                     } => {
-                                        println!(
+                                        info!(
                                             "Processing records: {}/{} ({:.2}%)",
                                             processed_records,
                                             total_records,
@@ -433,7 +437,7 @@ async fn main() -> anyhow::Result<()> {
                                         total_records,
                                         duration_secs,
                                     } => {
-                                        println!(
+                                        info!(
                                             "Migration completed: {} records processed in {} seconds",
                                             total_records, duration_secs
                                         );
@@ -443,7 +447,7 @@ async fn main() -> anyhow::Result<()> {
                                         total_records,
                                         processed_records,
                                     } => {
-                                        println!(
+                                        info!(
                                             "Migration paused: {}/{} ({:.2}%)",
                                             processed_records,
                                             total_records,
@@ -460,19 +464,18 @@ async fn main() -> anyhow::Result<()> {
                                         processed_records,
                                         error,
                                     } => {
-                                        println!(
+                                        error!(
                                             "Migration failed: {}/{} records processed. Error: {}",
                                             processed_records, total_records, error
                                         );
                                         break;
                                     }
                                     _ => {
-                                        println!("Migration status: {:?}", response.status);
+                                        info!("Migration status: {:?}", response.status);
                                     }
                                 },
                             }
                         } else {
-                            println!("Migration worker has stopped");
                             break;
                         }
                     }
@@ -484,7 +487,7 @@ async fn main() -> anyhow::Result<()> {
                                 println!("{}", serde_json::to_string_pretty(&response.status)?);
                             }
                             OutputFormat::Text => {
-                                println!("Migration status: {:?}", response.status);
+                                info!("Migration status: {:?}", response.status);
                             }
                         }
                     }
