@@ -12,8 +12,8 @@ use axum::{
 use oasgen::{oasgen, OaSchema, Server};
 
 use screenpipe_db::{
-    ContentType, DatabaseManager, FrameData, OCRResult as OCRResultDB, Order, SearchMatch,
-    SearchResult, Speaker, TagContentType,
+    ContentType, DatabaseManager, FrameData, Order, SearchMatch, SearchResult, Speaker,
+    TagContentType,
 };
 use tokio_util::io::ReaderStream;
 
@@ -77,7 +77,7 @@ use crate::text_embeds::generate_embedding;
 
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
-    // pub device_manager: Arc<DeviceManager>,
+    pub audio_manager: Arc<AudioManager>,
     pub app_start_time: DateTime<Utc>,
     pub screenpipe_dir: PathBuf,
     pub pipe_manager: Arc<PipeManager>,
@@ -933,7 +933,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
 pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
-    // device_manager: Arc<DeviceManager>,
+    audio_manager: Arc<AudioManager>,
     screenpipe_dir: PathBuf,
     pipe_manager: Arc<PipeManager>,
     vision_disabled: bool,
@@ -951,7 +951,7 @@ impl SCServer {
         vision_disabled: bool,
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
-        audio_manager: &AudioManager,
+        audio_manager: Arc<AudioManager>,
     ) -> Self {
         SCServer {
             db,
@@ -961,13 +961,14 @@ impl SCServer {
             vision_disabled,
             audio_disabled,
             ui_monitoring_enabled,
+            audio_manager,
         }
     }
 
     pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            // device_manager: self.device_manager.clone(),
+            audio_manager: self.audio_manager,
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
             pipe_manager: self.pipe_manager,
@@ -1037,6 +1038,8 @@ impl SCServer {
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
             .post("/v1/embeddings", create_embeddings)
+            .post("/audio/start", start_audio_device)
+            // .post("/audio/stop", stop_audio_device)
             // .post("/vision/start", start_vision_device)
             // .post("/vision/stop", stop_vision_device)
             // .post("/audio/restart", restart_audio_devices)
@@ -1761,7 +1764,7 @@ async fn get_similar_speakers_handler(
 //     device_type: Option<DeviceType>,
 // }
 
-#[derive(Serialize)]
+#[derive(Debug, OaSchema, Serialize)]
 pub struct AudioDeviceControlResponse {
     success: bool,
     message: String,
@@ -2090,6 +2093,47 @@ pub struct VideoExportRequest {
     #[serde(deserialize_with = "deserialize_frame_ids")]
     frame_ids: Vec<i64>,
     fps: f64,
+}
+
+#[derive(OaSchema, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct AudioDeviceControlRequest {
+    device_name: String,
+}
+
+#[oasgen]
+async fn start_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+    let device: AudioDevice;
+    // todo Better handling error
+    match AudioDevice::from_name(&payload.device_name) {
+        Ok(audio_device) => device = audio_device,
+        Err(e) => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                JsonResponse(
+                    json!({"error": format!("device {} not found: {}", device_name.clone(), e)}),
+                ),
+            ))
+        }
+    };
+
+    if let Err(e) = state.audio_manager.start_device(&device).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("started device: {}", device_name),
+    }))
 }
 
 fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>

@@ -4,12 +4,12 @@ use std::sync::{
 };
 
 use crate::core::{
-    device::{default_input_device, default_output_device, AudioDevice},
+    device::{list_audio_devices, AudioDevice},
     stream::AudioStream,
 };
 use anyhow::Result;
 use dashmap::DashMap;
-use tracing::error;
+use tracing::{error, warn};
 
 pub struct DeviceManager {
     devices: Vec<AudioDevice>,
@@ -19,28 +19,10 @@ pub struct DeviceManager {
 
 impl DeviceManager {
     pub async fn new() -> Result<Self> {
-        let devices = vec![default_input_device()?, default_output_device()?];
+        let devices = list_audio_devices().await?;
 
         let streams = DashMap::new();
         let states = DashMap::new();
-
-        for device in devices.iter() {
-            let is_running = Arc::new(AtomicBool::new(false));
-            let stream = match AudioStream::from_device(
-                Arc::new(device.clone()),
-                is_running.clone(),
-            )
-            .await
-            {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!("Error creating audio stream: {:?}", e);
-                    continue;
-                }
-            };
-            streams.insert(device.clone(), Arc::new(stream));
-            states.insert(device.clone(), is_running);
-        }
 
         Ok(Self {
             devices,
@@ -55,6 +37,21 @@ impl DeviceManager {
 
     pub fn device(&self, device_name: &str) -> Option<AudioDevice> {
         self.devices.iter().find(|d| d.name == device_name).cloned()
+    }
+
+    pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
+        let is_running = Arc::new(AtomicBool::new(false));
+        let stream =
+            match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    return Err(e);
+                }
+            };
+        self.streams.insert(device.clone(), Arc::new(stream));
+        self.states.insert(device.clone(), is_running);
+
+        Ok(())
     }
 
     pub fn stream(&self, device: &AudioDevice) -> Option<Arc<AudioStream>> {
