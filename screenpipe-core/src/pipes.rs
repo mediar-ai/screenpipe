@@ -106,6 +106,7 @@ function Get-ChildProcesses($ProcessId) {{
 while ($true) {{
     try {{
         $parent = Get-Process -Id $parentPid -ErrorAction Stop
+        $child = Get-Process -Id $childPid -ErrorAction Stop
         Start-Sleep -Seconds 1
     }} catch {{
         Write-Host "Parent process ($parentPid) not found, terminating child processes"
@@ -119,7 +120,7 @@ while ($true) {{
         foreach ($processId in $allProcesses) {{
             try {{
                 Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process: $pid"
+                Write-Host "Stopped process: $processId"
             }} catch {{
                 Write-Host "Process $processId already terminated"
             }}
