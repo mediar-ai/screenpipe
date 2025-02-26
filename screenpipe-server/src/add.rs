@@ -225,10 +225,7 @@ pub async fn handle_index_command(
                     frame_ids[idx],
                     &text,
                     "{}", // empty json
-                    "",   // no app name
-                    "",   // no window name
                     engine_arc.clone(),
-                    true, // focused
                 )
                 .await
             {

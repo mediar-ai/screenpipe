@@ -247,10 +247,15 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                     }
                   }}
                   className="font-medium"
-                  disabled={isLoadingPurchase}
+                  disabled={isLoadingPurchase || isLoadingInstall}
                 >
                   {isLoadingPurchase ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : isLoadingInstall ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      installing...
+                    </>
                   ) : pipe.is_paid && !pipe.has_purchased ? (
                     `$${pipe.price}`
                   ) : (

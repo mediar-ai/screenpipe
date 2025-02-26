@@ -1132,13 +1132,18 @@ fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
     let parsed_url = Url::parse(url)?;
     if parsed_url.host_str() == Some("github.com") {
         let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-        if path_segments.len() >= 5 && path_segments[2] == "tree" {
-            let (owner, repo, _, branch) = (
-                path_segments[0],
-                path_segments[1],
-                path_segments[2],
-                path_segments[3],
-            );
+        if path_segments.len() >= 5 && path_segments.contains(&"tree") {
+            // Find the position of "tree" in the path
+            let tree_pos = path_segments.iter().position(|&s| s == "tree").unwrap();
+
+            let owner = path_segments[0];
+            let repo = path_segments[1];
+
+            // Everything after "tree" until the next major section is the branch
+            // Join with "/" to handle branches with slashes like "feature/branch-name"
+            let branch_end = path_segments.len();
+            let branch = path_segments[(tree_pos + 1)..branch_end].join("/");
+
             let raw_url = format!(
                 "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
                 owner, repo, branch

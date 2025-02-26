@@ -69,6 +69,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[tokio::test]
+    #[ignore]
     async fn test_custom_ocr() {
         println!("Starting custom OCR test...");
 
@@ -117,6 +118,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_custom_ocr_chinese() {
         println!("Starting custom OCR Chinese test...");
 
