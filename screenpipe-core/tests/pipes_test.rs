@@ -4,10 +4,9 @@ mod tests {
     use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
     use serde_json::json;
     use std::sync::Arc;
+    use std::sync::Once;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
-    use tokio::fs::create_dir_all;
     use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -25,7 +24,6 @@ mod tests {
         });
     }
 
-
     #[tokio::test]
     async fn test_download_pipe_invalid_url() {
         init();
@@ -37,8 +35,6 @@ mod tests {
 
         assert!(result.is_err(), "Expected an error for invalid URL");
     }
-
-    
 
     #[tokio::test]
     #[ignore]

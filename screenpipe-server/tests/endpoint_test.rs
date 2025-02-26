@@ -172,16 +172,19 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "This is a test OCR text", // 21 chars
             "",
-            "TestApp",
-            "TestWindow",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -189,10 +192,7 @@ mod tests {
             frame_id2,
             "Another OCR text for testing that should be longer than thirty characters", // >30 chars
             "",
-            "TestApp2",
-            "TestWindow2",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -239,6 +239,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -249,6 +251,8 @@ mod tests {
             .count_search_results(
                 "OCR",
                 ContentType::OCR,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -275,6 +279,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -288,6 +294,8 @@ mod tests {
                 None,
                 None,
                 Some("TestApp"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -311,6 +319,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -326,6 +336,8 @@ mod tests {
                 None,
                 None,
                 Some(30),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -347,6 +359,8 @@ mod tests {
                 Some(25),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -363,7 +377,10 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")
@@ -384,10 +401,7 @@ mod tests {
             frame_id1,
             "old ocr text",
             "",
-            "testapp",
-            "testwindow",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -427,6 +441,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -439,6 +455,8 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -460,6 +478,8 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -490,6 +510,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -513,6 +535,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -523,6 +547,8 @@ mod tests {
                 "audio",
                 ContentType::Audio,
                 Some(two_hours_ago - Duration::minutes(100)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -551,14 +577,20 @@ mod tests {
             .insert_video_chunk("old_video.mp4", "test_device")
             .await
             .unwrap();
-        let old_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let old_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert recent data
         let _ = db
             .insert_video_chunk("recent_video.mp4", "test_device")
             .await
             .unwrap();
-        let recent_frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let recent_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert OCR data with different timestamps
         sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
@@ -579,10 +611,7 @@ mod tests {
             old_frame_id,
             "old task: write documentation",
             "",
-            "vscode",
-            "tasks.md",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -591,10 +620,7 @@ mod tests {
             recent_frame_id,
             "current task: fix bug #123",
             "",
-            "vscode",
-            "tasks.md",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -607,6 +633,8 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::seconds(30)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -636,6 +664,8 @@ mod tests {
                 0,
                 Some(old_timestamp - Duration::seconds(1)),
                 Some(old_timestamp + Duration::seconds(1)),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -686,6 +716,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -701,6 +733,8 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
+                None,
                 None,
                 None,
                 None,

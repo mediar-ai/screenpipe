@@ -5,19 +5,29 @@ mod tests {
     use chrono::Utc;
     use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::{
-        db_types::{ContentType, SearchResult},
+        db_types::{ContentType, Frame, SearchResult},
         DatabaseManager,
     };
     use screenpipe_vision::OcrEngine;
 
     async fn setup_test_db() -> DatabaseManager {
+        // Initialize tracing for debug output
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::INFO)
+            .try_init();
+
         let db = DatabaseManager::new("sqlite::memory:").await.unwrap();
 
-        // Run all migrations
-        sqlx::migrate!("./src/migrations")
-            .run(&db.pool)
-            .await
-            .unwrap();
+        // Run all migrations with better error handling
+        match sqlx::migrate!("./src/migrations").run(&db.pool).await {
+            Ok(_) => {
+                tracing::debug!("Database migrations completed successfully");
+            }
+            Err(e) => {
+                eprintln!("Migration error: {:?}", e);
+                panic!("Database migration failed: {}", e);
+            }
+        }
 
         db
     }
@@ -29,15 +39,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id,
             "Hello, world!",
             "",
-            "test",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -51,6 +61,8 @@ mod tests {
                 None,
                 None,
                 Some("test"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -99,6 +111,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -110,6 +124,8 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -168,6 +184,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -179,6 +197,8 @@ mod tests {
                 ContentType::Audio,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -208,18 +228,37 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
+
+        // Debug: Check if app_name was inserted correctly
+        let frame_data: Frame = sqlx::query_as("SELECT * FROM frames WHERE id = ?")
+            .bind(frame_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        println!("Inserted frame data: {:?}", frame_data);
+
         db.insert_ocr_text(
             frame_id,
             "Hello from OCR",
             "",
-            "app",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
+
+        // Verify that frames_fts was populated
+        let fts_data: Option<(i64, String, String, String, bool)> = sqlx::query_as(
+            "SELECT rowid, browser_url, app_name, window_name, focused FROM frames_fts WHERE rowid = ?",
+        )
+        .bind(frame_id)
+        .fetch_optional(&db.pool)
+        .await
+        .unwrap();
+        println!("Frames FTS data: {:?}", fts_data);
 
         // Insert Audio data
         let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
@@ -244,7 +283,9 @@ mod tests {
                 0,
                 None,
                 None,
-                Some("app"),
+                Some("test"),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -261,6 +302,8 @@ mod tests {
                 ContentType::All,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -298,15 +341,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -335,18 +378,48 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
+
+        let raw_ocr_text: Vec<(String, Option<i64>)> =
+            sqlx::query_as("SELECT text, frame_id FROM ocr_text")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("Raw OCR text in DB: {:?}", raw_ocr_text);
+        // print raw frames with timestamp
+        let raw_frames: Vec<(Option<i64>, Option<String>)> =
+            sqlx::query_as("SELECT id, timestamp FROM frames")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("Raw frames in DB: {:?}", raw_frames);
+        // Check if OCR text is properly indexed in FTS
+        let ocr_fts_data: Vec<(i64, String)> =
+            sqlx::query_as("SELECT rowid, text FROM ocr_text_fts")
+                .fetch_all(&db.pool)
+                .await
+                .unwrap();
+        println!("OCR FTS data: {:?}", ocr_fts_data);
+
+        // check if frames_fts is properly indexed
+        let frame_fts_data: Vec<(i64, String, String, String, bool)> = sqlx::query_as(
+            "SELECT id, browser_url, app_name, window_name, focused FROM frames_fts",
+        )
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+        println!("Frames FTS data: {:?}", frame_fts_data);
 
         let insert_result = db
             .insert_audio_transcription(
@@ -387,6 +460,30 @@ mod tests {
 
         let end_time = Utc::now();
 
+        // Debug OCR search with time range
+        let ocr_results = db
+            .search(
+                "Hello",
+                ContentType::OCR,
+                100,
+                0,
+                Some(start_time),
+                Some(end_time),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        println!("OCR time range results: {:?}", ocr_results);
+
+        assert_eq!(ocr_results.len(), 2);
+
         // Test search with full time range
         let results = db
             .search(
@@ -396,6 +493,8 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -417,6 +516,8 @@ mod tests {
                 0,
                 Some(mid_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -448,6 +549,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -462,6 +565,8 @@ mod tests {
                 0,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -485,15 +590,15 @@ mod tests {
             .insert_video_chunk("test_video.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from OCR 1",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -520,15 +625,15 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // Insert remaining data
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from OCR 2",
             "",
-            "",
-            "",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -565,6 +670,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -583,6 +690,8 @@ mod tests {
                 ContentType::Audio,
                 Some(start_time),
                 Some(end_time),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -928,29 +1037,29 @@ mod tests {
             .unwrap();
 
         // Insert first frame with OCR
-        let frame_id1 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id1,
             "Hello from frame 1",
             "",
-            "test_app",
-            "test_window",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
 
         // Insert second frame with OCR
-        let frame_id2 = db.insert_frame("test_device", None, None).await.unwrap();
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
         db.insert_ocr_text(
             frame_id2,
             "Hello from frame 2",
             "",
-            "test_app",
-            "test_window",
             Arc::new(OcrEngine::Tesseract),
-            false,
         )
         .await
         .unwrap();
@@ -970,6 +1079,8 @@ mod tests {
                 None,
                 None,
                 Some("test_video"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -995,6 +1106,8 @@ mod tests {
                 None,
                 None,
                 Some("non_existent"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1020,6 +1133,8 @@ mod tests {
                 None,
                 None,
                 Some("test_video"),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1035,6 +1150,8 @@ mod tests {
             .count_search_results(
                 "Hello",
                 ContentType::OCR,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1090,6 +1207,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1117,6 +1236,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -1129,6 +1250,8 @@ mod tests {
                 ContentType::UI,
                 100,
                 0,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1157,9 +1280,130 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
         assert_eq!(results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_count_search_results_all_content_types() {
+        let db = setup_test_db().await;
+
+        // Insert OCR data
+        let _ = db
+            .insert_video_chunk("test_video.mp4", "test_device")
+            .await
+            .unwrap();
+        let frame_id = db
+            .insert_frame("test_device", None, None, Some("test"), Some(""), false)
+            .await
+            .unwrap();
+        db.insert_ocr_text(
+            frame_id,
+            "Hello from OCR",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
+
+        // Insert Audio data
+        let audio_chunk_id = db.insert_audio_chunk("test_audio.mp4").await.unwrap();
+        db.insert_audio_transcription(
+            audio_chunk_id,
+            "Hello from audio",
+            0,
+            "",
+            &AudioDevice::new("test".to_string(), DeviceType::Output),
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Insert UI monitoring data
+        sqlx::query(
+            r#"
+            INSERT INTO ui_monitoring (
+                text_output,
+                timestamp,
+                app,
+                window,
+                initial_traversal_at
+            ) VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind("Hello from UI")
+        .bind(Utc::now())
+        .bind("test_app")
+        .bind("test_window")
+        .bind(Utc::now())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Test count with All content types
+        let count = db
+            .count_search_results(
+                "Hello",
+                ContentType::All,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 3, "Should count OCR, Audio, and UI results");
+
+        // Test count with specific app filter
+        let count = db
+            .count_search_results(
+                "Hello",
+                ContentType::All,
+                None,
+                None,
+                Some("test_app"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "Should only count UI result with app filter");
+
+        // Test count with non-matching query
+        let count = db
+            .count_search_results(
+                "nonexistent",
+                ContentType::All,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "Should count zero results for non-matching query");
     }
 }
