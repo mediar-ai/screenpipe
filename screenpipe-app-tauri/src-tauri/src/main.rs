@@ -31,7 +31,6 @@ use updates::start_update_check;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
-use tauri_plugin_shell::ShellExt;
 
 mod commands;
 mod disk_usage;
