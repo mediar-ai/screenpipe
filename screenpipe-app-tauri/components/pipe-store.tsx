@@ -922,15 +922,27 @@ export const PipeStore: React.FC = () => {
       // Store current time as last check
       await localforage.setItem("lastUpdateCheck", now);
 
-      const installedPipes = pipes.filter((pipe) => pipe.is_installed);
+      const installedPipes = pipes.filter((pipe) => 
+        pipe.is_installed && 
+        pipe.installed_config?.version
+      );
+      
+      // Skip if no pipes to check
+      if (installedPipes.length === 0) return;
+
+      // Format pipes for batch update check
+      const pluginsToCheck = installedPipes.map(pipe => ({
+        pipe_id: pipe.id,
+        version: pipe.installed_config!.version!
+      }));
 
       const storeApi = await PipeApi.create(settings.user.token);
+      const updates = await storeApi.checkUpdates(pluginsToCheck);
+
+      // Process updates and install them
       for (const pipe of installedPipes) {
-        const update = await storeApi.checkUpdate(
-          pipe.id,
-          pipe.installed_config?.version!
-        );
-        if (update.has_update) {
+        const update = updates.results.find(u => u.pipe_id === pipe.id);
+        if (update && 'has_update' in update && update.has_update) {
           await handleUpdatePipe(pipe);
         }
       }
