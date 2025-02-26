@@ -48,13 +48,13 @@ pub struct AudioManager {
     db: Arc<DatabaseManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     whisper_model: Arc<Mutex<WhisperModel>>,
-    recording_receiver_handle: Arc<Option<JoinHandle<()>>>,
+    recording_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     recording_handles: DashMap<AudioDevice, Arc<Mutex<tokio::task::JoinHandle<Result<()>>>>>,
     recording_sender: crossbeam::channel::Sender<AudioInput>,
     recording_receiver: crossbeam::channel::Receiver<AudioInput>,
     transcription_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     transcription_sender: crossbeam::channel::Sender<TranscriptionResult>,
-    transcription_receiver_handle: Arc<Option<JoinHandle<()>>>,
+    transcription_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     // health: AudioManagerHealth,
 }
 
@@ -90,8 +90,8 @@ impl AudioManager {
             transcription_receiver,
             transcription_sender,
             recording_handles,
-            recording_receiver_handle: Arc::new(None),
-            transcription_receiver_handle: Arc::new(None),
+            recording_receiver_handle: Arc::new(Mutex::new(None)),
+            transcription_receiver_handle: Arc::new(Mutex::new(None)),
             // health: AudioManagerHealth::Healthy,
         })
     }
@@ -100,7 +100,11 @@ impl AudioManager {
         self.options.use_all_devices
     }
 
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start(&self) -> Result<()> {
+        if self.status().await == AudioManagerStatus::Running {
+            return Err(anyhow!("AudioManager is already running"));
+        }
+
         info!("Starting audio manager");
         for device_name in &self.options.enabled_devices {
             let device = match self.device_manager.device(device_name) {
@@ -117,15 +121,21 @@ impl AudioManager {
         let transcription_receiver = self.transcription_receiver.clone();
         let transcription_sender = self.transcription_sender.clone();
 
-        self.transcription_receiver_handle = Arc::new(Some(
+        let mut transcription_receiver_handle = self.transcription_receiver_handle.lock().await;
+        *transcription_receiver_handle = Some(
             self.start_transcription_receiver_handler(transcription_receiver)
                 .await?,
-        ));
+        );
 
-        self.recording_receiver_handle = Arc::new(Some(
+        let mut recording_receiver_handle = self.recording_receiver_handle.lock().await;
+        *recording_receiver_handle = Some(
             self.start_audio_receiver_handler(transcription_sender)
                 .await?,
-        ));
+        );
+
+        let mut status = self.status.lock().await;
+
+        *status = AudioManagerStatus::Running;
 
         Ok(())
     }
@@ -157,6 +167,10 @@ impl AudioManager {
 
     // Stop all audio processing
     pub async fn stop(&self) -> Result<()> {
+        if self.status().await == AudioManagerStatus::Stopped {
+            return Err(anyhow!("AudioManager already stopped"));
+        }
+
         self.recording_handles.clear();
         let _ = self.device_manager.stop_all_devices();
         *self.status.lock().await = AudioManagerStatus::Stopped;

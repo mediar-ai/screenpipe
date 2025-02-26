@@ -2027,7 +2027,7 @@ async fn start_audio_device(
             return Err((
                 StatusCode::UNPROCESSABLE_ENTITY,
                 JsonResponse(
-                    json!({"error": format!("device {} not found: {}", device_name.clone(), e)}),
+                    json!({"success": false, "message": format!("device {} not found: {}", device_name.clone(), e)}),
                 ),
             ))
         }
@@ -2037,7 +2037,8 @@ async fn start_audio_device(
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({
-                "error": format!("Failed to start recording device {}: {}", device_name.clone(), e)
+                "success": false,
+                "message": format!("Failed to start recording device {}: {}", device_name.clone(), e)
             })),
         ));
     }
@@ -2058,7 +2059,8 @@ async fn stop_audio_device(
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             JsonResponse(json!({
-                "error": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+                "success": false,
+                "message": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
             })),
         ));
     }
@@ -2067,6 +2069,36 @@ async fn stop_audio_device(
         "success": true,
         "mesage": format!("stopped recording audio device: {}", device_name)
     })))
+}
+
+async fn start_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.start().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
+}
+
+async fn stop_audio(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, (StatusCode, JsonResponse<Value>)> {
+    match state.audio_manager.stop().await {
+        Ok(_) => Ok(Response::builder().status(200).body(Body::empty()).unwrap()),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "success": false,
+                "message": format!("Failed to start audio processing: {}", e),
+            })),
+        )),
+    }
 }
 
 pub fn create_router() -> Router<Arc<AppState>> {
@@ -2118,6 +2150,8 @@ pub fn create_router() -> Router<Arc<AppState>> {
         .route("/experimental/validate/media", get(validate_media_handler))
         .route("/audio/device/start", post(start_audio_device))
         .route("/audio/device/stop", post(stop_audio_device))
+        .route("/audio/start", post(start_audio))
+        .route("/audio/stop", post(stop_audio))
         .route("/ws/events", get(ws_events_handler))
         .route("/semantic-search", get(semantic_search_handler))
         .route("/frames/:frame_id", get(get_frame_data))
