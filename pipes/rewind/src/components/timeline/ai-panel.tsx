@@ -132,7 +132,7 @@ export function AIPanel({
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (
 				(e.metaKey || e.ctrlKey) &&
-				e.key.toLowerCase() === "k" &&
+				e.key.toLowerCase() === "l" &&
 				!isExpanded
 			) {
 				e.preventDefault();
@@ -339,7 +339,7 @@ export function AIPanel({
 						>
 							<span>ask ai</span>
 							<span className="text-muted-foreground text-[10px]">
-								{osType === "macos" ? "⌘K" : "Ctrl+K"}
+								{osType === "macos" ? "⌘L" : "Ctrl+L"}
 							</span>
 						</button>
 					</div>
