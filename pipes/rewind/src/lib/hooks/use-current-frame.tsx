@@ -10,7 +10,6 @@ export const useCurrentFrame = (setCurrentIndex: (index: number) => void) => {
 	const lastFramesLen = useRef<number>(0);
 
 	useEffect(() => {
-		console.log("current length", lastFramesLen);
 		if (!currentFrame && frames.length) {
 			setCurrentFrame(frames[lastFramesLen.current]);
 			setCurrentIndex(lastFramesLen.current);

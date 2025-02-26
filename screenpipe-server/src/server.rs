@@ -2388,7 +2388,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
     let db = state.db.clone();
 
     // Create a buffer for batching frames
-    let mut frame_buffer = Vec::with_capacity(50);
+    let mut frame_buffer = Vec::with_capacity(100);
     let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
 
     // Handle incoming messages for time range requests
@@ -2450,7 +2450,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                             frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
 
                             // If buffer is full, send immediately
-                            if frame_buffer.len() >= 50 {
+                            if frame_buffer.len() >= 100 {
                                 if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
                                     error!("failed to send batch: {}", e);
                                     break;

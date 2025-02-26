@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use libsqlite3_sys::sqlite3_auto_extension;
+use nix::NixPath;
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use sqlite_vec::sqlite3_vec_init;
@@ -122,9 +123,12 @@ impl DatabaseManager {
         Ok(id)
     }
 
-    pub async fn count_audio_transcriptions(&self, audio_chunk_id: i64) -> Result<i64, sqlx::Error> {
+    pub async fn count_audio_transcriptions(
+        &self,
+        audio_chunk_id: i64,
+    ) -> Result<i64, sqlx::Error> {
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM audio_transcriptions WHERE audio_chunk_id = ?1"
+            "SELECT COUNT(*) FROM audio_transcriptions WHERE audio_chunk_id = ?1",
         )
         .bind(audio_chunk_id)
         .fetch_one(&self.pool)
@@ -1089,10 +1093,10 @@ impl DatabaseManager {
                        AND (?5 IS NULL OR COALESCE(ocr_text.text_length, LENGTH(ocr_text.text)) <= ?5)
                        AND (?6 IS NULL OR frames.name LIKE '%' || ?6 || '%')"#,
                 base_table = if ocr_query.is_empty() {
-                    "frames 
+                    "frames
                      JOIN ocr_text ON frames.id = ocr_text.frame_id"
                 } else {
-                    "ocr_text_fts 
+                    "ocr_text_fts
                      JOIN ocr_text ON ocr_text_fts.frame_id = ocr_text.frame_id
                      JOIN frames ON ocr_text.frame_id = frames.id"
                 },
@@ -1456,30 +1460,20 @@ impl DatabaseManager {
     ) -> Result<TimeSeriesChunk, SqlxError> {
         // Get frames with OCR data, grouped by minute to handle multiple monitors
         let frames_query = r#"
-        WITH MinuteGroups AS (
-            SELECT
-                f.id,
-                f.timestamp,
-                f.offset_index,
-                ot.text,
-                f.app_name,
-                f.window_name,
-                vc.device_name as screen_device,
-                vc.file_path as video_path,
-                strftime('%Y-%m-%d %H:%M', f.timestamp) as minute_group,
-                ROW_NUMBER() OVER (
-                    PARTITION BY strftime('%Y-%m-%d %H:%M', f.timestamp), f.app_name, vc.device_name
-                    ORDER BY f.timestamp DESC
-                ) as rn
-            FROM frames f
-            JOIN video_chunks vc ON f.video_chunk_id = vc.id
-            LEFT JOIN ocr_text ot ON f.id = ot.frame_id
-            WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
-        )
-        SELECT *
-        FROM MinuteGroups
-        WHERE rn = 1
-        ORDER BY timestamp DESC, offset_index DESC
+         SELECT
+            f.id,
+            f.timestamp,
+            f.offset_index,
+            ot.text,
+            COALESCE(f.app_name, ot.app_name) as app_name,
+            COALESCE(f.window_name, ot.window_name) as window_name,
+            vc.device_name as screen_device,
+            vc.file_path as video_path
+        FROM frames f
+        JOIN video_chunks vc ON f.video_chunk_id = vc.id
+        LEFT JOIN ocr_text ot ON f.id = ot.frame_id
+        WHERE f.timestamp >= ?1 AND f.timestamp <= ?2
+        ORDER BY f.timestamp DESC, f.offset_index DESC
     "#;
 
         // Get audio data with proper time windows for synchronization
@@ -2271,8 +2265,8 @@ SELECT
     f.id,
     f.timestamp,
     f.browser_url as url,
-    f.app_name,
-    f.window_name,
+    COALESCE(f.app_name, o.app_name) as app_name,
+    COALESCE(f.window_name, o.window_name) as window_name,
     o.text as ocr_text,
     o.text_json
 FROM frames f
