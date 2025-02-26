@@ -18,8 +18,11 @@ impl WindowsUrlDetector {
 
     fn validate_url(url: &str) -> Result<bool, Error> {
         let client = Client::new();
-        let response = client.get(url).send()?;
-        Ok(response.status().is_success())
+        let response = client.get(url).send();
+        match response {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
     }
     
     fn get_active_url_from_window(pid: i32) -> Result<Option<String>> {
@@ -45,16 +48,22 @@ impl WindowsUrlDetector {
                         if let Ok(url) = value.get_string() {
                             if !url.is_empty() {
                                 debug!("found url: {}", url);
-                                if !url.starts_with("http://") || !url.starts_with("https://") {
-                                    let full_url = format!("http://{}", url);
+                                if !url.starts_with("http://") && !url.starts_with("https://") {
+                                    let full_url = format!("https://{}", url);
                                     debug!("reconstructed url: {}", full_url);
                                     if Self::validate_url(&full_url).unwrap_or(false) {
-                                        debug!("validated url: {}", url);
+                                        debug!("validated url: {}", full_url);
                                         return Ok(Some(full_url));
                                     } else {
                                         debug!("invalid url, might be some search text: {}", url);
                                     }
                                 } else {
+                                    if Self::validate_url(&url).unwrap_or(false) {
+                                        debug!("validated url: {}", url);
+                                        return Ok(Some(url));
+                                    } else {
+                                        debug!("invalid url, might be some search text: {}", url);
+                                    }
                                     return Ok(Some(url));
                                 }
                             }
