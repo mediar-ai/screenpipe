@@ -1038,7 +1038,8 @@ impl SCServer {
             .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
             .get("/search/keyword", keyword_search_handler)
             .post("/v1/embeddings", create_embeddings)
-            .post("/audio/start", start_audio_device)
+            .post("/audio/device/start", start_audio_device)
+            .post("/audio/device/stop", stop_audio_device)
             // .post("/audio/stop", stop_audio_device)
             // .post("/vision/start", start_vision_device)
             // .post("/vision/stop", stop_vision_device)
@@ -2133,6 +2134,28 @@ async fn start_audio_device(
     Ok(Json(AudioDeviceControlResponse {
         success: true,
         message: format!("started device: {}", device_name),
+    }))
+}
+
+#[oasgen]
+async fn stop_audio_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AudioDeviceControlRequest>,
+) -> Result<Json<AudioDeviceControlResponse>, (StatusCode, JsonResponse<Value>)> {
+    let device_name = payload.device_name.clone();
+
+    if let Err(e) = state.audio_manager.stop_device(&device_name).await {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            JsonResponse(json!({
+                "error": format!("Failed to stop recording device {}: {}", device_name.clone(), e)
+            })),
+        ));
+    }
+
+    Ok(Json(AudioDeviceControlResponse {
+        success: true,
+        message: format!("stopped recording audio device: {}", device_name),
     }))
 }
 

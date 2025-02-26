@@ -135,7 +135,7 @@ impl AudioManager {
         Ok(devices)
     }
 
-    pub async fn stop_device(&mut self, device_name: &str) -> Result<()> {
+    pub async fn stop_device(&self, device_name: &str) -> Result<()> {
         // Disable specific audio device
         let device = match parse_audio_device(device_name) {
             Ok(device) => device,
