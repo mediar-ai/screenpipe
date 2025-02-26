@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
     time::Duration,
 };
-use tokio::{sync::Mutex, task::JoinHandle};
+use tokio::{join, sync::Mutex, task::JoinHandle};
 use tracing::{error, info};
 
 use screenpipe_db::DatabaseManager;
@@ -17,7 +17,8 @@ use crate::{
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{
-        process_transcription_result, stt::process_audio_input, whisper::model::WhisperModel,
+        deepgram::streaming::stream_transcription_deepgram, process_transcription_result,
+        stt::process_audio_input, whisper::model::WhisperModel,
     },
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
     AudioInput, TranscriptionResult,
@@ -47,10 +48,10 @@ pub struct AudioManager {
     db: Arc<DatabaseManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
     whisper_model: Arc<Mutex<WhisperModel>>,
-    audio_receiver_handle: Arc<Option<JoinHandle<()>>>,
+    recording_receiver_handle: Arc<Option<JoinHandle<()>>>,
     recording_handles: DashMap<AudioDevice, Arc<Mutex<tokio::task::JoinHandle<Result<()>>>>>,
-    whisper_sender: crossbeam::channel::Sender<AudioInput>,
-    whisper_receiver: crossbeam::channel::Receiver<AudioInput>,
+    recording_sender: crossbeam::channel::Sender<AudioInput>,
+    recording_receiver: crossbeam::channel::Receiver<AudioInput>,
     transcription_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     transcription_sender: crossbeam::channel::Sender<TranscriptionResult>,
     transcription_receiver_handle: Arc<Option<JoinHandle<()>>>,
@@ -84,12 +85,12 @@ impl AudioManager {
             db,
             vad_engine,
             whisper_model,
-            whisper_sender,
-            whisper_receiver,
+            recording_sender: whisper_sender,
+            recording_receiver: whisper_receiver,
             transcription_receiver,
             transcription_sender,
             recording_handles,
-            audio_receiver_handle: Arc::new(None),
+            recording_receiver_handle: Arc::new(None),
             transcription_receiver_handle: Arc::new(None),
             // health: AudioManagerHealth::Healthy,
         })
@@ -122,18 +123,13 @@ impl AudioManager {
                 .await?,
         ));
 
-        self.audio_receiver_handle = Arc::new(Some(
+        self.recording_receiver_handle = Arc::new(Some(
             self.start_audio_receiver_handler(transcription_sender)
                 .await?,
         ));
 
         Ok(())
     }
-
-    // pub async fn enable_device(&mut self, device_name: &str) -> Result<()> {
-    //     // Enable specific audio device
-    //     Ok(())
-    // }
 
     pub async fn devices(&self) -> Result<Vec<AudioDevice>> {
         let devices = self.device_manager.devices();
@@ -177,8 +173,8 @@ impl AudioManager {
     //     Ok(())
     // }
 
-    async fn start_device(&mut self, device: &AudioDevice) -> Result<()> {
-        info!("Starting device: {:?}", device.name);
+    // TODO: Make sure stopped or return device already running error
+    pub async fn start_device(&mut self, device: &AudioDevice) -> Result<()> {
         if let Some(is_running) = self.device_manager.is_running_mut(device) {
             is_running.store(true, Ordering::Relaxed);
         }
@@ -189,15 +185,49 @@ impl AudioManager {
     }
 
     async fn record_device(&mut self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
-        info!("Recording device: {:?}", device.name);
-        let whisper_handle = tokio::spawn(record_and_transcribe(
-            self.device_manager.stream(device).unwrap(),
-            Duration::from_secs(self.options.audio_chunk_duration as u64),
-            self.whisper_sender.clone(),
-            self.device_manager.is_running_mut(device).unwrap(),
-        ));
+        let stream = self.device_manager.stream(device).unwrap();
+        let audio_chunk_duration = self.options.audio_chunk_duration as u64;
+        let recording_sender = self.recording_sender.clone();
+        let is_running = self.device_manager.is_running_mut(device).unwrap();
+        let languages = self.options.languages.clone();
+        let deepgram_api_key = self.options.deepgram_api_key.clone();
 
-        Ok(whisper_handle)
+        let recording_handle = tokio::spawn(async move {
+            let record_and_transcribe_handle = record_and_transcribe(
+                stream.clone(),
+                Duration::from_secs(audio_chunk_duration),
+                recording_sender.clone(),
+                is_running.clone(),
+            );
+
+            let realtime_handle =
+                stream_transcription_deepgram(stream, languages, is_running, deepgram_api_key);
+
+            let (record_result, realtime_result) =
+                join!(record_and_transcribe_handle, realtime_handle);
+
+            if record_result.is_err() || realtime_result.is_err() {
+                let mut e = anyhow!("record_device failed");
+
+                if record_result.is_err() {
+                    let record_error = record_result.err().unwrap();
+                    error!("Record and transcribe error: {}", record_error);
+                    e = e.context(record_error)
+                }
+
+                if realtime_result.is_err() {
+                    let realtime_error = realtime_result.err().unwrap();
+                    error!("Realtime recording error: {}", realtime_error);
+                    e = e.context(realtime_error);
+                }
+
+                return Err(e);
+            }
+
+            Ok(())
+        });
+
+        Ok(recording_handle)
     }
 
     async fn start_audio_receiver_handler(
@@ -214,11 +244,11 @@ impl AudioManager {
         let audio_transcription_engine = self.options.transcription_engine.clone();
         let vad_engine = self.vad_engine.clone();
         let whisper_model = self.whisper_model.clone();
-        let whisper_receiver = self.whisper_receiver.clone();
+        let whisper_receiver = self.recording_receiver.clone();
 
         Ok(tokio::spawn(async move {
             while let Ok(audio) = whisper_receiver.recv() {
-                info!("Received audio from whisper: {:?}", audio.device.name);
+                info!("Received audio from device: {:?}", audio.device.name);
                 if let Err(e) = process_audio_input(
                     audio.clone(),
                     whisper_model.clone(),

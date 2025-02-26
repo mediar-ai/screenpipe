@@ -7,7 +7,7 @@ use candle_transformers::models::whisper::{self as m, Config};
 use hf_hub::{api::sync::Api, Repo, RepoType};
 use tokenizers::Tokenizer;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::core::engine::AudioTranscriptionEngine;
 
@@ -22,7 +22,7 @@ impl WhisperModel {
     pub fn new(engine: &AudioTranscriptionEngine) -> Result<Self> {
         debug!("Initializing WhisperModel");
         let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-        info!("device = {:?}", device);
+        debug!("device = {:?}", device);
 
         debug!("Fetching model files");
         let (config_filename, tokenizer_filename, weights_filename) = {

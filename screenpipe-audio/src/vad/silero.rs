@@ -1,9 +1,8 @@
 use anyhow;
 use dirs;
-use tracing::debug;
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use tracing::info;
+use tracing::debug;
 use vad_rs::{Vad, VadStatus};
 
 use crate::vad::FRAME_HISTORY;
@@ -21,9 +20,9 @@ pub struct SileroVad {
 
 impl SileroVad {
     pub async fn new() -> anyhow::Result<Self> {
-        info!("Initializing SileroVad...");
+        debug!("Initializing SileroVad...");
         let model_path = Self::get_or_download_model().await?;
-        info!("SileroVad Model downloaded to: {:?}", model_path);
+        debug!("SileroVad Model downloaded to: {:?}", model_path);
         let vad = Vad::new(model_path, 16000).map_err(|e| {
             debug!("SileroVad Error creating Vad: {}", e);
             anyhow::anyhow!("Vad creation error: {}", e)
