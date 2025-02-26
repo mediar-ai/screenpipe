@@ -58123,6 +58123,7 @@ import path2 from "path";
 var import_archiver = __toESM(require_archiver(), 1);
 var import_ignore = __toESM(require_ignore2(), 1);
 import crypto2 from "crypto";
+import { execSync } from "child_process";
 var NEXTJS_FILES = {
   required: ["package.json", ".next"],
   optional: [
@@ -58178,7 +58179,37 @@ async function retryFetch(url2, options, maxRetries = 3, baseDelay = 1000) {
   }
   throw new Error("Retry failed");
 }
-var publishCommand = new Command("publish").description("publish or update a pipe to the store").requiredOption("-n, --name <name>", "name of the pipe").option("-v, --verbose", "enable verbose logging", false).action(async (opts) => {
+function isProjectBuilt() {
+  if (fs3.existsSync("next.config.js") || fs3.existsSync("next.config.mjs") || fs3.existsSync("next.config.ts")) {
+    return fs3.existsSync(".next") && fs3.existsSync(".next/server");
+  }
+  return fs3.existsSync("dist") || fs3.existsSync("build") || fs3.existsSync("out");
+}
+function runBuildCommand() {
+  logger.info(colors8.info(`
+${symbols.info} Project needs to be built. Running build command...`));
+  try {
+    const packageJson = JSON.parse(fs3.readFileSync("package.json", "utf-8"));
+    if (packageJson.scripts && packageJson.scripts.build) {
+      try {
+        logger.log(colors8.dim(`${symbols.arrow} Executing: bun run build`));
+        execSync("bun run build", { stdio: "inherit" });
+      } catch (error) {
+        logger.log(colors8.dim(`${symbols.arrow} Bun not available, trying npm instead`));
+        execSync("npm run build", { stdio: "inherit" });
+      }
+      logger.success(`${symbols.success} Build completed successfully`);
+    } else {
+      throw new Error("No build script found in package.json");
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to build project: ${error.message}`);
+    }
+    throw new Error("Failed to build project");
+  }
+}
+var publishCommand = new Command("publish").description("publish or update a pipe to the store").requiredOption("-n, --name <name>", "name of the pipe").option("-v, --verbose", "enable verbose logging", false).option("--skip-build-check", "skip checking if the project has been built", false).option("--build", "automatically run the build command if needed", false).action(async (opts) => {
   try {
     if (opts.verbose) {
       console.log(colors8.dim(`${symbols.arrow} starting publish command...`));
@@ -58254,8 +58285,16 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
     if (opts.verbose) {
       console.log(colors8.dim(`${symbols.arrow} calculating file hash...`));
     }
+    if (!opts.skipBuildCheck && !isProjectBuilt()) {
+      if (opts.build) {
+        runBuildCommand();
+      } else {
+        console.error(colors8.error(`${symbols.error} Project has not been built. Run ${colors8.highlight("bun run build")} or ${colors8.highlight("npm run build")} first, or use ${colors8.highlight("--build")} flag to build automatically.`));
+        process.exit(1);
+      }
+    }
     try {
-      console.log(colors8.dim(`${symbols.arrow} Getting upload URL...`));
+      console.log(colors8.dim(`${symbols.arrow} getting upload URL...`));
       const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
         method: "POST",
         headers: {

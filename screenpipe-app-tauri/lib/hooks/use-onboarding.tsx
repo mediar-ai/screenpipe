@@ -1,46 +1,59 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
 import { useSettings } from "./use-settings";
 import localforage from "localforage";
+import { create } from "zustand";
+import { useEffect } from "react";
 
-interface OnboardingContextType {
+// Define the store state type
+interface OnboardingState {
   showOnboarding: boolean;
   setShowOnboarding: (show: boolean) => void;
+  initialized: boolean;
 }
 
-const OnboardingContext = createContext<OnboardingContextType | undefined>(
-  undefined
-);
+// Create the Zustand store
+export const useOnboardingStore = create<OnboardingState>((set) => ({
+  showOnboarding: false,
+  initialized: false,
+  setShowOnboarding: (show: boolean) => {
+    set({ showOnboarding: show });
+    localforage.setItem("showOnboarding", show);
+  },
+}));
 
-export const OnboardingProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const { settings } = useSettings();
-  useEffect(() => {
-    const checkFirstTimeUser = async () => {
-      // settings unreliable here ... race condition
-      const showOnboarding = await localforage.getItem("showOnboarding");
-      if (showOnboarding === null || showOnboarding === undefined || showOnboarding === true) {
-        setShowOnboarding(true);
-        localforage.setItem("showOnboarding", false);
-      }
-    };
-    checkFirstTimeUser();
-  }, [settings]);
-  useEffect(() => {
-    localforage.setItem("showOnboarding", showOnboarding);
-  }, [showOnboarding]);
-  return (
-    <OnboardingContext.Provider value={{ showOnboarding, setShowOnboarding }}>
-      {children}
-    </OnboardingContext.Provider>
-  );
-};
-
-export const useOnboarding = () => {
-  const context = useContext(OnboardingContext);
-  if (context === undefined) {
-    throw new Error("useOnboarding must be used within an OnboardingProvider");
+// Initialize the store with persisted data
+const initializeOnboarding = async () => {
+  // Only initialize once
+  if (useOnboardingStore.getState().initialized) {
+    return;
   }
-  return context;
+
+  const persistedValue = await localforage.getItem("showOnboarding");
+
+  if (persistedValue === null || persistedValue === undefined) {
+    // First time user, show onboarding
+    useOnboardingStore.setState({
+      showOnboarding: true,
+      initialized: true,
+    });
+  } else {
+    // Returning user, respect the stored value
+    useOnboardingStore.setState({
+      showOnboarding: persistedValue === true,
+      initialized: true,
+    });
+  }
 };
+
+// Custom hook that combines store with initialization logic
+export const useOnboarding = () => {
+  const { showOnboarding, setShowOnboarding } = useOnboardingStore();
+  const { settings } = useSettings();
+
+  useEffect(() => {
+    initializeOnboarding();
+  }, [settings]);
+
+  return { showOnboarding, setShowOnboarding };
+};
+
+// No longer need the OnboardingProvider component
