@@ -30,6 +30,8 @@ export function ExportButton() {
 				fps: number;
 			};
 
+			let isClosed = false;
+
 			const sortedFrameIds = selectionRange.frameIds.sort(
 				(a, b) => parseInt(a) - parseInt(b),
 			);
@@ -102,6 +104,7 @@ export function ExportButton() {
 						setIsExporting(false);
 						setProgress(0);
 						ws.close();
+						isClosed = true;
 						break;
 
 					case "error":
@@ -113,19 +116,8 @@ export function ExportButton() {
 						setIsExporting(false);
 						setProgress(0);
 						ws.close();
+						isClosed = true;
 						break;
-				}
-			};
-
-			ws.onerror = () => {
-				if (isExporting) {
-					toast({
-						title: "Export failed",
-						description: "Connection error. Please try again.",
-						variant: "destructive",
-					});
-					setIsExporting(false);
-					setProgress(0);
 				}
 			};
 
@@ -134,6 +126,17 @@ export function ExportButton() {
 					setIsExporting(false);
 					setProgress(0);
 				}
+			};
+
+			ws.onerror = () => {
+				if (isClosed) return;
+				toast({
+					title: "Export failed",
+					description: "Connection error. Please try again.",
+					variant: "destructive",
+				});
+				setIsExporting(false);
+				setProgress(0);
 			};
 		} catch (error) {
 			console.error(error);
