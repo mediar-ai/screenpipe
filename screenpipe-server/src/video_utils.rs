@@ -314,25 +314,34 @@ async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
             "quiet",
             "-print_format",
             "json",
-            "-show_format",
-            "-show_streams",
+            "-select_streams",
+            "v:0", // Select first video stream
+            "-show_entries",
+            "stream=r_frame_rate", // Only request frame rate information
             video_path,
         ])
         .output()
         .await?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
+    if !output.status.success() {
+        let error = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("ffprobe failed: {}", error));
+    }
 
-    let fps = metadata
-        .streams
-        .first()
-        .and_then(|s| {
-            let parts: Vec<f64> = s
-                .r_frame_rate
-                .split('/')
-                .filter_map(|n| n.parse().ok())
-                .collect();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    debug!("ffprobe output: {}", stdout);
+
+    // Parse the simplified JSON output
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)?;
+
+    let fps = parsed
+        .get("streams")
+        .and_then(|streams| streams.as_array())
+        .and_then(|streams| streams.first())
+        .and_then(|stream| stream.get("r_frame_rate"))
+        .and_then(|rate| rate.as_str())
+        .and_then(|rate| {
+            let parts: Vec<f64> = rate.split('/').filter_map(|n| n.parse().ok()).collect();
             if parts.len() == 2 && parts[1] != 0.0 {
                 Some(parts[0] / parts[1])
             } else {

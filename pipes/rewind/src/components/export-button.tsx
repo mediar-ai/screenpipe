@@ -3,9 +3,13 @@ import { Button } from "./ui/button";
 import { Loader2, Video } from "lucide-react";
 import { useTimelineSelection } from "@/lib/hooks/use-timeline-selection";
 import { toast } from "./ui/use-toast";
+import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
+import { Settings } from "@screenpipe/js";
+import { parseInt } from "lodash";
 
 export function ExportButton() {
 	const [isExporting, setIsExporting] = useState(false);
+	const [progress, setProgress] = useState(0);
 	const { selectionRange } = useTimelineSelection();
 
 	const handleExport = async () => {
@@ -19,52 +23,129 @@ export function ExportButton() {
 		}
 
 		setIsExporting(true);
+		setProgress(0);
+
 		try {
-			const response = await fetch("/api/export-video", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					frameIds: selectionRange.frameIds,
-					fps: 30,
-				}),
-			});
+			const settings = (await getScreenpipeAppSettings()) as Settings & {
+				fps: number;
+			};
 
-			if (!response.ok) {
-				throw new Error("Failed to export video");
-			}
+			const sortedFrameIds = selectionRange.frameIds.sort(
+				(a, b) => parseInt(a) - parseInt(b),
+			);
 
-			const data = await response.json();
-			toast({
-				title: "Video exported",
-				description:
-					"Your video has been exported successfully. check your desktop",
-			});
+			// Create WebSocket connection
+			const ws = new WebSocket(
+				`ws://localhost:3030/frames/export?frame_ids=${sortedFrameIds.join(",")}&fps=${settings.fps ?? 0.5}`,
+			);
+
+			ws.onmessage = async (event) => {
+				const data = JSON.parse(event.data);
+
+				switch (data.status) {
+					case "extracting":
+						setProgress(data.progress * 100);
+						break;
+
+					case "encoding":
+						setProgress(50 + data.progress * 50);
+						break;
+
+					case "completed":
+						if (data.video_data) {
+							const filename = `screenpipe_export_${new Date()
+								.toISOString()
+								.replace(/[:.]/g, "-")}.mp4`;
+
+							if ("__TAURI__" in window) {
+								const tauri = window.__TAURI__ as any;
+								const { save } = tauri.dialog;
+								const { writeFile } = tauri.fs;
+
+								const filePath = await save({
+									filters: [
+										{
+											name: "Video",
+											extensions: ["mp4"],
+										},
+									],
+									defaultPath: filename,
+								});
+
+								if (filePath) {
+									await writeFile(filePath, new Uint8Array(data.video_data));
+
+									toast({
+										title: "Video exported",
+										description: "Your video has been exported successfully",
+									});
+								}
+							} else {
+								const blob = new Blob([new Uint8Array(data.video_data)], {
+									type: "video/mp4",
+								});
+								const url = window.URL.createObjectURL(blob);
+								const a = document.createElement("a");
+								a.href = url;
+								a.download = filename;
+								document.body.appendChild(a);
+								a.click();
+								window.URL.revokeObjectURL(url);
+								a.remove();
+
+								toast({
+									title: "Video exported",
+									description: "Your video has been exported successfully",
+								});
+							}
+						}
+						setIsExporting(false);
+						setProgress(0);
+						ws.close();
+						break;
+
+					case "error":
+						toast({
+							title: "Export failed",
+							description: data.error || "Failed to export video",
+							variant: "destructive",
+						});
+						setIsExporting(false);
+						setProgress(0);
+						ws.close();
+						break;
+				}
+			};
+
+			ws.onerror = () => {
+				if (isExporting) {
+					toast({
+						title: "Export failed",
+						description: "Connection error. Please try again.",
+						variant: "destructive",
+					});
+					setIsExporting(false);
+					setProgress(0);
+				}
+			};
+
+			ws.onclose = () => {
+				if (isExporting) {
+					setIsExporting(false);
+					setProgress(0);
+				}
+			};
 		} catch (error) {
+			console.error(error);
 			toast({
 				title: "Export failed",
 				description: "Failed to export video. Please try again.",
 				variant: "destructive",
 			});
-		} finally {
 			setIsExporting(false);
+			setProgress(0);
 		}
 	};
-
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
-				e.preventDefault();
-				if (!isExporting && selectionRange?.frameIds?.length) {
-					handleExport();
-				}
-			}
-		};
-
-		document.addEventListener("keydown", handleKeyDown);
-		return () => document.removeEventListener("keydown", handleKeyDown);
-	}, [isExporting, selectionRange]);
 
 	return (
 		<Button
@@ -74,7 +155,10 @@ export function ExportButton() {
 			disabled={isExporting || !selectionRange?.frameIds.length}
 		>
 			{isExporting ? (
-				<Loader2 className="h-4 w-4 animate-spin mr-2" />
+				<div className="flex items-center">
+					<Loader2 className="h-4 w-4 animate-spin mr-2" />
+					{progress > 0 && `${Math.round(progress)}%`}
+				</div>
 			) : (
 				<Video className="h-4 w-4 mr-2" />
 			)}
