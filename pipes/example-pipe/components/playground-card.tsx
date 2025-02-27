@@ -11,13 +11,13 @@ import { Button } from "@/components/ui/button";
 // Import the JSON data
 import healthStatusCardData from '../content/health-status-card.json';
 
-// Create a component registry that will be populated dynamically
-const COMPONENT_REGISTRY = {};
+// Create a component registry that will be properly typed
+const COMPONENT_REGISTRY: Record<string, any> = {};
 
 // Define the content interface
 interface PlaygroundCardContent {
   componentPath: string;
-  endpoint_optional: string;
+  endpoint_optional?: string;
   llmModel: string;
   llmUserPrompt: string;
   llmContextUrl: string;
@@ -62,10 +62,10 @@ export function PlaygroundCard({ content }: { content: PlaygroundCardContent }) 
         const fileName = pathParts[pathParts.length - 1].replace('.tsx', '');
         
         // Dynamically import the component
-        const module = await import(`./ready-to-use-examples/${fileName}`);
+        const importedModule = await import(`./ready-to-use-examples/${fileName}`);
         
         // Store the module in state
-        setComponentModule(module);
+        setComponentModule(importedModule);
         setLoading(false);
       } catch (err) {
         console.error("Error loading component:", err);
@@ -161,7 +161,7 @@ export function PlaygroundCard({ content }: { content: PlaygroundCardContent }) 
 
   // Utility function to format API call results into raw output
   const formatRawOutput = (
-    endpoint: string,
+    endpoint: string | undefined,
     data: any | null, 
     error: string | null, 
     metadata: { 
@@ -179,11 +179,11 @@ export function PlaygroundCard({ content }: { content: PlaygroundCardContent }) 
     const contentTypeInfo = contentType ? `> Content-Type: ${contentType}` : "";
     
     if (error) {
-      return `> ${method} ${endpoint}
+      return `> ${method} ${endpoint || '[No endpoint specified]'}
 > Error: ${error}`;
     }
     
-    return `> ${method} ${endpoint}
+    return `> ${method} ${endpoint || '[No endpoint specified]'}
 ${timeInfo}
 ${statusInfo}
 ${contentTypeInfo}
@@ -205,9 +205,9 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
         data, 
         null, 
         { 
-          requestTime, 
-          status: responseStatus, 
-          contentType 
+          requestTime: requestTime ?? undefined, 
+          status: responseStatus ?? undefined, 
+          contentType: contentType ?? undefined 
         }
       ));
     } else if (errorMsg && errorMsg !== error) {
@@ -219,6 +219,7 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
   // For other API calls, you can use the same formatter
   const handleOtherApiCall = (endpoint: string, method = "GET") => {
     // Example of using the formatter with another API call
+    const startTime = performance.now();
     fetch(endpoint)
       .then(async (response) => {
         const data = await response.json();
