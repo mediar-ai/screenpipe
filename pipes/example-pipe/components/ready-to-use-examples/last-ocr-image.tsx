@@ -67,7 +67,7 @@ export function LastOcrImage() {
           </div>
           <div className="flex justify-between">
             <span>{ocrData.windowName || "Unknown"}</span>
-            <span>{ocrData.focused ? "Focused" : "Not Focused"}</span>
+            <span>Window</span>
           </div>
         </div>
         <div className="bg-slate-100 rounded p-2 overflow-auto h-[230px] whitespace-pre-wrap font-mono text-xs">
