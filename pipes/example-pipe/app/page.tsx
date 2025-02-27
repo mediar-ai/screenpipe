@@ -20,8 +20,8 @@ export default function Page() {
     <SettingsProvider>
       <ClientOnly>
         <div className={`flex flex-col gap-6 items-center justify-center h-full mt-12 px-4 pb-12 ${inter.className}`}>
-          <h1 className="text-2xl font-bold mb-0">example pipe</h1>
-          <p className="text-gray-600 mb-2 -mt-5">ready to use components powered by screenpipe</p>
+          <h1 className="text-2xl font-bold mb-0">example app (pipe) for developers</h1>
+          <p className="text-gray-600 mb-2 -mt-5">ready-to-use components for engineers building apps with screenpipe</p>
           {healthStatusContent.map((cardContent, index) => (
             <PlaygroundCard key={index} content={cardContent} />
           ))}
