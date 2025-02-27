@@ -75,7 +75,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { IconCode } from "@/components/ui/icons";
 import { CodeBlock } from "@/components/ui/codeblock";
 import { SqlAutocompleteInput } from "@/components/sql-autocomplete-input";
-import { cn, removeDuplicateSelections } from "@/lib/utils";
+import { cn, removeDuplicateSelections, generateTitle } from "@/lib/utils";
 import {
   ExampleSearch,
   ExampleSearchCards,
@@ -102,6 +102,8 @@ import {
 } from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
+import { saveHistory, loadHistory, HistoryItem } from "@/hooks/actions/history";
+import { v4 as uuidv4 } from 'uuid';
 
 interface Agent {
   id: string;
@@ -327,10 +329,10 @@ export function SearchChat() {
         platform.includes("mac")
           ? "macos"
           : platform.includes("win")
-          ? "windows"
-          : platform.includes("linux")
-          ? "linux"
-          : "unknown"
+            ? "windows"
+            : platform.includes("linux")
+              ? "linux"
+              : "unknown"
       );
     } else {
       // Fallback to platform for older browsers
@@ -339,10 +341,10 @@ export function SearchChat() {
         platform.includes("mac")
           ? "macos"
           : platform.includes("win")
-          ? "windows"
-          : platform.includes("linux")
-          ? "linux"
-          : "unknown"
+            ? "windows"
+            : platform.includes("linux")
+              ? "linux"
+              : "unknown"
       );
     }
   }, []);
@@ -641,13 +643,65 @@ export function SearchChat() {
         item.type === "OCR"
           ? item.content.text.length
           : item.type === "Audio"
-          ? item.content.transcription.length
-          : item.type === "UI"
-          ? item.content.text.length
-          : 0;
+            ? item.content.transcription.length
+            : item.type === "UI"
+              ? item.content.text.length
+              : 0;
       return total + contentLength;
     }, 0);
   };
+
+  // Function to load chat history from local storage
+  const loadChatHistory = async () => {
+    const historyId = localStorage.getItem("historyId");
+    if (historyId) {
+      const history = await loadHistory(historyId);
+      const historyItem = history[0];
+      if (historyItem) {
+        // Restore search parameters
+        setQuery(historyItem.searchParams.q || "");
+        setContentType(historyItem.searchParams.content_type);
+        setLimit(historyItem.searchParams.limit);
+        setStartDate(new Date(historyItem.searchParams.start_time));
+        setEndDate(new Date(historyItem.searchParams.end_time));
+        setAppName(historyItem.searchParams.app_name || "");
+        setWindowName(historyItem.searchParams.window_name || "");
+        setIncludeFrames(historyItem.searchParams.include_frames);
+        setMinLength(historyItem.searchParams.min_length);
+        setMaxLength(historyItem.searchParams.max_length);
+
+        // Restore results
+        setResults(historyItem.results);
+        setTotalResults(historyItem.results.length);
+        setHasSearched(true);
+        setShowExamples(false);
+
+        // Restore messages if any
+        if (historyItem.messages) {
+          setChatMessages(
+            historyItem.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.type === "ai" ? "assistant" : "user",
+              content: msg.content,
+            }))
+          );
+        }
+      }
+      scrollToBottom();
+    }
+  };
+
+  useEffect(() => {
+    const handleChatUpdate = () => {
+      loadChatHistory();
+    };
+    window.addEventListener("historyUpdated", handleChatUpdate);
+    // Load chat history when the component mounts
+    loadChatHistory();
+    return () => {
+      window.removeEventListener("historyUpdated", handleChatUpdate);
+    };
+  }, []);
 
   const handleFloatingInputSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -700,9 +754,8 @@ export function SearchChat() {
       const messages = [
         {
           role: "user" as const, // claude does not support system messages?
-          content: `You are a helpful assistant specialized as a "${
-            selectedAgent.name
-          }". ${selectedAgent.systemPrompt}
+          content: `You are a helpful assistant specialized as a "${selectedAgent.name
+            }". ${selectedAgent.systemPrompt}
             Rules:
             - Current time (JavaScript Date.prototype.toString): ${new Date().toString()}
             - User timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}
@@ -764,6 +817,78 @@ export function SearchChat() {
         ]);
         scrollToBottom();
       }
+      // Save history after the response is fully received
+      const historyId = localStorage.getItem("historyId");
+      let historyItem: HistoryItem;
+
+      if (historyId) {
+        const history = await loadHistory(historyId);
+        historyItem = history[0] || {
+          id: historyId,
+          title: await generateTitle(floatingInput, settings),
+          query: floatingInput,
+          timestamp: new Date().toISOString(),
+          searchParams: {
+            q: query,
+            content_type: contentType,
+            limit: limit,
+            offset: offset,
+            start_time: startDate.toISOString(),
+            end_time: endDate.toISOString(),
+            app_name: appName,
+            window_name: windowName,
+            include_frames: includeFrames,
+            min_length: minLength,
+            max_length: maxLength,
+          },
+          results: results,
+          messages: [],
+        };
+      } else {
+        historyItem = {
+          id: uuidv4(),
+          title: floatingInput,
+          query: floatingInput,
+          timestamp: new Date().toISOString(),
+          searchParams: {
+            q: query,
+            content_type: contentType,
+            limit: limit,
+            offset: offset,
+            start_time: startDate.toISOString(),
+            end_time: endDate.toISOString(),
+            app_name: appName,
+            window_name: windowName,
+            include_frames: includeFrames,
+            min_length: minLength,
+            max_length: maxLength,
+          },
+          results: results,
+          messages: [],
+        };
+        localStorage.setItem("historyId", historyItem.id);
+
+      }
+
+      // Add human message to history
+      historyItem.messages.push({
+        id: generateId(),
+        type: "user",
+        content: floatingInput,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Add AI message to history
+      historyItem.messages.push({
+        id: generateId(),
+        type: "ai",
+        content: fullResponse,
+        timestamp: new Date().toISOString(),
+      });
+
+      await saveHistory([historyItem]);
+      window.dispatchEvent(new Event("historyCreated"));
+
     } catch (error: any) {
       if (error.toString().includes("unauthorized")) {
         toast({
@@ -1071,7 +1196,7 @@ export function SearchChat() {
                         </p>
                       </div>
                       {item.content.filePath &&
-                      item.content.filePath.trim() !== "" ? (
+                        item.content.filePath.trim() !== "" ? (
                         <div className="flex justify-center mt-4">
                           <VideoComponent
                             filePath={item.content.filePath}
@@ -1211,17 +1336,6 @@ export function SearchChat() {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 mt-12">
-      <div className="fixed top-4 left-4 z-50 flex items-center gap-2">
-        {/* <SidebarTrigger className="h-8 w-8" /> */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewSearch}
-          className="h-8 w-8"
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
-      </div>
 
       <div className="flex items-center justify-center mb-16">
         {/* Add the new SearchFilterGenerator component */}
@@ -1675,8 +1789,8 @@ export function SearchChat() {
                   >
                     {Object.values(selectedSpeakers).length > 0
                       ? `${Object.values(selectedSpeakers)
-                          .map((s) => s.name)
-                          .join(", ")}`
+                        .map((s) => s.name)
+                        .join(", ")}`
                       : "select speakers"}
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -1933,7 +2047,7 @@ export function SearchChat() {
                           value={floatingInput}
                           disabled={
                             calculateSelectedContentLength() >
-                              MAX_CONTENT_LENGTH ||
+                            MAX_CONTENT_LENGTH ||
                             isAiDisabled ||
                             !isAvailable
                           }
