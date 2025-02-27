@@ -125,3 +125,8 @@ export interface Env {
 	SUPABASE_ANON_KEY: string;
 	NODE_ENV: string;
 }
+
+export interface ResponseUtils {
+	createSuccessResponse: (body: string | object, status?: number) => Response;
+	createErrorResponse: (status: number, message: string) => Response;
+}
