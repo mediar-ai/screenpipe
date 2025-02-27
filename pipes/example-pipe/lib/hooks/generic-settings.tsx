@@ -1,6 +1,6 @@
 "use client";
 
-import { useSettings } from "./settings-provider";
+import { useSettings } from "../settings-provider";
 import { useState } from "react";
 
 export function GenericSettings() {
