@@ -1,9 +1,7 @@
-import MotionDiv from '../../components/motion-div'
 import { Tabs, Tab } from 'nextra/components'
 
 # javascript sdk reference
 
-<MotionDiv>
 
 screenpipe provides two sdk packages:
 - `@screenpipe/js` - for node.js environments (nextjs api routes, etc)
@@ -11,9 +9,6 @@ screenpipe provides two sdk packages:
 
 both sdks provide type-safe interfaces to interact with screenpipe's core functionality.
 
-</MotionDiv>
-
-<MotionDiv delay={0.3}>
 
 ### installation
 
@@ -93,11 +88,172 @@ const results = await pipe.queryScreenpipe({
   minLength: 10,
   maxLength: 1000,
   speakerIds: [1, 2],
-  frameName: "screenshot.png"
+  frameName: "screenshot.png",
+  browserUrl: "github.com/mediar-ai/screenpipe" // Filter by browser URL
 })
 ```
 
+### common usage patterns
+
+#### fetching recent screen activity
+
+```typescript
+// Get the last hour of screen activity from Chrome
+const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+const now = new Date().toISOString()
+
+const results = await pipe.queryScreenpipe({
+  contentType: "ocr",
+  startTime: oneHourAgo,
+  endTime: now,
+  appName: "chrome",
+  limit: 50,
+  includeFrames: true, // include base64 encoded images
+})
+
+// Process results
+for (const item of results.data) {
+  console.log(`At ${item.content.timestamp}:`)
+  console.log(`Text: ${item.content.text}`)
+  
+  if (item.content.frame) {
+    // You could display or process the base64 image
+    // e.g., <img src={`data:image/png;base64,${item.content.frame}`} />
+  }
+}
+```
+
+#### searching for specific content
+
+```typescript
+// Search for "meeting notes" in all applications
+const results = await pipe.queryScreenpipe({
+  q: "meeting notes",
+  contentType: "all", // search across ocr, audio and ui
+  limit: 20,
+})
+
+// Process results based on content type
+for (const item of results.data) {
+  if (item.type === "OCR") {
+    console.log(`Screen text: ${item.content.text}`)
+  } else if (item.type === "Audio") {
+    console.log(`Audio transcript: ${item.content.transcription}`)
+    console.log(`Speaker: ${item.content.speaker_id}`)
+  } else if (item.type === "UI") {
+    console.log(`UI element: ${item.content.element_type}`)
+  }
+}
+```
+
+#### building a timeline of user activity
+
+```typescript
+// Get a full day of activity
+const startOfDay = new Date()
+startOfDay.setHours(0, 0, 0, 0)
+
+const endOfDay = new Date() 
+endOfDay.setHours(23, 59, 59, 999)
+
+// Get both screen and audio data
+const results = await pipe.queryScreenpipe({
+  contentType: "ocr+audio",
+  startTime: startOfDay.toISOString(),
+  endTime: endOfDay.toISOString(),
+  limit: 1000, // Get a large sample
+})
+
+// Group by hour for timeline visualization
+const timelineByHour = {}
+
+for (const item of results.data) {
+  const timestamp = new Date(item.content.timestamp)
+  const hour = timestamp.getHours()
+  
+  // Initialize hour bucket if needed
+  if (!timelineByHour[hour]) {
+    timelineByHour[hour] = {
+      screenEvents: 0,
+      audioEvents: 0,
+      apps: new Set(),
+    }
+  }
+  
+  // Update counts
+  if (item.type === "OCR") {
+    timelineByHour[hour].screenEvents++
+    
+    if (item.content.app_name) {
+      timelineByHour[hour].apps.add(item.content.app_name)
+    }
+  } else if (item.type === "Audio") {
+    timelineByHour[hour].audioEvents++
+  }
+}
+
+// Now timelineByHour can be used to build a visualization
+console.log(timelineByHour)
+```
+
+#### fetching website-specific content
+
+```typescript
+/**
+ * Retrieves all content captured from a specific website
+ * This is useful for aggregating research materials or tracking 
+ * activity on particular web applications
+ */
+async function getWebsiteCaptures(domain: string, days = 7) {
+  const startTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const endTime = new Date().toISOString();
+
+  const results = await pipe.queryScreenpipe({
+    browserUrl: domain,  // Target specific website
+    contentType: "ocr",  // Get both visual content and UI elements
+    startTime,
+    endTime,
+    limit: 100,
+    includeFrames: true  // Include screenshots
+  });
+
+  // Process and analyze the results
+  const captures = results.data.map(item => {
+    const timestamp = new Date(
+      item.type === "OCR" ? item.content.timestamp : item.content.timestamp
+    );
+    
+    return {
+      timestamp,
+      date: timestamp.toLocaleDateString(),
+      time: timestamp.toLocaleTimeString(),
+      type: item.type,
+      content: item.type === "OCR" ? item.content.text : item.content.text,
+      screenshot: item.type === "OCR" && item.content.frame ? item.content.frame : null,
+      url: item.type === "OCR" ? item.content.browserUrl : item.content.browserUrl
+    };
+  });
+
+  return captures;
+}
+
+// Example: Get all GitHub activity from the past week
+const githubActivity = await getWebsiteCaptures("github.com");
+console.log(`Found ${githubActivity.length} interactions with GitHub`);
+
+// Example: Search for specific text within a website
+const searchTerm = "pull request";
+const pullRequests = githubActivity.filter(item => 
+  item.content.toLowerCase().includes(searchTerm.toLowerCase())
+);
+console.log(`Found ${pullRequests.length} pull request interactions`);
+```
+
 ### input control api
+
+requires building the backend with the `experimental` feature flag.
+
+`cargo build --release --features experimental`
 
 ```typescript
 // type text
@@ -111,6 +267,39 @@ await pipe.input.moveMouse(100, 200)
 
 // click
 await pipe.input.click("left") // "left" | "right" | "middle"
+```
+
+#### automating repetitive tasks
+
+```typescript
+// Example: Automate filling a form
+async function fillForm() {
+  // Move to input field and click
+  await pipe.input.moveMouse(300, 200)
+  await pipe.input.click("left")
+  
+  // Type name
+  await pipe.input.type("John Doe")
+  
+  // Tab to next field
+  await pipe.input.press("tab")
+  
+  // Type email
+  await pipe.input.type("john@example.com")
+  
+  // Tab to next field 
+  await pipe.input.press("tab")
+  
+  // Type message
+  await pipe.input.type("This is an automated message")
+  
+  // Submit form
+  await pipe.input.press("tab")
+  await pipe.input.press("enter")
+}
+
+// Call the function
+await fillForm()
 ```
 
 ### realtime streams
@@ -130,120 +319,87 @@ for await (const event of pipe.streamVision(true)) { // true to include images
 }
 ```
 
-### notifications (desktop)
+#### real-time meeting summarizer
 
 ```typescript
-await pipe.sendDesktopNotification({
-  title: "meeting starting",
-  body: "your standup begins in 5 minutes",
-  actions: [
-    {
-      id: "join",
-      label: "join meeting"
-    }
-  ],
-  timeout: 5000,
-  persistent: false
+import OpenAI from 'openai'
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 })
-```
 
-### node.js specific features
-
-the node sdk includes additional features not available in the browser:
-
-```typescript
-// settings management
-const settings = await pipe.settings.getAll()
-await pipe.settings.update({ aiModel: "gpt-4" })
-
-// inbox management (node only)
-const messages = await pipe.inbox.getMessages()
-await pipe.inbox.clearMessages()
-```
-
-### typescript types
-
-both sdks export comprehensive typescript types:
-
-```typescript
-import type {
-  ContentType,
-  ScreenpipeQueryParams,
-  ScreenpipeResponse,
-  OCRContent,
-  AudioContent,
-  UiContent,
-  Speaker,
-  NotificationOptions,
-  Settings,
-  // ... and more
-} from '@screenpipe/js' // or @screenpipe/browser
-```
-
-key types include:
-
-```typescript
-type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
-
-interface ScreenpipeQueryParams {
-  q?: string
-  contentType?: ContentType
-  limit?: number
-  offset?: number
-  startTime?: string
-  endTime?: string
-  appName?: string
-  windowName?: string
-  includeFrames?: boolean
-  minLength?: number
-  maxLength?: number
-  speakerIds?: number[]
-  frameName?: string
-}
-
-interface ScreenpipeResponse {
-  data: ContentItem[] // OCR | Audio | UI content
-  pagination: {
-    limit: number
-    offset: number
-    total: number
+async function summarizeMeeting() {
+  let transcript = ""
+  let summaryBuffer = ""
+  let lastSummaryTime = Date.now()
+  
+  // Stream transcriptions in real-time
+  for await (const chunk of pipe.streamTranscriptions()) {
+    const text = chunk.choices[0].text
+    transcript += text + " "
+    
+    // Generate summary every 30 seconds
+    if (Date.now() - lastSummaryTime > 30000 && transcript.length > 200) {
+      const summary = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You summarize meeting transcripts concisely."
+          },
+          {
+            role: "user",
+            content: `Summarize this meeting transcript: ${transcript}`
+          }
+        ]
+      })
+      
+      summaryBuffer = summary.choices[0].message.content
+      lastSummaryTime = Date.now()
+      
+      // Display or store the summary
+      console.log("Meeting Summary Update:", summaryBuffer)
+    }
   }
 }
+
+// Start summarizing
+summarizeMeeting().catch(console.error)
 ```
 
-### error handling
+#### real-time screen activity monitor
 
 ```typescript
-try {
-  const results = await pipe.queryScreenpipe({
-    q: "meeting",
-    contentType: "ocr"
-  })
-} catch (error) {
-  console.error("screenpipe api error:", error)
+async function monitorScreenActivity() {
+  // Monitor screen content in real-time
+  for await (const event of pipe.streamVision(true)) {
+    // Check if we're looking at important apps
+    const appName = event.data.app_name?.toLowerCase() || ""
+    const text = event.data.text?.toLowerCase() || ""
+    
+    // Example: Detect when looking at email
+    if (
+      appName.includes("outlook") || 
+      appName.includes("gmail") ||
+      text.includes("inbox") ||
+      text.includes("compose email")
+    ) {
+      console.log("Email activity detected at", new Date().toLocaleTimeString())
+      
+      // You could log this, send notifications, etc.
+    }
+    
+    // Example: Track time spent in different applications
+    // This would require keeping state between events
+  }
 }
+
+// Start monitoring
+monitorScreenActivity().catch(console.error)
 ```
-
-### examples
-
-check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) to see real-world usage of the sdk:
-
-- data visualization pipe
-- linkedin ai assistant
-- meeting summarizer
-- memories gallery
-- obsidian integration
-- search interface
-
-these examples demonstrate best practices and common patterns when building with screenpipe's sdk.
-
-</MotionDiv>
-
-<MotionDiv delay={0.7}>
 
 ### settings management
 
-<MotionDiv delay={0.7}>
 
 pipes can access and modify screenpipe app settings through the SDK. this is useful for storing pipe-specific configuration and accessing global app settings.
 
@@ -428,7 +584,303 @@ export function SettingsComponent() {
 
 see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for a complete example of settings management.
 
-</MotionDiv>
+
+
+### integrating with llms
+
+screenpipe's sdk can be easily integrated with various ai providers to analyze and generate insights from screen activity. here are common patterns for connecting context data with llms.
+
+if the user is using screenpipe-cloud, you can use claude-3-7-sonnet, gemini-2.0-flash-lite or gpt-4o (Anthropic, Google, OpenAI or local models).
+
+#### vercel ai sdk integration
+
+the vercel ai sdk offers a streamlined way to work with llms. this example from the obsidian pipe demonstrates how to generate structured work logs:
+
+```typescript
+import { generateObject, embed } from "ai";
+import { ollama } from "ollama-ai-provider";
+import { pipe } from "@screenpipe/js";
+import { z } from "zod";
+
+// define your output schema
+const workLog = z.object({
+  title: z.string(),
+  description: z.string(),
+  tags: z.array(z.string()),
+  mediaLinks: z.array(z.string()).optional(),
+});
+
+type WorkLog = z.infer<typeof workLog> & {
+  startTime: string;
+  endTime: string;
+};
+
+async function generateWorkLog(screenData, model, startTime, endTime) {
+  // configure the prompt with context and instructions
+  const prompt = `You are analyzing screen recording data from Screenpipe.
+    Based on the following screen data, generate a concise work activity log entry.
+    
+    Screen data: ${JSON.stringify(screenData)}
+    
+    Return a JSON object with:
+    {
+        "title": "Brief title describing the main activity",
+        "description": "Clear description of what was accomplished",
+        "tags": ["#relevant-tool", "#activity-type"],
+        "mediaLinks": ["<video src=\"file:///path/to/video.mp4\" controls></video>"]
+    }`;
+
+  // use ollama provider with vercel ai sdk
+  const provider = ollama(model);
+  const response = await generateObject({
+    model: provider,
+    messages: [{ role: "user", content: prompt }],
+    schema: workLog, // zod schema for type safety
+  });
+
+  return {
+    ...response.object,
+    startTime: formatDate(startTime),
+    endTime: formatDate(endTime),
+  };
+}
+
+// api endpoint implementation
+async function handleRequest() {
+  // get last hour of activity
+  const now = new Date();
+  const oneHourAgo = new Date(now.getTime() - 3600000);
+
+  // query context from screenpipe
+  const screenData = await pipe.queryScreenpipe({
+    startTime: oneHourAgo.toISOString(),
+    endTime: now.toISOString(),
+    limit: 100,
+    contentType: "all",
+  });
+
+  // generate structured log with ai
+  const logEntry = await generateWorkLog(
+    screenData.data,
+    "llama3.2", // ollama model name
+    oneHourAgo,
+    now
+  );
+
+  return { message: "log generated successfully", logEntry };
+}
+```
+
+see the [obsidian pipe](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) for the complete implementation.
+
+or [irs-agent](https://github.com/different-ai/irs-agent/blob/master/src/services/financial-activity-detector.ts) for a more complex example.
+
+#### deduplicating context with embeddings
+
+when working with large amounts of screen data, it's useful to remove duplicates before sending to an llm:
+
+```typescript
+import { embed } from "ai";
+import { ollama } from "ollama-ai-provider";
+import { ContentItem } from "@screenpipe/js";
+
+async function deduplicateScreenData(screenData: ContentItem[]): Promise<ContentItem[]> {
+  if (!screenData.length) return screenData;
+
+  // use ollama's embedding model
+  const provider = ollama.embedding("nomic-embed-text");
+  const embeddings: number[][] = [];
+  const uniqueData: ContentItem[] = [];
+  
+  for (const item of screenData) {
+    // extract text content depending on type
+    const textToEmbed =
+      "content" in item
+        ? typeof item.content === "string"
+          ? item.content
+          : "text" in item.content
+          ? item.content.text
+          : JSON.stringify(item.content)
+        : "";
+
+    if (!textToEmbed.trim()) {
+      uniqueData.push(item);
+      continue;
+    }
+
+    // generate embedding
+    const { embedding } = await embed({
+      model: provider,
+      value: textToEmbed,
+    });
+
+    // check for duplicates using cosine similarity
+    let isDuplicate = false;
+    for (let i = 0; i < embeddings.length; i++) {
+      const similarity = cosineSimilarity(embedding, embeddings[i]);
+      if (similarity > 0.95) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isDuplicate) {
+      embeddings.push(embedding);
+      uniqueData.push(item);
+    }
+  }
+
+  return uniqueData;
+}
+
+// cosine similarity helper
+function cosineSimilarity(a: number[], b: number[]): number {
+  const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+  return dotProduct / (normA * normB);
+}
+```
+
+#### streaming transcriptions to llms
+
+for real-time analysis of audio:
+
+```typescript
+import { pipe } from "@screenpipe/js";
+import { OpenAI } from "openai";
+import type { Settings } from "@screenpipe/js";
+
+
+async function streamMeetingInsights(settings: Settings) {
+  const openai = new OpenAI({
+    apiKey:
+      settings?.aiProviderType === "screenpipe-cloud"
+        ? settings?.user?.token
+        : settings?.openaiApiKey,
+    baseURL: settings?.aiUrl,
+    dangerouslyAllowBrowser: true, // for browser environments
+  });
+  let transcript = "";
+  
+  // stream audio transcriptions
+  for await (const chunk of pipe.streamTranscriptions()) {
+    transcript += chunk.choices[0].text + " ";
+    
+    // analyze every 30 seconds
+    if (transcript.length > 200 && transcript.length % 30 === 0) {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o", // if user is using screenpipe-cloud, you can also use claude-3-7-sonnet or gemini-2.0-flash-lite
+        messages: [
+          {
+            role: "system",
+            content: "provide brief insights on this ongoing meeting."
+          },
+          {
+            role: "user", 
+            content: transcript
+          }
+        ]
+      });
+      
+      console.log("meeting insight:", response.choices[0].message.content);
+    }
+  }
+}
+```
+
+check out our [production pipe examples](https://github.com/mediar-ai/screenpipe/tree/main/pipes) on github to see more ai integration patterns.
+
+### notifications (desktop)
+
+```typescript
+await pipe.sendDesktopNotification({
+  title: "meeting starting",
+  body: "your standup begins in 5 minutes",
+})
+```
+
+### node.js specific features
+
+the node sdk includes additional features not available in the browser:
+
+```typescript
+// settings management
+const settings = await pipe.settings.getAll()
+await pipe.settings.update({ aiModel: "gpt-4" })
+
+// inbox management (node only)
+const messages = await pipe.inbox.getMessages()
+await pipe.inbox.clearMessages()
+```
+
+### typescript types
+
+both sdks export comprehensive typescript types:
+
+```typescript
+import type {
+  ContentType,
+  ScreenpipeQueryParams,
+  ScreenpipeResponse,
+  OCRContent,
+  AudioContent,
+  UiContent,
+  Speaker,
+  NotificationOptions,
+  Settings,
+  // ... and more
+} from '@screenpipe/js' // or '@screenpipe/browser'
+```
+
+key types include:
+
+```typescript
+type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
+
+interface ScreenpipeQueryParams {
+  q?: string
+  contentType?: ContentType
+  limit?: number
+  offset?: number
+  startTime?: string
+  endTime?: string
+  appName?: string
+  windowName?: string
+  includeFrames?: boolean
+  minLength?: number
+  maxLength?: number
+  speakerIds?: number[]
+  frameName?: string
+}
+
+interface ScreenpipeResponse {
+  data: ContentItem[] // OCR | Audio | UI content
+  pagination: {
+    limit: number
+    offset: number
+    total: number
+  }
+}
+```
+
+### error handling
+
+```typescript
+try {
+  const results = await pipe.queryScreenpipe({
+    q: "meeting",
+    contentType: "ocr"
+  })
+} catch (error) {
+  console.error("screenpipe api error:", error)
+}
+```
+
+
+
+
+
 
 ### LLM links 
 

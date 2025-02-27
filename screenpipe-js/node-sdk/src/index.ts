@@ -81,6 +81,109 @@ class NodePipe {
     }
   }
 
+  /**
+   * Query Screenpipe for content based on various filters.
+   *
+   * @param params - Query parameters for filtering Screenpipe content
+   * @returns Promise resolving to the Screenpipe response or null
+   *
+   * @example
+   * // Basic search for recent browser activity on a specific website
+   * const githubActivity = await pipe.queryScreenpipe({
+   *   browserUrl: "github.com",
+   *   contentType: "ocr",
+   *   limit: 20,
+   *   includeFrames: true
+   * });
+   *
+   * @example
+   * // Search for specific text on a particular website with date filters
+   * const searchResults = await pipe.queryScreenpipe({
+   *   q: "authentication",
+   *   browserUrl: "auth0.com",
+   *   appName: "Chrome",
+   *   contentType: "ocr",
+   *   startTime: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+   *   endTime: new Date().toISOString(),
+   *   limit: 50
+   * });
+   *
+   * @example
+   * // Track history of visits to a specific web application
+   * type VisitSession = {
+   *   timestamp: string;
+   *   title: string;
+   *   textContent: string;
+   *   imageData?: string;
+   * };
+   *
+   * async function getAppUsageHistory(domain: string): Promise<VisitSession[]> {
+   *   try {
+   *     const results = await pipe.queryScreenpipe({
+   *       browserUrl: domain,
+   *       contentType: "ocr",
+   *       includeFrames: true,
+   *       limit: 100,
+   *       startTime: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() // last 30 days
+   *     });
+   *
+   *     return results.data
+   *       .filter(item => item.type === "OCR")
+   *       .map(item => {
+   *         const ocrItem = item.content as OCRContent;
+   *         return {
+   *           timestamp: ocrItem.timestamp,
+   *           title: ocrItem.windowName || '',
+   *           textContent: ocrItem.text,
+   *           imageData: ocrItem.frame
+   *         };
+   *       });
+   *   } catch (error) {
+   *     console.error("Failed to retrieve app usage history:", error);
+   *     return [];
+   *   }
+   * }
+   *
+   * @example
+   * // Combining browserUrl with speaker filters for meeting recordings in browser
+   * import { pipe, ContentType, ScreenpipeResponse } from '@screenpipe/js';
+   *
+   * interface MeetingData {
+   *   url: string;
+   *   speakerName: string;
+   *   transcript: string;
+   *   timestamp: string;
+   * }
+   *
+   * async function getMeetingTranscripts(
+   *   meetingUrl: string,
+   *   speakerIds: number[]
+   * ): Promise<MeetingData[]> {
+   *   try {
+   *     const results = await pipe.queryScreenpipe({
+   *       browserUrl: meetingUrl,
+   *       contentType: "audio" as ContentType,
+   *       speakerIds: speakerIds,
+   *       limit: 200
+   *     });
+   *
+   *     return results.data
+   *       .filter(item => item.type === "Audio")
+   *       .map(item => {
+   *         const audioItem = item.content;
+   *         return {
+   *           url: meetingUrl,
+   *           speakerName: audioItem.speaker?.name || 'Unknown',
+   *           transcript: audioItem.transcription,
+   *           timestamp: audioItem.timestamp
+   *         };
+   *       });
+   *   } catch (error) {
+   *     console.error(`Error fetching meeting transcripts for ${meetingUrl}:`, error);
+   *     return [];
+   *   }
+   * }
+   */
   public async queryScreenpipe(
     params: ScreenpipeQueryParams
   ): Promise<ScreenpipeResponse | null> {

@@ -7,6 +7,8 @@ import {
   RefreshCw,
   Trash2,
   X,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { PipeStoreMarkdown } from "@/components/pipe-store-markdown";
 import { PipeWithStatus } from "./types";
@@ -32,6 +34,10 @@ interface PipeDetailsProps {
   onUpdate: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onDelete: (pipe: PipeWithStatus, onComplete: () => void) => void;
   onRefreshFromDisk: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onInstall: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  onPurchase: (pipe: PipeWithStatus, onComplete: () => void) => void;
+  isLoadingPurchase?: boolean;
+  isLoadingInstall?: boolean;
 }
 
 const buildStatusNotAllows = ["in_progress", "not_started"];
@@ -61,6 +67,10 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
   onUpdate,
   onDelete,
   onRefreshFromDisk,
+  onInstall,
+  onPurchase,
+  isLoadingPurchase,
+  isLoadingInstall,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   return (
@@ -137,7 +147,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                             <Button
                               onClick={() =>
                                 onRefreshFromDisk(pipe, () =>
-                                  setIsLoading(false),
+                                  setIsLoading(false)
                                 )
                               }
                               variant="outline"
@@ -222,9 +232,45 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
 
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-3xl mx-auto p-8 ">
+            {!pipe.is_installed && (
+              <div className="mb-6">
+                <Button
+                  size="sm"
+                  variant={pipe.is_paid ? "default" : "outline"}
+                  onClick={() => {
+                    if (pipe.is_paid && !pipe.has_purchased) {
+                      setIsLoading(true);
+                      onPurchase(pipe, () => setIsLoading(false));
+                    } else {
+                      setIsLoading(true);
+                      onInstall(pipe, () => setIsLoading(false));
+                    }
+                  }}
+                  className="font-medium"
+                  disabled={isLoadingPurchase || isLoadingInstall}
+                >
+                  {isLoadingPurchase ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : isLoadingInstall ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      installing...
+                    </>
+                  ) : pipe.is_paid && !pipe.has_purchased ? (
+                    `$${pipe.price}`
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5 mr-2" />
+                      get
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
             {pipe.installed_config?.enabled &&
               !buildStatusNotAllows.includes(
-                getBuildStatus(pipe.installed_config.buildStatus) ?? "",
+                getBuildStatus(pipe.installed_config.buildStatus) ?? ""
               ) &&
               pipe.installed_config?.port && (
                 <div>
@@ -234,7 +280,7 @@ export const PipeDetails: React.FC<PipeDetailsProps> = ({
                         variant="outline"
                         onClick={() =>
                           openUrl(
-                            `http://localhost:${pipe.installed_config?.port}`,
+                            `http://localhost:${pipe.installed_config?.port}`
                           )
                         }
                         disabled={!pipe.installed_config?.enabled}

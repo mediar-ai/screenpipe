@@ -29,6 +29,7 @@ below is the detailed api reference for screenpipe's core functionality.
 - `end_time` (timestamp, optional): filter by end timestamp
 - `app_name` (string, optional): filter by application name
 - `window_name` (string, optional): filter by window name
+- `browser_url` (string, optional): filter by browser URL for web content
 - `include_frames` (bool, optional): include base64 encoded frames
 - `min_length` (int, optional): minimum content length
 - `max_length` (int, optional): maximum content length
@@ -45,6 +46,9 @@ curl "http://localhost:3030/search?content_type=audio&speaker_ids=1,2"
 
 # UI elements search
 curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
+
+# Filter by browser URL
+curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com"
 ```
 
 #### sample response:
@@ -79,6 +83,91 @@ curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
 
 <MotionDiv delay={0.5}>
 
+### advanced filtering & querying guide
+
+the search api provides powerful filtering capabilities, but there are important considerations to understand for effective usage.
+
+#### content type combinations
+
+you can combine different content types using the `+` operator:
+
+```bash
+# Search across both OCR and audio content
+curl "http://localhost:3030/search?content_type=ocr+audio&q=meeting"
+
+# Search across all content types
+curl "http://localhost:3030/search?content_type=all&q=meeting"
+
+# Search across UI elements and audio
+curl "http://localhost:3030/search?content_type=ui+audio&q=meeting"
+```
+
+#### filtering limitations and best practices
+
+- **single value filters**: most filter parameters (`app_name`, `window_name`) accept only single string values, not arrays
+  ```bash
+  # CORRECT: Single app name
+  curl "http://localhost:3030/search?content_type=ocr&app_name=chrome"
+  
+  # INCORRECT: Will only use the last value
+  curl "http://localhost:3030/search?content_type=ocr&app_name=chrome&app_name=firefox"
+  ```
+
+- **window vs. app name**: be consistent in how you filter
+  ```bash
+  # Filter by application name (e.g., "Chrome", "Firefox")
+  curl "http://localhost:3030/search?content_type=ocr&app_name=chrome"
+  
+  # Filter by window title (e.g., "Google - Meeting Notes")
+  curl "http://localhost:3030/search?content_type=ocr&window_name=meeting%20notes"
+  ```
+
+- **url filtering**: use the browser_url parameter to filter content from specific websites
+  ```bash
+  # Filter content from a specific website
+  curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com"
+  
+  # Filter content from a specific page
+  curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com/mediar-ai/screenpipe"
+  ```
+
+- **timestamp formats**: use ISO 8601 format for timestamps
+  ```bash
+  # Filter by date range
+  curl "http://localhost:3030/search?content_type=ocr&start_time=2024-05-01T00:00:00Z&end_time=2024-05-02T23:59:59Z"
+  ```
+
+- **speaker filtering**: only applicable to audio content
+  ```bash
+  # Multiple speakers must be comma-separated
+  curl "http://localhost:3030/search?content_type=audio&speaker_ids=1,2,3"
+  ```
+
+#### combining multiple filters
+
+you can combine multiple filters to narrow your search:
+
+```bash
+# Find "meeting" mentions in Chrome from a specific website and date range
+curl "http://localhost:3030/search?q=meeting&content_type=ocr&app_name=chrome&browser_url=zoom.us&start_time=2024-05-01T00:00:00Z&end_time=2024-05-02T23:59:59Z"
+```
+
+#### pagination best practices
+
+for large result sets, use pagination to improve performance:
+
+```bash
+# First page (20 results)
+curl "http://localhost:3030/search?content_type=ocr&limit=20&offset=0"
+
+# Second page (next 20 results)
+curl "http://localhost:3030/search?content_type=ocr&limit=20&offset=20"
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
 ### audio devices api
 
 - **endpoint**: `/audio/list`
@@ -98,7 +187,7 @@ curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
 
 </MotionDiv>
 
-<MotionDiv delay={0.7}>
+<MotionDiv delay={0.9}>
 
 ### monitors api
 
@@ -122,7 +211,7 @@ curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
 
 </MotionDiv>
 
-<MotionDiv delay={0.9}>
+<MotionDiv delay={1.1}>
 
 ### tags api
 
@@ -149,7 +238,7 @@ curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
 
 </MotionDiv>
 
-<MotionDiv delay={1.1}>
+<MotionDiv delay={1.3}>
 
 ### pipes api
 
@@ -293,7 +382,7 @@ curl "http://localhost:3030/speakers/similar?speaker_id=123&limit=5"
 
 </MotionDiv>
 
-<MotionDiv delay={1.3}>
+<MotionDiv delay={1.5}>
 
 ### health api
 
@@ -395,6 +484,10 @@ curl "http://localhost:3030/stream/frames?start_time=2024-03-10T12:00:00Z&end_ti
 - **endpoint**: `/experimental/input_control`
 - **method**: `post`
 - **description**: control keyboard and mouse input programmatically
+
+requires building the backend with the `experimental` feature flag.
+
+`cargo build --release --features experimental`
 
 ##### request body:
 ```json

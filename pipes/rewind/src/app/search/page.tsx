@@ -9,7 +9,7 @@ import { useKeywordSearchStore } from "@/lib/hooks/use-keyword-search-store";
 import { endOfDay, startOfDay } from "date-fns";
 import { useCallback, useEffect, useRef } from "react";
 import { parser } from "@/lib/keyword-parser";
-import { CurrentFrame } from "@/components/current-frame";
+import { CurrentFrame } from "@/components/current-frame-search";
 import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 import { AppSelect } from "@/components/search-command";
 import { ArrowLeft } from "lucide-react";
@@ -130,11 +130,16 @@ export default function Page() {
 				</div>
 			) : null}
 
-			{isSearching &&
-				searchResults.length === 0 &&
-				Array.from({ length: 6 }).map((_, index) => (
-					<SkeletonCard key={`skeleton-${index}`} />
-				))}
+			{isSearching && searchResults.length === 0 && (
+				<div
+					className="flex flex-row gap-4 p-8 overflow-hidden"
+					style={{ direction: "rtl" }}
+				>
+					{Array.from({ length: 8 }).map((_, index) => (
+						<SkeletonCard key={`skeleton-${index}`} />
+					))}
+				</div>
+			)}
 
 			{querys.query && !(searchResults.length === 0) ? (
 				<div className="h-64 flex items-end">

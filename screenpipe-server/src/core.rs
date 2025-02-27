@@ -230,7 +230,14 @@ async fn record_video(
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db
-                    .insert_frame(&device_name, None, window_result.browser_url.as_deref())
+                    .insert_frame(
+                        &device_name,
+                        None,
+                        window_result.browser_url.as_deref(),
+                        Some(window_result.app_name.as_str()),
+                        Some(window_result.window_name.as_str()),
+                        window_result.focused,
+                    )
                     .await
                 {
                     Ok(frame_id) => {
@@ -258,15 +265,7 @@ async fn record_video(
                             },
                         );
                         if let Err(e) = db
-                            .insert_ocr_text(
-                                frame_id,
-                                text,
-                                &text_json,
-                                &window_result.app_name,
-                                &window_result.window_name,
-                                Arc::clone(&ocr_engine),
-                                window_result.focused, // Add this line
-                            )
+                            .insert_ocr_text(frame_id, text, &text_json, Arc::clone(&ocr_engine))
                             .await
                         {
                             error!(
@@ -531,11 +530,16 @@ async fn process_audio_result(
                 return Ok(Some(audio_chunk_id));
             }
 
+            let offset_index = db
+                .count_audio_transcriptions(audio_chunk_id)
+                .await
+                .unwrap_or(0);
+            
             if let Err(e) = db
                 .insert_audio_transcription(
                     audio_chunk_id,
                     &transcription,
-                    0,
+                    offset_index,
                     &transcription_engine,
                     &result.input.device,
                     Some(speaker.id),

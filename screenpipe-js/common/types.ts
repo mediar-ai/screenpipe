@@ -16,19 +16,47 @@ export type ContentType =
  * Parameters for querying Screenpipe.
  */
 export interface ScreenpipeQueryParams {
+  /** Optional search query text */
   q?: string;
+
+  /** Type of content to search for (default: "all") */
   contentType?: ContentType;
+
+  /** Maximum number of results to return (default: 10) */
   limit?: number;
+
+  /** Number of results to skip (for pagination) */
   offset?: number;
+
+  /** Filter results after this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   startTime?: string;
+
+  /** Filter results before this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   endTime?: string;
+
+  /** Filter by application name (e.g. "chrome", "vscode") */
   appName?: string;
+
+  /** Filter by window title */
   windowName?: string;
+
+  /** Include base64-encoded screenshot frames in results */
   includeFrames?: boolean;
+
+  /** Filter by minimum text length */
   minLength?: number;
+
+  /** Filter by maximum text length */
   maxLength?: number;
+
+  /** Filter by specific speaker IDs */
   speakerIds?: number[];
+
+  /** Filter by frame name */
   frameName?: string;
+
+  /** Filter by browser URL (for web content) */
+  browserUrl?: string;
 }
 
 /**
