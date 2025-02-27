@@ -88,7 +88,8 @@ const results = await pipe.queryScreenpipe({
   minLength: 10,
   maxLength: 1000,
   speakerIds: [1, 2],
-  frameName: "screenshot.png"
+  frameName: "screenshot.png",
+  browserUrl: "github.com/mediar-ai/screenpipe" // Filter by browser URL
 })
 ```
 
@@ -193,6 +194,59 @@ for (const item of results.data) {
 
 // Now timelineByHour can be used to build a visualization
 console.log(timelineByHour)
+```
+
+#### fetching website-specific content
+
+```typescript
+/**
+ * Retrieves all content captured from a specific website
+ * This is useful for aggregating research materials or tracking 
+ * activity on particular web applications
+ */
+async function getWebsiteCaptures(domain: string, days = 7) {
+  const startTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const endTime = new Date().toISOString();
+
+  const results = await pipe.queryScreenpipe({
+    browserUrl: domain,  // Target specific website
+    contentType: "ocr",  // Get both visual content and UI elements
+    startTime,
+    endTime,
+    limit: 100,
+    includeFrames: true  // Include screenshots
+  });
+
+  // Process and analyze the results
+  const captures = results.data.map(item => {
+    const timestamp = new Date(
+      item.type === "OCR" ? item.content.timestamp : item.content.timestamp
+    );
+    
+    return {
+      timestamp,
+      date: timestamp.toLocaleDateString(),
+      time: timestamp.toLocaleTimeString(),
+      type: item.type,
+      content: item.type === "OCR" ? item.content.text : item.content.text,
+      screenshot: item.type === "OCR" && item.content.frame ? item.content.frame : null,
+      url: item.type === "OCR" ? item.content.browserUrl : item.content.browserUrl
+    };
+  });
+
+  return captures;
+}
+
+// Example: Get all GitHub activity from the past week
+const githubActivity = await getWebsiteCaptures("github.com");
+console.log(`Found ${githubActivity.length} interactions with GitHub`);
+
+// Example: Search for specific text within a website
+const searchTerm = "pull request";
+const pullRequests = githubActivity.filter(item => 
+  item.content.toLowerCase().includes(searchTerm.toLowerCase())
+);
+console.log(`Found ${pullRequests.length} pull request interactions`);
 ```
 
 ### input control api

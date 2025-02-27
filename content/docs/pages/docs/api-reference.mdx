@@ -29,6 +29,7 @@ below is the detailed api reference for screenpipe's core functionality.
 - `end_time` (timestamp, optional): filter by end timestamp
 - `app_name` (string, optional): filter by application name
 - `window_name` (string, optional): filter by window name
+- `browser_url` (string, optional): filter by browser URL for web content
 - `include_frames` (bool, optional): include base64 encoded frames
 - `min_length` (int, optional): minimum content length
 - `max_length` (int, optional): maximum content length
@@ -45,6 +46,9 @@ curl "http://localhost:3030/search?content_type=audio&speaker_ids=1,2"
 
 # UI elements search
 curl "http://localhost:3030/search?content_type=ui&app_name=chrome"
+
+# Filter by browser URL
+curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com"
 ```
 
 #### sample response:
@@ -118,10 +122,13 @@ curl "http://localhost:3030/search?content_type=ui+audio&q=meeting"
   curl "http://localhost:3030/search?content_type=ocr&window_name=meeting%20notes"
   ```
 
-- **url filtering**: to filter by URL (for browser content), use the window_name parameter with the URL pattern
+- **url filtering**: use the browser_url parameter to filter content from specific websites
   ```bash
   # Filter content from a specific website
-  curl "http://localhost:3030/search?content_type=ocr&window_name=github.com"
+  curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com"
+  
+  # Filter content from a specific page
+  curl "http://localhost:3030/search?content_type=ocr&browser_url=github.com/mediar-ai/screenpipe"
   ```
 
 - **timestamp formats**: use ISO 8601 format for timestamps
@@ -141,8 +148,8 @@ curl "http://localhost:3030/search?content_type=ui+audio&q=meeting"
 you can combine multiple filters to narrow your search:
 
 ```bash
-# Find "meeting" mentions in Chrome from a specific date range
-curl "http://localhost:3030/search?q=meeting&content_type=ocr&app_name=chrome&start_time=2024-05-01T00:00:00Z&end_time=2024-05-02T23:59:59Z"
+# Find "meeting" mentions in Chrome from a specific website and date range
+curl "http://localhost:3030/search?q=meeting&content_type=ocr&app_name=chrome&browser_url=zoom.us&start_time=2024-05-01T00:00:00Z&end_time=2024-05-02T23:59:59Z"
 ```
 
 #### pagination best practices
