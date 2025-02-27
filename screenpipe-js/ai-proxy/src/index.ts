@@ -278,6 +278,7 @@ export default Sentry.withSentry(
 	(env) => ({
 		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
 		tracesSampleRate: 0.1,
+		sampleRate: 0.1,
 		environment: env.NODE_ENV || 'development',
 		enabled: (env.NODE_ENV || 'development') === 'production',
 	}),
@@ -290,6 +291,7 @@ export default Sentry.withSentry(
 		 * @param ctx - The execution context of the Worker
 		 * @returns The response to be sent back to the client
 		 */
+		// @ts-ignore
 		async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 			const langfuse = new Langfuse({
 				publicKey: env.LANGFUSE_PUBLIC_KEY,

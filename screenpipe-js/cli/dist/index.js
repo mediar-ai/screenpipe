@@ -57804,6 +57804,41 @@ var ERRORS = {
   BUILD_MISSING_REGISTRY_FILE: "3"
 };
 
+// src/utils/credentials.ts
+import os2 from "os";
+import fs from "fs";
+import path from "path";
+
+class Credentials {
+  static configDir = path.join(os2.homedir(), ".screenpipe");
+  static configFile = path.join(this.configDir, "config-developer.json");
+  static getApiKey() {
+    try {
+      if (!fs.existsSync(this.configFile)) {
+        return null;
+      }
+      const config = JSON.parse(fs.readFileSync(this.configFile, "utf-8"));
+      return config.apiKey || null;
+    } catch (error) {
+      return null;
+    }
+  }
+  static setApiKey(apiKey, developerId) {
+    if (!fs.existsSync(this.configDir)) {
+      fs.mkdirSync(this.configDir);
+    }
+    fs.writeFileSync(this.configFile, JSON.stringify({
+      apiKey,
+      developerId
+    }, null, 2));
+  }
+  static clearCredentials() {
+    if (fs.existsSync(this.configFile)) {
+      fs.unlinkSync(this.configFile);
+    }
+  }
+}
+
 // src/commands/login/utils/cli-login.ts
 class UserCancellationError extends Error {
   constructor(message) {
@@ -57814,21 +57849,30 @@ class UserCancellationError extends Error {
 var authPayload = z.object({
   token: z.string(),
   email: z.string(),
-  user_id: z.string()
+  user_id: z.string(),
+  developer_id: z.string(),
+  api_key: z.string()
 });
 async function sendAuthData(authPayload2) {
-  const response = await fetch(`http://localhost:11435/auth`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(authPayload2)
-  });
-  if (!response.ok) {
-    throw new Error("failed to send auth data");
+  try {
+    const response = await fetch(`http://localhost:11435/auth`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(authPayload2)
+    });
+    if (!response.ok) {
+      throw new Error("failed to send auth data");
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new Error("Make sure to run the app before attempting to login");
+    }
+    throw error;
   }
-  const data = await response.json();
-  return data;
 }
 var nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
 async function cliLogin() {
@@ -57874,12 +57918,25 @@ async function cliLogin() {
 `);
   logger.log(`if something goes wrong, copy and paste this url into your browser: ${colors8.bold(confirmationUrl.toString())}
 `);
-  spawn("open", [confirmationUrl.toString()]);
+  const openBrowser = (url2) => {
+    const platform = process.platform;
+    switch (platform) {
+      case "win32":
+        const escapedUrl = url2.replace(/&/g, "^&");
+        return spawn("cmd", ["/c", "start", "", escapedUrl]);
+      case "darwin":
+        return spawn("open", [url2]);
+      default:
+        return spawn("xdg-open", [url2]);
+    }
+  };
+  openBrowser(confirmationUrl.toString());
   const loadingSpinner = spinner("waiting for authentication...");
   try {
     loadingSpinner.start();
     const authData = await authPromise;
     await sendAuthData(authData);
+    Credentials.setApiKey(authData.api_key, authData.developer_id);
     loadingSpinner.succeed("authentication successful");
     server.close();
   } catch (error) {
@@ -57902,41 +57959,6 @@ async function cliLogin() {
 
 // src/constants.ts
 var API_BASE_URL = process.env.SC_API_BASE_URL || "https://screenpi.pe";
-
-// src/utils/credentials.ts
-import os2 from "os";
-import fs from "fs";
-import path from "path";
-
-class Credentials {
-  static configDir = path.join(os2.homedir(), ".screenpipe");
-  static configFile = path.join(this.configDir, "config-developer.json");
-  static getApiKey() {
-    try {
-      if (!fs.existsSync(this.configFile)) {
-        return null;
-      }
-      const config = JSON.parse(fs.readFileSync(this.configFile, "utf-8"));
-      return config.apiKey || null;
-    } catch (error) {
-      return null;
-    }
-  }
-  static setApiKey(apiKey, developerId) {
-    if (!fs.existsSync(this.configDir)) {
-      fs.mkdirSync(this.configDir);
-    }
-    fs.writeFileSync(this.configFile, JSON.stringify({
-      apiKey,
-      developerId
-    }, null, 2));
-  }
-  static clearCredentials() {
-    if (fs.existsSync(this.configFile)) {
-      fs.unlinkSync(this.configFile);
-    }
-  }
-}
 
 // src/commands/login/utils/api-key-login.ts
 async function apiKeyLogin(apiKey) {
@@ -58316,6 +58338,7 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
       logger.log(colors8.dim(`${symbols.arrow} uploading to storage...`));
       const uploadResponse = await retryFetch(uploadUrl, {
         method: "PUT",
+        verbose: true,
         headers: {
           "Content-Type": "application/zip"
         },

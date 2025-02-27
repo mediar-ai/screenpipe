@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/dev",
-  "version": "1.1.15",
+  "version": "1.1.20",
   "description": "screenpipe development CLI",
   "type": "module",
   "main": "dist/index.js",
@@ -13,8 +13,8 @@
     "dev": "bun run src/index.ts"
   },
   "dependencies": {
-    "@screenpipe/browser": "^0.1.26",
-    "@screenpipe/js": "^1.0.7",
+    "@screenpipe/browser": "^0.1.36",
+    "@screenpipe/js": "^1.0.17",
     "@topcli/spinner": "^2.1.2",
     "archiver": "^7.0.1",
     "async-listen": "^3.0.1",
