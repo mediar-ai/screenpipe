@@ -9,6 +9,7 @@ import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
 import { logger } from "../components/commands/add/utils/logger";
 import { execSync } from "child_process";
+import axios from "axios";
 
 interface ProjectFiles {
   required: string[];
@@ -357,16 +358,15 @@ export const publishCommand = new Command("publish")
 
         // Upload directly to Supabase
         logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
-        const uploadResponse = await retryFetch(uploadUrl, {
-          method: "PUT",
+        const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
           headers: {
             "Content-Type": "application/zip",
           },
-          body: fileBuffer,
+          maxBodyLength: Infinity,
         });
 
-        if (!uploadResponse.ok) {
-          const text = await uploadResponse.text();
+        if (!uploadResponse.data.success) {
+          const text = uploadResponse.data.error;
           throw new Error(`Failed to upload file to storage: ${text}`);
         }
 
