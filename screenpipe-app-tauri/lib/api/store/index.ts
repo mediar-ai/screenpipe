@@ -61,6 +61,31 @@ export interface CheckUpdateResponse {
   latest_file_size: number;
 }
 
+export interface CheckUpdatesRequest {
+  plugins: Array<{
+    pipe_id: string;
+    version: string;
+  }>;
+}
+
+export interface CheckUpdatesResponse {
+  results: Array<
+    | {
+        pipe_id: string;
+        has_update: boolean;
+        current_version: string;
+        latest_version: string;
+        latest_file_hash: string;
+        latest_file_size: number;
+      }
+    | {
+        pipe_id: string;
+        error: string;
+        status: number;
+      }
+  >;
+}
+
 interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -235,6 +260,40 @@ export class PipeApi {
           Authorization: `Bearer ${this.authToken}`,
         },
         body: JSON.stringify({ pipe_id: pipeId, version }),
+      });
+
+      if (!response.ok) {
+        const { error } = await response.json();
+        throw new Error(`failed to check for updates: ${error}`);
+      }
+
+      const data = await response.json();
+      await this.setCache(cacheKey, data);
+      return data;
+    } catch (error) {
+      console.error("error checking for updates:", error);
+      throw error;
+    }
+  }
+
+  async checkUpdates(
+    plugins: Array<{ pipe_id: string; version: string }>
+  ): Promise<CheckUpdatesResponse> {
+    // Create a cache key based on all plugin IDs and versions
+    const cacheKey = `updates_${plugins
+      .map((p) => `${p.pipe_id}_${p.version}`)
+      .join("_")}`;
+    const cached = await this.getCached<CheckUpdatesResponse>(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/plugins/check-updates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.authToken}`,
+        },
+        body: JSON.stringify({ plugins }),
       });
 
       if (!response.ok) {

@@ -1,6 +1,6 @@
 [package]
 name = "screenpipe-app"
-version = "0.37.0"
+version = "0.38.7"
 description = ""
 authors = ["you"]
 license = ""
@@ -98,7 +98,7 @@ cocoa = "0.26.0"
 objc = "0.2.7"
 base64 = "0.22.1"
 # bunch of hack for permissions
-scap = { git = "https://github.com/CapSoftware/scap", rev = "58d4410bf52f" }
+scap = { git = "https://github.com/CapSoftware/scap", rev = "92cabc5" }
 nokhwa-bindings-macos = { git = "https://github.com/CapSoftware/nokhwa", rev = "0d3d1f30a78b" }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2" }
 

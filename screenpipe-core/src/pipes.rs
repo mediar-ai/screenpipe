@@ -106,6 +106,7 @@ function Get-ChildProcesses($ProcessId) {{
 while ($true) {{
     try {{
         $parent = Get-Process -Id $parentPid -ErrorAction Stop
+        $child = Get-Process -Id $childPid -ErrorAction Stop
         Start-Sleep -Seconds 1
     }} catch {{
         Write-Host "Parent process ($parentPid) not found, terminating child processes"
@@ -119,7 +120,7 @@ while ($true) {{
         foreach ($processId in $allProcesses) {{
             try {{
                 Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process: $pid"
+                Write-Host "Stopped process: $processId"
             }} catch {{
                 Write-Host "Process $processId already terminated"
             }}
@@ -1132,13 +1133,16 @@ fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
     let parsed_url = Url::parse(url)?;
     if parsed_url.host_str() == Some("github.com") {
         let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-        if path_segments.len() >= 5 && path_segments[2] == "tree" {
-            let (owner, repo, _, branch) = (
-                path_segments[0],
-                path_segments[1],
-                path_segments[2],
-                path_segments[3],
-            );
+        if path_segments.len() >= 4 && path_segments.contains(&"tree") {
+            // Find the position of "tree" in the path
+            let tree_pos = path_segments.iter().position(|&s| s == "tree").unwrap();
+
+            let owner = path_segments[0];
+            let repo = path_segments[1];
+
+            // The branch is just the segment after "tree"
+            let branch = path_segments[tree_pos + 1];
+
             let raw_url = format!(
                 "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
                 owner, repo, branch
@@ -1242,6 +1246,8 @@ fn find_bun_path_internal() -> Option<PathBuf> {
     }
 
     error!("bun not found");
+    let err = anyhow::anyhow!("Bun executable not found. Pipe functionality may be limited.");
+    sentry::capture_error(&err.source().unwrap());
     None
 }
 

@@ -8,6 +8,7 @@ import ignore from "ignore";
 import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
 import { logger } from "../components/commands/add/utils/logger";
+import { execSync } from "child_process";
 
 interface ProjectFiles {
   required: string[];
@@ -97,10 +98,67 @@ async function retryFetch(
   throw new Error("Retry failed"); // Fallback error
 }
 
-export const publishCommand = new Command('publish')
-  .description('publish or update a pipe to the store')
-  .requiredOption('-n, --name <name>', 'name of the pipe')
-  .option('-v, --verbose', 'enable verbose logging', false)
+function isProjectBuilt(): boolean {
+  // For Next.js projects
+  if (
+    fs.existsSync("next.config.js") ||
+    fs.existsSync("next.config.mjs") ||
+    fs.existsSync("next.config.ts")
+  ) {
+    return fs.existsSync(".next") && fs.existsSync(".next/server");
+  }
+
+  // For other projects - check common build directories
+  return (
+    fs.existsSync("dist") || fs.existsSync("build") || fs.existsSync("out")
+  );
+}
+
+function runBuildCommand(): void {
+  logger.info(
+    colors.info(
+      `\n${symbols.info} Project needs to be built. Running build command...`
+    )
+  );
+
+  try {
+    // Check if package.json has a build script
+    const packageJson = JSON.parse(fs.readFileSync("package.json", "utf-8"));
+
+    if (packageJson.scripts && packageJson.scripts.build) {
+      // Try bun first, fall back to npm
+      try {
+        logger.log(colors.dim(`${symbols.arrow} Executing: bun run build`));
+        execSync("bun run build", { stdio: "inherit" });
+      } catch (error) {
+        logger.log(
+          colors.dim(`${symbols.arrow} Bun not available, trying npm instead`)
+        );
+        execSync("npm run build", { stdio: "inherit" });
+      }
+
+      logger.success(`${symbols.success} Build completed successfully`);
+    } else {
+      throw new Error("No build script found in package.json");
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to build project: ${error.message}`);
+    }
+    throw new Error("Failed to build project");
+  }
+}
+
+export const publishCommand = new Command("publish")
+  .description("publish or update a pipe to the store")
+  .requiredOption("-n, --name <name>", "name of the pipe")
+  .option("-v, --verbose", "enable verbose logging", false)
+  .option(
+    "--skip-build-check",
+    "skip checking if the project has been built",
+    false
+  )
+  .option("--build", "automatically run the build command if needed", false)
   .action(async (opts) => {
     try {
       if (opts.verbose) {
@@ -246,10 +304,33 @@ export const publishCommand = new Command('publish')
         console.log(colors.dim(`${symbols.arrow} calculating file hash...`));
       }
 
+      // Check if project is built (unless explicitly skipped)
+      if (!opts.skipBuildCheck && !isProjectBuilt()) {
+        if (opts.build) {
+          // Run build if --build flag is provided
+          runBuildCommand();
+        } else {
+          console.error(
+            colors.error(
+              `${
+                symbols.error
+              } Project has not been built. Run ${colors.highlight(
+                "bun run build"
+              )} or ${colors.highlight(
+                "npm run build"
+              )} first, or use ${colors.highlight(
+                "--build"
+              )} flag to build automatically.`
+            )
+          );
+          process.exit(1);
+        }
+      }
+
       // Replace the upload section with this:
       try {
         // First get the signed URL
-        console.log(colors.dim(`${symbols.arrow} Getting upload URL...`));
+        console.log(colors.dim(`${symbols.arrow} getting upload URL...`));
 
         const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
           method: "POST",
@@ -318,8 +399,8 @@ export const publishCommand = new Command('publish')
         const data = await finalizeResponse.json();
 
         // Success messages
-        logger.success(`\n${symbols.success} successfully published plugin!`)
-        
+        logger.success(`\n${symbols.success} successfully published plugin!`);
+
         console.log(
           colors.listItem(`${colors.label("name")} ${packageJson.name}`)
         );
@@ -377,4 +458,4 @@ export const publishCommand = new Command('publish')
       }
       process.exit(1);
     }
-  })
+  });

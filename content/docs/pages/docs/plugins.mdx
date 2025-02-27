@@ -18,7 +18,7 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 
 #### for developers
 - **zero infrastructure**: 100% local by default, no servers or complex setups, access to your auth tokens (unlike cloud agents)
-- **typescript + rust + bun**: blazing fast environment, highly optimized pipeline, 4 AI models, running on $200 laptops
+- **typescript + rust + bun**: blazing fast environment, highly optimized pipeline, 4 AI models, running on $200 laptops, best local STT in the market
 - **full context**: rich OCR, desktop scrapping, keyboard/mouse, and audio transcription APIs
 - **open source**: no BS, no tricks, MIT license
 - **monetization ready**: Stripe integration to monetize your pipes
@@ -30,11 +30,11 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 #### killer features
 - **ai flexibility**: OpenAI, local LLMs (ollama), Anthropic, Gemini, etc.
 - **rich APIs**: 
-  - `pipe.input` for keyboard/mouse control
   - `pipe.queryScreenpipe` for context
   - `pipe.settings` for app settings
-  - experimental `pipe.streamTranscriptions` for audio transcription streaming (atm uses a lot of RAM, make sure to enable it in settings/CLI)
-  - experimental `pipe.streamVision` for OCR/Accessibility streaming (atm uses a lot of RAM)
+  - experimental `pipe.streamTranscriptions` for audio transcription streaming (make sure to enable it in settings)
+  - experimental `pipe.streamVision` for OCR/Accessibility/Frames/browser URL streaming 
+  - experimental `pipe.input` for keyboard/mouse control
 - **sandboxed & cross-platform**: safe execution on all OS
 - **real-time**: process screen & audio as it happens
 - **cron jobs**: schedule your pipes to run at specific times, same API as Vercel
@@ -46,12 +46,14 @@ regardless of progress in AI architecture, it's as good as the given context. sc
 
 <MotionDiv delay={0.5}>
 
+we recommend using `bun`, [install](https://bun.sh/docs/installation) or make sure it's up to date.
+
 The fastest way to create a new pipe is using our CLI:
 
 <Tabs items={['bun', 'npm', , 'yarn', 'pnpm']}>
   <Tab>
     ```bash copy
-bunx --bun @screenpipe/dev@latest pipe create
+  bunx --bun @screenpipe/dev@latest pipe create
     ```
   </Tab>
   <Tab>
@@ -95,7 +97,7 @@ bunx --bun @screenpipe/dev@latest login --apiKey <your-key>
 bunx --bun @screenpipe/dev@latest pipe register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
 # you'll receive payouts to your stripe account on a daily basis
 
-# add predefined components to your pipe
+# add predefined components to your pipe (shadcn style)
 bunx --bun @screenpipe/dev@latest components add
 # select components from the interactive menu:
 # - use-health: health monitoring hooks
@@ -122,22 +124,38 @@ you can deploy your pipe to your screenpipe app through the UI or using `screenp
 
 when you're ready to deploy, send a PR to the [screenpipe repo](https://github.com/mediar-ai/screenpipe) to add your pipe to the store.
 
+PS: monetization requires a stripe account and US bank account, we recommend [wise](https://wise.com) for international users.
+
+(louis) i am french and i don't have a personal US bank account, so i use wise.
+
 ### available pipes
 
 | **pipe**                          | **description**                                  | **link**                          |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------- |
+| **obsidian logs** | automate your second brain by logging activities to obsidian | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) |
 | **memories gallery** | google-photo like gallery of your screen recordings with AI insights | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/memories) |
 | **data table** | explore your data in a powerful table view with filtering and sorting | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/data-table) |
 | **search** | search through your screen recordings and audio transcripts with AI | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/search) |
-| **timeline** | visualize your day with AI-powered timeline of activities | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/timeline) |
+| **rewind** | visualize your day with AI-powered timeline of activities | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/rewind) |
 | **speaker identification** | automatically identify and label different speakers using AI | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/identify-speakers) |
-| **obsidian logs** | automate your second brain by logging activities to obsidian | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/obsidian) |
 | **meeting assistant** | organize and summarize meetings with AI - get transcripts and insights | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/meeting) |
-| **linkedin ai agent** | automate business development on linkedin | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin_ai_assistant) |
-| **loom** | generate looms from your screenpipe data | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/pipe-for-loom) |
+| **linkedin ai agent** | automate business development on linkedin | [link](https://github.com/mediar-ai/screenpipe/tree/main/pipes/linkedin-ai-assistant) |
 
 </MotionDiv>
 
 to install a pipe from the store, just add the url of the folder in the UI and click install.
+
+### LLM links 
+
+paste these links into your Cursor chat for context:
+
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts
+- https://github.com/mediar-ai/screenpipe/blob/main/pipes/search/src/components/search-chat.tsx
+- https://github.com/mediar-ai/screenpipe/blob/main/pipes/rewind/src/lib/hooks/use-app-name-suggestion.tsx
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/server.rs
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-core/src/pipes.rs
+
+
 
 

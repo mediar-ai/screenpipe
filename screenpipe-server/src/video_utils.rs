@@ -306,23 +306,42 @@ pub async fn extract_frames_from_video(
 }
 
 async fn get_video_fps(ffmpeg_path: &PathBuf, video_path: &str) -> Result<f64> {
-    let output = Command::new(ffmpeg_path)
-        .args(["-i", video_path])
+    let ffprobe_path = ffmpeg_path.with_file_name("ffprobe");
+
+    let output = Command::new(&ffprobe_path)
+        .args([
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            video_path,
+        ])
         .output()
         .await?;
 
-    let metadata = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let metadata: FFprobeOutput = serde_json::from_str(&stdout)?;
+
     let fps = metadata
-        .lines()
-        .find(|line| line.contains("fps") && !line.contains("Stream"))
-        .and_then(|line| {
-            line.split_whitespace()
-                .find(|&word| word.parse::<f64>().is_ok())
-                .and_then(|n| n.parse::<f64>().ok())
+        .streams
+        .first()
+        .and_then(|s| {
+            let parts: Vec<f64> = s
+                .r_frame_rate
+                .split('/')
+                .filter_map(|n| n.parse().ok())
+                .collect();
+            if parts.len() == 2 && parts[1] != 0.0 {
+                Some(parts[0] / parts[1])
+            } else {
+                None
+            }
         })
         .unwrap_or(1.0);
 
-    debug!("detected fps from video metadata: {}", fps);
+    debug!("Video FPS: {}", fps);
     Ok(fps)
 }
 
@@ -515,7 +534,7 @@ impl VideoMetadataOverride {
 pub async fn extract_frame_from_video(file_path: &str, offset_index: i64) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    let source_fps = match get_video_fps(&ffmpeg_path, &file_path).await {
+    let source_fps = match get_video_fps(&ffmpeg_path, file_path).await {
         Ok(fps) => fps,
         Err(e) => {
             error!("failed to get video fps, using default 1fps: {}", e);

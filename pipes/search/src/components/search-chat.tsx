@@ -40,6 +40,7 @@ import {
   ChevronsUpDown,
   Bot,
   Settings,
+  Copy,
 } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -102,6 +103,10 @@ import {
 } from "@/components/ui/popover";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
+import {
+  MultiSelectCombobox,
+  type BaseOption,
+} from "@/components/ui/multi-select-combobox";
 
 interface Agent {
   id: string;
@@ -273,9 +278,6 @@ export function SearchChat() {
     new Set()
   );
   const [similarityThreshold, setSimilarityThreshold] = useState(1);
-  const [hoveredResult, setHoveredResult] = useState<number | null>(null);
-
-  const [isCurlDialogOpen, setIsCurlDialogOpen] = useState(false);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -292,6 +294,23 @@ export function SearchChat() {
   const [isQueryParamsDialogOpen, setIsQueryParamsDialogOpen] = useState(false);
 
   // Add state for individual content types
+  const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>(
+    []
+  );
+
+  // Define content type options
+  const contentTypeOptions: BaseOption[] = [
+    { label: "Speech", value: "audio" },
+    { label: "Screen UI", value: "ui" },
+    { label: "Screen Capture", value: "ocr" },
+  ];
+
+  // Define content type descriptions for tooltips
+  const contentTypeDescriptions: Record<string, string> = {
+    audio: "audio transcripts",
+    ui: "text emitted directly from the source code of the desktop applications",
+    ocr: "recognized text from screenshots taken every 5s by default",
+  };
   const [selectedTypes, setSelectedTypes] = useState({
     ocr: false,
     audio: false,
@@ -307,13 +326,12 @@ export function SearchChat() {
 
   const [frameName, setFrameName] = useState<string>("");
 
+  // Add this state for browser URL
+  const [browserUrl, setBrowserUrl] = useState("");
+
   useEffect(() => {
     if (Object.keys(selectedSpeakers).length > 0) {
-      setSelectedTypes({
-        ocr: false,
-        ui: false,
-        audio: true,
-      });
+      setSelectedContentTypes(["audio"]);
       setContentType("audio");
     }
   }, [selectedSpeakers]);
@@ -400,44 +418,66 @@ export function SearchChat() {
   };
 
   // Update content type when checkboxes change
-  const handleContentTypeChange = (type: "ocr" | "audio" | "ui") => {
-    const newTypes = { ...selectedTypes, [type]: !selectedTypes[type] };
-    setSelectedTypes(newTypes);
+  const handleContentTypeChange = (values: string[]) => {
+    setSelectedContentTypes(values);
 
-    if (Object.keys(selectedSpeakers).length > 0) {
-      setSelectedTypes({
-        ocr: false,
-        ui: false,
-        audio: true,
-      });
-      setContentType("audio");
-    }
-
-    // Convert checkbox state to content type
-    if (!newTypes.ocr && !newTypes.audio && !newTypes.ui) {
-      setContentType("all"); // fallback to all if nothing selected
-    } else if (newTypes.audio && newTypes.ui && !newTypes.ocr) {
+    // Convert selected values to content type
+    if (values.length === 0) {
+      setContentType("all");
+    } else if (values.length === 3) {
+      setContentType("all");
+    } else if (
+      values.includes("audio") &&
+      values.includes("ui") &&
+      !values.includes("ocr")
+    ) {
       setContentType("audio+ui");
-    } else if (newTypes.ocr && newTypes.ui && !newTypes.audio) {
+    } else if (
+      values.includes("ocr") &&
+      values.includes("ui") &&
+      !values.includes("audio")
+    ) {
       setContentType("ocr+ui");
-    } else if (newTypes.audio && newTypes.ocr && !newTypes.ui) {
+    } else if (
+      values.includes("audio") &&
+      values.includes("ocr") &&
+      !values.includes("ui")
+    ) {
       setContentType("audio+ocr");
-    } else if (newTypes.audio) {
+    } else if (values.includes("audio")) {
       setContentType("audio");
-    } else if (newTypes.ocr) {
+    } else if (values.includes("ocr")) {
       setContentType("ocr");
-    } else if (newTypes.ui) {
-      setContentType("ui"); // This was missing - single UI type
+    } else if (values.includes("ui")) {
+      setContentType("ui");
     } else {
       setContentType("all");
     }
+
+    // Update selectedTypes for backward compatibility
+    setSelectedTypes({
+      ocr: values.includes("ocr"),
+      audio: values.includes("audio"),
+      ui: values.includes("ui"),
+    });
   };
 
   const handleContentTypeFromFilter = (contentType: string) => {
     // Update content type
     setContentType(contentType);
 
-    // Update checkbox states based on content type
+    // Update selected content types based on content type
+    const newSelectedTypes: string[] = [];
+    if (contentType === "all") {
+      // Keep empty to indicate all
+    } else {
+      if (contentType.includes("ocr")) newSelectedTypes.push("ocr");
+      if (contentType.includes("audio")) newSelectedTypes.push("audio");
+      if (contentType.includes("ui")) newSelectedTypes.push("ui");
+    }
+    setSelectedContentTypes(newSelectedTypes);
+
+    // Update checkbox states for backward compatibility
     setSelectedTypes({
       ocr: contentType.includes("ocr") || contentType === "all",
       audio: contentType.includes("audio") || contentType === "all",
@@ -527,6 +567,7 @@ export function SearchChat() {
       q: query,
       app_name: appName,
       window_name: windowName,
+      browser_url: browserUrl,
       include_frames: includeFrames ? "true" : undefined,
     };
 
@@ -827,6 +868,11 @@ export function SearchChat() {
     setSimilarityThreshold(1); // Reset similarity threshold to 1
 
     try {
+      // if browserUrl contains special characters like :, /, etc, wrap in double quotes
+      // bcs it's FTS
+      const bUrl = browserUrl.includes(":") ? `"${browserUrl}"` : browserUrl;
+      const wName = windowName.includes(":") ? `"${windowName}"` : windowName;
+      const aName = appName.includes(":") ? `"${appName}"` : appName;
       const searchParams = {
         q: query || undefined,
         contentType: overrides.contentType || contentType,
@@ -837,6 +883,7 @@ export function SearchChat() {
         endTime: endDate.toISOString(),
         appName: overrides.appName || appName || undefined,
         windowName: overrides.windowName || windowName || undefined,
+        browserUrl: bUrl || undefined,
         includeFrames: includeFrames,
         minLength: overrides.minLength || minLength,
         maxLength: maxLength,
@@ -1078,7 +1125,6 @@ export function SearchChat() {
                             startTime={item.content.startTime}
                             endTime={item.content.endTime}
                             speaker={item.content.speaker}
-
                           />
                         </div>
                       ) : (
@@ -1115,6 +1161,43 @@ export function SearchChat() {
                   >
                     {item.content.appName}
                   </Badge>
+                </div>
+              )}
+              {item.type === "OCR" && item.content.browserUrl && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">url:</span>
+                  <div className="flex items-center">
+                    <Badge
+                      className="text-xs cursor-pointer "
+                      title={item.content.browserUrl}
+                      onClick={() =>
+                        window.open(
+                          item.content.browserUrl,
+                          "_blank",
+                          "noreferrer"
+                        )
+                      }
+                    >
+                      {new URL(item.content.browserUrl).hostname}
+                    </Badge>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-5 w-5 ml-0.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(item.content.browserUrl!);
+                        toast({
+                          title: "copied",
+                          description: "url copied to clipboard",
+                          duration: 2000,
+                        });
+                      }}
+                      title="copy url"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               )}
               {item.type === "OCR" && item.content.windowName && (
@@ -1246,100 +1329,21 @@ export function SearchChat() {
         />
       </div>
       {/* Content Type Checkboxes and Code Button */}
-      <div className="flex items-center justify-center mb-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-1">
-              <Checkbox
-                id="audio-type"
-                checked={selectedTypes.audio}
-                onCheckedChange={() => handleContentTypeChange("audio")}
-                className="h-4 w-4"
-              />
+      <div className="flex items-center justify-center mb-4 gap-4">
+        {/* Remove MultiSelectCombobox from here */}
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Label htmlFor="audio-type" className="text-xs">
-                      speech
-                    </Label>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>audio transcripts</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            {currentPlatform === "macos" && (
-              <div className="flex items-center space-x-1">
-                <Checkbox
-                  id="ui-type"
-                  checked={selectedTypes.ui}
-                  onCheckedChange={() => handleContentTypeChange("ui")}
-                  className="h-4 w-4"
-                />
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Label htmlFor="ui-type" className="text-xs">
-                        screen UI
-                      </Label>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        text emitted directly from the source code of the
-                        desktop applications
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            )}
-            <div className="flex items-center space-x-1">
-              <Checkbox
-                id="ocr-type"
-                checked={selectedTypes.ocr}
-                onCheckedChange={() => handleContentTypeChange("ocr")}
-                className="h-4 w-4"
-              />
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Label htmlFor="ocr-type" className="text-xs">
-                      screen capture
-                    </Label>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>
-                      recognized text from screenshots taken every 5s by default
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Existing search bar and other controls */}
-      <div className="flex items-center gap-4 mb-4">
-        {/* Keyword search - smaller width */}
-        <Input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              handleSearch(0);
-            }
-          }}
-          placeholder="keyword search, you may leave it blank"
-          className="w-[350px]"
-          autoCorrect="off"
-          autoComplete="off"
-        />
+        {/* Add browser URL input */}
+        {currentPlatform === "macos" && (
+          <SqlAutocompleteInput
+            id="browser-url"
+            type="url"
+            value={browserUrl}
+            onChange={setBrowserUrl}
+            placeholder="filter by browser URL"
+            className="w-[350px]"
+            icon={<Search className="h-4 w-4" />}
+          />
+        )}
 
         {/* Window name filter - increased width */}
         <SqlAutocompleteInput
@@ -1348,7 +1352,7 @@ export function SearchChat() {
           value={windowName}
           onChange={setWindowName}
           placeholder="filter by window"
-          className="w-[300px]"
+          className="w-[350px]"
           icon={<Layout className="h-4 w-4" />}
         />
 
@@ -1418,49 +1422,8 @@ export function SearchChat() {
         </TooltipProvider>
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <div className="flex-grow space-y-2">
-          <div className="flex items-center space-x-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Label htmlFor="start-date">start date</Label>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>select the start date to search for content</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <DateTimePicker
-            date={startDate}
-            setDate={setStartDate}
-            className="w-full"
-          />
-        </div>
-
-        <div className="flex-grow space-y-2">
-          <div className="flex items-center space-x-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Label htmlFor="end-date">end date</Label>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>select the end date to search for content</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <DateTimePicker
-            date={endDate}
-            setDate={setEndDate}
-            className="w-full"
-          />
-        </div>
-      </div>
-
-      <div className="flex mt-4 space-x-2 justify-center">
+      {/* Quick time filter badges */}
+      <div className="flex mt-2 mb-4 space-x-2 justify-center">
         <Badge
           variant="outline"
           className="cursor-pointer hover:bg-secondary"
@@ -1507,7 +1470,7 @@ export function SearchChat() {
         open={isQueryParamsDialogOpen}
         onOpenChange={setIsQueryParamsDialogOpen}
       >
-        <DialogContent className="sm:max-w-[605px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[705px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>advanced search parameters</DialogTitle>
             <DialogDescription>
@@ -1545,6 +1508,197 @@ export function SearchChat() {
               </Dialog>
             </div>
 
+            {/* Move content type selection here */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="content-type" className="text-right">
+                content type
+              </Label>
+              <div className="col-span-3">
+                <MultiSelectCombobox
+                  label="content type"
+                  options={contentTypeOptions}
+                  value={selectedContentTypes}
+                  onChange={handleContentTypeChange}
+                  placeholder="Filter by content type..."
+                  renderItem={(option) => (
+                    <div className="flex items-center justify-between w-full">
+                      <span>{option.label}</span>
+                      <span className="text-xs text-muted-foreground items-end">
+                        {contentTypeDescriptions[option.value]}
+                      </span>
+                    </div>
+                  )}
+                  renderSelectedItem={(values) => (
+                    <div className="flex gap-1 items-center">
+                      {values.length === 0 ? (
+                        <span>All content types</span>
+                      ) : (
+                        <>
+                          {values.map((value) => {
+                            const option = contentTypeOptions.find(
+                              (opt) => opt.value === value
+                            );
+                            return option ? (
+                              <Badge
+                                key={value}
+                                variant="secondary"
+                                className="gap-1 px-1.5"
+                              >
+                                {option.label}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Add keyword search field */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="keyword-search" className="text-right">
+                keyword search
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Input
+                  id="keyword-search"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="search for specific keywords"
+                  className="flex-grow"
+                  autoCorrect="off"
+                  autoComplete="off"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>search for specific keywords in all content</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+
+            {/* Add browser URL field in advanced settings too */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="browser-url" className="text-right">
+                browser URL
+              </Label>
+              <div className="col-span-3 flex items-center">
+                <Input
+                  id="browser-url"
+                  type="text"
+                  value={browserUrl}
+                  onChange={(e) => setBrowserUrl(e.target.value)}
+                  placeholder="filter by browser URL"
+                  className="flex-grow"
+                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-4 w-4 text-gray-400 ml-2 cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>filter results by specific browser URLs</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="speakers" className="text-right">
+                speakers
+              </Label>
+              <div className="col-span-3 w-full">
+                <MultiSelectCombobox
+                  label="speakers"
+                  options={speakers.map((speaker) => ({
+                    label: speaker.name || `Speaker ${speaker.id}`,
+                    value: speaker.id.toString(),
+                  }))}
+                  value={Object.values(selectedSpeakers).map((speaker) =>
+                    speaker.id.toString()
+                  )}
+                  onChange={(selectedIds) => {
+                    // Convert from array of IDs to object with speaker objects
+                    const newSelectedSpeakers: { [key: number]: Speaker } = {};
+                    selectedIds.forEach((id) => {
+                      const speakerId = parseInt(id);
+                      const speaker = speakers.find((s) => s.id === speakerId);
+                      if (speaker) {
+                        newSelectedSpeakers[speakerId] = speaker;
+                      }
+                    });
+                    setSelectedSpeakers(newSelectedSpeakers);
+                  }}
+                  placeholder="Search speakers..."
+                  renderItem={(option) => (
+                    <div className="flex items-center justify-between w-full">
+                      <span>{option.label}</span>
+                    </div>
+                  )}
+                  renderSelectedItem={(values) => (
+                    <div className="flex gap-1 items-center w-full">
+                      {values.length === 0 ? (
+                        <span>Select speakers</span>
+                      ) : (
+                        <>
+                          {values.map((value) => {
+                            const speaker = speakers.find(
+                              (s) => s.id.toString() === value
+                            );
+                            return speaker ? (
+                              <Badge
+                                key={value}
+                                variant="secondary"
+                                className="gap-1 px-1.5"
+                              >
+                                {speaker.name || `Speaker ${speaker.id}`}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Add date pickers here */}
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="start-date" className="text-right">
+                start date
+              </Label>
+              <div className="col-span-3">
+                <DateTimePicker
+                  date={startDate}
+                  setDate={setStartDate}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="end-date" className="text-right">
+                end date
+              </Label>
+              <div className="col-span-3">
+                <DateTimePicker
+                  date={endDate}
+                  setDate={setEndDate}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
             {/* Rest of the advanced settings content */}
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="app-name" className="text-right">
@@ -1572,6 +1726,7 @@ export function SearchChat() {
                 </TooltipProvider>
               </div>
             </div>
+
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="min-length" className="text-right">
                 min length
@@ -1660,72 +1815,6 @@ export function SearchChat() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="speakers" className="text-right">
-              speakers
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Popover open={openSpeakers} onOpenChange={setOpenSpeakers}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openSpeakers}
-                    className="w-full justify-between"
-                  >
-                    {Object.values(selectedSpeakers).length > 0
-                      ? `${Object.values(selectedSpeakers)
-                          .map((s) => s.name)
-                          .join(", ")}`
-                      : "select speakers"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="search speakers..."
-                      value={speakerSearchQuery}
-                      onValueChange={setSpeakerSearchQuery}
-                    />
-                    <CommandList>
-                      <CommandEmpty>no speakers found.</CommandEmpty>
-                      <CommandGroup>
-                        {[...new Set(speakers)].map((speaker: Speaker) => (
-                          <CommandItem
-                            key={speaker.id}
-                            value={speaker.name}
-                            onSelect={() => handleSpeakerChange(speaker)}
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedSpeakers[speaker.id]
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <span
-                                style={{
-                                  userSelect: "none",
-                                  WebkitUserSelect: "none",
-                                  MozUserSelect: "none",
-                                  msUserSelect: "none",
-                                }}
-                              >
-                                {speaker.name}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
           {/* Add frame name input after app name */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="frame-name" className="text-right">
@@ -1831,15 +1920,7 @@ export function SearchChat() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSimilarityThreshold(similarityThreshold === 0.5 ? 1 : 0.5);
-                  if (similarityThreshold === 0.5) {
-                    setSelectedResults(
-                      new Set(results.map((_, index) => index))
-                    );
-                    setSelectAll(true);
-                  }
-                }}
+                onClick={() => {}}
                 disabled={isFiltering}
                 className="flex items-center gap-2 disabled:opacity-100"
               >

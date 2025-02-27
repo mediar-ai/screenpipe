@@ -45,6 +45,8 @@ export const TimelineSlider = ({
 	onSelectionChange,
 }: TimelineSliderProps) => {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const observerTargetRef = useRef<HTMLDivElement>(null);
+	const lastFetchRef = useRef<Date | null>(null);
 	const { scrollXProgress } = useScroll({
 		container: containerRef,
 		offset: ["start end", "end start"],
@@ -58,12 +60,18 @@ export const TimelineSlider = ({
 	);
 	const { setSelectionRange, selectionRange } = useTimelineSelection();
 
+	const visibleFrames = useMemo(() => {
+		const start = Math.max(0, currentIndex - 100);
+		const end = Math.min(frames.length, currentIndex + 100);
+		return frames.slice(start, end);
+	}, [frames, currentIndex]);
+
 	const appGroups = useMemo(() => {
 		const groups: AppGroup[] = [];
 		let currentApp = "";
 		let currentGroup: StreamTimeSeriesResponse[] = [];
 
-		frames.forEach((frame) => {
+		visibleFrames.forEach((frame) => {
 			const appName = frame.devices[0].metadata.app_name;
 			if (appName !== currentApp) {
 				if (currentGroup.length > 0) {
@@ -88,9 +96,39 @@ export const TimelineSlider = ({
 			});
 		}
 		return groups;
-	}, [frames]);
+	}, [visibleFrames]);
 
-	// Add effect to keep current frame in view
+	useEffect(() => {
+		const observerTarget = observerTargetRef.current;
+		if (!observerTarget) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				const entry = entries[0];
+				if (!entry.isIntersecting) return;
+
+				const lastDate = subDays(currentDate, 1);
+				const now = new Date();
+				const canFetch =
+					!lastFetchRef.current ||
+					now.getTime() - lastFetchRef.current.getTime() > 1000;
+
+				if (isAfter(lastDate, startAndEndDates.start) && canFetch) {
+					lastFetchRef.current = now;
+					fetchNextDayData(lastDate);
+				}
+			},
+			{
+				root: containerRef.current,
+				threshold: 1.0,
+				rootMargin: "0px 20% 0px 0px",
+			},
+		);
+
+		observer.observe(observerTarget);
+		return () => observer.disconnect();
+	}, [fetchNextDayData, currentDate, startAndEndDates]);
+
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container || !frames[currentIndex]) return;
@@ -110,46 +148,20 @@ export const TimelineSlider = ({
 	}, [currentIndex, frames.length]);
 
 	useEffect(() => {
-		const container = containerRef.current;
-		if (!container) return;
-
-		const handleScroll = () => {
-			const { scrollLeft, scrollWidth, clientWidth } = container;
-
-			// Check if we're 20% away from the left end (considering RTL)
-			const threshold = scrollWidth * 0.2; // 20% of total scroll width
-			const isNearLeftEnd =
-				Math.abs(scrollLeft) + clientWidth >= scrollWidth - threshold;
-
-			const lastDate = subDays(currentDate, 1);
-			if (isNearLeftEnd && isAfter(lastDate, startAndEndDates.start)) {
-				console.log("fetching next day's data", currentDate);
-				fetchNextDayData(lastDate);
-			}
-		};
-
-		container.addEventListener("scroll", handleScroll);
-		return () => container.removeEventListener("scroll", handleScroll);
-	}, [fetchNextDayData, currentDate, startAndEndDates]);
-
-	useEffect(() => {
 		if (!selectionRange) {
 			setSelectedIndices(new Set());
 		}
 	}, [selectionRange]);
 
-	// Handle drag start
 	const handleDragStart = (index: number) => {
 		setIsDragging(true);
 		setDragStartIndex(index);
 		setSelectedIndices(new Set([index]));
 
-		// Set initial selection range
 		const startDate = new Date(frames[index].timestamp);
 		setSelectionRange({ start: startDate, end: startDate });
 	};
 
-	// Handle drag over
 	const handleDragOver = (index: number) => {
 		if (isDragging && dragStartIndex !== null) {
 			const start = Math.min(dragStartIndex, index);
@@ -162,13 +174,11 @@ export const TimelineSlider = ({
 
 			setSelectedIndices(newSelection);
 
-			// Update selection range
 			setSelectionRange({
 				end: new Date(frames[start].timestamp),
 				start: new Date(frames[end].timestamp),
 			});
 
-			// Notify parent of selection change
 			if (onSelectionChange) {
 				const selectedFrames = Array.from(newSelection).map((i) => frames[i]);
 				onSelectionChange(selectedFrames);
@@ -176,7 +186,6 @@ export const TimelineSlider = ({
 		}
 	};
 
-	// Handle drag end
 	const handleDragEnd = () => {
 		setIsDragging(false);
 		setDragStartIndex(null);
@@ -239,15 +248,15 @@ export const TimelineSlider = ({
 											backgroundColor: group.color,
 											height:
 												frameIndex === currentIndex || isSelected || isInRange
-													? "100%"
-													: "70%",
+													? "60%"
+													: "40%",
 											opacity:
 												frameIndex === currentIndex || isSelected || isInRange
 													? 1
 													: 0.7,
 											direction: "ltr",
 										}}
-										whileHover={{ height: "100%", opacity: 1 }}
+										whileHover={{ height: "60%", opacity: 1 }}
 										onMouseDown={() => handleDragStart(frameIndex)}
 										onMouseEnter={() => {
 											setHoveredTimestamp(frame.timestamp);
@@ -260,8 +269,9 @@ export const TimelineSlider = ({
 												<AudioLinesIcon className="w-full h-full" />
 											</div>
 										)}
-										{hoveredTimestamp === frame.timestamp && (
-											<div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">
+										{(hoveredTimestamp === frame.timestamp ||
+											frames[currentIndex].timestamp === frame.timestamp) && (
+											<div className="absolute bottom-full left-1/2 z-50 -translate-x-1/2 mb-6 w-max bg-background border rounded-md px-2 py-1 text-xs shadow-lg">
 												<p className="font-medium">
 													{frame.devices[0].metadata.app_name}
 												</p>
@@ -275,6 +285,7 @@ export const TimelineSlider = ({
 							})}
 						</div>
 					))}
+					<div ref={observerTargetRef} className="h-full w-1" />
 				</motion.div>
 			</div>
 		</div>
