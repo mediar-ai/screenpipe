@@ -250,7 +250,7 @@ ${JSON.stringify(tweetArray, null, 2)}
     let i = 0;
     for await (const chunk of fullStream) {
       const text = getText(chunk);
-      if (text) {
+      if (text !== null) {
         summary += text;
 
         if (i < 99) {
@@ -321,7 +321,7 @@ ${JSON.stringify(context, null, 2)}
     let i = 0;
     for await (const chunk of fullStream) {
       const text = getText(chunk);
-      if (text) {
+      if (text !== null) {
         summary += text;
 
         if (i < 99) {
@@ -446,7 +446,7 @@ ${JSON.stringify(summaries, null, 2)}
     let i = 0;
     for await (const chunk of fullStream) {
       const text = getText(chunk);
-      if (text) {
+      if (text !== null) {
         summary += text;
 
         if (i < 99) {
@@ -611,8 +611,8 @@ Return in the following JSON format:
 }
 
 function getText(chunk: any): string | null {
-  if (chunk.type === "deltaText") {
-    return chunk.text;
+  if (chunk.type == "text-delta") {
+    return chunk.textDelta;
   } else if (chunk.type === "error") {
     if (TypeValidationError.isInstance(chunk.error)) {
       return chunk.error.value.choices[0]?.delta?.content || "";
