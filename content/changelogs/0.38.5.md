@@ -1,13 +1,6 @@
-Based on your provided commits, here is the changelog for the new Screenpipe update:
+Based on the provided commits, it seems that there are no contributions that bring clear customer value. The updates related to the release application and documentation do not directly enhance features, improve performance, or fix issues that users would experience.
 
-### **New Features:**
-- **Updated SDK:** Enhanced functionality and compatibility with the latest SDK updates.
+Therefore, there are no relevant changes to include in the changelog at this time.
 
-### **Improvements:**
-- **Fixed small UX issue in Obsidian:** Improved user experience in the Obsidian interface.
- 
-### **Fixes:**
-- **Fixed issue with browser_url filter in search API:** Resolved a filtering issue to ensure accurate search results.
-
-#### **Full Changelog:** [36bfa..b371c](https://github.com/mediar-ai/screenpipe/compare/36bfa..b371c)
+#### **Full Changelog:** [89f83..87cef](https://github.com/mediar-ai/screenpipe/compare/89f83..87cef)
 
