@@ -1,6 +1,6 @@
 {
   "name": "search",
-  "version": "0.1.18",
+  "version": "0.1.22",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -23,8 +23,8 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.1.5",
-    "@screenpipe/browser": "^0.1.33",
-    "@screenpipe/js": "^1.0.12",
+    "@screenpipe/browser": "^0.1.35",
+    "@screenpipe/js": "^1.0.16",
     "@shadcn/ui": "^0.0.4",
     "@tanstack/react-query": "^5.62.7",
     "@types/js-levenshtein": "^1.1.3",

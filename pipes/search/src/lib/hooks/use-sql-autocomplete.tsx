@@ -10,7 +10,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 const cache: Record<string, { data: AutocompleteItem[]; timestamp: number }> =
   {};
 
-export function useSqlAutocomplete(type: "app" | "window") {
+export function useSqlAutocomplete(type: "app" | "window" | "url") {
   const [items, setItems] = useState<AutocompleteItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -21,17 +21,34 @@ export function useSqlAutocomplete(type: "app" | "window") {
       if (cachedData && Date.now() - cachedData.timestamp < CACHE_DURATION) {
         setItems(cachedData.data);
       } else {
-        const query = `
-          SELECT ${
-            type === "app" ? "ocr.app_name" : "ocr.window_name"
-          } as name, COUNT(*) as count
-          FROM ocr_text ocr
-          JOIN frames f ON ocr.frame_id = f.id
-          WHERE f.timestamp > datetime('now', '-7 days')
-          GROUP BY ${type === "app" ? "ocr.app_name" : "ocr.window_name"}
-          ORDER BY count DESC
-          LIMIT 100
-        `;
+        let query = "";
+
+        // Select the appropriate query based on type
+        if (type === "url") {
+          query = `
+            SELECT browser_url as name, COUNT(*) as count
+            FROM frames f
+            WHERE f.timestamp > datetime('now', '-7 days')
+            AND browser_url IS NOT NULL
+            AND browser_url != ''
+            GROUP BY browser_url
+            ORDER BY count DESC
+            LIMIT 100
+          `;
+        } else {
+          query = `
+            SELECT ${
+              type === "app" ? "ocr.app_name" : "ocr.window_name"
+            } as name, COUNT(*) as count
+            FROM ocr_text ocr
+            JOIN frames f ON ocr.frame_id = f.id
+            WHERE f.timestamp > datetime('now', '-7 days')
+            GROUP BY ${type === "app" ? "ocr.app_name" : "ocr.window_name"}
+            ORDER BY count DESC
+            LIMIT 100
+          `;
+        }
+
         const response = await fetch("http://localhost:3030/raw_sql", {
           method: "POST",
           headers: {

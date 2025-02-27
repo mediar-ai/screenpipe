@@ -74,6 +74,7 @@ export interface OCRContent {
   frame?: string;
   frameName?: string;
   browserUrl?: string;
+  focused?: boolean;
 }
 
 /**
