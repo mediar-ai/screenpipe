@@ -32,11 +32,6 @@ interface VideoMetadata {
     creation_time?: string;
     fps?: number;
     device_name?: string;
-    video_codec?: string;
-    video_preset?: string;
-    video_crf?: number;
-    hw_accel?: string;
-    hw_accel_device?: string;
   };
 }
 
@@ -85,12 +80,7 @@ export function DataImportSection() {
           name: "",
           creation_time: new Date().toISOString(),
           fps: 30,
-          device_name: "",
-          video_codec: "",
-          video_preset: "",
-          video_crf: 23,
-          hw_accel: "",
-          hw_accel_device: "",
+          device_name: ""
         },
       }));
       console.log("initialized metadata config:", newMetadataConfig);
