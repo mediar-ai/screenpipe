@@ -1246,6 +1246,8 @@ fn find_bun_path_internal() -> Option<PathBuf> {
     }
 
     error!("bun not found");
+    let err = anyhow::anyhow!("Bun executable not found. Pipe functionality may be limited.");
+    sentry::capture_error(&err.source().unwrap());
     None
 }
 
