@@ -72176,7 +72176,7 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
         })
       });
       if (!urlResponse.ok) {
-        throw new Error(`Failed to get upload URL: ${await urlResponse.text()}`);
+        throw new Error(`Failed to get upload URL: ${await urlResponse.text()} ${urlResponse.status}`);
       }
       const { uploadUrl, path: path3 } = await urlResponse.json();
       logger.log(colors8.dim(`${symbols.arrow} uploading to storage...`));
@@ -72186,9 +72186,8 @@ ${symbols.info} publishing ${colors8.highlight(packageJson.name)} v${packageJson
         },
         maxBodyLength: Infinity
       });
-      if (!uploadResponse.data.success) {
-        const text = uploadResponse.data.error;
-        throw new Error(`Failed to upload file to storage: ${text}`);
+      if (uploadResponse.status !== 200) {
+        throw new Error(`Failed to upload file to storage: code:${uploadResponse.status} body: ${JSON.stringify(uploadResponse.data)}`);
       }
       logger.log(colors8.dim(`${symbols.arrow} finalizing upload...`));
       const finalizeResponse = await fetch(`${API_BASE_URL}/api/plugins/publish/finalize`, {

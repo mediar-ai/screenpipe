@@ -350,7 +350,7 @@ export const publishCommand = new Command("publish")
 
         if (!urlResponse.ok) {
           throw new Error(
-            `Failed to get upload URL: ${await urlResponse.text()}`
+            `Failed to get upload URL: ${await urlResponse.text()} ${urlResponse.status}`
           );
         }
 
@@ -363,11 +363,9 @@ export const publishCommand = new Command("publish")
             "Content-Type": "application/zip",
           },
           maxBodyLength: Infinity,
-        });
-
-        if (!uploadResponse.data.success) {
-          const text = uploadResponse.data.error;
-          throw new Error(`Failed to upload file to storage: ${text}`);
+        });        
+        if (uploadResponse.status !== 200) {
+          throw new Error(`Failed to upload file to storage: code:${uploadResponse.status} body: ${JSON.stringify(uploadResponse.data)}`);
         }
 
         // Notify server that upload is complete
