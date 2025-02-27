@@ -1470,7 +1470,7 @@ export function SearchChat() {
         open={isQueryParamsDialogOpen}
         onOpenChange={setIsQueryParamsDialogOpen}
       >
-        <DialogContent className="sm:max-w-[605px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[705px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>advanced search parameters</DialogTitle>
             <DialogDescription>
@@ -1609,6 +1609,66 @@ export function SearchChat() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="speakers" className="text-right">
+                speakers
+              </Label>
+              <div className="col-span-3 w-full">
+                <MultiSelectCombobox
+                  label="speakers"
+                  options={speakers.map((speaker) => ({
+                    label: speaker.name || `Speaker ${speaker.id}`,
+                    value: speaker.id.toString(),
+                  }))}
+                  value={Object.values(selectedSpeakers).map((speaker) =>
+                    speaker.id.toString()
+                  )}
+                  onChange={(selectedIds) => {
+                    // Convert from array of IDs to object with speaker objects
+                    const newSelectedSpeakers: { [key: number]: Speaker } = {};
+                    selectedIds.forEach((id) => {
+                      const speakerId = parseInt(id);
+                      const speaker = speakers.find((s) => s.id === speakerId);
+                      if (speaker) {
+                        newSelectedSpeakers[speakerId] = speaker;
+                      }
+                    });
+                    setSelectedSpeakers(newSelectedSpeakers);
+                  }}
+                  placeholder="Search speakers..."
+                  renderItem={(option) => (
+                    <div className="flex items-center justify-between w-full">
+                      <span>{option.label}</span>
+                    </div>
+                  )}
+                  renderSelectedItem={(values) => (
+                    <div className="flex gap-1 items-center w-full">
+                      {values.length === 0 ? (
+                        <span>Select speakers</span>
+                      ) : (
+                        <>
+                          {values.map((value) => {
+                            const speaker = speakers.find(
+                              (s) => s.id.toString() === value
+                            );
+                            return speaker ? (
+                              <Badge
+                                key={value}
+                                variant="secondary"
+                                className="gap-1 px-1.5"
+                              >
+                                {speaker.name || `Speaker ${speaker.id}`}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+                />
               </div>
             </div>
 
@@ -1755,72 +1815,6 @@ export function SearchChat() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="speakers" className="text-right">
-              speakers
-            </Label>
-            <div className="col-span-3 flex items-center">
-              <Popover open={openSpeakers} onOpenChange={setOpenSpeakers}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openSpeakers}
-                    className="w-full justify-between"
-                  >
-                    {Object.values(selectedSpeakers).length > 0
-                      ? `${Object.values(selectedSpeakers)
-                          .map((s) => s.name)
-                          .join(", ")}`
-                      : "select speakers"}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0">
-                  <Command>
-                    <CommandInput
-                      placeholder="search speakers..."
-                      value={speakerSearchQuery}
-                      onValueChange={setSpeakerSearchQuery}
-                    />
-                    <CommandList>
-                      <CommandEmpty>no speakers found.</CommandEmpty>
-                      <CommandGroup>
-                        {[...new Set(speakers)].map((speaker: Speaker) => (
-                          <CommandItem
-                            key={speaker.id}
-                            value={speaker.name}
-                            onSelect={() => handleSpeakerChange(speaker)}
-                          >
-                            <div className="flex items-center">
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedSpeakers[speaker.id]
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <span
-                                style={{
-                                  userSelect: "none",
-                                  WebkitUserSelect: "none",
-                                  MozUserSelect: "none",
-                                  msUserSelect: "none",
-                                }}
-                              >
-                                {speaker.name}
-                              </span>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
           {/* Add frame name input after app name */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="frame-name" className="text-right">
