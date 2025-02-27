@@ -10,7 +10,6 @@ import { createSuccessResponse, createErrorResponse } from '../utils/cors';
  */
 export async function handleFileTranscription(request: Request, env: Env): Promise<Response> {
   try {
-    // Get the raw body instead of form data
     const audioBuffer = await request.arrayBuffer();
     const languages = request.headers.get('detect_language')?.split(',') || [];
     const sampleRate = request.headers.get('sample_rate') || '16000';
@@ -23,7 +22,7 @@ export async function handleFileTranscription(request: Request, env: Env): Promi
         method: 'POST',
         headers: {
           Authorization: `Token ${env.DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/wav', // Set correct content type
+          'Content-Type': 'audio/wav', 
         },
         body: audioBuffer,
       }

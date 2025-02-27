@@ -31,7 +31,6 @@ class SubscriptionCache {
   }
 }
 
-// Export a singleton instance of the cache
 export const subscriptionCache = new SubscriptionCache();
 
 /**

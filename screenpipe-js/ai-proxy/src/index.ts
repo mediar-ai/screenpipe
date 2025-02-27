@@ -7,83 +7,104 @@ import { setupAnalytics } from './services/analytics';
 import { handleChatCompletions } from './handlers/chat';
 import { handleModelListing } from './handlers/models';
 import { handleFileTranscription, handleWebSocketUpgrade } from './handlers/transcription';
+import { handleVoiceTranscription, handleVoiceQuery, handleTextToSpeech, handleVoiceChat } from './handlers/voice';
+// import { handleTTSWebSocketUpgrade } from './handlers/voice-ws';
 
 export { RateLimiter };
 
 export default Sentry.withSentry(
-  (env) => ({
-    dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
-    tracesSampleRate: 0.1,
-    environment: env.NODE_ENV || 'development',
-    enabled: (env.NODE_ENV || 'development') === 'production',
-  }),
-  {
-    /**
-     * This is the standard fetch handler for a Cloudflare Worker
-     * @param request The HTTP request
-     * @param env Environment variables
-     * @param ctx Execution context
-     * @returns HTTP response
-     */
-    async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-      // Setup analytics
-      const langfuse = setupAnalytics(env);
+	(env) => ({
+		dsn: 'https://60750a679399e9d0b8631c059fb7578d@o4507617161314304.ingest.us.sentry.io/4508689350983680',
+		tracesSampleRate: 0.1,
+		environment: env.NODE_ENV || 'development',
+		enabled: (env.NODE_ENV || 'development') === 'production',
+	}),
+	{
+		/**
+		 * This is the standard fetch handler for a Cloudflare Worker
+		 * @param request The HTTP request
+		 * @param env Environment variables
+		 * @param ctx Execution context
+		 * @returns HTTP response
+		 */
+		async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+			const langfuse = setupAnalytics(env);
 
-      try {
-        // Handle OPTIONS requests for CORS
-        if (request.method === 'OPTIONS') {
-          return handleOptions(request);
-        }
+			try {
+				if (request.method === 'OPTIONS') {
+					return handleOptions(request);
+				}
 
-        const rateLimit = await checkRateLimit(request, env);
-        if (!rateLimit.allowed && rateLimit.response) {
-          return rateLimit.response;
-        }
+				const rateLimit = await checkRateLimit(request, env);
+				if (!rateLimit.allowed && rateLimit.response) {
+					return rateLimit.response;
+				}
 
-        const url = new URL(request.url);
-        const path = url.pathname;
-        console.log('path', path);
+				const url = new URL(request.url);
+				const path = url.pathname;
+				console.log('path', path);
 
-        // Handle WebSocket upgrade for real-time transcription
-        const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
-        if (path === '/v1/listen' && upgradeHeader === 'websocket') {
-          console.log('websocket request to /v1/listen detected, bypassing auth');
-          return await handleWebSocketUpgrade(request, env);
-        }
+				// Handle WebSocket upgrade for real-time transcription
+				const upgradeHeader = request.headers.get('upgrade')?.toLowerCase();
+				if (path === '/v1/listen' && upgradeHeader === 'websocket') {
+					console.log('websocket request to /v1/listen detected, bypassing auth');
+					return await handleWebSocketUpgrade(request, env);
+				}
 
-        if (path !== '/test') {
-          const authResult = await validateAuth(request, env);
-          if (!authResult.isValid) {
-            return createErrorResponse(401, authResult.error || 'unauthorized');
-          }
-        }
+				if (path !== '/test') {
+				  const authResult = await validateAuth(request, env);
+				  if (!authResult.isValid) {
+				    return createErrorResponse(401, authResult.error || 'unauthorized');
+				  }
+				}
 
-        if (path === '/test') {
-          return createSuccessResponse('ai proxy is working!');
-        }
+				if (path === '/test') {
+					return createSuccessResponse('ai proxy is working!');
+				}
 
-        if (path === '/v1/chat/completions' && request.method === 'POST') {
-          const body = (await request.json()) as RequestBody;
-          return await handleChatCompletions(body, env, langfuse);
-        }
+				if (path === '/v1/chat/completions' && request.method === 'POST') {
+					const body = (await request.json()) as RequestBody;
+					return await handleChatCompletions(body, env, langfuse);
+				}
 
-        if (path === '/v1/listen' && request.method === 'POST') {
-          return await handleFileTranscription(request, env);
-        }
+				if (path === '/v1/listen' && request.method === 'POST') {
+					return await handleFileTranscription(request, env);
+				}
 
-        if (path === '/v1/models' && request.method === 'GET') {
-          return await handleModelListing(env);
-        }
+				if (path === '/v1/models' && request.method === 'GET') {
+					return await handleModelListing(env);
+				}
 
-        return createErrorResponse(404, 'not found');
-      } catch (error) {
-        console.error('error in fetch:', error);
-        return createErrorResponse(500, 'an error occurred');
-      } finally {
-        await langfuse.shutdownAsync();
-      }
-    },
-  } satisfies ExportedHandler<Env>
+				if (path === '/v1/voice/transcribe' && request.method === 'POST') {
+					return await handleVoiceTranscription(request, env);
+				}
+
+				if (path === '/v1/voice/query' && request.method === 'POST') {
+					return await handleVoiceQuery(request, env, langfuse);
+				}
+
+				if (path === '/v1/text-to-speech' && request.method === 'POST') {
+					return await handleTextToSpeech(request, env, langfuse);
+				}
+
+				if (path === '/v1/voice/chat' && request.method === 'POST') {
+					return await handleVoiceChat(request, env, langfuse);
+				}
+
+				// //TODO:
+				// if (path === '/v1/tts-ws' && upgradeHeader === 'websocket') {
+				// 	return await handleTTSWebSocketUpgrade(request, env);
+				// }
+
+				return createErrorResponse(404, 'not found');
+			} catch (error) {
+				console.error('error in fetch:', error);
+				return createErrorResponse(500, 'an error occurred');
+			} finally {
+				await langfuse.shutdownAsync();
+			}
+		},
+	} satisfies ExportedHandler<Env>
 );
 
 /*

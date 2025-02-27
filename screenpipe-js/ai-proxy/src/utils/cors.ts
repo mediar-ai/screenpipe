@@ -1,8 +1,4 @@
 /**
- * CORS utility functions for handling cross-origin requests
- */
-
-/**
  * Adds CORS headers to a response
  * @param response The response to add headers to
  * @returns The response with CORS headers added

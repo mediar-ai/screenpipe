@@ -20,18 +20,20 @@ export class RateLimiter {
     const url = new URL(request.url);
     const now = Date.now();
 
-    // different limits for different endpoints
+    // idk much about limits loius wanted to have 
     const limits: Record<string, { rpm: number; window: number }> = {
       '/v1/chat/completions': { rpm: 20, window: 60000 }, // 20 requests per minute for openai
+      '/v1/voice/transcribe': { rpm: 15, window: 60000 }, // 15 requests per minute for voice transcription
+      '/v1/voice/query': { rpm: 10, window: 60000 },      // 10 requests per minute for voice queries
+      '/v1/text-to-speech': { rpm: 15, window: 60000 },   // 15 requests per minute for text-to-speech
+      '/v1/voice/chat': { rpm: 8, window: 60000 },        // 8 requests per minute for voice chat
       default: { rpm: 60, window: 60000 }, // 60 rpm for other endpoints
     };
 
     const limit = limits[url.pathname] || limits.default;
 
-    // get or initialize request tracking
     let tracking = this.requests.get(ip) || { count: 0, lastReset: now };
 
-    // reset if window expired
     if (now - tracking.lastReset > limit.window) {
       tracking = { count: 0, lastReset: now };
     }
