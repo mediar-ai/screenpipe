@@ -1142,7 +1142,7 @@ async fn main() -> anyhow::Result<()> {
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
             // sleep for 1 seconds
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
 

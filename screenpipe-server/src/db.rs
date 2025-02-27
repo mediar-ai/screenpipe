@@ -393,7 +393,7 @@ impl DatabaseManager {
     pub async fn search(
         &self,
         query: &str,
-        content_type: ContentType,
+        mut content_type: ContentType,
         limit: u32,
         offset: u32,
         start_time: Option<DateTime<Utc>>,
@@ -408,6 +408,11 @@ impl DatabaseManager {
         focused: Option<bool>,
     ) -> Result<Vec<SearchResult>, sqlx::Error> {
         let mut results = Vec::new();
+
+        // if focused or browser_url is present, we run only on OCR
+        if focused.is_some() || browser_url.is_some() {
+            content_type = ContentType::OCR;
+        }
 
         match content_type {
             ContentType::All => {
@@ -968,7 +973,7 @@ impl DatabaseManager {
     pub async fn count_search_results(
         &self,
         query: &str,
-        content_type: ContentType,
+        mut content_type: ContentType,
         start_time: Option<DateTime<Utc>>,
         end_time: Option<DateTime<Utc>>,
         app_name: Option<&str>,
@@ -980,6 +985,12 @@ impl DatabaseManager {
         browser_url: Option<&str>,
         focused: Option<bool>,
     ) -> Result<usize, sqlx::Error> {
+
+        // if focused or browser_url is present, we run only on OCR
+        if focused.is_some() || browser_url.is_some() {
+            content_type = ContentType::OCR;
+        }
+
         if content_type == ContentType::All {
             // Create boxed futures to avoid infinite size issues with recursion
             let ocr_future = Box::pin(self.count_search_results(
