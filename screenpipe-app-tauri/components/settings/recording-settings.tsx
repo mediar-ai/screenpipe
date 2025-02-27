@@ -919,130 +919,6 @@ export function RecordingSettings() {
                     />
                   </div>
                 </div>
-
-                <div className="flex flex-col space-y-4">
-                  <Label>video settings</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>fps</Label>
-                      <Slider
-                        defaultValue={[settings.fps || 0.5]}
-                        max={30}
-                        min={0.1}
-                        step={0.1}
-                        onValueChange={handleFpsChange}
-                      />
-                      <div className="text-xs text-muted-foreground">
-                        current: {settings.fps || 0.5} fps
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="flex items-center space-x-2">
-                        <span>video codec</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <HelpCircle className="h-4 w-4 cursor-default" />
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                              <p>
-                                h264/avc: fast encoding, high compatibility
-                                <br />
-                                h265/hevc: better compression, slower encoding
-                                <br />
-                                av1: best compression, slowest encoding
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </Label>
-                      <Select
-                        value={settings.videoCodec}
-                        onValueChange={handleVideoCodecChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="select video codec" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="libx264">h264/avc (fast, compatible)</SelectItem>
-                          <SelectItem value="libx265">h265/hevc (smaller, slower)</SelectItem>
-                          <SelectItem value="libaom-av1">av1 (best compression, slowest)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>encoder preset</Label>
-                      <Select
-                        value={settings.videoPreset}
-                        onValueChange={handleVideoPresetChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="select encoder preset" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ultrafast">ultrafast (fastest)</SelectItem>
-                          <SelectItem value="superfast">superfast</SelectItem>
-                          <SelectItem value="veryfast">veryfast</SelectItem>
-                          <SelectItem value="faster">faster</SelectItem>
-                          <SelectItem value="fast">fast</SelectItem>
-                          <SelectItem value="medium">medium (balanced)</SelectItem>
-                          <SelectItem value="slow">slow</SelectItem>
-                          <SelectItem value="slower">slower</SelectItem>
-                          <SelectItem value="veryslow">veryslow (smallest)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>quality (crf)</Label>
-                      <Slider
-                        defaultValue={[settings.videoCrf || 23]}
-                        max={51}
-                        min={0}
-                        step={1}
-                        onValueChange={handleVideoCrfChange}
-                      />
-                      <div className="text-xs text-muted-foreground">
-                        current: {settings.videoCrf || 23} (lower = better quality)
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label>hardware acceleration</Label>
-                      <Select
-                        value={settings.hwAccel || "none"}
-                        onValueChange={handleHwAccelChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="select hardware acceleration" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">none (software)</SelectItem>
-                          <SelectItem value="vaapi">vaapi (intel/amd)</SelectItem>
-                          <SelectItem value="nvenc">nvenc (nvidia)</SelectItem>
-                          <SelectItem value="qsv">qsv (intel quicksync)</SelectItem>
-                          <SelectItem value="videotoolbox">videotoolbox (macos)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    {settings.hwAccel === "vaapi" && (
-                      <div className="space-y-2">
-                        <Label>hardware device</Label>
-                        <Input
-                          placeholder="/dev/dri/renderD128"
-                          value={settings.hwAccelDevice || ""}
-                          onChange={(e) => handleHwAccelDeviceChange(e.target.value)}
-                        />
-                        <div className="text-xs text-muted-foreground">
-                          device path for vaapi (e.g., /dev/dri/renderD128)
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
               <Separator className="my-6" />
             </>
@@ -1609,6 +1485,121 @@ export function RecordingSettings() {
             </div>
 
             {/*  */}
+          </div>
+        </div>
+
+        <Separator className="my-6" />
+
+        <h4 className="text-lg font-semibold my-4">advanced settings</h4>
+        <div className="space-y-6">
+          <div className="flex flex-col space-y-4">
+            <Label>video settings</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="flex items-center space-x-2">
+                  <span>video codec</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="h-4 w-4 cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>
+                          h264/avc: fast encoding, high compatibility
+                          <br />
+                          h265/hevc: better compression, slower encoding
+                          <br />
+                          av1: best compression, slowest encoding
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </Label>
+                <Select
+                  value={settings.videoCodec}
+                  onValueChange={handleVideoCodecChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="select video codec" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="libx264">h264/avc (fast, compatible)</SelectItem>
+                    <SelectItem value="libx265">h265/hevc (smaller, slower)</SelectItem>
+                    <SelectItem value="libaom-av1">av1 (best compression, slowest)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>encoder preset</Label>
+                <Select
+                  value={settings.videoPreset}
+                  onValueChange={handleVideoPresetChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="select encoder preset" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ultrafast">ultrafast (fastest)</SelectItem>
+                    <SelectItem value="superfast">superfast</SelectItem>
+                    <SelectItem value="veryfast">veryfast</SelectItem>
+                    <SelectItem value="faster">faster</SelectItem>
+                    <SelectItem value="fast">fast</SelectItem>
+                    <SelectItem value="medium">medium (balanced)</SelectItem>
+                    <SelectItem value="slow">slow</SelectItem>
+                    <SelectItem value="slower">slower</SelectItem>
+                    <SelectItem value="veryslow">veryslow (smallest)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>quality (crf)</Label>
+                <Slider
+                  defaultValue={[settings.videoCrf || 23]}
+                  max={51}
+                  min={0}
+                  step={1}
+                  onValueChange={handleVideoCrfChange}
+                />
+                <div className="text-xs text-muted-foreground">
+                  current: {settings.videoCrf || 23} (lower = better quality)
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>hardware acceleration</Label>
+                <Select
+                  value={settings.hwAccel || "none"}
+                  onValueChange={handleHwAccelChange}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="select hardware acceleration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">none (software)</SelectItem>
+                    <SelectItem value="vaapi">vaapi (intel/amd)</SelectItem>
+                    <SelectItem value="nvenc">nvenc (nvidia)</SelectItem>
+                    <SelectItem value="qsv">qsv (intel quicksync)</SelectItem>
+                    <SelectItem value="videotoolbox">videotoolbox (macos)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {settings.hwAccel === "vaapi" && (
+                <div className="space-y-2">
+                  <Label>hardware device</Label>
+                  <Input
+                    placeholder="/dev/dri/renderD128"
+                    value={settings.hwAccelDevice || ""}
+                    onChange={(e) => handleHwAccelDeviceChange(e.target.value)}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    device path for vaapi (e.g., /dev/dri/renderD128)
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
