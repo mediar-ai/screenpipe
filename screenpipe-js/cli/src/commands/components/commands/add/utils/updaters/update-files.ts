@@ -1,10 +1,9 @@
 import fs from "fs-extra";
 import path from "path";
 import { highlighter, logger, spinner } from "../logger";
-import prompts from "prompts";
+import * as p from "@clack/prompts";
 import { existsSync } from "fs";
 import { fetchFileFromGitHubAPI } from "../download-file-from-github";
-import inquirer from "inquirer";
 
 export async function updateFiles(
   componentLocations: { src: string; target: string }[],
@@ -42,18 +41,15 @@ export async function updateFiles(
     const existingFile = existsSync(location.target);
     if (existingFile && !options.overwrite) {
       filesCreatedSpinner.succeed("");
-      const { overwrite } = await inquirer.prompt([
-        {
-          type: "confirm",
-          name: "overwrite",
-          message: `The file ${highlighter.info(
-            location.target
-          )} already exists. Would you like to overwrite?`,
-          default: false,
-        },
-      ]);
 
-      if (!overwrite) {
+      const overwrite = await p.confirm({
+        message: `The file ${highlighter.info(
+          location.target
+        )} already exists. Would you like to overwrite?`,
+        initialValue: false,
+      });
+
+      if (p.isCancel(overwrite) || !overwrite) {
         filesSkipped.push(path.relative(options.cwd, location.target));
         continue;
       }

@@ -4,10 +4,9 @@ process.removeAllListeners("warning");
 
 import fs from "fs-extra";
 import path from "path";
-import { input } from "@inquirer/prompts";
+import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
-import { logger, spinner } from "../components/commands/add/utils/logger";
 import simpleGit from "simple-git";
 import { handleError } from "../components/commands/add/utils/handle-error";
 
@@ -22,28 +21,52 @@ const PIPE_ADDITIONS = {
 
 async function downloadAndExtractSubdir(subdir: string, destPath: string) {
   const tempDir = path.join(destPath, "_temp");
+
+  // Create a spinner with initial text
+  const s = p.spinner();
+
   try {
+    // Start spinner with initial message
+    s.start("preparing to download template...");
+
     // Ensure the destination path exists first
     await fs.ensureDir(destPath);
     await fs.ensureDir(tempDir);
+
+    // Update spinner text before clone starts
+    s.message(
+      "cloning repository (this may take a while on slow connections)..."
+    );
 
     // Use more specific error handling for git clone
     const git = simpleGit();
     await git.clone("https://github.com/mediar-ai/screenpipe", tempDir);
 
+    // Update spinner as we progress through steps
+    s.message("checking template directory...");
     const sourcePath = path.join(tempDir, subdir);
     if (!(await fs.pathExists(sourcePath))) {
-      throw new Error(`Template directory '${subdir}' not found in repository`);
+      throw new Error(`template directory '${subdir}' not found in repository`);
     }
 
+    s.message("copying template files to destination...");
     await fs.copy(sourcePath, destPath);
+
+    s.message("cleaning up temporary files...");
     await fs.remove(tempDir);
+
+    // Stop spinner with success
+    s.stop("template downloaded and extracted successfully!");
   } catch (error: any) {
     // Clean up temp directory if it exists
     if (await fs.pathExists(tempDir)) {
+      s.message("cleaning up after error...");
       await fs.remove(tempDir);
     }
-    throw new Error(`Failed to setup pipe: ${error.message}`);
+
+    // Stop spinner with error
+    s.stop("download failed!");
+    throw new Error(`failed to setup pipe: ${error.message}`);
   }
 }
 
@@ -51,44 +74,48 @@ export const createPipeCommand = new Command()
   .name("create")
   .description("create a new pipe")
   .action(async () => {
-    console.log(chalk.bold("\nwelcome to screenpipe!\n"));
-    logger.log("let's create a new screenpipe pipe based on a template with ready-to-use components.\n");
-    logger.log(
-      "pipes are plugins that interact with captured screen and audio data."
-    );
-    logger.log("build powerful agents, monetize it, etc.\n");
+    p.intro(chalk.bold("\nwelcome to screenpipe!\n"));
 
-    let pipeName = "";
-    try {
-      pipeName = await input({
-        message: "> what is your pipe name?",
-        default: "my-screenpipe",
-        validate: (input) => {
-          if (input.trim().length === 0) return "pipe name is required";
-          return true;
-        },
-        transformer: (input) => input.trim(),
-      });
-    } catch (error) {
-      handleError(error);
+    // Get pipe name
+    const pipeNameInput = await p.text({
+      message: "what is your pipe name?",
+      placeholder: "my-screenpipe",
+      validate: (value) => {
+        if (value.trim().length === 0) return "pipe name is required";
+        return undefined;
+      },
+    });
+
+    // Check if user cancelled
+    if (p.isCancel(pipeNameInput)) {
+      p.cancel("operation cancelled");
+      process.exit(1);
     }
 
-    let directory = "";
-    try {
-      directory = await input({
-        message: "> where would you like to create your pipe?",
-        default: pipeName,
-        validate: (input) => {
-          if (input.trim().length === 0) return "directory is required";
-          return true;
-        },
-        transformer: (input) => input.trim(),
-      });
-    } catch (error) {
-      handleError(error);
+    // Now pipeName is definitely a string
+    const pipeName = pipeNameInput;
+
+    // Get directory
+    const directoryInput = await p.text({
+      message: "where would you like to create your pipe?",
+      placeholder: pipeName,
+      validate: (value) => {
+        if (value.trim().length === 0) return "directory is required";
+        return undefined;
+      },
+    });
+
+    // Check if user cancelled
+    if (p.isCancel(directoryInput)) {
+      p.cancel("operation cancelled");
+      process.exit(1);
     }
 
-    const loadingSpinner = spinner("creating your pipe...");
+    // Now directory is definitely a string
+    const directory = directoryInput;
+
+    const s = p.spinner();
+    s.start("creating your pipe...");
 
     try {
       // Ensure we have an absolute path
@@ -113,7 +140,7 @@ export const createPipeCommand = new Command()
 
       await fs.writeJson(pkgPath, pkg, { spaces: 2 });
 
-      loadingSpinner.succeed(chalk.green(`> pipe created successfully!`));
+      s.stop(chalk.green(`> pipe created successfully!`));
 
       console.log("\nto get started:");
       console.log(chalk.cyan(`cd ${absoluteDirectory}`));
@@ -128,7 +155,7 @@ export const createPipeCommand = new Command()
         "\nwhen you're ready, you can ship your pipe to the app by adding it to the pipe store using the UI and then send a PR to the main repo.\n"
       );
     } catch (error) {
-      loadingSpinner.failed("failed to create pipe");
+      s.stop("failed to create pipe");
       handleError(error);
     }
   });
