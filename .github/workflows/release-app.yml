@@ -325,6 +325,7 @@ jobs:
             libbz2-dev \
             zlib1g-dev \
             libonig-dev \
+            libappindicator3-dev \
             libayatana-appindicator3-dev \
             libsamplerate-dev \
             libwebrtc-audio-processing-dev \
