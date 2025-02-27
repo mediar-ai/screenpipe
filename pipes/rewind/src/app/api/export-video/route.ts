@@ -19,7 +19,10 @@ export async function POST(request: Request) {
 			headers: {
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({ frame_ids: frameIds, fps: settings.fps ?? 0.5 }),
+			body: JSON.stringify({
+				frame_ids: frameIds.sort((a, b) => a - b),
+				fps: settings.fps ?? 0.5,
+			}),
 		});
 
 		if (!response.ok) {

@@ -638,9 +638,15 @@ pub async fn extract_high_quality_frame(
 ) -> Result<String> {
     let ffmpeg_path = find_ffmpeg_path().expect("failed to find ffmpeg path");
 
-    let source_fps = (get_video_fps(&ffmpeg_path, file_path).await).unwrap_or(1.0);
+    let source_fps = match get_video_fps(&ffmpeg_path, file_path).await {
+        Ok(fps) => fps,
+        Err(e) => {
+            error!("failed to get video fps, using default 1fps: {}", e);
+            1.0
+        }
+    };
 
-    let frame_time = offset_index as f64 / source_fps;
+    let frame_time = offset_index as f64 * source_fps;
 
     let frame_filename = format!(
         "frame_{}_{}.png",
