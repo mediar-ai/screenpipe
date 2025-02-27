@@ -818,6 +818,14 @@ pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Res
         debug!("Source is a URL: {}", parsed_url);
         if parsed_url.host_str() == Some("github.com") {
             download_github_folder(&parsed_url, &temp_dir).await
+        } else if cfg!(windows) && parsed_url.scheme().len() == 1 {
+            // This is likely a Windows path with drive letter being interpreted as URL scheme
+            debug!("Detected Windows path with drive letter, treating as local path");
+            let source_path = Path::new(source);
+            if !source_path.exists() || !source_path.is_dir() {
+                anyhow::bail!("Invalid local source path");
+            }
+            copy_dir_all(source_path, &temp_dir).await
         } else {
             anyhow::bail!("Unsupported URL format");
         }

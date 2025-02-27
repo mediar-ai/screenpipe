@@ -1,6 +1,10 @@
 {
   "name": "rewind",
+<<<<<<< Updated upstream
   "version": "0.1.13",
+=======
+  "version": "0.1.14",
+>>>>>>> Stashed changes
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

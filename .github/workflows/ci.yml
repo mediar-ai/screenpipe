@@ -112,7 +112,7 @@ jobs:
           cp screenpipe-vision/tests/testing_OCR.png target/debug/deps/
 
       - name: Run specific Windows OCR cargo test
-        run: cargo test test_process_ocr_task_windows
+        run: cargo test test_process_ocr_task_windows pipes_test
 
   test-macos:
     runs-on: macos-latest
