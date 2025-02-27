@@ -34,7 +34,7 @@ export const createPipeCommand = new Command()
   .description("create a new pipe")
   .action(async () => {
     console.log(chalk.bold("\nwelcome to screenpipe!\n"));
-    logger.log("let's create a new screenpipe pipe.\n");
+    logger.log("let's create a new screenpipe pipe based on a template with ready-to-use components.\n");
     logger.log(
       "pipes are plugins that interact with captured screen and audio data."
     );
@@ -74,7 +74,7 @@ export const createPipeCommand = new Command()
 
     try {
       // Download and extract the appropriate template
-      await downloadAndExtractSubdir("pipes/obsidian", directory);
+      await downloadAndExtractSubdir("pipes/example-pipe", directory);
 
       // Update package.json with the pipe name
       const pkgPath = path.join(process.cwd(), directory, "package.json");
