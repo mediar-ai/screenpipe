@@ -91,6 +91,9 @@ windows = { version = "0.58", features = [
   "Media_Ocr",
   "Storage",
   "Storage_Streams",
+  "Win32_UI_Accessibility",
+  "Win32_Foundation", 
+  "Win32_UI_WindowsAndMessaging"
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

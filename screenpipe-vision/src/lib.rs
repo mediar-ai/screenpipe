@@ -3,6 +3,7 @@ pub mod apple;
 pub mod core;
 pub mod custom_ocr;
 #[cfg(target_os = "windows")]
+pub mod run_ui_monitoring_windows;
 pub mod microsoft;
 pub mod monitor;
 #[cfg(target_os = "macos")]
@@ -17,6 +18,7 @@ pub use utils::OcrEngine;
 pub mod capture_screenshot_by_window;
 pub use custom_ocr::perform_ocr_custom;
 #[cfg(target_os = "windows")]
+pub use run_ui_monitoring_windows::run_ui;
 pub use microsoft::perform_ocr_windows;
 #[cfg(target_os = "macos")]
 pub use run_ui_monitoring_macos::run_ui;
