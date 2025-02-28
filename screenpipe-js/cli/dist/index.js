@@ -73625,7 +73625,7 @@ var registryResolvedComponentsTreeSchema = registryComponentSchema.pick({
 var registry_default = {
   "use-health": {
     name: "use-health",
-    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-health-check.tsx",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/hooks/use-health-check.tsx",
     target: "./src/hooks/use-health.tsx",
     dependencies: [
       "lodash"
@@ -73636,7 +73636,7 @@ var registry_default = {
   },
   "update-pipe-config": {
     name: "update-pipe-config",
-    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/update-pipe-config.tsx",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/actions/update-pipe-config.ts",
     target: "./src/lib/actions/update-pipe-config.tsx",
     dependencies: [
       "@screenpipe/browser"
@@ -73647,7 +73647,7 @@ var registry_default = {
   },
   "use-pipe-settings": {
     name: "use-pipe-settings",
-    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-pipe-settings.tsx",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/hooks/use-pipe-settings.tsx",
     target: "./src/lib/hooks/use-pipe-settings.ts",
     dependencies: [
       "@screenpipe/browser"
@@ -73659,7 +73659,7 @@ var registry_default = {
   },
   "get-screenpipe-app-settings": {
     name: "get-screenpipe-app-settings",
-    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/get-screenpipe-app-settings.ts",
+    src: "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/example-pipe/lib/actions/get-screenpipe-app-settings.ts",
     target: "./src/lib/actions/get-screenpipe-app-settings.ts",
     dependencies: [
       "@screenpipe/js"
