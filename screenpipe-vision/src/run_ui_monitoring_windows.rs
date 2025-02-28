@@ -2,7 +2,7 @@ use anyhow::{Ok, Result};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use windows::{
-    core::*, windows::Win32::System::Com::*, Win32::Foundation::HWND, Win32::UI::Accessibility::*,
+    core::*, Win32::Foundation::HWND, Win32::System::Com::*, Win32::UI::Accessibility::*,
     Win32::UI::WindowsAndMessaging::*,
 };
 
@@ -107,8 +107,9 @@ fn build_text_output(element: &[ElementAttributes]) -> String {
     output
 }
 
-
-
+fn measure_global_element_value_size(windows_state: &HashMap<HWND, WindowState>) -> usize {
+    windows_state.iter().map(|(_, ws)| ws.elements.len().sum())
+}
 
 pub async fn run_ui() -> Result<()> {
     Ok(())
