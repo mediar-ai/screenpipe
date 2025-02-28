@@ -142,8 +142,12 @@ export async function cliLogin() {
   try {
     loadingSpinner.start();
     const authData = await authPromise;
-    await sendAuthData(authData);
     Credentials.setApiKey(authData.api_key, authData.developer_id);
+    await sendAuthData(authData).catch((_) => {
+      logger.warn(
+        "could not set app credentials, is it app running? \nignore this warning if you're just trying to publish a pipe!"
+      );
+    });
 
     loadingSpinner.succeed("authentication successful");
     server.close();
