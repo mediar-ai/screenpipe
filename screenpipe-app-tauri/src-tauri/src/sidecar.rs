@@ -97,6 +97,7 @@ pub async fn stop_screenpipe(
     #[cfg(not(target_os = "windows"))]
     {
         match tokio::process::Command::new("pkill")
+            .arg("-9")
             .arg("-f")
             .arg("screenpipe")
             .output()

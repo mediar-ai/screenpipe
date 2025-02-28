@@ -285,7 +285,7 @@ pub async fn process_ocr_task(
 
     for captured_window in window_images {
         let app_name = captured_window.app_name.clone();
-        let browser_url = if cfg!(target_os = "macos")
+        let browser_url = if cfg!(not(target_os = "linux"))
             && captured_window.is_focused
             && BROWSER_NAMES
                 .iter()

@@ -114,6 +114,9 @@ jobs:
       - name: Run specific Windows OCR cargo test
         run: cargo test test_process_ocr_task_windows
 
+      - name: Run pipes_test
+        run: cargo test --package pipes_test
+
   test-macos:
     runs-on: macos-latest
     steps:

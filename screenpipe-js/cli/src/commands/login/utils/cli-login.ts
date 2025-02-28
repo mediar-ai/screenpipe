@@ -1,6 +1,5 @@
 import http from "http";
 import { spawn } from "child_process";
-import { ParsedUrlQuery } from "node:querystring";
 import url from "url";
 import { listen } from "async-listen";
 import { customAlphabet } from "nanoid";
@@ -8,6 +7,7 @@ import { logger, spinner } from "../../components/commands/add/utils/logger";
 import { colors } from "../../../utils/colors";
 import { handleError } from "../../components/commands/add/utils/handle-error";
 import { z } from "zod";
+import { Credentials } from "../../../utils/credentials";
 
 class UserCancellationError extends Error {
   constructor(message: string) {
@@ -22,23 +22,32 @@ const authPayload = z.object({
   token: z.string(),
   email: z.string(),
   user_id: z.string(),
+  developer_id: z.string(),
+  api_key: z.string(),
 });
 
 async function sendAuthData(authPayload: AuthPayload) {
-  const response = await fetch(`http://localhost:11435/auth`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(authPayload),
-  });
+  try {
+    const response = await fetch(`http://localhost:11435/auth`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(authPayload),
+    });
 
-  if (!response.ok) {
-    throw new Error("failed to send auth data");
+    if (!response.ok) {
+      throw new Error("failed to send auth data");
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new Error("Make sure to run the app before attempting to login");
+    }
+    throw error;
   }
-
-  const data = await response.json();
-  return data;
 }
 
 const nanoid = customAlphabet("123456789qazwsxedcrfvtgbyhnujmikolp", 8);
@@ -110,14 +119,35 @@ export async function cliLogin() {
     )}\n`
   );
 
-  spawn("open", [confirmationUrl.toString()]);
+  // Use the appropriate command based on the operating system
+  const openBrowser = (url: string) => {
+    const platform = process.platform;
+    switch (platform) {
+      case "win32":
+        // Escape & characters for Windows command prompt
+        const escapedUrl = url.replace(/&/g, "^&");
+        return spawn("cmd", ["/c", "start", "", escapedUrl]);
+      case "darwin":
+        return spawn("open", [url]);
+      default:
+        // For Linux and other systems
+        return spawn("xdg-open", [url]);
+    }
+  };
+
+  openBrowser(confirmationUrl.toString());
 
   const loadingSpinner = spinner("waiting for authentication...");
 
   try {
     loadingSpinner.start();
     const authData = await authPromise;
-    await sendAuthData(authData);
+    Credentials.setApiKey(authData.api_key, authData.developer_id);
+    await sendAuthData(authData).catch((_) => {
+      logger.warn(
+        "could not set app credentials, is it app running? \nignore this warning if you're just trying to publish a pipe!"
+      );
+    });
 
     loadingSpinner.succeed("authentication successful");
     server.close();

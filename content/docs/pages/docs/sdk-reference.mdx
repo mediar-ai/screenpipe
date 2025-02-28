@@ -76,7 +76,7 @@ import { pipe } from '@screenpipe/browser'
 
 ```typescript
 const results = await pipe.queryScreenpipe({
-  q: "meeting notes",
+  q: "john",
   contentType: "ocr", // "ocr" | "audio" | "ui" | "all" | "audio+ui" | "ocr+ui" | "audio+ocr"
   limit: 10,
   offset: 0,
@@ -126,14 +126,13 @@ for (const item of results.data) {
 #### searching for specific content
 
 ```typescript
-// Search for "meeting notes" in all applications
 const results = await pipe.queryScreenpipe({
-  q: "meeting notes",
-  contentType: "all", // search across ocr, audio and ui
+  browserUrl: "discord*",
+  startTime: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
   limit: 20,
 })
 
-// Process results based on content type
+// Process results based on content type, when using browserUrl, only OCR is available
 for (const item of results.data) {
   if (item.type === "OCR") {
     console.log(`Screen text: ${item.content.text}`)
@@ -249,58 +248,36 @@ const pullRequests = githubActivity.filter(item =>
 console.log(`Found ${pullRequests.length} pull request interactions`);
 ```
 
-### input control api
 
-requires building the backend with the `experimental` feature flag.
 
-`cargo build --release --features experimental`
+### vercel-like crons 
 
-```typescript
-// type text
-await pipe.input.type("hello world")
+you need to add a `pipe.json` file to your pipe folder with this config for example:
 
-// press key
-await pipe.input.press("enter")
-
-// move mouse
-await pipe.input.moveMouse(100, 200)
-
-// click
-await pipe.input.click("left") // "left" | "right" | "middle"
-```
-
-#### automating repetitive tasks
-
-```typescript
-// Example: Automate filling a form
-async function fillForm() {
-  // Move to input field and click
-  await pipe.input.moveMouse(300, 200)
-  await pipe.input.click("left")
-  
-  // Type name
-  await pipe.input.type("John Doe")
-  
-  // Tab to next field
-  await pipe.input.press("tab")
-  
-  // Type email
-  await pipe.input.type("john@example.com")
-  
-  // Tab to next field 
-  await pipe.input.press("tab")
-  
-  // Type message
-  await pipe.input.type("This is an automated message")
-  
-  // Submit form
-  await pipe.input.press("tab")
-  await pipe.input.press("enter")
+```json
+{
+  "crons": [
+    {
+      "path": "/api/log",
+      "schedule": "0 */5 * * *" // every 5 minutes
+    }
+  ]
 }
-
-// Call the function
-await fillForm()
 ```
+
+this will run the `/api/log` route every 5 minutes.
+
+check how the obsidian pipe implements this, [route](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts) and [pipe.json](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/pipe.json) for a complete example.
+
+we recommend using the CLI to add the `update-pipe-config` server action to your pipe. this will allow you to update the pipe's cron schedule using a server action.
+
+```bash
+bunx @screenpipe/dev@latest components add
+# select "update-pipe-config" from the menu
+```
+
+please adjust its code to your needs as some things are hardcoded in it.
+
 
 ### realtime streams
 
@@ -319,7 +296,32 @@ for await (const event of pipe.streamVision(true)) { // true to include images
 }
 ```
 
+### react hooks sdk support ⚛️
+
+  
+screenpipe provides first-class support for React applications through custom hooks, enabling seamless integration with your React components. while you can manually create hooks using libraries like [React Query](https://tanstack.com/query/v5/docs/framework/react/overview), we recommend leveraging our built-in CLI to quickly add pre-built, optimized hooks to your pipes.
+
+#### using the cli to add hooks
+
+the fastest way to integrate react hooks into your pipe is through our CLI:
+
+```bash copy
+bunx --bun @screenpipe/dev@latest components add
+```
+
+select from the interactive menu to add hooks such as:
+
+- `use-pipe-settings`: manage pipe-specific and global app settings.
+- `use-health`: monitor pipe health and status.
+- `use-ai-provider`: integrate seamlessly with ai providers.
+- `use-sql-autocomplete`: provide sql query assistance.
+
+these hooks follow best practices, ensuring type safety, efficient state management, and easy integration with your existing React components.
+
+
 #### real-time meeting summarizer
+
+⚠️ make sure to enable real time transcription in the screenpipe app settings or CLI args.
 
 ```typescript
 import OpenAI from 'openai'
@@ -572,6 +574,7 @@ export function SettingsComponent() {
 }
 ```
 
+
 #### best practices
 
 - store pipe-specific settings under `customSettings.yourPipeName` in screenpipe app settings
@@ -814,73 +817,60 @@ const messages = await pipe.inbox.getMessages()
 await pipe.inbox.clearMessages()
 ```
 
-### typescript types
 
-both sdks export comprehensive typescript types:
 
-```typescript
-import type {
-  ContentType,
-  ScreenpipeQueryParams,
-  ScreenpipeResponse,
-  OCRContent,
-  AudioContent,
-  UiContent,
-  Speaker,
-  NotificationOptions,
-  Settings,
-  // ... and more
-} from '@screenpipe/js' // or '@screenpipe/browser'
-```
+### input control api
 
-key types include:
+requires building the backend with the `experimental` feature flag.
+
+`cargo build --release --features experimental`
 
 ```typescript
-type ContentType = "all" | "ocr" | "audio" | "ui" | "audio+ui" | "ocr+ui" | "audio+ocr"
+// type text
+await pipe.input.type("hello world")
 
-interface ScreenpipeQueryParams {
-  q?: string
-  contentType?: ContentType
-  limit?: number
-  offset?: number
-  startTime?: string
-  endTime?: string
-  appName?: string
-  windowName?: string
-  includeFrames?: boolean
-  minLength?: number
-  maxLength?: number
-  speakerIds?: number[]
-  frameName?: string
-}
+// press key
+await pipe.input.press("enter")
 
-interface ScreenpipeResponse {
-  data: ContentItem[] // OCR | Audio | UI content
-  pagination: {
-    limit: number
-    offset: number
-    total: number
-  }
-}
+// move mouse
+await pipe.input.moveMouse(100, 200)
+
+// click
+await pipe.input.click("left") // "left" | "right" | "middle"
 ```
 
-### error handling
+#### automating repetitive tasks
 
 ```typescript
-try {
-  const results = await pipe.queryScreenpipe({
-    q: "meeting",
-    contentType: "ocr"
-  })
-} catch (error) {
-  console.error("screenpipe api error:", error)
+// Example: Automate filling a form
+async function fillForm() {
+  // Move to input field and click
+  await pipe.input.moveMouse(300, 200)
+  await pipe.input.click("left")
+  
+  // Type name
+  await pipe.input.type("John Doe")
+  
+  // Tab to next field
+  await pipe.input.press("tab")
+  
+  // Type email
+  await pipe.input.type("john@example.com")
+  
+  // Tab to next field 
+  await pipe.input.press("tab")
+  
+  // Type message
+  await pipe.input.type("This is an automated message")
+  
+  // Submit form
+  await pipe.input.press("tab")
+  await pipe.input.press("enter")
 }
+
+// Call the function
+await fillForm()
 ```
-
-
-
-
-
 
 ### LLM links 
 
@@ -888,4 +878,5 @@ paste these links into your Cursor chat for context:
 
 - https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/browser-sdk/src/index.ts
 - https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-js/node-sdk/src/index.ts
+
 
