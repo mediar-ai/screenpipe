@@ -82,7 +82,8 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
         .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap());
+        .add_directive("hf_hub=error".parse().unwrap())
+        .add_directive("whisper_rs=error".parse().unwrap());
 
     // noise - but prob should be more precise on which error to ignore
     #[cfg(target_os = "windows")]

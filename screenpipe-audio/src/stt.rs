@@ -3,6 +3,7 @@ use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
 pub use crate::segments::prepare_segments;
+use crate::whisper::download_quantized_whisper;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
     vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity, WebRtcVad},
@@ -25,35 +26,34 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
+use whisper_rs::{
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+};
 
-pub fn stt_sync(
+pub async fn stt_sync(
     audio: &[f32],
     sample_rate: u32,
     device: &str,
-    whisper_model: &mut WhisperModel,
+    whisper_model: &WhisperContext,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
 ) -> Result<String> {
-    let mut whisper_model = whisper_model.clone();
+    let mut whisper_model = whisper_model;
     let audio = audio.to_vec();
 
     let device = device.to_string();
-    let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
 
-        rt.block_on(stt(
-            &audio,
-            sample_rate,
-            &device,
-            &mut whisper_model,
-            audio_transcription_engine,
-            deepgram_api_key,
-            languages,
-        ))
-    });
-
-    handle.join().unwrap()
+    stt(
+        &audio,
+        sample_rate,
+        &device,
+        whisper_model,
+        audio_transcription_engine,
+        deepgram_api_key,
+        languages,
+    )
+    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -61,45 +61,44 @@ pub async fn stt(
     audio: &[f32],
     sample_rate: u32,
     device: &str,
-    whisper_model: &mut WhisperModel,
+    whisper_model: &WhisperContext,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
 ) -> Result<String> {
-    let model = &whisper_model.model;
+    // let model = &whisper_model.model;
 
-    debug!("Loading mel filters");
-    let mel_bytes = match model.config().num_mel_bins {
-        80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
-        128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
-        nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
-    };
-    let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
-    <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters);
+    // debug!("Loading mel filters");
+    // let mel_bytes = match model.config().num_mel_bins {
+    //     80 => include_bytes!("../models/whisper/melfilters.bytes").as_slice(),
+    //     128 => include_bytes!("../models/whisper/melfilters128.bytes").as_slice(),
+    //     nmel => anyhow::bail!("unexpected num_mel_bins {nmel}"),
+    // };
+    // let mut mel_filters = vec![0f32; mel_bytes.len() / 4];
+    // <byteorder::LittleEndian as byteorder::ByteOrder>::read_f32_into(mel_bytes, &mut mel_filters)
 
-    let transcription: Result<String> = if audio_transcription_engine
-        == AudioTranscriptionEngine::Deepgram.into()
-    {
-        // Deepgram implementation
-        let api_key = deepgram_api_key.unwrap_or_default();
+    let transcription: Result<String> =
+        if audio_transcription_engine == AudioTranscriptionEngine::Deepgram.into() {
+            // Deepgram implementation
+            let api_key = deepgram_api_key.unwrap_or_default();
 
-        match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
-            .await
-        {
-            Ok(transcription) => Ok(transcription),
-            Err(e) => {
-                error!(
-                    "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
-                    device, e
-                );
-                // Fallback to Whisper
-                process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages.clone())
+            match transcribe_with_deepgram(&api_key, audio, device, sample_rate, languages.clone())
+                .await
+            {
+                Ok(transcription) => Ok(transcription),
+                Err(e) => {
+                    error!(
+                        "device: {}, deepgram transcription failed, falling back to Whisper: {:?}",
+                        device, e
+                    );
+                    // Fallback to Whisper
+                    process_with_whisper(whisper_model, audio, languages.clone())
+                }
             }
-        }
-    } else {
-        // Existing Whisper implementation
-        process_with_whisper(&mut *whisper_model, audio, &mel_filters, languages)
-    };
+        } else {
+            // Existing Whisper implementation
+            process_with_whisper(whisper_model, audio, languages)
+        };
 
     transcription
 }
@@ -162,7 +161,18 @@ pub async fn create_whisper_channel(
     crossbeam::channel::Receiver<TranscriptionResult>,
     Arc<AtomicBool>, // Shutdown flag
 )> {
-    let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
+    // let mut whisper_model = WhisperModel::new(&audio_transcription_engine)?;
+    whisper_rs::install_logging_hooks();
+    let mut context_param = WhisperContextParameters::default();
+    context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset {
+        model_preset: whisper_rs::DtwModelPreset::LargeV3Turbo,
+    };
+    context_param.use_gpu(true);
+
+    let quantized_path = download_quantized_whisper()?;
+    let ctx = WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
+        .expect("failed to load model");
+
     let (input_sender, input_receiver): (
         crossbeam::channel::Sender<AudioInput>,
         crossbeam::channel::Receiver<AudioInput>,
@@ -273,16 +283,16 @@ pub async fn create_whisper_channel(
                                     {
                                         let timestamp = timestamp + segment.start.round() as u64;
                                         autoreleasepool(|| {
-                                            run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
-                                        })
-                                    }
-                                    #[cfg(not(target_os = "macos"))]
-                                    {
-                                        unreachable!("This code should not be reached on non-macOS platforms")
-                                    }
-                                } else {
-                                    run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
-                                };
+                                                run_stt(segment, audio.device.clone(), &ctx, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
+                                            }).await
+                                        }
+                                        #[cfg(not(target_os = "macos"))]
+                                        {
+                                            unreachable!("This code should not be reached on non-macOS platforms")
+                                        }
+                                    } else {
+                                        run_stt(segment, audio.device.clone(), &ctx, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp).await
+                                    };
 
                                 if output_sender.send(transcription_result).is_err() {
                                     break;
@@ -306,10 +316,10 @@ pub async fn create_whisper_channel(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run_stt(
+pub async fn run_stt(
     segment: SpeechSegment,
     device: Arc<AudioDevice>,
-    whisper_model: &mut WhisperModel,
+    whisper_model: &WhisperContext,
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     deepgram_api_key: Option<String>,
     languages: Vec<Language>,
@@ -326,7 +336,9 @@ pub fn run_stt(
         audio_transcription_engine.clone(),
         deepgram_api_key.clone(),
         languages.clone(),
-    ) {
+    )
+    .await
+    {
         Ok(transcription) => TranscriptionResult {
             input: AudioInput {
                 data: Arc::new(audio),
