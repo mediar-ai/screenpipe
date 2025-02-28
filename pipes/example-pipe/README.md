@@ -1,17 +1,36 @@
+# screenpipe playground
 
-Easily grow your followers, market your product, or be useful.
+a flexible playground for displaying, testing, and exploring components with their associated code, documentation, and ai prompts.
 
-GPT-4o (or local model) looks at your screen 24/7 and sends you emails with questions to post on Reddit based on your activity.
+<!-- <img width="1312" alt="screenshot of component playground" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10"> -->
 
-<img width="1312" alt="Screenshot 2024-10-12 at 14 09 01" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10">
+## features
 
+- **interactive component display**: view rendered components in action
+- **code inspection**: examine the full source code of each component
+- **raw output**: see the raw api responses and data
+- **ai prompt visibility**: view the prompts and context used to generate components
+- **collapsible interface**: toggle component visibility for a cleaner workspace
 
-https://github.com/user-attachments/assets/289d1809-6855-4336-807f-dd9ee7181324
+## usage
 
+the playground allows you to:
 
+1. view rendered components in their intended state
+2. inspect the raw output from api calls
+3. study the complete component code
+4. examine the ai prompts and context used to generate components
 
-#### quick setup
-1. [Get an OpenAI API key](https://platform.openai.com/account/api-keys)
-2. [Create an app-specific password](https://support.google.com/accounts/answer/185833?hl=en) in your Google account that will be used to send yourself emails
-3. Configure pipe in the app UI, save, enable, and restart screenpipe recording (you can configure to either receive an email daily or several every x hours)
+## component structure
+
+each playground card includes:
+- component title and collapsible interface
+- tabs for different views (rendered output, raw output, code, ai prompt)
+- copy functionality for sharing prompts and context
+
+## getting started
+
+1. install this pipe from UI and play with it
+2. follow docs to create your pipe (it will create this app) (https://docs.screenpi.pe/docs/plugins)
+3. modify code from ready-to-use-examples directory
 
