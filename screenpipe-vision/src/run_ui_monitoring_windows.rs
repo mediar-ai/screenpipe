@@ -110,6 +110,31 @@ fn build_text_output(element: &[ElementAttributes]) -> String {
 fn measure_global_element_value_size(windows_state: &HashMap<HWND, WindowState>) -> usize {
     windows_state.iter().map(|(_, ws)| ws.elements.len().sum())
 }
+fn monitor_ui_changes(automation: &IUIAutomation) -> Result<()> {
+    unsafe {
+        let root_element = automation.GetRootElement()?;
+        let condition = automation.CreateTrueCondition()?;
+
+        let event_handler = UIAutomationEventHandler::new(|_, sender, event_id| {
+            info!("UI Change detected! Event ID: {:?}", event_id);
+            if let Ok(automation) = get_ui_automation() {
+                if let Ok(element) = traverse_and_store_ui_elements(&automation, &sender) {
+                    info!("New UI Element: {:?}", element);
+                }
+            }
+            Ok(())
+        });
+
+        automation.AddAutomationEventHandler(
+            UIA_StructureChangedEventId,
+            &root_element,
+            TreeScope_Subtree,
+            None,
+            &event_handler,
+        )?;
+    }
+    Ok(())
+}
 
 pub async fn run_ui() -> Result<()> {
     Ok(())
