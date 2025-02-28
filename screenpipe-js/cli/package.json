@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/dev",
-  "version": "1.1.24",
+  "version": "1.1.25",
   "description": "screenpipe development CLI",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
     "@types/tar-stream": "^3.1.3",
     "archiver": "^7.0.1",
     "async-listen": "^3.0.1",
+    "axios": "^1.8.1",
     "chalk": "^5.4.1",
     "commander": "^11.1.0",
     "deepmerge": "^4.3.1",
