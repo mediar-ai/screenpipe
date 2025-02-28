@@ -179,11 +179,11 @@ export function PlaygroundCard({ content }: { content: PlaygroundCardContent }) 
     const contentTypeInfo = contentType ? `> Content-Type: ${contentType}` : "";
     
     if (error) {
-      return `> ${method} ${endpoint || '[No endpoint specified]'}
+      return `> ${endpoint?.startsWith('SDK:') ? endpoint : `${method} ${endpoint || '[No endpoint specified]'}`}
 > Error: ${error}`;
     }
     
-    return `> ${method} ${endpoint || '[No endpoint specified]'}
+    return `> ${endpoint?.startsWith('SDK:') ? endpoint : `${method} ${endpoint || '[No endpoint specified]'}`}
 ${timeInfo}
 ${statusInfo}
 ${contentTypeInfo}
@@ -218,7 +218,19 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
 
   // For other API calls, you can use the same formatter
   const handleOtherApiCall = (endpoint: string, method = "GET") => {
-    // Example of using the formatter with another API call
+    // If this is an SDK endpoint, we should trigger the component's functionality
+    // instead of trying to fetch directly
+    if (endpoint.startsWith('SDK:')) {
+      setRawOutput(`This component uses an SDK endpoint that can't be triggered directly from here.
+
+Please:
+1. Switch to the "rendered output" tab
+2. Click the fetch/trigger button in the component
+3. Return to this "raw output" tab to see the results`);
+      return;
+    }
+    
+    // For regular HTTP endpoints, proceed with fetch as before
     const startTime = performance.now();
     fetch(endpoint)
       .then(async (response) => {
@@ -327,16 +339,17 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
                 <TabsTrigger value="rendered" className="justify-start font-mono text-xs w-full text-left">rendered output</TabsTrigger>
                 <TabsTrigger value="raw" className="justify-start font-mono text-xs w-full text-left">raw output</TabsTrigger>
                 <TabsTrigger value="code" className="justify-start font-mono text-xs w-full text-left">full code</TabsTrigger>
-                <TabsTrigger value="prompt" className="justify-start font-mono text-xs w-full text-left">llm prompt</TabsTrigger>
+                <TabsTrigger value="prompt" className="justify-start font-mono text-xs w-full text-left">AI prompt</TabsTrigger>
               </TabsList>
               
               <div className="flex-1 relative">
                 <TabsContent value="prompt" className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md mt-0 absolute inset-0 overflow-auto h-[350px]">
                   <div className="space-y-3">
+                    <h2 className="text-sm font-bold mb-2">Instructions used to generate this component:</h2>
                     <div className="flex justify-between items-center mb-1">
                       <div>
                         <div className="text-xs text-gray-500 mb-1">model: {llmModel}</div>
-                        <h3 className="text-sm font-semibold">user prompt:</h3>
+                        <h3 className="text-sm text-gray-500 font-normal">prompt:</h3>
                       </div>
                       <Button 
                         variant="outline" 
@@ -356,13 +369,13 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
                     <div className="relative">
                       <div className="flex items-start gap-2">
                         <div className="flex-1 bg-slate-50 p-2 rounded-md">
-                          <p className="text-sm">{llmUserPrompt}</p>
+                          <p className="text-sm font-semibold">Hey AI, please {llmUserPrompt}</p>
                         </div>
                         <Button 
                           variant="ghost" 
                           size="sm" 
                           className="text-xs h-8 py-0 px-2 whitespace-nowrap" 
-                          onClick={() => copyToClipboard(llmUserPrompt, "user-prompt")}
+                          onClick={() => copyToClipboard(`Hey AI, please ${llmUserPrompt}`, "user-prompt")}
                         >
                           {copiedButton === "user-prompt" ? (
                             <span className="text-green-500">copied!</span>
@@ -374,9 +387,8 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
                     </div>
                     <div className="relative">
                       <div className="flex justify-between items-center mb-1">
-                        <h3 className="text-sm font-semibold">
-                          context: 
-                          <span className="text-xs text-gray-500 block mt-1">{llmContextUrl}</span>
+                        <h3 className="text-sm text-gray-500 font-normal">
+                          context (from <a href={llmContextUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline inline">{llmContextUrl}</a>):
                         </h3>
                       </div>
                       <div className="text-xs max-h-40 overflow-y-auto p-2 bg-slate-50 rounded break-words whitespace-pre-wrap relative">
@@ -410,14 +422,45 @@ ${data ? JSON.stringify(data, null, 2) : "No data returned"}`;
                   </div>
                 </TabsContent>
                 
-                <TabsContent value="raw" className="mt-0 absolute inset-0 overflow-auto h-[350px]">
+                <TabsContent 
+                  value="raw" 
+                  className="mt-0 absolute inset-0 overflow-auto h-[350px]"
+                  onSelect={() => {
+                    // If we don't have raw output yet and there's an endpoint, trigger it
+                    if (!rawOutput && endpoint_optional) {
+                      handleOtherApiCall(endpoint_optional);
+                    }
+                  }}
+                >
                   {rawOutput ? (
-                    <div className="p-3 bg-black text-green-400 font-mono rounded-md h-full border border-green-700">
-                      <pre className="text-sm font-mono">{rawOutput}</pre>
+                    <div className="p-3 bg-black text-green-400 font-mono rounded-md h-full border border-green-700 overflow-auto">
+                      <pre className="text-sm font-mono whitespace-pre">{rawOutput}</pre>
                     </div>
                   ) : (
-                    <div className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md h-full">
-                      <p className="text-sm text-slate-500 font-mono">click to see raw output</p>
+                    <div 
+                      className="p-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md h-full cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      onClick={() => {
+                        if (endpoint_optional) {
+                          // Trigger API call when clicked
+                          handleOtherApiCall(endpoint_optional);
+                        } else {
+                          // If no endpoint is specified, show a message
+                          setRawOutput("No API endpoint specified for this component.");
+                        }
+                      }}
+                    >
+                      <p className="text-sm text-slate-500 font-mono text-center mt-4"
+                         onClick={(e) => {
+                           e.stopPropagation(); // Prevent double triggering
+                           if (endpoint_optional) {
+                             handleOtherApiCall(endpoint_optional);
+                           } else {
+                             setRawOutput("No API endpoint specified for this component.");
+                           }
+                         }}
+                      >
+                        click to get raw output
+                      </p>
                     </div>
                   )}
                 </TabsContent>
