@@ -31,7 +31,7 @@ export function RealtimeScreen({ onDataChange }: { onDataChange?: (data: any, er
         originalConsoleError.apply(console, [msg, ...args]);
       };
       
-      for await (const event of pipe.streamVision(withOcr, withImages)) {
+      for await (const event of pipe.streamVision()) {
         if (event.data) {
           setVisionEvent(event.data);
           
