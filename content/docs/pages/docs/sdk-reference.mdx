@@ -269,6 +269,15 @@ this will run the `/api/log` route every 5 minutes.
 
 check how the obsidian pipe implements this, [route](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/src/app/api/log/route.ts) and [pipe.json](https://github.com/mediar-ai/screenpipe/blob/main/pipes/obsidian/pipe.json) for a complete example.
 
+we recommend using the CLI to add the `update-pipe-config` server action to your pipe. this will allow you to update the pipe's cron schedule using a server action.
+
+```bash
+bunx @screenpipe/dev@latest components add
+# select "update-pipe-config" from the menu
+```
+
+please adjust its code to your needs as some things are hardcoded in it.
+
 
 ### realtime streams
 
