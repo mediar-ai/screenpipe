@@ -9,6 +9,9 @@ import chalk from "chalk";
 import { Command } from "commander";
 import simpleGit from "simple-git";
 import { handleError } from "../components/commands/add/utils/handle-error";
+import { extract } from "tar-stream";
+import { createGunzip } from "zlib";
+import { Readable } from "stream";
 
 const PIPE_ADDITIONS = {
   dependencies: {
@@ -33,18 +36,33 @@ async function downloadAndExtractSubdir(subdir: string, destPath: string) {
     await fs.ensureDir(destPath);
     await fs.ensureDir(tempDir);
 
-    // Update spinner text before clone starts
-    s.message(
-      "cloning repository (this may take a while on slow connections)..."
-    );
+    // Update spinner text before download starts
+    s.message("downloading template files...");
 
-    // Use more specific error handling for git clone
-    const git = simpleGit();
-    await git.clone("https://github.com/mediar-ai/screenpipe", tempDir);
+    // Use GitHub's API to download just the specific subdirectory as a tarball
+    const repoOwner = "mediar-ai";
+    const repoName = "screenpipe";
+    const branch = "main"; // or whatever branch you need
+    const tarballUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/tarball/${branch}`;
 
-    // Update spinner as we progress through steps
+    // Download the tarball
+    const response = await fetch(tarballUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to download template: ${response.statusText}`);
+    }
+
+    // Get the tarball as an array buffer
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    s.message("extracting template files...");
+
+    // Extract the tarball using tar-stream
+    const extractedDirName = await extractTarball(buffer, tempDir, subdir);
+
+    // Check if the template subdirectory exists
     s.message("checking template directory...");
-    const sourcePath = path.join(tempDir, subdir);
+    const sourcePath = path.join(tempDir, extractedDirName, subdir);
     if (!(await fs.pathExists(sourcePath))) {
       throw new Error(`template directory '${subdir}' not found in repository`);
     }
@@ -68,6 +86,60 @@ async function downloadAndExtractSubdir(subdir: string, destPath: string) {
     s.stop("download failed!");
     throw new Error(`failed to setup pipe: ${error.message}`);
   }
+}
+
+// Helper function to extract the tarball using tar-stream
+async function extractTarball(
+  buffer: Buffer,
+  tempDir: string,
+  targetSubdir: string
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const extractor = extract();
+    let extractedDirName = "";
+
+    extractor.on("entry", async (header, stream, next) => {
+      // GitHub tarballs have a top-level directory with a name like 'username-repo-hash'
+      const parts = header.name.split("/");
+      if (parts.length > 0 && !extractedDirName) {
+        extractedDirName = parts[0];
+      }
+
+      // Only extract files that are in the target subdirectory or its parent directories
+      if (
+        header.name.includes(`/${targetSubdir}/`) ||
+        header.name.endsWith(`/${targetSubdir}`)
+      ) {
+        const filePath = path.join(tempDir, header.name);
+
+        if (header.type === "directory") {
+          await fs.ensureDir(filePath);
+          stream.resume();
+        } else {
+          await fs.ensureDir(path.dirname(filePath));
+          stream.pipe(fs.createWriteStream(filePath));
+        }
+      } else {
+        stream.resume();
+      }
+
+      stream.on("end", next);
+    });
+
+    extractor.on("finish", () => {
+      if (!extractedDirName) {
+        reject(new Error("Could not determine extracted directory name"));
+      } else {
+        resolve(extractedDirName);
+      }
+    });
+
+    extractor.on("error", reject);
+
+    // Create a readable stream from the buffer and pipe it through gunzip to the extractor
+    const bufferStream = Readable.from(buffer);
+    bufferStream.pipe(createGunzip()).pipe(extractor);
+  });
 }
 
 export const createPipeCommand = new Command()
