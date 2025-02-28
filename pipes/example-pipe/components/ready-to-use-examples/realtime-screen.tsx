@@ -31,20 +31,23 @@ export function RealtimeScreen({ onDataChange }: { onDataChange?: (data: any, er
         originalConsoleError.apply(console, [msg, ...args]);
       };
       
-      for await (const event of pipe.streamVision()) {
+      for await (const event of pipe.streamVision(withOcr)) {
         if (event.data) {
-          setVisionEvent(event.data);
-          
-          // Pass the raw data to the parent component for display in the raw output tab
-          if (onDataChange) {
-            onDataChange(event.data, null);
+          // Only update the vision event if the data is valid
+          if (isValidVisionEvent(event.data)) {
+            setVisionEvent(event.data);
+            
+            // Pass the raw data to the parent component for display in the raw output tab
+            if (onDataChange) {
+              onDataChange(event.data, null);
+            }
+            
+            console.log("vision event:", {
+              ts: event.data.timestamp,
+              hasText: !!event.data.text,
+              imgSize: event.data.image?.length
+            });
           }
-          
-          console.log("vision event:", {
-            ts: event.data.timestamp,
-            hasText: !!event.data.text,
-            imgSize: event.data.image?.length
-          });
         }
       }
       
@@ -77,6 +80,19 @@ export function RealtimeScreen({ onDataChange }: { onDataChange?: (data: any, er
     };
   }, []);
 
+  // Helper function to validate vision event data
+  const isValidVisionEvent = (event: VisionEvent): boolean => {
+    // Check if timestamp is valid
+    const hasValidTimestamp = event.timestamp && !isNaN(new Date(event.timestamp).getTime());
+    
+    // Check if app_name and window_name are valid strings
+    const hasValidAppName = !!event.app_name && event.app_name !== "Unknown";
+    const hasValidWindowName = !!event.window_name && event.window_name !== "Unknown";
+    
+    // Return true if the event has at least some valid data
+    return hasValidTimestamp || hasValidAppName || hasValidWindowName;
+  };
+
   const renderVisionContent = (event: VisionEvent) => {
     return (
       <div className="space-y-2 text-xs">
@@ -84,17 +100,21 @@ export function RealtimeScreen({ onDataChange }: { onDataChange?: (data: any, er
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="font-semibold">app_name: </span>
-              <span>{event.app_name || "Unknown"}</span>
+              <span>{event.app_name || "Not available"}</span>
             </div>
             <div>
               <span className="font-semibold">timestamp: </span>
-              <span>{new Date(event.timestamp).toLocaleString()}</span>
+              <span>
+                {event.timestamp && !isNaN(new Date(event.timestamp).getTime()) 
+                  ? new Date(event.timestamp).toLocaleString() 
+                  : "Not available"}
+              </span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <span className="font-semibold">window_name: </span>
-              <span>{event.window_name || "Unknown"}</span>
+              <span>{event.window_name || "Not available"}</span>
             </div>
             <div>
               <span className="font-semibold">type: </span>
