@@ -57,6 +57,31 @@ export type User = {
   cloud_subscribed?: boolean;
 };
 
+export type AIPreset = {
+  id: string;
+  maxContextChars: number;
+  url: string;
+  model: string;
+  defaultPreset: boolean;
+  prompt: string;
+  //provider: AIProviderType;
+} & (
+  | {
+      provider: "openai";
+      apiKey: string;
+    }
+  | {
+      provider: "native-ollama";
+    }
+  | {
+      provider: "screenpipe-cloud";
+    }
+  | {
+      provider: "custom";
+      apiKey?: string;
+    }
+);
+
 export type Settings = {
   openaiApiKey: string;
   deepgramApiKey: string;
@@ -89,7 +114,7 @@ export type Settings = {
   languages: Language[];
   enableBeta: boolean;
   isFirstTimeUser: boolean;
-  autoStartEnabled: boolean
+  autoStartEnabled: boolean;
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
@@ -105,9 +130,18 @@ export type Settings = {
   realtimeAudioTranscriptionEngine: string;
   disableVision: boolean;
   useAllMonitors: boolean;
+  aiPresets: AIPreset[];
 };
 
+export const DEFAULT_PROMPT = `Rules:
+- You can analyze/view/show/access videos to the user by putting .mp4 files in a code block (we'll render it) like this: \`/users/video.mp4\`, use the exact, absolute, file path from file_path property
+- Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
+- Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
+- Always answer my question/intent, do not make up things
+`;
+
 const DEFAULT_SETTINGS: Settings = {
+  aiPresets: [],
   openaiApiKey: "",
   deepgramApiKey: "", // for now we hardcode our key (dw about using it, we have bunch of credits)
   isLoading: true,
@@ -119,7 +153,6 @@ const DEFAULT_SETTINGS: Settings = {
 - Do not try to embed video in links (e.g. [](.mp4) or https://.mp4) instead put the file_path in a code block using backticks
 - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
 - Always answer my question/intent, do not make up things
-
 `,
   devMode: false,
   audioTranscriptionEngine: "deepgram",
@@ -217,8 +250,8 @@ export function createDefaultSettingsObject(): Settings {
       currentPlatform === "macos"
         ? "apple-native"
         : currentPlatform === "windows"
-        ? "windows-native"
-        : "tesseract";
+          ? "windows-native"
+          : "tesseract";
 
     defaultSettings.ocrEngine = ocrModel;
     defaultSettings.fps = currentPlatform === "macos" ? 0.5 : 1;
@@ -281,12 +314,6 @@ const tauriStorage: PersistStorage = {
     delete value.settings.customSettings;
     const flattenedValue = flattenObject(value.settings);
 
-    // Delete all existing keys first
-    //const existingKeys = await tauriStore.keys();
-    //for (const key of existingKeys) {
-    //	await tauriStore.delete(key);
-    //}
-
     // Only delete keys that are present in the new settings
     for (const key of Object.keys(flattenedValue)) {
       await tauriStore.delete(key);
@@ -314,6 +341,7 @@ export const store = createContextStore<StoreModel>(
     {
       settings: createDefaultSettingsObject(),
       setSettings: action((state, payload) => {
+        console.log(state, payload);
         state.settings = {
           ...state.settings,
           ...payload,
@@ -330,15 +358,15 @@ export const store = createContextStore<StoreModel>(
     {
       storage: tauriStorage,
       mergeStrategy: "mergeDeep",
-    }
-  )
+    },
+  ),
 );
 
 export function useSettings() {
   const settings = store.useStoreState((state) => state.settings);
   const setSettings = store.useStoreActions((actions) => actions.setSettings);
   const resetSettings = store.useStoreActions(
-    (actions) => actions.resetSettings
+    (actions) => actions.resetSettings,
   );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
 
