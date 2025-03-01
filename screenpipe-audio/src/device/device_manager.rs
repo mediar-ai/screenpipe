@@ -9,40 +9,43 @@ use crate::core::{
 };
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use tracing::{error, warn};
+use tokio::sync::Mutex;
+use tracing::info;
 
 pub struct DeviceManager {
-    devices: Vec<AudioDevice>,
     streams: DashMap<AudioDevice, Arc<AudioStream>>,
     states: DashMap<AudioDevice, Arc<AtomicBool>>,
 }
 
 impl DeviceManager {
     pub async fn new() -> Result<Self> {
-        let devices = list_audio_devices().await?;
-
         let streams = DashMap::new();
         let states = DashMap::new();
 
-        Ok(Self {
-            devices,
-            streams,
-            states,
-        })
+        Ok(Self { streams, states })
     }
 
-    pub fn devices(&self) -> Vec<AudioDevice> {
-        self.devices.clone()
+    pub async fn devices(&self) -> Vec<AudioDevice> {
+        list_audio_devices().await.unwrap_or_default()
     }
 
-    pub fn device(&self, device_name: &str) -> Option<AudioDevice> {
-        self.devices.iter().find(|d| d.name == device_name).cloned()
+    pub async fn device(&self, device_name: &str) -> Option<AudioDevice> {
+        self.devices()
+            .await
+            .iter()
+            .find(|d| d.name == device_name)
+            .cloned()
     }
 
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
+        if !self.devices().await.contains(device) {
+            return Err(anyhow!("device {device} not found"));
+        }
+
         if self.is_running(device) {
             return Err(anyhow!("Device {} already running.", device));
         }
+
         let is_running = Arc::new(AtomicBool::new(false));
         let stream =
             match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
@@ -51,6 +54,9 @@ impl DeviceManager {
                     return Err(e);
                 }
             };
+
+        info!("starting recording for device: {}", device);
+
         self.streams.insert(device.clone(), Arc::new(stream));
         self.states.insert(device.clone(), is_running);
 
@@ -68,9 +74,13 @@ impl DeviceManager {
             .unwrap_or(false)
     }
 
-    pub fn stop_all_devices(&self) -> Result<()> {
-        for device in self.devices.iter() {
-            self.stop_device(device)?;
+    pub async fn stop_all_devices(&self) -> Result<()> {
+        for pair in self.states.iter() {
+            let device = pair.key();
+
+            if self.is_running(device) {
+                self.stop_device(device)?;
+            }
         }
 
         Ok(())

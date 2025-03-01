@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::Ordering, Arc},
     time::Duration,
 };
-use tokio::{join, sync::Mutex, task::JoinHandle};
+use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
 use tracing::{error, info, warn};
 
 use screenpipe_db::DatabaseManager;
@@ -55,6 +55,7 @@ pub struct AudioManager {
     transcription_receiver: crossbeam::channel::Receiver<TranscriptionResult>,
     transcription_sender: crossbeam::channel::Sender<TranscriptionResult>,
     transcription_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    device_check_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     // health: AudioManagerHealth,
 }
 
@@ -92,7 +93,7 @@ impl AudioManager {
             recording_handles,
             recording_receiver_handle: Arc::new(Mutex::new(None)),
             transcription_receiver_handle: Arc::new(Mutex::new(None)),
-            // health: AudioManagerHealth::Healthy,
+            device_check_handle: Arc::new(Mutex::new(None)), // health: AudioManagerHealth::Healthy,
         })
     }
 
@@ -106,17 +107,7 @@ impl AudioManager {
         }
 
         info!("Starting audio manager");
-        for device_name in &self.options.enabled_devices {
-            let device = match self.device_manager.device(device_name) {
-                Some(device) => device,
-                None => {
-                    warn!("Device {} not found", device_name);
-                    continue;
-                }
-            };
-
-            self.start_device(&device).await?;
-        }
+        self.start_device_check().await;
 
         let transcription_receiver = self.transcription_receiver.clone();
         let transcription_sender = self.transcription_sender.clone();
@@ -141,7 +132,7 @@ impl AudioManager {
     }
 
     pub async fn devices(&self) -> Result<Vec<AudioDevice>> {
-        let devices = self.device_manager.devices();
+        let devices = self.device_manager.devices().await;
         Ok(devices)
     }
 
@@ -172,7 +163,7 @@ impl AudioManager {
         }
 
         self.recording_handles.clear();
-        let _ = self.device_manager.stop_all_devices();
+        let _ = self.device_manager.stop_all_devices().await;
         *self.status.lock().await = AudioManagerStatus::Stopped;
         Ok(())
     }
@@ -187,7 +178,17 @@ impl AudioManager {
     // }
 
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
-        self.device_manager.start_device(device).await?;
+        if let Err(e) = self.device_manager.start_device(device).await {
+            let err_str = e.to_string();
+            if err_str.contains("already running") {
+                return Ok(());
+            } else if err_str.contains("Failed to build input stream") {
+                return Err(anyhow!("Device {device} not found"));
+            } else {
+                return Err(e);
+            }
+        }
+
         if let Some(is_running) = self.device_manager.is_running_mut(device) {
             is_running.store(true, Ordering::Relaxed);
         }
@@ -343,5 +344,49 @@ impl AudioManager {
                 }
             }
         }))
+    }
+
+    pub async fn start_device_check(&self) -> Result<()> {
+        let enabled_devices = self.options.enabled_devices.clone();
+        let self_clone = self.clone();
+        let device_manager = self.device_manager.clone();
+
+        *self.device_check_handle.lock().await = Some(tokio::spawn(async move {
+            loop {
+                let currently_available_devices = device_manager.devices().await;
+                for device_name in enabled_devices.iter() {
+                    let device = match parse_audio_device(device_name) {
+                        Ok(device) => device,
+                        Err(e) => {
+                            error!("Device name {} invalid: {}", device_name, e);
+                            continue;
+                        }
+                    };
+
+                    if device_manager.is_running(&device)
+                        && !currently_available_devices.contains(&device)
+                    {
+                        info!("Device {device_name} disconnected");
+                        let _ = self_clone.stop_device(device_name).await;
+                    } else {
+                        match self_clone.start_device(&device).await {
+                            Ok(()) => {
+                                //
+                            }
+                            Err(e) => {
+                                let e_str = e.to_string();
+                                if e_str.contains("already running") || e_str.contains("not found")
+                                {
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                sleep(Duration::from_secs(1)).await;
+            }
+        }));
+
+        Ok(())
     }
 }

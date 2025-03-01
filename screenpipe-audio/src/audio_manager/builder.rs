@@ -3,7 +3,7 @@ use std::{env, path::PathBuf, sync::Arc};
 use tracing::info;
 
 use screenpipe_core::Language;
-use screenpipe_db::DatabaseManager;
+use screenpipe_db::{AudioDevice, DatabaseManager};
 
 use crate::{
     core::{
@@ -142,8 +142,10 @@ impl AudioManagerBuilder {
         let options = &mut self.options;
 
         if options.enabled_devices.is_empty() {
-            options.enabled_devices =
-                vec![default_input_device()?.name, default_output_device()?.name];
+            options.enabled_devices = vec![
+                default_input_device()?.to_string(),
+                default_output_device()?.to_string(),
+            ];
         }
 
         AudioManager::new(options.clone(), db).await
