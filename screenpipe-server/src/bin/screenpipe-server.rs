@@ -582,16 +582,16 @@ async fn main() -> anyhow::Result<()> {
         if cli.audio_device.is_empty() {
             // Use default devices
             if let Ok(input_device) = default_input_device() {
-                audio_devices.push(input_device.name);
+                audio_devices.push(input_device.to_string());
             }
             if let Ok(output_device) = default_output_device() {
-                audio_devices.push(output_device.name);
+                audio_devices.push(output_device.to_string());
             }
         } else {
             // Use specified devices
             for d in &cli.audio_device {
                 let device = parse_audio_device(d).expect("failed to parse audio device");
-                audio_devices.push(device.name);
+                audio_devices.push(device.to_string());
             }
         }
 

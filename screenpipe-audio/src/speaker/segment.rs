@@ -211,7 +211,12 @@ impl Iterator for SegmentIterator {
 
         while self.current_position < self.padded_samples.len() - 1 {
             let end = (self.current_position + self.window_size).min(self.padded_samples.len());
-            let window = self.padded_samples[self.current_position..end].to_vec();
+
+            let window = if end == self.padded_samples.len() {
+                self.padded_samples[self.current_position..].to_vec()
+            } else {
+                self.padded_samples[self.current_position..end].to_vec()
+            };
 
             // Process the window
             match self.process_window(&window) {

@@ -133,10 +133,7 @@ async fn handle_deepgram_response(
                         .unwrap_or("");
 
                     if transcription.is_empty() {
-                        info!(
-                            "device: {}, transcription is empty. full response: {:?}",
-                            device, result
-                        );
+                        info!("device: {}, transcription is empty.", device);
                     } else {
                         info!(
                             "device: {}, transcription successful. length: {} characters",
