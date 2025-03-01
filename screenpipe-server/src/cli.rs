@@ -325,14 +325,48 @@ pub enum Command {
     },
     /// Setup screenpipe environment
     Setup,
-    /// Run database migrations
-    Migrate,
-         /// Generate shell completions
+    /// Run data migrations in the background
+    Migrate {
+        /// The name of the migration to run
+        #[arg(long, default_value = "ocr_text_to_frames")]
+        migration_name: String,
+        /// Data directory. Default to $HOME/.screenpipe
+        #[arg(long, value_hint = ValueHint::DirPath)]
+        data_dir: Option<String>,
+        /// The subcommand for data migration
+        #[command(subcommand)]
+        subcommand: Option<MigrationSubCommand>,
+        /// Output format
+        #[arg(short = 'o', long, value_enum, default_value_t = OutputFormat::Text)]
+        output: OutputFormat,
+        /// Batch size for processing records
+        #[arg(long, default_value_t = 100_000)]
+        batch_size: i64,
+        /// Delay between batches in milliseconds
+        #[arg(long, default_value_t = 100)]
+        batch_delay_ms: u64,
+        /// Continue processing if errors occur
+        #[arg(long, default_value_t = true)]
+        continue_on_error: bool,
+    },
+    /// Generate shell completions
     Completions {
         /// The shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
     },
+}
+
+#[derive(Subcommand)]
+pub enum MigrationSubCommand {
+    /// Start or resume a migration
+    Start,
+    /// Pause a running migration
+    Pause,
+    /// Stop a running migration
+    Stop,
+    /// Get migration status
+    Status,
 }
 
 #[derive(Subcommand)]

@@ -10,7 +10,10 @@ pub fn create_url_detector() -> Box<dyn BrowserUrlDetector> {
     #[cfg(target_os = "macos")]
     return Box::new(MacOSUrlDetector::new());
     
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    return Box::new(WindowsUrlDetector::new());
+    
+    #[cfg(target_os = "linux")]
     return Box::new(UnsupportedUrlDetector::new());
 }
 
@@ -34,3 +37,9 @@ impl BrowserUrlDetector for UnsupportedUrlDetector {
 mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::MacOSUrlDetector; 
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::WindowsUrlDetector; 
+

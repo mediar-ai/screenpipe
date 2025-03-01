@@ -1,12 +1,11 @@
-### **New Features:**
-- **Added Think Markdown component:** Introduced a new component to enhance markdown rendering capabilities.
-- **Implemented FTS for window and app names:** Added Full-Text Search functionality to improve window and application name accessibility.
-
 ### **Improvements:**
-- **Bunch of small UI improvements:** Various enhancements made to the user interface for a better user experience.
+- **Fixed Windows installation path:** Corrected the installation path for Screenpipe on Windows to ensure proper functionality.
 
 ### **Fixes:**
-- **Fixed ffmpeg directory not writable issue:** Resolved permission issues preventing ffmpeg directory access.
+- **Resolved CLI failure on Windows:** Fixed an issue where the CLI was failing on Windows due to a scarf-related problem.
+- **Fixed CLI browser login:** Addressed a bug that affected the CLI browser login process.
+- **Resolved Sentry integration issue with Cloudflare:** Fixed an issue with Sentry integration when used in conjunction with Cloudflare.
+- **Updated documentation:** Improved documentation for better user guidance and clarity.
 
-#### **Full Changelog:** [a9f4f..5687f](https://github.com/mediar-ai/screenpipe/compare/a9f4f..5687f)
+#### **Full Changelog:** [7e94c..e17ce](https://github.com/mediar-ai/screenpipe/compare/7e94c..e17ce)
 

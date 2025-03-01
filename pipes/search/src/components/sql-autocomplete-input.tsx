@@ -10,7 +10,7 @@ interface SqlAutocompleteInputProps {
   placeholder: string;
   value: string;
   onChange: (value: string) => void;
-  type: "app" | "window";
+  type: "app" | "window" | "url";
   icon?: React.ReactNode;
   className?: string;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
@@ -128,14 +128,14 @@ export function SqlAutocompleteInput({
                 .filter((item) =>
                   item.name.toLowerCase().includes(inputValue.toLowerCase())
                 )
-                .map((item: any) => (
+                .map((item: any, index: number) => (
                   <Command.Item
-                    key={item.name}
+                    key={item.name + index}
                     value={item.name}
                     onSelect={handleSelect}
                     className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200 last:border-b-0"
                   >
-                    {item.name} ({item.count})
+                    {item.name}
                   </Command.Item>
                 ))
             )}

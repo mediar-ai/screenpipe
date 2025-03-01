@@ -117,7 +117,14 @@ pub async fn start_continuous_recording(
             languages.clone(),
             Some(audio_devices_control.clone()),
         )
-        .await?
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("ORT API") {
+                anyhow::anyhow!("ONNX Runtime initialization failed. This is likely due to missing Visual C++ Redistributable packages. Please install the latest Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe and restart your computer. For more information, see: https://github.com/mediar-ai/screenpipe/issues/1034")
+            } else {
+                e
+            }
+        })?
     };
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
@@ -230,7 +237,14 @@ async fn record_video(
         if let Some(frame) = video_capture.ocr_frame_queue.pop() {
             for window_result in &frame.window_ocr_results {
                 match db
-                    .insert_frame(&device_name, None, window_result.browser_url.as_deref())
+                    .insert_frame(
+                        &device_name,
+                        None,
+                        window_result.browser_url.as_deref(),
+                        Some(window_result.app_name.as_str()),
+                        Some(window_result.window_name.as_str()),
+                        window_result.focused,
+                    )
                     .await
                 {
                     Ok(frame_id) => {
@@ -258,15 +272,7 @@ async fn record_video(
                             },
                         );
                         if let Err(e) = db
-                            .insert_ocr_text(
-                                frame_id,
-                                text,
-                                &text_json,
-                                &window_result.app_name,
-                                &window_result.window_name,
-                                Arc::clone(&ocr_engine),
-                                window_result.focused, // Add this line
-                            )
+                            .insert_ocr_text(frame_id, text, &text_json, Arc::clone(&ocr_engine))
                             .await
                         {
                             error!(
@@ -531,11 +537,16 @@ async fn process_audio_result(
                 return Ok(Some(audio_chunk_id));
             }
 
+            let offset_index = db
+                .count_audio_transcriptions(audio_chunk_id)
+                .await
+                .unwrap_or(0);
+
             if let Err(e) = db
                 .insert_audio_transcription(
                     audio_chunk_id,
                     &transcription,
-                    0,
+                    offset_index,
                     &transcription_engine,
                     &result.input.device,
                     Some(speaker.id),

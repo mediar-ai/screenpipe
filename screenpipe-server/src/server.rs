@@ -114,6 +114,10 @@ pub(crate) struct SearchQuery {
         default = "default_speaker_ids"
     )]
     speaker_ids: Option<Vec<i64>>,
+    #[serde(default)]
+    focused: Option<bool>,
+    #[serde(default)]
+    browser_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -191,6 +195,7 @@ pub struct OCRContent {
     pub frame: Option<String>,
     pub frame_name: Option<String>,
     pub browser_url: Option<String>,
+    pub focused: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -285,7 +290,7 @@ pub(crate) async fn search(
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
-        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}",
+        "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
         query.q.as_deref().unwrap_or(""),
         query.content_type,
         query.pagination.limit,
@@ -298,6 +303,8 @@ pub(crate) async fn search(
         query.max_length,
         query.speaker_ids,
         query.frame_name,
+        query.browser_url,
+        query.focused,
     );
 
     let query_str = query.q.as_deref().unwrap_or("");
@@ -318,6 +325,8 @@ pub(crate) async fn search(
             query.max_length,
             query.speaker_ids.clone(),
             query.frame_name.as_deref(),
+            query.browser_url.as_deref(),
+            query.focused,
         ),
         state.db.count_search_results(
             query_str,
@@ -330,6 +339,8 @@ pub(crate) async fn search(
             query.max_length,
             query.speaker_ids.clone(),
             query.frame_name.as_deref(),
+            query.browser_url.as_deref(),
+            query.focused,
         ),
     )
     .await
@@ -356,6 +367,7 @@ pub(crate) async fn search(
                 frame: None,
                 frame_name: Some(ocr.frame_name.clone()),
                 browser_url: ocr.browser_url.clone(),
+                focused: ocr.focused,
             }),
             SearchResult::Audio(audio) => ContentItem::Audio(AudioContent {
                 chunk_id: audio.audio_chunk_id,
@@ -1113,6 +1125,9 @@ async fn add_frame_to_db(
             device_name,
             Some(frame.timestamp.unwrap_or_else(Utc::now)),
             None,
+            frame.app_name.as_deref(),
+            frame.window_name.as_deref(),
+            false,
         )
         .await?;
 
@@ -1122,10 +1137,7 @@ async fn add_frame_to_db(
                 frame_id,
                 &ocr.text,
                 ocr.text_json.as_deref().unwrap_or(""),
-                frame.app_name.as_deref().unwrap_or(""),
-                frame.window_name.as_deref().unwrap_or(""),
                 Arc::new(OcrEngine::default()), // Ideally could pass any str as ocr_engine since can be run outside of screenpipe
-                false,
             )
             .await?;
         }
@@ -2377,7 +2389,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
     let db = state.db.clone();
 
     // Create a buffer for batching frames
-    let mut frame_buffer = Vec::with_capacity(50);
+    let mut frame_buffer = Vec::with_capacity(100);
     let mut buffer_timer = tokio::time::interval(Duration::from_millis(100));
 
     // Handle incoming messages for time range requests
@@ -2439,7 +2451,7 @@ async fn handle_stream_frames_socket(socket: WebSocket, state: Arc<AppState>) {
                             frame_buffer.push(StreamTimeSeriesResponse::from(timeseries_frame));
 
                             // If buffer is full, send immediately
-                            if frame_buffer.len() >= 50 {
+                            if frame_buffer.len() >= 100 {
                                 if let Err(e) = send_batch(&mut sender, &mut frame_buffer).await {
                                     error!("failed to send batch: {}", e);
                                     break;

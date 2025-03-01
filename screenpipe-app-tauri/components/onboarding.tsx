@@ -266,8 +266,6 @@ const Onboarding: React.FC = () => {
     });
 
     setShowOnboarding(false);
-    localforage.setItem("showOnboarding", false);
-
   };
 
   return (

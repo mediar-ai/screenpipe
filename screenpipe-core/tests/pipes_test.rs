@@ -4,10 +4,9 @@ mod tests {
     use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
     use serde_json::json;
     use std::sync::Arc;
+    use std::sync::Once;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    use std::{path::PathBuf, sync::Once};
     use tempfile::TempDir;
-    use tokio::fs::create_dir_all;
     use tokio::sync::Mutex;
     use tokio::time::sleep;
     use tracing::subscriber::set_global_default;
@@ -25,7 +24,6 @@ mod tests {
         });
     }
 
-
     #[tokio::test]
     async fn test_download_pipe_invalid_url() {
         init();
@@ -37,8 +35,6 @@ mod tests {
 
         assert!(result.is_err(), "Expected an error for invalid URL");
     }
-
-    
 
     #[tokio::test]
     #[ignore]
@@ -240,6 +236,51 @@ mod tests {
             (300..=301).contains(&time_diff),
             "Unexpected time difference: {}",
             time_diff
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(windows)]
+    async fn test_download_pipe_windows_path() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        // Create a source directory with a simple pipe
+        let source_dir = temp_dir.path().join("source_pipe");
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+
+        // Create a basic pipe.js file
+        tokio::fs::write(
+            source_dir.join("pipe.js"),
+            r#"console.log("Hello from Windows pipe test!");"#,
+        )
+        .await
+        .unwrap();
+
+        // Get the absolute Windows path with backslashes
+        let source_path = source_dir.to_str().unwrap().replace("/", "\\");
+        println!("Testing Windows path: {}", source_path);
+
+        // Try to download the pipe using the Windows path
+        let result = download_pipe(&source_path, screenpipe_dir.clone()).await;
+
+        // The function should succeed with a Windows path
+        assert!(
+            result.is_ok(),
+            "Failed to handle Windows path: {:?}",
+            result.err()
+        );
+
+        // Verify the pipe was copied correctly
+        let pipe_name = source_dir.file_name().unwrap().to_str().unwrap();
+        let dest_path = screenpipe_dir
+            .join("pipes")
+            .join(format!("{}_local", pipe_name));
+        assert!(dest_path.exists(), "Destination pipe directory not found");
+        assert!(
+            dest_path.join("pipe.js").exists(),
+            "pipe.js not found in destination"
         );
     }
 }

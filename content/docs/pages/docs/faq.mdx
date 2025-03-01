@@ -35,6 +35,37 @@
 </details>
 
 <details>
+  <summary>How do I manage screenpipe sessions?</summary>
+  
+  - **starting a session**: 
+    - macOS: use the system tray icon or run `screenpipe` in terminal
+    - windows: launch from start menu or run `screenpipe` in command prompt
+    - linux: run `screenpipe` in terminal
+  
+  - **checking if session is running**:
+    ```bash
+    curl localhost:3030/health
+    # If running, you'll get a health status response
+    # If not running, you'll get a connection refused error
+    ```
+  
+  - **stopping a session**:
+    - macOS: cmd+option+x or right-click tray icon and select "quit"
+    - windows: right-click tray icon and select "exit"
+    - linux: ctrl+c in terminal
+    
+  - **troubleshooting**:
+    - if ctrl+c doesn't work to stop a terminal session, try:
+      ```bash
+      # Find screenpipe process ID
+      ps aux | grep screenpipe
+      # Kill the process
+      kill -9 [PID]
+      ```
+    - if the server starts but API calls fail, check if another instance is already running
+</details>
+
+<details>
   <summary>Can I run screenpipe on remote/virtual machines?</summary>
   
   - yes! screenpipe works seamlessly with remote desktop solutions
@@ -71,4 +102,28 @@
   - plugins system in typescript + bun
   - community contributions welcome
   - find us on [github](https://github.com/mediar-ai/screenpipe)
+</details>
+
+<details>
+  <summary>How do I troubleshoot common installation issues?</summary>
+  
+  - **missing dependencies**: 
+    - linux: install `ffmpeg` and required libraries
+    - macOS: ensure XCode tools are installed
+    - windows: ensure VS C++ redistributable is installed
+  
+  see our [complete troubleshooting guide](/docs/troubleshooting) for more details.
+</details>
+
+<details>
+  <summary>Does screenpipe work with frameworks other than Next.js?</summary>
+
+  - yes! while our examples mainly use next.js, you can use any framework:
+    - **react**: yes
+    - **vue/svelte/etc**: yes
+    - **electron/tauri**: yes
+    - **python**: yes
+    - **ruby/php/etc**: yes
+  
+  - example pipe templates for other frameworks coming soon!
 </details>

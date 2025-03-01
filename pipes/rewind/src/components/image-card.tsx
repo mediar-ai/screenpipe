@@ -10,7 +10,7 @@ import { useKeywordParams } from "@/lib/hooks/use-keyword-params";
 export const SkeletonCard = () => (
 	<div className="flex flex-col shrink-0 w-56 h-full relative overflow-hidden rounded-lg bg-white shadow-sm">
 		<div className="aspect-video bg-neutral-200 animate-pulse" />
-		<div className="p-3 space-y-2">
+		<div className="p-3 space-y-2" style={{ direction: "ltr" }}>
 			<div className="h-4 bg-neutral-200 rounded animate-pulse" />
 			<div className="h-3 bg-neutral-200 rounded animate-pulse w-3/4" />
 			<div className="h-3 bg-neutral-200 rounded animate-pulse w-1/2" />
