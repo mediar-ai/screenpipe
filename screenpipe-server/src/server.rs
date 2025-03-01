@@ -1018,6 +1018,7 @@ impl SCServer {
             .post("/pipes/update-version", update_pipe_version_handler)
             .post("/pipes/delete", delete_pipe_handler)
             .post("/pipes/purge", purge_pipe_handler)
+            .get("/frames/:frame_id", get_frame_data)
             .get("/health", health_check)
             .post("/raw_sql", execute_raw_sql)
             .post("/add", add_to_database)
@@ -1050,7 +1051,6 @@ impl SCServer {
             // TODO: Make this route work possibly remove generic type that prevents codegen
             .route("/search", get(search))
             // Need to figure this out too
-            .route("/frames/:frame_id",get( get_frame_data))
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
             .route("/ws/health", get(ws_health_handler))
@@ -2210,10 +2210,11 @@ pub struct KeywordSearchRequest {
     app_names: Option<Vec<String>>,
 }
 
+#[oasgen]
 pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
     Path(frame_id): Path<i64>,
-) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     let start_time = Instant::now();
 
     match timeout(Duration::from_secs(5), async {
