@@ -186,7 +186,6 @@ impl AudioManager {
     //     Ok(())
     // }
 
-    // TODO: Make sure stopped or return device already running error
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
         self.device_manager.start_device(device).await?;
         if let Some(is_running) = self.device_manager.is_running_mut(device) {
