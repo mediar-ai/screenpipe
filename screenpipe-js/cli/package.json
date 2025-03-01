@@ -8,7 +8,7 @@
     "screenpipe-dev": "./dist/index.js"
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node && chmod +x ./dist/index.js && bun link",
+    "build": "tsup src/index.ts --format esm --target node18 --clean && chmod +x ./dist/index.js && bun link",
     "start": "bun run dist/index.js",
     "dev": "bun run src/index.ts"
   },
@@ -42,6 +42,7 @@
     "@types/prompts": "^2.4.9",
     "@types/unzip-stream": "^0.3.4",
     "bun-types": "latest",
+    "tsup": "^8.4.0",
     "typescript": "^5.3.3"
   },
   "publishConfig": {
