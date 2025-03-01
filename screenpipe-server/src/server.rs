@@ -176,7 +176,7 @@ struct MarkAsHallucinationRequest {
     speaker_id: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -184,7 +184,7 @@ pub enum ContentItem {
     UI(UiContent),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct OCRContent {
     pub frame_id: i64,
     pub text: String,
@@ -200,7 +200,7 @@ pub struct OCRContent {
     pub focused: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct AudioContent {
     pub chunk_id: i64,
     pub transcription: String,
@@ -215,7 +215,7 @@ pub struct AudioContent {
     pub end_time: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct UiContent {
     pub id: i64,
     pub text: String,
@@ -283,12 +283,20 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
+
+#[derive(OaSchema, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub data: Vec<ContentItem>,
+    pub pagination: PaginationInfo,
+}
+
 // Update the search function
+#[oasgen]
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Result<
-    JsonResponse<PaginatedResponse<ContentItem>>,
+    JsonResponse<SearchResponse>,
     (StatusCode, JsonResponse<serde_json::Value>),
 > {
     info!(
@@ -425,7 +433,7 @@ pub(crate) async fn search(
     }
 
     info!("search completed: found {} results", total);
-    Ok(JsonResponse(PaginatedResponse {
+    Ok(JsonResponse( SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
@@ -1004,6 +1012,7 @@ impl SCServer {
 
         // Create the OpenAPI server
         let server = Server::axum()
+            .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
             .get("/vision/list", api_list_monitors)
             .post("/tags/:content_type/:id", add_tags)
@@ -1048,9 +1057,7 @@ impl SCServer {
         // Build the main router with all routes
         let app = Router::new()
             .merge(server.into_router())
-            // TODO: Make this route work possibly remove generic type that prevents codegen
-            .route("/search", get(search))
-            // Need to figure this out too
+            // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
             .route("/ws/health", get(ws_health_handler))
