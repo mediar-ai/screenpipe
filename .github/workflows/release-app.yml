@@ -190,7 +190,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.1.43
+          bun-version: latest
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -332,7 +332,6 @@ jobs:
             libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf
-          curl -fsSL https://bun.sh/install | bash
 
       - name: Install frontend dependencies
         working-directory: ./screenpipe-app-tauri
