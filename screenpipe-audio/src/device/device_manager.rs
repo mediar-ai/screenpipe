@@ -77,10 +77,7 @@ impl DeviceManager {
     pub async fn stop_all_devices(&self) -> Result<()> {
         for pair in self.states.iter() {
             let device = pair.key();
-
-            if self.is_running(device) {
-                self.stop_device(device).await?;
-            }
+            let _ = self.stop_device(device).await;
         }
 
         self.states.clear();
@@ -96,6 +93,10 @@ impl DeviceManager {
 
         if let Some(is_running) = self.states.get(device) {
             is_running.store(false, Ordering::Relaxed)
+        }
+
+        if let Some(p) = self.streams.get(device) {
+            let _ = p.value().stop().await;
         }
 
         self.streams.remove(device);

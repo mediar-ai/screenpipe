@@ -110,15 +110,16 @@ impl AudioStream {
         self.transmitter.subscribe()
     }
 
-    pub async fn stop(mut self) -> Result<()> {
+    pub async fn stop(&self) -> Result<()> {
         self.is_disconnected.store(true, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;
         rx.await?;
 
-        if let Some(thread_arc) = self.stream_thread.take() {
+        if let Some(thread_arc) = self.stream_thread.as_ref() {
+            let thread_arc_clone = thread_arc.clone();
             let thread_handle = tokio::task::spawn_blocking(move || {
-                let mut thread_guard = thread_arc.blocking_lock();
+                let mut thread_guard = thread_arc_clone.blocking_lock();
                 if let Some(join_handle) = thread_guard.take() {
                     join_handle
                         .join()
