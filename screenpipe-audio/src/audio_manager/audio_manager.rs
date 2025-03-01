@@ -163,6 +163,7 @@ impl AudioManager {
         }
 
         self.recording_handles.clear();
+
         let mut device_check_handle = self.device_check_handle.lock().await;
         if let Some(handle) = device_check_handle.take() {
             handle.abort();
