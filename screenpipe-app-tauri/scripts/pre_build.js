@@ -155,9 +155,10 @@ async function copyBunBinary() {
 	} else if (platform === 'linux') {
 		bunSrc = path.join(os.homedir(), '.bun', 'bin', 'bun');
 		bunDest1 = path.join(cwd, 'bun-x86_64-unknown-linux-gnu');
+		bunDest2 = path.join(cwd, 'bun-aarch64-unknown-linux-gnu');
 	}
 
-	if (await fs.exists(bunDest1)) {
+	if (await fs.exists(bunDest1) || await fs.exists(bunDest2)) {
 		console.log('bun binary already exists for tauri.');
 		return;
 	}
@@ -167,7 +168,7 @@ async function copyBunBinary() {
 		await copyFile(bunSrc, bunDest1);
 		console.log(`bun binary copied successfully from ${bunSrc} to ${bunDest1}`);
 
-		if (platform === 'macos') {
+		if (platform === 'macos' || platform === 'linux') {
 			await copyFile(bunSrc, bunDest2);
 			console.log(`bun binary also copied to ${bunDest2}`);
 		}
@@ -204,7 +205,8 @@ if (platform == 'linux') {
 	const potentialPaths = [
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
-                path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
+        path.join(__dirname, '..', '..', 'target', 'aarch64-unknown-linux-gnu', 'release', 'screenpipe'),
+		path.join(__dirname, '..', '..', 'target', 'x86_64-unknown-linux-gnu', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', '..', 'target', 'release', 'screenpipe'),
 		path.join(__dirname, '..', 'target', 'release', 'screenpipe'),
@@ -217,9 +219,11 @@ if (platform == 'linux') {
 			copied = true;
 			break;
 		}
-		const screenpipeDest = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
+		const screenpipeDest1 = path.join(cwd, 'screenpipe-x86_64-unknown-linux-gnu');
+		const screenpipeDest2 = path.join(cwd, 'screenpipe-aarch64-unknown-linux-gnu');
 		try {
-			await fs.copyFile(screenpipeSrc, screenpipeDest);
+			await fs.copyFile(screenpipeSrc, screenpipeDest1);
+			await fs.copyFile(screenpipeSrc, screenpipeDest2);
 			console.log(`screenpipe binary copied successfully from ${screenpipeSrc}`);
 			copied = true;
 			break;
