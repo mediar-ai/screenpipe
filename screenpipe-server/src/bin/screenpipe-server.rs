@@ -553,7 +553,7 @@ async fn main() -> anyhow::Result<()> {
                 let result = tokio::select! {
                     result = recording_future => result,
                     _ = shutdown_rx.recv() => {
-                        audio_manager_clone.stop().await.unwrap();
+                        let _ = audio_manager_clone.stop().await;
                         info!("received shutdown signal for recording");
                         break;
                     }
@@ -875,7 +875,11 @@ async fn main() -> anyhow::Result<()> {
 
     // start recording after all this text
     if !cli.disable_audio {
-        audio_manager.start().await.unwrap();
+        let audio_manager_clone = audio_manager.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            audio_manager_clone.start().await.unwrap();
+        });
     }
 
     // Start pipes

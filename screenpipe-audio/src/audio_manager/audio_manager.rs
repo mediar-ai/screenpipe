@@ -217,6 +217,7 @@ impl AudioManager {
         let is_running = self.device_manager.is_running_mut(device).unwrap();
         let languages = self.options.languages.clone();
         let deepgram_api_key = self.options.deepgram_api_key.clone();
+        let realtime_enabled = self.options.enable_realtime;
 
         let recording_handle = tokio::spawn(async move {
             let record_and_transcribe_handle = record_and_transcribe(
@@ -226,11 +227,22 @@ impl AudioManager {
                 is_running.clone(),
             );
 
-            let realtime_handle =
-                stream_transcription_deepgram(stream, languages, is_running, deepgram_api_key);
+            let realtime_handle = if realtime_enabled {
+                Some(stream_transcription_deepgram(
+                    stream,
+                    languages,
+                    is_running,
+                    deepgram_api_key,
+                ))
+            } else {
+                None
+            };
 
-            let (record_result, realtime_result) =
-                join!(record_and_transcribe_handle, realtime_handle);
+            let (record_result, realtime_result) = if let Some(handle) = realtime_handle {
+                join!(record_and_transcribe_handle, handle)
+            } else {
+                (record_and_transcribe_handle.await, Ok(()))
+            };
 
             if record_result.is_err() || realtime_result.is_err() {
                 let mut e = anyhow!("record_device failed");
