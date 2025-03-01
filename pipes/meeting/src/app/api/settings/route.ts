@@ -2,58 +2,46 @@
 import { pipe } from "@screenpipe/js";
 import { NextResponse } from "next/server";
 import type { Settings } from "@screenpipe/js";
+import { getDefaultSettings } from "@screenpipe/browser";
 // Force Node.js runtime
 export const runtime = "nodejs"; // Add this line
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const defaultSettings: Settings = {
-    openaiApiKey: "",
-    deepgramApiKey: "",
-    aiModel: "gpt-4",
-    aiUrl: "https://api.openai.com/v1",
-    customPrompt: "",
-    port: 3030,
-    dataDir: "default",
-    disableAudio: false,
-    ignoredWindows: [],
-    includedWindows: [],
-    aiProviderType: "openai",
-    embeddedLLM: {
-      enabled: false,
-      model: "llama3.2:1b-instruct-q4_K_M",
-      port: 11438,
-    },
-    enableFrameCache: true,
-    enableUiMonitoring: false,
-    aiMaxContextChars: 128000,
-    user: {
-      token: "",
-    },
-  };
-
+  console.log("[api/settings] getting settings...");
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
-      throw new Error("settingsManager not found");
+      console.error("[api/settings] settingsManager is undefined");
+      return NextResponse.json(getDefaultSettings(), { status: 200 });
     }
     const rawSettings = await settingsManager.getAll();
+    console.log("[api/settings] got settings successfully");
     return NextResponse.json(rawSettings);
   } catch (error) {
-    console.error("failed to get settings:", error);
-    return NextResponse.json(defaultSettings);
+    console.error("[api/settings] failed to get settings:", error);
+    return NextResponse.json(
+      { error: "failed to get settings", details: String(error) },
+      { status: 500 }
+    );
   }
 }
 
 export async function PUT(request: Request) {
+  console.log("[api/settings] updating settings...");
   try {
     const settingsManager = pipe.settings;
     if (!settingsManager) {
-      throw new Error("settingsManager not found");
+      console.error("[api/settings] settingsManager is undefined");
+      return NextResponse.json(
+        { error: "settingsManager not found" },
+        { status: 500 }
+      );
     }
 
     const body = await request.json();
     const { key, value, isPartialUpdate, reset } = body;
+    console.log("[api/settings] received update request:", { key, isPartialUpdate, reset });
 
     if (reset) {
       if (key) {

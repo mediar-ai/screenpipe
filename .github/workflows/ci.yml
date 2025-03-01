@@ -34,6 +34,8 @@ jobs:
           rustflags: ""
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.43
 
       - name: Install dependencies
         run: .github/scripts/install_dependencies.sh
@@ -46,14 +48,9 @@ jobs:
       - name: Run cargo tests
         run: cargo test
 
-      # TODO: ??
+      # todo: need to run backend ...
       # - name: Run bun tests
-      #   env:
-      #     SCREENPIPE_DIR: ${{ runner.workspace }}/screenpipe
-      #     PIPE_ID: test
-      #     PIPE_FILE: pipe.ts
-      #     PIPE_DIR: ${{ runner.workspace }}/screenpipe/pipes/test
-      #   run: bun ./scripts/run_tests.js
+      #   run: bun test
       #   working-directory: ./screenpipe-js
 
   test-windows:
@@ -87,6 +84,8 @@ jobs:
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.43
 
       - name: Install vcpkg
         uses: lukka/run-vcpkg@v11
@@ -136,6 +135,8 @@ jobs:
 
       - name: setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.43
 
       - name: Run pre_build.js
         shell: bash

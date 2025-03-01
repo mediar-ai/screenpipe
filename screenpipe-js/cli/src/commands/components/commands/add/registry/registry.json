@@ -1,0 +1,81 @@
+{
+  "use-health": {
+    "name": "use-health",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-health-check.tsx",
+    "target": "./src/hooks/use-health.tsx",
+    "dependencies": [
+      "lodash"
+    ],
+    "devDependencies": [
+      "@types/lodash"
+    ]
+  },
+  "update-pipe-config": {
+    "name": "update-pipe-config",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/update-pipe-config.tsx",
+    "target": "./src/lib/actions/update-pipe-config.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "types"
+    ]
+  },
+  "use-pipe-settings": {
+    "name": "use-pipe-settings",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/hooks/use-pipe-settings.tsx",
+    "target": "./src/lib/hooks/use-pipe-settings.ts",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [
+      "get-screenpipe-app-settings",
+      "types"
+    ]
+  },
+  "get-screenpipe-app-settings": {
+    "name": "get-screenpipe-app-settings",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/actions/get-screenpipe-app-settings.ts",
+    "target": "./src/lib/actions/get-screenpipe-app-settings.ts",
+    "dependencies": [
+      "@screenpipe/js"
+    ],
+    "registryDependencies": []
+  },
+  "types": {
+    "name": "types",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/obsidian/src/lib/types.ts",
+    "target": "./src/lib/types.ts",
+    "dependencies": [
+      "@screenpipe/js"
+    ],
+    "registryDependencies": []
+  },
+  "use-sql-autocomplete": {
+    "name": "use-sql-autocomplete",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/hooks/use-sql-autocomplete.ts"
+  },
+  "sql-autocomplete-input": {
+    "name": "sql-autocomplete-input",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/screenpipe-app-tauri/components/sql-autocomplete-input.tsx",
+    "target": "./src/components/sql-autocomplete-input.ts",
+    "dependencies": [
+      "cmdk",
+      "lucide-react"
+    ],
+    "registryDependencies": [
+      "use-sql-autocomplete"
+    ]
+  },
+  "use-ai-provider": {
+    "name": "use-ai-provider",
+    "src": "https://api.github.com/repos/mediar-ai/screenpipe/contents/pipes/search/src/lib/hooks/use-ai-provider.tsx",
+    "target": "./src/hooks/use-ai-provider.tsx",
+    "dependencies": [
+      "@screenpipe/browser"
+    ],
+    "registryDependencies": [],
+    "devDependencies": []
+  }
+}

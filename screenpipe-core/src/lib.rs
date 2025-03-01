@@ -20,9 +20,7 @@ pub use mistral::*;
 pub mod llama;
 #[cfg(feature = "llm")]
 pub use llama::*;
-#[cfg(feature = "pipes")]
 pub mod pipes;
-#[cfg(feature = "pipes")]
 pub use pipes::*;
 mod language;
 #[cfg(feature = "security")]
@@ -31,7 +29,6 @@ pub mod pii_removal;
 #[cfg(feature = "mkl")]
 extern crate intel_mkl_src;
 
-
 #[cfg(feature = "security")]
 pub use pii_removal::*;
 
@@ -39,3 +36,9 @@ pub mod network;
 pub use network::*;
 
 pub use language::{Language, TESSERACT_LANGUAGES};
+
+pub mod devices;
+pub use devices::*;
+
+pub mod embedding;
+pub use embedding::*;

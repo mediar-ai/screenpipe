@@ -2,7 +2,6 @@ use crate::audio_processing::write_audio_to_file;
 use crate::deepgram::transcribe_with_deepgram;
 use crate::pyannote::models::{get_or_download_model, PyannoteModel};
 use crate::pyannote::segment::SpeechSegment;
-use crate::resample;
 pub use crate::segments::prepare_segments;
 use crate::{
     pyannote::{embedding::EmbeddingExtractor, identify::EmbeddingManager},
@@ -10,15 +9,17 @@ use crate::{
     whisper::{process_with_whisper, WhisperModel},
     AudioDevice, AudioTranscriptionEngine,
 };
+use crate::{resample, DeviceControl};
 use anyhow::{anyhow, Result};
 use candle_transformers::models::whisper as m;
+use dashmap::DashMap;
 use log::{debug, error, info};
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
-    path::PathBuf,
+    path::Path,
     sync::Arc,
     sync::Mutex as StdMutex,
     time::{SystemTime, UNIX_EPOCH},
@@ -152,9 +153,10 @@ pub async fn create_whisper_channel(
     audio_transcription_engine: Arc<AudioTranscriptionEngine>,
     vad_engine: VadEngineEnum,
     deepgram_api_key: Option<String>,
-    output_path: &PathBuf,
+    output_path: &Path,
     vad_sensitivity: VadSensitivity,
     languages: Vec<Language>,
+    audio_devices_control: Option<Arc<DashMap<AudioDevice, DeviceControl>>>,
 ) -> Result<(
     crossbeam::channel::Sender<AudioInput>,
     crossbeam::channel::Receiver<TranscriptionResult>,
@@ -177,7 +179,7 @@ pub async fn create_whisper_channel(
     let vad_engine = Arc::new(Mutex::new(vad_engine));
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
-    let output_path = output_path.clone();
+    let output_path = output_path.to_path_buf();
 
     let embedding_model_path = get_or_download_model(PyannoteModel::Embedding).await?;
     let segmentation_model_path = get_or_download_model(PyannoteModel::Segmentation).await?;
@@ -202,6 +204,17 @@ pub async fn create_whisper_channel(
                 recv(input_receiver) -> input_result => {
                     match input_result {
                         Ok(mut audio) => {
+                            // Check if device should be recording
+                            if let Some(control) = audio_devices_control.as_ref().unwrap().get(&audio.device) {
+                                if !control.is_running {
+                                    debug!("Skipping audio processing for stopped device: {}", audio.device);
+                                    continue;
+                                }
+                            } else {
+                                debug!("Device not found in control list: {}", audio.device);
+                                continue;
+                            }
+
                             debug!("Received input from input_receiver");
                             let timestamp = SystemTime::now()
                                 .duration_since(UNIX_EPOCH)
@@ -227,13 +240,17 @@ pub async fn create_whisper_channel(
                             audio.data = Arc::new(audio_data.clone());
                             audio.sample_rate = m::SAMPLE_RATE as u32;
 
-                            let mut segments = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
-                                Ok(segments) => segments,
+                            let (mut segments, speech_ratio_ok) = match prepare_segments(&audio_data, vad_engine.clone(), &segmentation_model_path, embedding_manager.clone(), embedding_extractor.clone(), &audio.device.to_string()).await {
+                                Ok((segments, speech_ratio_ok)) => (segments, speech_ratio_ok),
                                 Err(e) => {
                                     error!("Error preparing segments: {:?}", e);
                                     continue;
                                 }
                             };
+
+                            if !speech_ratio_ok {
+                                continue;
+                            }
 
                             let path = match write_audio_to_file(
                                 &audio.data.to_vec(),
@@ -252,9 +269,9 @@ pub async fn create_whisper_channel(
                             while let Some(segment) = segments.recv().await {
                                 let path = path.clone();
                                 let transcription_result = if cfg!(target_os = "macos") {
-                                    let timestamp = timestamp + segment.start.round() as u64;
                                     #[cfg(target_os = "macos")]
                                     {
+                                        let timestamp = timestamp + segment.start.round() as u64;
                                         autoreleasepool(|| {
                                             run_stt(segment, audio.device.clone(), &mut whisper_model, audio_transcription_engine.clone(), deepgram_api_key.clone(), languages.clone(), path, timestamp)
                                         })

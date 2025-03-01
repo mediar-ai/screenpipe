@@ -2,6 +2,7 @@
 use crate::apple::perform_ocr_apple;
 use crate::capture_screenshot_by_window::CapturedWindow;
 use crate::capture_screenshot_by_window::WindowFilters;
+use crate::custom_ocr::perform_ocr_custom;
 #[cfg(target_os = "windows")]
 use crate::microsoft::perform_ocr_windows;
 use crate::monitor::get_monitor_by_id;
@@ -9,30 +10,97 @@ use crate::tesseract::perform_ocr_tesseract;
 use crate::utils::OcrEngine;
 use crate::utils::{capture_screenshot, compare_with_previous_image};
 use anyhow::{anyhow, Result};
-#[cfg(target_os = "macos")]
-use cidre::ns;
+use base64::{engine::general_purpose, Engine as _};
+use image::codecs::jpeg::JpegEncoder;
 use image::DynamicImage;
 use log::{debug, error};
 use screenpipe_core::Language;
 use screenpipe_integrations::unstructured_ocr::perform_ocr_cloud;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::Serialize;
+use serde::Serializer;
 use serde_json;
 use std::sync::Arc;
 use std::{
     collections::HashMap,
-    time::{Duration, Instant},
-    sync::OnceLock,
+    time::{Duration, Instant, UNIX_EPOCH},
 };
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc::Sender;
 use tokio::time::sleep;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::Monitor;
-
-#[cfg(not(target_os = "macos"))]
+use crate::browser_utils::create_url_detector;
 use xcap::Monitor;
 
-#[cfg(target_os = "macos")]
-static APPLE_LANGUAGE_MAP: OnceLock<HashMap<Language, &'static str>> = OnceLock::new();
+fn serialize_image<S>(image: &Option<DynamicImage>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if let Some(image) = image {
+        let mut webp_buffer = Vec::new();
+        let mut cursor = std::io::Cursor::new(&mut webp_buffer);
+
+        let mut encoder = JpegEncoder::new_with_quality(&mut cursor, 80);
+
+        // Encode the image as WebP
+        encoder
+            .encode_image(image)
+            .map_err(serde::ser::Error::custom)?;
+
+        // Base64 encode the WebP data
+        let base64_string = general_purpose::STANDARD.encode(webp_buffer);
+
+        // Serialize the base64 string
+        serializer.serialize_str(&base64_string)
+    } else {
+        serializer.serialize_none()
+    }
+}
+
+fn deserialize_image<'de, D>(deserializer: D) -> Result<Option<DynamicImage>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Deserialize the base64 string
+    let base64_string: String = serde::Deserialize::deserialize(deserializer)?;
+
+    // Check if the base64 string is empty or invalid
+    if base64_string.trim().is_empty() {
+        return Ok(None);
+    }
+
+    // Decode base64 to bytes
+    let image_bytes = general_purpose::STANDARD
+        .decode(&base64_string)
+        .map_err(serde::de::Error::custom)?;
+
+    // Create a cursor to read from the bytes
+    let cursor = std::io::Cursor::new(image_bytes);
+
+    // Decode the JPEG data back into an image
+    let image = image::load(cursor, image::ImageFormat::Jpeg).map_err(serde::de::Error::custom)?;
+    Ok(Some(image))
+}
+
+fn serialize_instant<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let duration_since_epoch = UNIX_EPOCH.elapsed().map_err(serde::ser::Error::custom)?;
+    let instant_duration = duration_since_epoch - instant.elapsed();
+    let millis = instant_duration.as_millis();
+    serializer.serialize_u128(millis)
+}
+
+fn deserialize_instant<'de, D>(deserializer: D) -> Result<Instant, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let millis: u128 = Deserialize::deserialize(deserializer)?;
+    Ok(Instant::now() - Duration::from_millis(millis as u64))
+}
 
 pub struct CaptureResult {
     pub image: DynamicImage,
@@ -49,6 +117,7 @@ pub struct WindowOcrResult {
     pub text_json: Vec<HashMap<String, String>>, // Change this line
     pub focused: bool,
     pub confidence: f64,
+    pub browser_url: Option<String>,
 }
 
 pub struct OcrTaskData {
@@ -58,6 +127,10 @@ pub struct OcrTaskData {
     pub timestamp: Instant,
     pub result_tx: Sender<CaptureResult>,
 }
+
+const BROWSER_NAMES: [&str; 9] = [
+    "chrome", "firefox", "safari", "edge", "brave", "arc", "chromium", "vivaldi", "opera",
+];
 
 pub async fn continuous_capture(
     result_tx: Sender<CaptureResult>,
@@ -114,6 +187,7 @@ pub async fn continuous_capture(
                 Ok(avg) => avg,
                 Err(e) => {
                     error!("Error comparing images: {}", e);
+                    previous_image = None;
                     0.0
                 }
             };
@@ -209,18 +283,33 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
-    #[cfg(target_os = "macos")]
-    let languages_slice = {
-        use ns;
-        let apple_languages = get_apple_languages(languages.clone());
-        let mut slice = ns::ArrayMut::<ns::String>::with_capacity(apple_languages.len());
-        apple_languages.iter().for_each(|language| {
-            slice.push(&ns::String::with_str(language.as_str()));
-        });
-        slice
-    };
-
     for captured_window in window_images {
+        let app_name = captured_window.app_name.clone();
+        let browser_url = if cfg!(target_os = "macos")
+            && captured_window.is_focused
+            && BROWSER_NAMES
+                .iter()
+                .any(|&browser| app_name.to_lowercase().contains(browser))
+        {
+            match tokio::task::spawn_blocking(move || {
+                get_active_browser_url_sync(&app_name, captured_window.process_id)
+            })
+            .await
+            {
+                Ok(Ok(url)) => Some(url),
+                Ok(Err(_)) => {
+                    // error!("Failed to get browser URL: {}", e);
+                    None
+                }
+                Err(e) => {
+                    error!("Failed to spawn blocking task: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let (window_text, window_json_output, confidence) = match ocr_engine {
             OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
                 .await
@@ -233,7 +322,12 @@ pub async fn process_ocr_task(
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages_slice),
+            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
+            OcrEngine::Custom(config) => {
+                perform_ocr_custom(&captured_window.image, languages.clone(), config)
+                    .await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+            }
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -255,6 +349,7 @@ pub async fn process_ocr_task(
             text_json: parse_json_output(&window_json_output),
             focused: captured_window.is_focused,
             confidence: confidence.unwrap_or(0.0),
+            browser_url: browser_url.clone(),
         });
     }
 
@@ -266,6 +361,13 @@ pub async fn process_ocr_task(
     };
 
     if let Err(e) = result_tx.send(capture_result).await {
+        if e.to_string().contains("channel closed") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Channel closed",
+            ));
+        }
+
         error!("Failed to send OCR result: {}", e);
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -309,28 +411,79 @@ pub fn trigger_screen_capture_permission() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-pub fn get_apple_languages(languages: Vec<screenpipe_core::Language>) -> Vec<String> {
-    let map = APPLE_LANGUAGE_MAP.get_or_init(|| {
-        let mut m = HashMap::new();
-        m.insert(Language::English, "en-US");
-        m.insert(Language::Spanish, "es-ES");
-        m.insert(Language::French, "fr-FR");
-        m.insert(Language::German, "de-DE");
-        m.insert(Language::Italian, "it-IT");
-        m.insert(Language::Portuguese, "pt-BR");
-        m.insert(Language::Russian, "ru-RU");
-        m.insert(Language::Chinese, "zh-Hans");
-        m.insert(Language::Korean, "ko-KR");
-        m.insert(Language::Japanese, "ja-JP");
-        m.insert(Language::Ukrainian, "uk-UA");
-        m.insert(Language::Thai, "th-TH");
-        m.insert(Language::Arabic, "ar-SA");
-        m
-    });
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RealtimeVisionEvent {
+    Ocr(WindowOcr),
+    Ui(UIFrame),
+}
 
-    languages
-        .iter()
-        .filter_map(|lang| map.get(lang).map(|&s| s.to_string()))
-        .collect()
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowOcr {
+    #[serde(
+        serialize_with = "serialize_image",
+        deserialize_with = "deserialize_image"
+    )]
+    pub image: Option<DynamicImage>,
+    pub window_name: String,
+    pub app_name: String,
+    pub text: String,
+    pub text_json: Vec<HashMap<String, String>>, // Change this line
+    pub focused: bool,
+    pub confidence: f64,
+    #[serde(
+        serialize_with = "serialize_instant",
+        deserialize_with = "deserialize_instant"
+    )]
+    pub timestamp: Instant,
+    pub browser_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UIFrame {
+    pub window: String,
+    pub app: String,
+    pub text_output: String,
+    pub initial_traversal_at: String,
+}
+
+impl UIFrame {
+    pub async fn read_from_pipe(reader: &mut BufReader<File>) -> Result<Self> {
+        let window = UIFrame::read_string(reader).await?;
+        let app = UIFrame::read_string(reader).await?;
+        let text_output = UIFrame::read_string(reader).await?;
+        let initial_traversal_at = UIFrame::read_string(reader).await?;
+
+        Ok(UIFrame {
+            window,
+            app,
+            text_output,
+            initial_traversal_at,
+        })
+    }
+
+    async fn read_string(reader: &mut BufReader<File>) -> Result<String> {
+        let mut buffer = Vec::new();
+        loop {
+            let result = reader.read_until(b'\0', &mut buffer).await?;
+            if result > 0 {
+                buffer.pop(); // Remove the null terminator
+                return Ok(String::from_utf8_lossy(&buffer).to_string());
+            }
+        }
+    }
+}
+
+fn get_active_browser_url_sync(app_name: &str, process_id: i32) -> Result<String, std::io::Error> {
+    let detector = create_url_detector();
+    match detector.get_active_url(app_name, process_id) {
+        Ok(Some(url)) => Ok(url),
+        Ok(None) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to get browser URL",
+        )),
+        Err(e) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Error getting browser URL: {}", e),
+        )),
+    }
 }

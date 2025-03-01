@@ -1,14 +1,13 @@
-"use client";
+'use client'
 
-import MeetingHistory from "@/components/meeting-history";
-import { useState } from "react";
+import { useEffect } from "react"
+import { MeetingHistory } from "@/components/meeting-history/meeting-history"
 
-export default function MeetingsPage() {
-  const [showMeetingHistory, setShowMeetingHistory] = useState(true);
-  return (
-    <MeetingHistory
-      showMeetingHistory={true}
-      setShowMeetingHistory={setShowMeetingHistory}
-    />
-  );
+// Instead of redirecting, show meetings directly at root
+export default function HomePage() {
+  useEffect(() => {
+    console.log('homepage mounted')
+  }, [])
+
+  return <MeetingHistory />
 }

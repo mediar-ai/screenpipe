@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { IconCode } from "./ui/icons";
 import { Settings } from "@/lib/hooks/use-settings";
 import { getCliPath } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { platform } from "@tauri-apps/plugin-os";
 
 interface CliCommandDialogProps {
   settings: Settings;
@@ -23,28 +25,54 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { copyToClipboard } = useCopyToClipboard({ timeout: 2000 });
   const { toast } = useToast();
+  const [isWindows, setIsWindows] = useState(false);
 
-  const generateCliCommand = () => {
+  useEffect(() => {
+    const p = platform();
+    setIsWindows(p === "windows");
+  }, []);
+
+  const generateCliCommand = (
+    shell: "cmd" | "powershell" | "bash" = "bash"
+  ) => {
     const cliPath = getCliPath();
-    let args = [];
     let envVars = [];
+    let args = [];
 
-    if (settings.user?.credits) {
+    if (settings.useChineseMirror) {
       envVars.push(
-        'DEEPGRAM_API_URL="https://ai-proxy.i-f9f.workers.dev/v1/listen"'
+        shell === "cmd"
+          ? "SET HF_ENDPOINT=https://hf-mirror.com"
+          : 'HF_ENDPOINT="https://hf-mirror.com"'
       );
+    }
 
-      if (settings.user.token) {
-        envVars.push(`CUSTOM_DEEPGRAM_API_TOKEN="${settings.user.token}"`);
-      }
+    // Add AI proxy env vars for screenpipe cloud
+    if (
+      settings.user.cloud_subscribed &&
+      settings.realtimeAudioTranscriptionEngine === "screenpipe-cloud" &&
+      settings.userId
+    ) {
+      const cmdPrefix = shell === "cmd" ? "SET " : "";
+      const quoteChar = shell === "cmd" ? "" : '"';
+      envVars.push(
+        `${cmdPrefix}DEEPGRAM_API_URL=${quoteChar}https://ai-proxy.i-f9f.workers.dev/v1/listen${quoteChar}`
+      );
+      envVars.push(
+        `${cmdPrefix}DEEPGRAM_WEBSOCKET_URL=${quoteChar}wss://ai-proxy.i-f9f.workers.dev${quoteChar}`
+      );
+      envVars.push(
+        `${cmdPrefix}CUSTOM_DEEPGRAM_API_TOKEN=${quoteChar}${settings.userId}${quoteChar}`
+      );
+      args.push(
+        `--deepgram-api-key ${quoteChar}${settings.userId}${quoteChar}`
+      );
     }
 
     if (settings.audioTranscriptionEngine !== "default") {
-      const audioTranscriptionEngine =
-        settings.audioTranscriptionEngine === "screenpipe-cloud"
-          ? "deepgram"
-          : settings.audioTranscriptionEngine;
-      args.push(`--audio-transcription-engine ${audioTranscriptionEngine}`);
+      // TBD hard coded for now
+      // if someone wants to use deepgram / screenpipe cloud in CLI mode they'll ask us
+      args.push(`--audio-transcription-engine whisper-large-v3-turbo`);
     }
     if (settings.ocrEngine !== "default") {
       args.push(`--ocr-engine ${settings.ocrEngine}`);
@@ -69,9 +97,7 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
     if (settings.usePiiRemoval) {
       args.push("--use-pii-removal");
     }
-    if (settings.restartInterval > 0) {
-      args.push(`--restart-interval ${settings.restartInterval}`);
-    }
+
     if (settings.disableAudio) {
       args.push("--disable-audio");
     }
@@ -110,8 +136,16 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
       args.push("--enable-ui-monitoring");
     }
 
-    const envString = envVars.length > 0 ? `${envVars.join(" ")} ` : "";
-    return `${envString}${cliPath} ${args.join(" ")}`;
+    if (settings.enableRealtimeAudioTranscription) {
+      args.push("--enable-realtime-audio-transcription");
+    }
+
+    const envVarsStr =
+      envVars.length > 0
+        ? `${envVars.join(shell === "cmd" ? " && " : " ")} `
+        : "";
+    const cmdPrefix = shell === "cmd" ? "&& " : "";
+    return `${envVarsStr}${cmdPrefix}${cliPath} ${args.join(" ")}`;
   };
 
   const handleCopyCliCommand = () => {
@@ -138,7 +172,28 @@ export function CliCommandDialog({ settings }: CliCommandDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-x-auto">
-            <CodeBlock language="bash" value={generateCliCommand()} />
+            {isWindows ? (
+              <Tabs defaultValue="cmd">
+                <TabsList>
+                  <TabsTrigger value="cmd">cmd</TabsTrigger>
+                  <TabsTrigger value="powershell">powershell</TabsTrigger>
+                </TabsList>
+                <TabsContent value="cmd">
+                  <CodeBlock
+                    language="bash"
+                    value={generateCliCommand("cmd")}
+                  />
+                </TabsContent>
+                <TabsContent value="powershell">
+                  <CodeBlock
+                    language="powershell"
+                    value={generateCliCommand("powershell")}
+                  />
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <CodeBlock language="bash" value={generateCliCommand("bash")} />
+            )}
           </div>
           <DialogFooter>
             <Button onClick={handleCopyCliCommand}>Copy to Clipboard</Button>

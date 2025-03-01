@@ -1,28 +1,48 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { Database } from "lucide-react"
-import { JSX } from "react"
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Database } from "lucide-react";
+import { JSX } from "react";
 
 interface TableItem {
-  name: string
-  icon: JSX.Element
+  name: string;
+  displayName: string;
+  icon: JSX.Element;
 }
 
 const tables: TableItem[] = [
-  { name: "ui_monitoring", icon: <Database className="h-4 w-4" /> },
-  { name: "video_chunks", icon: <Database className="h-4 w-4" /> },
-  { name: "ocr_text", icon: <Database className="h-4 w-4" /> },
-  { name: "audio_transcriptions", icon: <Database className="h-4 w-4" /> },
-]
+  {
+    name: "ui_monitoring",
+    displayName: "UI monitoring",
+    icon: <Database className="h-4 w-4" />,
+  },
+  {
+    name: "video_chunks",
+    displayName: "Video chunks",
+    icon: <Database className="h-4 w-4" />,
+  },
+  {
+    name: "ocr_text",
+    displayName: "OCR text",
+    icon: <Database className="h-4 w-4" />,
+  },
+  {
+    name: "audio_transcriptions",
+    displayName: "Audio transcriptions",
+    icon: <Database className="h-4 w-4" />,
+  },
+];
 
 interface DatabaseSidebarProps {
-  currentTable: string
-  onTableSelect: (table: string) => void
+  currentTable: string;
+  onTableSelect: (table: string) => void;
 }
 
-export function DatabaseSidebar({ currentTable, onTableSelect }: DatabaseSidebarProps) {
+export function DatabaseSidebar({
+  currentTable,
+  onTableSelect,
+}: DatabaseSidebarProps) {
   return (
     <div className="pb-12 w-64 border-r">
       <div className="space-y-4 py-4">
@@ -40,12 +60,12 @@ export function DatabaseSidebar({ currentTable, onTableSelect }: DatabaseSidebar
                 onClick={() => onTableSelect(table.name)}
               >
                 {table.icon}
-                <span className="ml-2">{table.name}</span>
+                <span className="ml-2">{table.displayName}</span>
               </Button>
             ))}
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

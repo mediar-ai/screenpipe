@@ -1,15 +1,26 @@
-use crate::{get_store, icons::AppIcon};
+use crate::window_api::{close_window, show_specific_window};
+use crate::{get_base_dir, get_store, register_shortcut};
+use axum::body::Bytes;
+use axum::response::sse::{Event, Sse};
+use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
     Json, Router,
 };
-use http::header::HeaderValue;
+use futures::stream::Stream;
+use http::header::{HeaderValue, CONTENT_TYPE};
+use notify::RecursiveMode;
+use notify::Watcher;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use tauri::Emitter;
+use tauri::Manager;
 #[allow(unused_imports)]
 use tauri_plugin_notification::NotificationExt;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, TraceLayer};
@@ -25,7 +36,8 @@ struct LogEntry {
 
 #[derive(Clone)]
 pub struct ServerState {
-    app_handle: tauri::AppHandle,
+    pub app_handle: tauri::AppHandle,
+    settings_tx: broadcast::Sender<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,8 +89,74 @@ struct AppIconQuery {
     path: Option<String>,
 }
 
+#[derive(Deserialize, Debug)]
+struct WindowSizePayload {
+    title: String,
+    width: f64,
+    height: f64,
+}
+
+#[derive(Deserialize, Debug)]
+struct ShortcutRegistrationPayload {
+    shortcut: String,
+    endpoint: String,
+    method: String,
+    #[serde(default)]
+    body: Option<serde_json::Value>,
+}
+
+async fn settings_stream(
+    State(state): State<ServerState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.settings_tx.subscribe();
+
+    let stream = async_stream::stream! {
+        let store = get_store(&state.app_handle, None).unwrap();
+        let settings = serde_json::to_string(&store.entries()).unwrap();
+        yield Ok(Event::default().data(settings));
+
+        while let Ok(settings) = rx.recv().await {
+            yield Ok(Event::default().data(settings));
+        }
+    };
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(1))
+            .text("keep-alive-text"),
+    )
+}
+
 pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
-    let state = ServerState { app_handle };
+    let (settings_tx, _) = broadcast::channel(100);
+    let settings_tx_clone = settings_tx.clone();
+    let app_handle_clone = app_handle.clone();
+
+    let base_dir = get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+    let store_path = base_dir.join("store.bin");
+
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(event) = res {
+            if event.kind.is_modify() {
+                if let Ok(store) = get_store(&app_handle_clone, None) {
+                    let _ = store.reload();
+                    if let Ok(settings) = serde_json::to_string(&store.entries()) {
+                        let _ = settings_tx_clone.send(settings);
+                    }
+                }
+            }
+        }
+    })
+    .unwrap();
+
+    watcher
+        .watch(&store_path, RecursiveMode::NonRecursive)
+        .unwrap();
+
+    let state = ServerState {
+        app_handle,
+        settings_tx,
+    };
 
     let cors = CorsLayer::new()
         .allow_origin("*".parse::<HeaderValue>().unwrap())
@@ -92,6 +170,16 @@ pub async fn run_server(app_handle: tauri::AppHandle, port: u16) {
         .route("/log", axum::routing::post(log_message))
         .route("/auth", axum::routing::post(handle_auth))
         .route("/app-icon", axum::routing::get(get_app_icon_handler))
+        .route("/window-size", axum::routing::post(set_window_size))
+        .route("/sse/settings", axum::routing::get(settings_stream))
+        .route("/sidecar/start", axum::routing::post(start_sidecar))
+        .route("/sidecar/stop", axum::routing::post(stop_sidecar))
+        .route("/window", axum::routing::post(show_specific_window))
+        .route("/window/close", axum::routing::post(close_window))
+        .route(
+            "/shortcuts/register",
+            axum::routing::post(register_http_shortcut),
+        )
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
@@ -195,10 +283,10 @@ async fn handle_auth(
 
         info!("saving auth data: {:?}", auth_data);
 
-        store.set("auth_data", serde_json::to_value(Some(auth_data)).unwrap());
+        store.set("user", serde_json::to_value(Some(auth_data)).unwrap());
     } else {
         store.set(
-            "auth_data",
+            "user",
             serde_json::to_value::<Option<AuthData>>(None).unwrap(),
         );
     }
@@ -211,6 +299,8 @@ async fn handle_auth(
         ));
     }
 
+    state.app_handle.emit("cli-login", ()).unwrap();
+
     Ok(Json(ApiResponse {
         success: true,
         message: "auth data stored successfully".to_string(),
@@ -220,13 +310,23 @@ async fn handle_auth(
 async fn get_app_icon_handler(
     State(_): State<ServerState>,
     Query(app_name): Query<AppIconQuery>,
-) -> Result<Json<Option<AppIcon>>, (StatusCode, String)> {
+) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!("received app icon request: {:?}", app_name);
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     {
         match crate::icons::get_app_icon(&app_name.name, app_name.path).await {
-            Ok(icon) => Ok(Json(icon)),
+            Ok(Some(icon)) => {
+                let headers = [
+                    (CONTENT_TYPE, HeaderValue::from_static("image/jpeg")),
+                    (
+                        http::header::CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=604800"),
+                    ),
+                ];
+                Ok((headers, Bytes::from(icon.data)))
+            }
+            Ok(None) => Err((StatusCode::NOT_FOUND, "Icon not found".to_string())),
             Err(e) => {
                 error!("failed to get app icon: {}", e);
                 Err((
@@ -246,6 +346,153 @@ async fn get_app_icon_handler(
     }
 }
 
+async fn set_window_size(
+    State(state): State<ServerState>,
+    Json(payload): Json<WindowSizePayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received window size request: {:?}", payload);
+
+    if let Some(window) = state.app_handle.get_webview_window(&payload.title) {
+        match window.set_size(tauri::LogicalSize::new(payload.width, payload.height)) {
+            Ok(_) => Ok(Json(ApiResponse {
+                success: true,
+                message: "window size updated successfully".to_string(),
+            })),
+            Err(e) => {
+                error!("failed to set window size: {}", e);
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("failed to set window size: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            format!("window with title '{}' not found", payload.title),
+        ))
+    }
+}
+
+async fn start_sidecar(
+    State(state): State<ServerState>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received request to start sidecar");
+
+    let app_handle = state.app_handle.clone();
+    match crate::sidecar::spawn_screenpipe(
+        app_handle.clone().state::<crate::SidecarState>(),
+        app_handle,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: "sidecar started successfully".to_string(),
+        })),
+        Err(e) => {
+            error!("failed to start sidecar: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to start sidecar: {}", e),
+            ))
+        }
+    }
+}
+
+async fn stop_sidecar(
+    State(state): State<ServerState>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("received request to stop sidecar");
+
+    let app_handle = state.app_handle.clone();
+    match crate::sidecar::stop_screenpipe(
+        app_handle.clone().state::<crate::SidecarState>(),
+        app_handle,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: "sidecar stopped successfully".to_string(),
+        })),
+        Err(e) => {
+            error!("failed to stop sidecar: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to stop sidecar: {}", e),
+            ))
+        }
+    }
+}
+
+async fn register_http_shortcut(
+    State(state): State<ServerState>,
+    Json(payload): Json<ShortcutRegistrationPayload>,
+) -> Result<Json<ApiResponse>, (StatusCode, String)> {
+    info!("registering http shortcut: {:?}", payload);
+
+    let client = Client::new();
+    let endpoint = payload.endpoint.clone();
+    let method = payload.method.clone();
+    let body = payload.body.clone();
+
+    let handler = move |_app: &tauri::AppHandle| {
+        info!("executing http shortcut");
+        let client = client.clone();
+        let endpoint = endpoint.clone();
+        let method = method.clone();
+        let body = body.clone();
+
+        tokio::spawn(async move {
+            let request = match method.to_uppercase().as_str() {
+                "GET" => client.get(&endpoint),
+                "POST" => client.post(&endpoint),
+                "PUT" => client.put(&endpoint),
+                "DELETE" => client.delete(&endpoint),
+                _ => {
+                    error!("unsupported http method: {}", method);
+                    return;
+                }
+            };
+
+            let request = if let Some(body) = body {
+                request.json(&body)
+            } else {
+                request
+            };
+
+            match request.send().await {
+                Ok(response) => {
+                    info!(
+                        "http shortcut request completed with status: {}",
+                        response.status()
+                    );
+                }
+                Err(e) => {
+                    error!("http shortcut request failed: {}", e);
+                }
+            }
+        });
+    };
+
+    // TODO persist in settings?
+
+    match register_shortcut(&state.app_handle, &payload.shortcut, false, handler).await {
+        Ok(_) => Ok(Json(ApiResponse {
+            success: true,
+            message: format!("shortcut {} registered successfully", payload.shortcut),
+        })),
+        Err(e) => {
+            error!("failed to register shortcut: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("failed to register shortcut: {}", e),
+            ))
+        }
+    }
+}
+
 pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()> {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -262,7 +509,6 @@ pub fn spawn_server(app_handle: tauri::AppHandle, port: u16) -> mpsc::Sender<()>
 }
 
 /*
-
 
 curl -X POST http://localhost:11435/notify \
   -H "Content-Type: application/json" \

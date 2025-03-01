@@ -4,13 +4,12 @@ use axum::{
     Router,
 };
 use chrono::Utc;
-use crossbeam::queue::SegQueue;
+use lru::LruCache;
 use screenpipe_audio::{AudioDevice, DeviceType};
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::{num::NonZeroUsize, path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 use screenpipe_server::{
@@ -30,9 +29,6 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
         db: db.clone(),
         vision_disabled: false,
         audio_disabled: false,
-        vision_control: Arc::new(AtomicBool::new(false)),
-        audio_devices_control: Arc::new(SegQueue::new()),
-        devices_status: HashMap::new(),
         app_start_time: Utc::now(),
         screenpipe_dir: PathBuf::from(""),
         pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -40,8 +36,9 @@ async fn setup_test_app() -> (Router, Arc<AppState>) {
             FrameCache::new(PathBuf::from(""), db).await.unwrap(),
         )),
         ui_monitoring_enabled: false,
-        realtime_transcription_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
-        realtime_transcription_enabled: false,
+        frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+            NonZeroUsize::new(100).unwrap(),
+        )))),
     });
 
     let app = create_router().with_state(app_state.clone());
@@ -154,7 +151,7 @@ async fn test_add_tags_and_search() {
                 assert!(audio.tags.contains(&"audio".to_string()));
             }
             ContentItem::UI(_) => {
-                assert!(false);
+                unreachable!()
             }
         }
     }
@@ -368,17 +365,24 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         .unwrap();
 
     // Insert test frame
-    let frame_id = db.insert_frame("test_device", None).await.unwrap();
+    let frame_id = db
+        .insert_frame(
+            "test_device",
+            None,
+            None,
+            Some("test_app"),
+            Some("test_window"),
+            true,
+        )
+        .await
+        .unwrap();
 
     // Insert test OCR data
     db.insert_ocr_text(
         frame_id,
         "Test OCR text",
         "{'text': 'Test OCR text', 'confidence': 0.9}",
-        "test_app",
-        "test_window",
         Arc::new(OcrEngine::Tesseract),
-        true,
     )
     .await
     .unwrap();

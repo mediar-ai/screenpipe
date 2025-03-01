@@ -1,79 +1,37 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { platform } from "@tauri-apps/plugin-os";
 import { Badge } from "./ui/badge";
-import { invoke } from "@tauri-apps/api/core";
-import { toast, useToast } from "./ui/use-toast";
+import { toast } from "./ui/use-toast";
 
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { Lock, Folder, Activity } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
-import LogViewer from "./log-viewer-v2";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import {  Folder, Power, Settings } from "lucide-react";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+
 import { LogFileButton } from "./log-file-button";
 import { DevModeSettings } from "./dev-mode-settings";
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Check, X } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-settings";
-
-type PermissionsStatus = {
-  screenRecording: string;
-  microphone: string;
-  accessibility: string;
-};
+import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
+import { PermissionButtons } from "./status/permission-buttons";
 
 const HealthStatus = ({ className }: { className?: string }) => {
-  const { health, debouncedFetchHealth } = useHealthCheck();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isMac, setIsMac] = useState(false);
+  const { health } = useHealthCheck();
+  const { isOpen, open, close } = useStatusDialog();
   const { settings, getDataDir } = useSettings();
   const [localDataDir, setLocalDataDir] = useState("");
-  const [isLogOpen, setIsLogOpen] = useState(false);
-  const [isDialogLoading, setIsDialogLoading] = useState(false);
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(
-    null
-  );
-
-  useEffect(() => {
-    setIsMac(platform() === "macos");
-  }, []);
-
-  useEffect(() => {
-    const checkPermissions = async () => {
-      try {
-        const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-          initialCheck: true,
-        });
-
-        setPermissions({
-          screenRecording: perms.screenRecording,
-          microphone: perms.microphone,
-          accessibility: perms.accessibility,
-        });
-      } catch (error) {
-        console.error("Failed to check permissions:", error);
-      }
-    };
-    checkPermissions();
-  }, []);
 
   const handleOpenDataDir = async () => {
     try {
       const dataDir = await getDataDir();
-      await open(dataDir);
+      await openUrl(dataDir);
     } catch (error) {
       console.error("failed to open data directory:", error);
       toast({
@@ -148,75 +106,14 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
   const handleOpenStatusDialog = async () => {
     try {
-      setIsDialogLoading(true);
       const dir = await getDataDir();
       setLocalDataDir(dir);
-      setIsDialogOpen(true);
+      open();
     } catch (error) {
       console.error("failed to open status dialog:", error);
       toast({
         title: "error",
         description: "failed to open status dialog. please try again.",
-        variant: "destructive",
-        duration: 3000,
-      });
-    } finally {
-      setIsDialogLoading(false);
-    }
-  };
-
-  const handlePermissionButton = async (
-    type: "screen" | "audio" | "accessibility"
-  ) => {
-    const toastId = toast({
-      title: `checking ${type} permissions`,
-      description: "please wait...",
-      duration: Infinity,
-    });
-
-    try {
-      const permissionType =
-        type === "screen"
-          ? "screenRecording"
-          : type === "audio"
-          ? "microphone"
-          : "accessibility";
-
-      await invoke("request_permission", {
-        permission: permissionType,
-      });
-
-      const perms = await invoke<PermissionsStatus>("do_permissions_check", {
-        initialCheck: false,
-      });
-
-      setPermissions({
-        screenRecording: perms.screenRecording,
-        microphone: perms.microphone,
-        accessibility: perms.accessibility,
-      });
-
-      const granted =
-        type === "screen"
-          ? perms.screenRecording === "Granted"
-          : type === "audio"
-          ? perms.microphone === "Granted"
-          : perms.accessibility === "Granted";
-
-      toastId.update({
-        id: toastId.id,
-        title: granted ? "permission granted" : "permission check complete",
-        description: granted
-          ? `${type} permission was successfully granted`
-          : `please try granting ${type} permission again if needed`,
-        duration: 3000,
-      });
-    } catch (error) {
-      console.error(`failed to handle ${type} permission:`, error);
-      toastId.update({
-        id: toastId.id,
-        title: "error",
-        description: `failed to handle ${type} permission`,
         variant: "destructive",
         duration: 3000,
       });
@@ -232,14 +129,15 @@ const HealthStatus = ({ className }: { className?: string }) => {
         )}
         onClick={handleOpenStatusDialog}
       >
-        <Activity className="mr-2 h-4 w-4" />
+        {/* <Activity className="mr-2 h-4 w-4" /> */}
+        <Power className="mr-2 h-4 w-4" />
         <span
           className={`ml-1 w-2 h-2 rounded-full ${statusColor} inline-block ${
             statusColor === "bg-red-500" ? "animate-pulse" : ""
           }`}
         />
       </Badge>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isOpen} onOpenChange={close}>
         <DialogContent
           className="max-w-4xl max-h-[90vh] flex flex-col p-8"
           aria-describedby="status-dialog-description"
@@ -279,24 +177,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                     {formatTimestamp(health?.last_frame_timestamp ?? null)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {permissions && (
-                    <span>
-                      {permissions.screenRecording ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <X className="h-4 w-4 text-red-500" />
-                      )}
-                    </span>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton("screen")}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    grant screen permission
-                  </Button>
+                <div className="flex-shrink-0">
+                  <PermissionButtons type="screen" />
                 </div>
               </div>
 
@@ -326,25 +208,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       : formatTimestamp(health?.last_audio_timestamp ?? null)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  {permissions && (
-                    <span>
-                      {permissions.microphone ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <X className="h-4 w-4 text-red-500" />
-                      )}
-                    </span>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="w-[260px] text-sm justify-start"
-                    onClick={() => handlePermissionButton("audio")}
-                    disabled={settings.disableAudio}
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    grant audio permission
-                  </Button>
+                <div className="flex-shrink-0">
+                  <PermissionButtons type="audio" />
                 </div>
               </div>
 
@@ -367,24 +232,8 @@ const HealthStatus = ({ className }: { className?: string }) => {
                       )}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {permissions && (
-                      <span>
-                        {permissions.accessibility ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <X className="h-4 w-4 text-red-500" />
-                        )}
-                      </span>
-                    )}
-                    <Button
-                      variant="outline"
-                      className="w-[260px] text-sm justify-start"
-                      onClick={() => handlePermissionButton("accessibility")}
-                    >
-                      <Lock className="h-4 w-4 mr-2" />
-                      grant accessibility permission
-                    </Button>
+                  <div className="flex-shrink-0">
+                    <PermissionButtons type="accessibility" />
                   </div>
                 </div>
               )}
@@ -392,24 +241,6 @@ const HealthStatus = ({ className }: { className?: string }) => {
 
             <Separator className="my-12" />
             <DevModeSettings localDataDir={localDataDir} />
-
-            {!isMac ? null : (
-              <Collapsible
-                open={isLogOpen}
-                onOpenChange={setIsLogOpen}
-                className="w-full mt-4"
-              >
-                <div className="flex items-center justify-between w-full">
-                  <CollapsibleTrigger className="flex items-center justify-between p-2 flex-grow border-b border-gray-200">
-                    recorder logs
-                    <span>{isLogOpen ? "▲" : "▼"}</span>
-                  </CollapsibleTrigger>
-                </div>
-                <CollapsibleContent>
-                  <LogViewer className="mt-2" />
-                </CollapsibleContent>
-              </Collapsible>
-            )}
           </div>
         </DialogContent>
       </Dialog>

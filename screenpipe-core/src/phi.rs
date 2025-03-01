@@ -66,6 +66,7 @@ mod llm_module {
         Ok((model, tokenizer))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_text_streaming<F>(
         model: &mut Phi3,
         tokenizer: &Tokenizer,
@@ -93,8 +94,7 @@ mod llm_module {
             None => anyhow::bail!("cannot find the endoftext token"),
         };
 
-        let mut pos = 0;
-        for _ in 0..max_tokens {
+        for pos in 0..max_tokens {
             let context_size = if pos > 0 { 1 } else { tokens.len() };
             let ctxt = &tokens[tokens.len().saturating_sub(context_size)..];
             let input = Tensor::new(ctxt, device)?.unsqueeze(0)?;
@@ -127,7 +127,6 @@ mod llm_module {
             if let Ok(t) = tokenizer.decode(&[next_token], false) {
                 callback(t)?;
             }
-            pos += 1;
         }
 
         Ok(())

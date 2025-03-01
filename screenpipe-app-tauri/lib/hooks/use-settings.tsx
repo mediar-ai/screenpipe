@@ -12,6 +12,9 @@ import {
 import { LazyStore, LazyStore as TauriStore } from "@tauri-apps/plugin-store";
 import { localDataDir } from "@tauri-apps/api/path";
 import { flattenObject, unflattenObject } from "../utils";
+import { useEffect } from "react";
+import posthog from "posthog-js";
+import localforage from "localforage";
 
 export type VadSensitivity = "low" | "medium" | "high";
 
@@ -41,10 +44,18 @@ export type User = {
   image?: string;
   token?: string;
   clerk_id?: string;
+  api_key?: string;
   credits?: {
     amount: number;
   };
-}
+  stripe_connected?: boolean;
+  stripe_account_status?: "active" | "pending";
+  github_username?: string;
+  bio?: string;
+  website?: string;
+  contact?: string;
+  cloud_subscribed?: boolean;
+};
 
 export type Settings = {
   openaiApiKey: string;
@@ -78,6 +89,7 @@ export type Settings = {
   languages: Language[];
   enableBeta: boolean;
   isFirstTimeUser: boolean;
+  autoStartEnabled: boolean
   enableFrameCache: boolean; // Add this line
   enableUiMonitoring: boolean; // Add this line
   platform: string; // Add this line
@@ -86,7 +98,13 @@ export type Settings = {
   showScreenpipeShortcut: string;
   startRecordingShortcut: string;
   stopRecordingShortcut: string;
+  startAudioShortcut: string;
+  stopAudioShortcut: string;
   pipeShortcuts: Record<string, string>;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
+  useAllMonitors: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -127,10 +145,11 @@ const DEFAULT_SETTINGS: Settings = {
   embeddedLLM: {
     enabled: false,
     model: "llama3.2:1b-instruct-q4_K_M",
-    port: 11438,
+    port: 11434,
   },
   enableBeta: false,
   isFirstTimeUser: true,
+  autoStartEnabled: true,
   enableFrameCache: true, // Add this line
   enableUiMonitoring: false, // Change from true to false
   platform: "unknown", // Add this line
@@ -139,7 +158,13 @@ const DEFAULT_SETTINGS: Settings = {
   showScreenpipeShortcut: "Super+Alt+S",
   startRecordingShortcut: "Super+Alt+R",
   stopRecordingShortcut: "Super+Alt+X",
+  startAudioShortcut: "",
+  stopAudioShortcut: "",
   pipeShortcuts: {},
+  enableRealtimeAudioTranscription: false,
+  realtimeAudioTranscriptionEngine: "whisper-large-v3-turbo",
+  disableVision: false,
+  useAllMonitors: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
@@ -154,6 +179,7 @@ const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [
   "Recorder",
   "Vaults",
   "OBS Studio",
+  "screenpipe",
 ];
 
 const DEFAULT_IGNORED_WINDOWS_PER_OS: Record<string, string[]> = {
@@ -212,18 +238,22 @@ export function createDefaultSettingsObject(): Settings {
 // Create a singleton store instance
 let storePromise: Promise<LazyStore> | null = null;
 
-/** 
+/**
  * @warning Do not change autoSave to true, it causes race conditions
  */
-const getStore = async () => {
+export const getStore = async () => {
   if (!storePromise) {
     storePromise = (async () => {
       const dir = await localDataDir();
       const profilesStore = new TauriStore(`${dir}/screenpipe/profiles.bin`, {
         autoSave: false,
       });
-      const activeProfile = await profilesStore.get("activeProfile") || "default";
-      const file = activeProfile === "default" ? `store.bin` : `store-${activeProfile}.bin`;
+      const activeProfile =
+        (await profilesStore.get("activeProfile")) || "default";
+      const file =
+        activeProfile === "default"
+          ? `store.bin`
+          : `store-${activeProfile}.bin`;
       console.log("activeProfile", activeProfile, file);
       return new TauriStore(`${dir}/screenpipe/${file}`, {
         autoSave: false,
@@ -248,11 +278,17 @@ const tauriStorage: PersistStorage = {
   setItem: async (_key: string, value: any) => {
     const tauriStore = await getStore();
 
+    delete value.settings.customSettings;
     const flattenedValue = flattenObject(value.settings);
 
     // Delete all existing keys first
-    const existingKeys = await tauriStore.keys();
-    for (const key of existingKeys) {
+    //const existingKeys = await tauriStore.keys();
+    //for (const key of existingKeys) {
+    //	await tauriStore.delete(key);
+    //}
+
+    // Only delete keys that are present in the new settings
+    for (const key of Object.keys(flattenedValue)) {
       await tauriStore.delete(key);
     }
 
@@ -301,8 +337,22 @@ export const store = createContextStore<StoreModel>(
 export function useSettings() {
   const settings = store.useStoreState((state) => state.settings);
   const setSettings = store.useStoreActions((actions) => actions.setSettings);
-  const resetSettings = store.useStoreActions((actions) => actions.resetSettings);
+  const resetSettings = store.useStoreActions(
+    (actions) => actions.resetSettings
+  );
   const resetSetting = store.useStoreActions((actions) => actions.resetSetting);
+
+  useEffect(() => {
+    if (settings.user?.id) {
+      posthog.identify(settings.user?.id, {
+        email: settings.user?.email,
+        name: settings.user?.name,
+        github_username: settings.user?.github_username,
+        website: settings.user?.website,
+        contact: settings.user?.contact,
+      });
+    }
+  }, [settings.user?.id]);
 
   const getDataDir = async () => {
     const homeDirPath = await homeDir();
@@ -324,10 +374,84 @@ export function useSettings() {
       : `${homeDirPath}\\.screenpipe`;
   };
 
+  const loadUser = async (token: string, forceReload = false) => {
+    try {
+      // try to get from cache first (unless force reload)
+      const cacheKey = `user_data_${token}`;
+      if (!forceReload) {
+        const cached = await localforage.getItem<{
+          data: User;
+          timestamp: number;
+        }>(cacheKey);
+
+        // use cache if less than 30s old
+        if (cached && Date.now() - cached.timestamp < 30000) {
+          setSettings({
+            user: cached.data,
+          });
+          return;
+        }
+      }
+
+      const response = await fetch(`https://screenpi.pe/api/user`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!response.ok) {
+        throw new Error("failed to verify token");
+      }
+
+      const data = await response.json();
+      const userData = {
+        ...data.user,
+      } as User;
+
+      // if user was not logged in, send posthog event app_login with email
+      if (!settings.user?.id) {
+        posthog.capture("app_login", {
+          email: userData.email,
+        });
+      }
+
+      // cache the result
+      await localforage.setItem(cacheKey, {
+        data: userData,
+        timestamp: Date.now(),
+      });
+
+      setSettings({
+        user: userData,
+      });
+    } catch (err) {
+      console.error("failed to load user:", err);
+      throw err;
+    }
+  };
+
+  const reloadStore = async () => {
+    const store = await getStore();
+    await store.reload();
+
+    const allKeys = await store.keys();
+    const values: Record<string, any> = {};
+
+    for (const k of allKeys) {
+      values[k] = await store.get(k);
+    }
+
+    setSettings(unflattenObject(values));
+  };
+
   return {
     settings,
     updateSettings: setSettings,
     resetSettings,
+    reloadStore,
+    loadUser,
     resetSetting,
     getDataDir,
   };

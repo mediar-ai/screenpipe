@@ -14,7 +14,7 @@ mod tests {
     };
     use screenpipe_audio::{parse_audio_device, record_and_transcribe};
     use screenpipe_core::Language;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::str::FromStr;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -172,7 +172,7 @@ mod tests {
     }
 
     // Helper function to get audio duration (you'll need to implement this)
-    fn get_audio_duration(path: &PathBuf) -> Result<Duration, Box<dyn std::error::Error>> {
+    fn get_audio_duration(path: &Path) -> Result<Duration, Box<dyn std::error::Error>> {
         let output = Command::new("ffprobe")
             .args([
                 "-v",
@@ -216,6 +216,7 @@ mod tests {
             &output_path_2.clone(),
             VadSensitivity::High,
             vec![],
+            None,
         )
         .await
         .unwrap();
@@ -329,7 +330,7 @@ mod tests {
         ));
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
-        let mut segments = prepare_segments(
+        let (mut segments, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,
@@ -425,7 +426,7 @@ mod tests {
         // Measure transcription time
         let start_time = Instant::now();
 
-        let mut segments = prepare_segments(
+        let (mut segments, _) = prepare_segments(
             &audio_input.data,
             vad_engine.clone(),
             &segmentation_model_path,

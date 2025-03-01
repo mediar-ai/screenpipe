@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/browser",
-  "version": "0.1.12",
+  "version": "0.1.35",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -24,8 +24,10 @@
     "@types/express": "^5.0.0",
     "@types/node-cron": "^3.0.11",
     "@types/uuid": "^10.0.0",
+    "eventsource": "^3.0.2",
     "express": "^4.21.1",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "posthog-js": "^1.205.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
@@ -35,8 +37,18 @@
   },
   "typesVersions": {
     "*": {
-      "node": ["./dist/node.d.ts"],
-      "browser": ["./dist/browser.d.ts"]
+      "node": [
+        "./dist/node.d.ts"
+      ],
+      "browser": [
+        "./dist/browser.d.ts"
+      ]
     }
-  }
+  },
+  "description": "screenpipe browser test sdk",
+  "directories": {
+    "test": "tests"
+  },
+  "author": "",
+  "license": "ISC"
 }

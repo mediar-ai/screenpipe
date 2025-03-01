@@ -2,8 +2,7 @@ use super::get_base_dir;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreBuilder;
-use tracing::{info};
-
+use tracing::debug;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProfilesConfig {
@@ -49,7 +48,7 @@ pub fn get_store(
         "default".to_string()
     };
 
-    info!("Using settings profile: {}", profile);
+    debug!("Using settings profile: {}", profile);
 
     // Determine store file path based on profile
     let store_path = if profile == "default" {
@@ -59,24 +58,7 @@ pub fn get_store(
     };
 
     // Build and return the store wrapped in Arc
-    Ok(StoreBuilder::new(app, store_path)
+    StoreBuilder::new(app, store_path)
         .build()
-        .map_err(|e| anyhow::anyhow!(e))?)
-}
-
-pub async fn get_profiles_config(app: &AppHandle) -> anyhow::Result<ProfilesConfig> {
-    let base_dir = get_base_dir(app, None)?;
-    let profiles_path = base_dir.join("profiles.bin");
-    let profiles_store = StoreBuilder::new(app, profiles_path).build()?;
-
-    Ok(ProfilesConfig {
-        active_profile: profiles_store
-            .get("activeProfile")
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_else(|| "default".to_string()),
-        profiles: profiles_store
-            .get("profiles")
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_else(|| vec!["default".to_string()]),
-    })
+        .map_err(|e| anyhow::anyhow!(e))
 }

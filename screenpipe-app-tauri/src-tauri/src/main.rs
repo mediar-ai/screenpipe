@@ -1,12 +1,12 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use analytics::AnalyticsManager;
 use commands::load_pipe_config;
 use commands::save_pipe_config;
 use commands::show_main_window;
-use llm_sidecar::EmbeddedLLMSettings;
+use serde_json::json;
 use serde_json::Value;
-use sidecar::SidecarManager;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -15,45 +15,49 @@ use std::sync::Arc;
 use tauri::Config;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
-    tray::{MouseButton, MouseButtonState},
-};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::ShortcutState;
-use tauri_plugin_notification::NotificationExt;
 #[allow(unused_imports)]
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_store::StoreBuilder;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 use updates::start_update_check;
-use uuid::Uuid;
 mod analytics;
 mod icons;
 use crate::analytics::start_analytics;
-use crate::llm_sidecar::LLMSidecar;
 
 mod commands;
-mod llm_sidecar;
+mod disk_usage;
 mod permissions;
 mod server;
 mod sidecar;
 mod store;
 mod tray;
 mod updates;
+mod window_api;
+
+pub use server::*;
+
+pub use sidecar::*;
+
+pub use icons::*;
+pub use store::*;
+
+mod config;
+pub use config::get_base_dir;
+
 pub use commands::reset_all_pipes;
 pub use commands::set_tray_health_icon;
 pub use commands::set_tray_unhealth_icon;
 pub use server::spawn_server;
-pub use sidecar::kill_all_sreenpipes;
 pub use sidecar::spawn_screenpipe;
+pub use sidecar::stop_screenpipe;
 pub use store::get_profiles_store;
 pub use store::get_store;
 
@@ -61,14 +65,13 @@ use crate::commands::hide_main_window;
 pub use permissions::do_permissions_check;
 pub use permissions::open_permission_settings;
 pub use permissions::request_permission;
-
 use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
+use tauri_plugin_sentry::sentry;
 mod health;
 use health::start_health_check;
-pub struct SidecarState(Arc<tokio::sync::Mutex<Option<SidecarManager>>>);
 
 // New struct to hold shortcut configuration
 #[derive(Debug, Default)]
@@ -76,6 +79,8 @@ struct ShortcutConfig {
     show: String,
     start: String,
     stop: String,
+    start_audio: String,
+    stop_audio: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
     disabled: Vec<String>,
@@ -96,7 +101,7 @@ impl ShortcutConfig {
                     .into_iter()
                     .filter_map(|profile| {
                         profiles_store
-                            .get(&format!("shortcuts.{}", profile))
+                            .get(format!("shortcuts.{}", profile))
                             .and_then(|v| v.as_str().map(String::from))
                             .map(|shortcut| (profile, shortcut))
                     })
@@ -138,6 +143,14 @@ impl ShortcutConfig {
                 .get("stopRecordingShortcut")
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_else(|| "Alt+Shift+S".to_string()),
+            start_audio: store
+                .get("startAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
+            stop_audio: store
+                .get("stopAudioShortcut")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
             profile_shortcuts,
             pipe_shortcuts,
             disabled: store
@@ -171,18 +184,21 @@ async fn register_shortcut(
         .on_shortcut(shortcut, move |app, _shortcut, event| {
             // Only trigger on key press, not release
             if matches!(event.state, ShortcutState::Pressed) {
-                handler(&app);
+                handler(app);
             }
         })
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn update_global_shortcuts(
     app: AppHandle,
     show_shortcut: String,
     start_shortcut: String,
     stop_shortcut: String,
+    start_audio_shortcut: String,
+    stop_audio_shortcut: String,
     profile_shortcuts: HashMap<String, String>,
     pipe_shortcuts: HashMap<String, String>,
 ) -> Result<(), String> {
@@ -190,6 +206,8 @@ async fn update_global_shortcuts(
         show: show_shortcut,
         start: start_shortcut,
         stop: stop_shortcut,
+        start_audio: start_audio_shortcut,
+        stop_audio: stop_audio_shortcut,
         profile_shortcuts,
         pipe_shortcuts,
         disabled: ShortcutConfig::from_store(&app).await?.disabled,
@@ -262,6 +280,36 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
         }
     }
 
+    // Register start audio shortcut
+    register_shortcut(
+        app,
+        &config.start_audio,
+        config.is_disabled("start_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", false);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-start-audio", ());
+            info!("start audio shortcut triggered");
+        },
+    )
+    .await?;
+
+    // Register stop audio shortcut
+    register_shortcut(
+        app,
+        &config.stop_audio,
+        config.is_disabled("stop_audio"),
+        |app| {
+            let store = get_store(app, None).unwrap();
+            store.set("disableAudio", true);
+            store.save().unwrap();
+            let _ = app.emit("shortcut-stop-audio", ());
+            info!("stop audio shortcut triggered");
+        },
+    )
+    .await?;
+
     info!("pipe_shortcuts: {:?}", config.pipe_shortcuts);
 
     // Register pipe shortcuts
@@ -290,6 +338,11 @@ async fn apply_shortcuts(app: &AppHandle, config: &ShortcutConfig) -> Result<(),
     Ok(())
 }
 
+#[tauri::command]
+fn get_env(name: &str) -> String {
+    std::env::var(String::from(name)).unwrap_or(String::from(""))
+}
+
 async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
     // Fetch pipe config from API
     let client = reqwest::Client::new();
@@ -307,46 +360,68 @@ async fn get_pipe_port(pipe_id: &str) -> anyhow::Result<u16> {
         .ok_or_else(|| anyhow::anyhow!("no port found for pipe {}", pipe_id))
 }
 
-fn get_base_dir(app: &tauri::AppHandle, custom_path: Option<String>) -> anyhow::Result<PathBuf> {
-    let default_path = app.path().local_data_dir().unwrap().join("screenpipe");
-
-    let local_data_dir = custom_path.map(PathBuf::from).unwrap_or(default_path);
-
-    fs::create_dir_all(&local_data_dir.join("data"))?;
-    Ok(local_data_dir)
+#[derive(Debug, serde::Serialize)]
+pub struct LogFile {
+    name: String,
+    path: String,
+    modified_at: u64,
 }
 
-fn send_recording_notification(
-    app_handle: &tauri::AppHandle,
-    success: bool,
-    action: &str,
-    error_msg: Option<&str>,
-) {
-    let (title, body, event) = if success {
-        (
-            "Screenpipe",
-            format!("Recording {}", action),
-            format!("recording_{}", action),
-        )
-    } else {
-        (
-            "Screenpipe",
-            format!("Failed to {} recording", action),
-            "recording_failed".to_string(),
-        )
-    };
+#[tauri::command]
+async fn get_log_files(app: AppHandle) -> Result<Vec<LogFile>, String> {
+    let data_dir = get_data_dir(&app).map_err(|e| e.to_string())?;
+    let mut log_files = Vec::new();
 
-    if let Some(err) = error_msg {
-        error!("Recording operation failed: {}", err);
+    // Collect all entries first
+    let mut entries = Vec::new();
+    let mut dir = tokio::fs::read_dir(&data_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    while let Some(entry) = dir.next_entry().await.map_err(|e| e.to_string())? {
+        // Get metadata immediately for each entry
+        if let Ok(metadata) = entry.metadata().await {
+            entries.push((entry, metadata));
+        }
     }
 
-    let _ = app_handle
-        .notification()
-        .builder()
-        .title(title)
-        .body(&body)
-        .show();
-    let _ = app_handle.emit(&event, body);
+    // Sort by modified time descending (newest first)
+    entries.sort_by_key(|(_, metadata)| {
+        std::cmp::Reverse(
+            metadata
+                .modified()
+                .ok()
+                .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+        )
+    });
+
+    // Process sorted entries
+    for (entry, metadata) in entries {
+        let path = entry.path();
+        if let Some(extension) = path.extension() {
+            if extension == "log" {
+                let modified = metadata
+                    .modified()
+                    .map_err(|e| e.to_string())?
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_secs();
+
+                log_files.push(LogFile {
+                    name: path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    modified_at: modified,
+                });
+            }
+        }
+    }
+
+    Ok(log_files)
 }
 
 fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
@@ -361,11 +436,71 @@ fn get_data_dir(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
         .and_then(|v| v.as_str().map(String::from))
         .unwrap_or(String::from("default"));
 
-    if data_dir == "default" {
+    if data_dir == "default" || data_dir.is_empty() {
         Ok(default_path)
     } else {
         get_base_dir(app, Some(data_dir))
     }
+}
+
+use tokio::time::{sleep, Duration};
+
+#[tauri::command]
+async fn upload_file_to_s3(file_path: &str, signed_url: &str) -> Result<bool, String> {
+    debug!("Starting upload for file: {}", file_path);
+
+    // Read file contents - do this outside retry loop to avoid multiple reads
+    let file_contents = match tokio::fs::read(file_path).await {
+        Ok(contents) => {
+            debug!("Successfully read file of size: {} bytes", contents.len());
+            contents
+        }
+        Err(e) => {
+            error!("Failed to read file: {}", e);
+            return Err(e.to_string());
+        }
+    };
+
+    let client = reqwest::Client::new();
+    let max_retries = 3;
+    let mut attempt = 0;
+    let mut last_error = String::new();
+
+    while attempt < max_retries {
+        attempt += 1;
+        debug!("Upload attempt {} of {}", attempt, max_retries);
+
+        match client
+            .put(signed_url)
+            .body(file_contents.clone())
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    debug!("Successfully uploaded file on attempt {}", attempt);
+                    return Ok(true);
+                }
+                last_error = format!("Upload failed with status: {}", response.status());
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            }
+            Err(e) => {
+                last_error = format!("Request failed: {}", e);
+                error!("{} (attempt {}/{})", last_error, attempt, max_retries);
+            }
+        }
+
+        if attempt < max_retries {
+            let delay = Duration::from_secs(2u64.pow(attempt as u32 - 1)); // Exponential backoff
+            debug!("Waiting {}s before retry...", delay.as_secs());
+            sleep(delay).await;
+        }
+    }
+
+    Err(format!(
+        "Upload failed after {} attempts. Last error: {}",
+        max_retries, last_error
+    ))
 }
 
 // Helper function to parse shortcut string
@@ -460,6 +595,15 @@ fn parse_shortcut(shortcut_str: &str) -> Result<Shortcut, String> {
 async fn main() {
     let _ = fix_path_env::fix();
 
+    // Initialize Sentry early
+    let sentry_guard = sentry::init((
+        "https://8770b0b106954e199df089bf4ffa89cf@o4507617161314304.ingest.us.sentry.io/4508716587876352", // Replace with your actual Sentry DSN
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            ..Default::default()
+        },
+    ));
+
     // Set permanent OLLAMA_ORIGINS env var on Windows if not present
     #[cfg(target_os = "windows")]
     {
@@ -483,6 +627,7 @@ async fn main() {
     let sidecar_state = SidecarState(Arc::new(tokio::sync::Mutex::new(None)));
     #[allow(clippy::single_match)]
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_http::init())
         .on_window_event(|window, event| match event {
@@ -521,10 +666,11 @@ async fn main() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_sentry::init(&sentry_guard))
         .manage(sidecar_state)
         .invoke_handler(tauri::generate_handler![
             spawn_screenpipe,
-            kill_all_sreenpipes,
+            stop_screenpipe,
             permissions::open_permission_settings,
             permissions::request_permission,
             permissions::do_permissions_check,
@@ -533,19 +679,26 @@ async fn main() {
             reset_all_pipes,
             set_tray_unhealth_icon,
             set_tray_health_icon,
-            llm_sidecar::start_ollama_sidecar,
-            llm_sidecar::stop_ollama_sidecar,
             commands::update_show_screenpipe_shortcut,
-            commands::show_meetings,
-            commands::show_identify_speakers,
+            commands::get_disk_usage,
             commands::open_pipe_window,
+            get_log_files,
+            upload_file_to_s3,
             update_global_shortcuts,
+            get_env,
         ])
         .setup(|app| {
+            //deep link register_all
+            #[cfg(any(windows, target_os = "linux"))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                app.deep_link().register_all()?;
+            }
+
             // Logging setup
             let app_handle = app.handle();
             let base_dir =
-                get_base_dir(&app_handle, None).expect("Failed to ensure local data directory");
+                get_base_dir(app_handle, None).expect("Failed to ensure local data directory");
 
             // Set up rolling file appender
             let file_appender = RollingFileAppender::builder()
@@ -554,7 +707,7 @@ async fn main() {
                 .filename_suffix("log")
                 .max_log_files(5)
                 .build(
-                    &get_data_dir(&app.handle())
+                    get_data_dir(app.handle())
                         .unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe")),
                 )?;
 
@@ -588,17 +741,12 @@ async fn main() {
 
             // Autostart setup
             let autostart_manager = app.autolaunch();
-            let _ = autostart_manager.enable();
-            debug!(
-                "registered for autostart? {}",
-                autostart_manager.is_enabled().unwrap()
-            );
 
             info!("Local data directory: {}", base_dir.display());
 
             // PostHog analytics setup
             let posthog_api_key = "phc_Bt8GoTBPgkCpDrbaIZzJIEYt0CrJjhBiuLaBck1clce".to_string();
-            let interval_hours = 1;
+            let interval_hours = 6;
 
             let path = base_dir.join("store.bin");
             if !path.exists() {
@@ -609,156 +757,11 @@ async fn main() {
             let update_manager = start_update_check(app_handle, 5)?;
 
             // Tray setup
-            if let Some(main_tray) = app.tray_by_id("screenpipe_main") {
-                let show = MenuItemBuilder::with_id("show", "show screenpipe").build(app)?;
-
-                let start_recording =
-                    MenuItemBuilder::with_id("start_recording", "start recording").build(app)?;
-                let stop_recording =
-                    MenuItemBuilder::with_id("stop_recording", "stop recording").build(app)?;
-
-                let version = MenuItemBuilder::with_id(
-                    "version",
-                    format!("version {}", app.package_info().version),
-                )
-                .enabled(false)
-                .build(app)?;
-
-                let menu_divider = PredefinedMenuItem::separator(app)?;
-                let quit = MenuItemBuilder::with_id("quit", "quit screenpipe").build(app)?;
-                let menu = MenuBuilder::new(app)
-                    .items(&[
-                        &version,
-                        &show,
-                        &start_recording,
-                        &stop_recording,
-                        update_manager.update_now_menu_item_ref(),
-                        &menu_divider,
-                        &quit,
-                    ])
-                    .build()?;
-                let _ = main_tray.set_menu(Some(menu));
-
+            if let Some(_) = app.tray_by_id("screenpipe_main") {
                 let update_item = update_manager.update_now_menu_item_ref().clone();
-                tray::setup_tray_menu_updater(app.handle().clone(), &update_item);
-
-                main_tray.on_menu_event(move |app_handle, event| match event.id().as_ref() {
-                    "show" => {
-                        show_main_window(app_handle, false);
-                    }
-                    "quit" => {
-                        debug!("Quit requested");
-                        // First try to stop any running recordings
-                        let state = app_handle.state::<SidecarState>();
-                        tauri::async_runtime::block_on(async {
-                            if let Err(e) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                error!("Error stopping recordings during quit: {}", e);
-                            }
-                        });
-                        // Then exit
-                        app_handle.exit(0);
-                    }
-                    "start_recording" => {
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let state = app_handle.state::<SidecarState>();
-                            if let Err(err) = spawn_screenpipe(state, app_handle.clone()).await {
-                                send_recording_notification(
-                                    &app_handle,
-                                    false,
-                                    "start",
-                                    Some(&err.to_string()),
-                                );
-                            } else {
-                                send_recording_notification(&app_handle, true, "started", None);
-                            }
-                        });
-                    }
-                    "stop_recording" => {
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let state = app_handle.state::<SidecarState>();
-                            if let Err(err) = kill_all_sreenpipes(state, app_handle.clone()).await {
-                                error!("Failed to stop recording: {}", err);
-                                let _ = app_handle
-                                    .notification()
-                                    .builder()
-                                    .title("Screenpipe")
-                                    .body("Failed to stop recording")
-                                    .show();
-                                let _ =
-                                    app_handle.emit("recording_failed", "Failed to stop recording");
-                            } else {
-                                let _ = app_handle
-                                    .notification()
-                                    .builder()
-                                    .title("Screenpipe")
-                                    .body("Recording stopped")
-                                    .show();
-                                let _ = app_handle.emit("recording_stopped", "Recording stopped");
-                            }
-                        });
-                    }
-                    "update_now" => {
-                        use tauri_plugin_notification::NotificationExt;
-                        app_handle
-                            .notification()
-                            .builder()
-                            .title("screenpipe")
-                            .body("installing latest version")
-                            .show()
-                            .unwrap();
-
-                        tokio::task::block_in_place(move || {
-                            Handle::current().block_on(async move {
-                                if let Err(err) = sidecar::kill_all_sreenpipes(
-                                    app_handle.state::<SidecarState>(),
-                                    app_handle.clone(),
-                                )
-                                .await
-                                {
-                                    error!("Failed to kill sidecar: {}", err);
-                                }
-                            });
-                        });
-                        update_manager.update_screenpipe();
-                    }
-                    id if id.starts_with("pipe_") => {
-                        let pipe_id = id.replace("pipe_", "");
-                        let app_handle = app_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            match get_pipe_port(&pipe_id).await {
-                                Ok(port) => {
-                                    if let Err(e) =
-                                        commands::open_pipe_window(app_handle, port, pipe_id).await
-                                    {
-                                        error!("Failed to open pipe window: {}", e);
-                                    }
-                                }
-                                Err(e) => error!("Failed to get pipe port: {}", e),
-                            }
-                        });
-                    }
-                    _ => (),
-                });
-                main_tray.on_tray_icon_event(move |tray, event| match event {
-                    tauri::tray::TrayIconEvent::Click {
-                        button,
-                        button_state,
-                        ..
-                    } => {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                            let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            } else {
-                                show_main_window(&app, true);
-                            }
-                        }
-                    }
-                    _ => {}
-                });
+                if let Err(e) = tray::setup_tray(&app.handle(), &update_item) {
+                    error!("Failed to setup tray: {}", e);
+                }
             }
 
             // Store setup and analytics initialization
@@ -766,7 +769,8 @@ async fn main() {
                 .build()
                 .unwrap();
 
-            if store.keys().len() == 0 {
+            // TODO: proper lookup of keys rather than assuming they exist
+            if store.is_empty() {
                 store.set("analyticsEnabled".to_string(), Value::Bool(true));
                 store.set(
                     "config".to_string(),
@@ -787,25 +791,42 @@ async fn main() {
                 .as_bool()
                 .unwrap_or(true);
 
+            let is_autostart_enabled = store
+                .get("autoStartEnabled")
+                .unwrap_or(Value::Bool(true))
+                .as_bool()
+                .unwrap_or(true);
+
+            if is_autostart_enabled {
+                let _ = autostart_manager.enable();
+            } else {
+                let _ = autostart_manager.disable();
+            }
+
+            debug!(
+                "registered for autostart? {}",
+                autostart_manager.is_enabled().unwrap()
+            );
+
             let unique_id = store
-                .get("userId")
+                .get("user.id")
                 .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| {
-                    let new_id = Uuid::new_v4().to_string();
-                    store.set(
-                        "userId".to_string(),
-                        serde_json::Value::String(new_id.clone()),
-                    );
-                    store.save().unwrap();
-                    new_id
-                });
+                .unwrap_or_default();
+
+            let email = store
+                .get("user.email")
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default();
 
             if is_analytics_enabled {
                 match start_analytics(
                     unique_id,
+                    email,
                     posthog_api_key,
                     interval_hours,
                     "http://localhost:3030".to_string(),
+                    base_dir.clone(),
+                    is_analytics_enabled,
                 ) {
                     Ok(analytics_manager) => {
                         app.manage(analytics_manager);
@@ -823,12 +844,6 @@ async fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
 
-            // if first time user do t start sidecar yet
-            let mut is_first_time_user = store
-                .get("isFirstTimeUser")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-
             // double-check if they have any files in the data dir
             let data_dir = app
                 .path()
@@ -842,35 +857,22 @@ async fn main() {
 
             info!("has_files: {}", has_files);
 
-            if has_files {
-                is_first_time_user = false;
-                // Update the store with the new value
-                store.set("isFirstTimeUser".to_string(), Value::Bool(false));
-                store.save().unwrap();
-            }
-
             let sidecar_manager = Arc::new(Mutex::new(SidecarManager::new()));
             let sidecar_manager_clone = sidecar_manager.clone();
             app.manage(sidecar_manager.clone());
 
             let app_handle = app.handle().clone();
 
-            info!(
-                "will start sidecar: {}",
-                !use_dev_mode && !is_first_time_user
-            );
+            info!("use_dev_mode: {}", use_dev_mode);
 
-            if !use_dev_mode && !is_first_time_user {
+            info!("will start sidecar: {}", !use_dev_mode && has_files);
+
+            // if non dev mode and previously started sidecar, start sidecar
+            if !use_dev_mode && has_files {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
                     if let Err(e) = manager.spawn(&app_handle).await {
                         error!("Failed to spawn initial sidecar: {}", e);
-                    }
-
-                    // Spawn a background task to check and restart periodically
-                    let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.check_and_restart(&app_handle).await {
-                        error!("Failed to restart sidecar: {}", e);
                     }
                 });
             } else {
@@ -883,47 +885,21 @@ async fn main() {
 
             // Start health check service
             // macos only
-            #[cfg(target_os = "macos")]
-            {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = start_health_check(app_handle).await {
-                        error!("Failed to start health check service: {}", e);
-                    }
-                });
-            }
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = start_health_check(app_handle).await {
+                    error!("Failed to start health check service: {}", e);
+                }
+            });
 
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Regular);
 
-            // LLM Sidecar setup
-            let embedded_llm: EmbeddedLLMSettings = store
-                .get("embeddedLLM")
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or_else(|| EmbeddedLLMSettings {
-                    enabled: false,
-                    model: "llama3.2:3b-instruct-q4_K_M".to_string(),
-                    port: 11438,
-                });
-
-            if embedded_llm.enabled {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    match LLMSidecar::new(embedded_llm).start(app_handle).await {
-                        Ok(result) => {
-                            info!("LLM Sidecar started successfully: {}", result);
-                        }
-                        Err(e) => {
-                            error!("Failed to start LLM Sidecar: {}", e);
-                        }
-                    }
-                });
-            }
             // Initialize global shortcuts
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = initialize_global_shortcuts(&app_handle).await {
-                    error!("Failed to initialize global shortcuts: {}", e);
+                    warn!("Failed to initialize global shortcuts: {}", e);
                 }
             });
             Ok(())
@@ -935,13 +911,42 @@ async fn main() {
     app.run(|app_handle, event| match event {
         tauri::RunEvent::Ready { .. } => {
             debug!("Ready event");
+            // Send app started event
+            let app_handle = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_started",
+                            Some(json!({
+                                "startup_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
         }
         tauri::RunEvent::ExitRequested { .. } => {
             debug!("ExitRequested event");
 
-            // Add this to shut down the server
+            // Send app closed event before shutdown
+            let app_handle_v2 = app_handle.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(analytics) = app_handle_v2.try_state::<Arc<AnalyticsManager>>() {
+                    let _ = analytics
+                        .send_event(
+                            "app_closed",
+                            Some(json!({
+                                "shutdown_type": "normal"
+                            })),
+                        )
+                        .await;
+                }
+            });
+
+            // Shutdown server
             if let Some(server_shutdown_tx) = app_handle.try_state::<mpsc::Sender<()>>() {
-                let _ = server_shutdown_tx.send(());
+                drop(server_shutdown_tx.send(()));
             }
         }
         tauri::RunEvent::WindowEvent {
@@ -961,7 +966,7 @@ async fn main() {
             ..
         } => {
             if !has_visible_windows {
-                show_main_window(&app_handle, false);
+                show_main_window(app_handle, false);
             }
         }
         _ => {}

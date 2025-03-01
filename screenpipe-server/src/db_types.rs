@@ -4,7 +4,7 @@ use screenpipe_audio::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
-use std::fmt;
+use std::fmt::{self, Display};
 
 #[derive(OaSchema, Debug)]
 pub struct DatabaseError(pub String);
@@ -25,10 +25,19 @@ pub enum SearchResult {
 }
 
 #[derive(FromRow, Debug)]
+pub struct Frame {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub browser_url: String,
+    pub app_name: String,
+    pub window_name: String,
+}
+#[derive(FromRow, Debug)]
 pub struct OCRResultRaw {
     pub frame_id: i64,
     pub ocr_text: String,
     pub text_json: String,
+    pub frame_name: String,
     pub timestamp: DateTime<Utc>,
     pub file_path: String,
     pub offset_index: i64,
@@ -36,11 +45,14 @@ pub struct OCRResultRaw {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Option<String>,
+    pub browser_url: Option<String>,
+    pub focused: Option<bool>,
 }
 
 #[derive(OaSchema, Debug, Serialize, Deserialize)]
 pub struct OCRResult {
     pub frame_id: i64,
+    pub frame_name: String,
     pub ocr_text: String,
     pub text_json: String,
     pub timestamp: DateTime<Utc>,
@@ -50,6 +62,8 @@ pub struct OCRResult {
     pub ocr_engine: String,
     pub window_name: String,
     pub tags: Vec<String>,
+    pub browser_url: Option<String>,
+    pub focused: Option<bool>,
 }
 
 #[derive(OaSchema, Debug, Deserialize, PartialEq, Default, Clone)]
@@ -123,17 +137,20 @@ pub struct UiContent {
     #[sqlx(rename = "text_output")]
     pub text: String,
     pub timestamp: DateTime<Utc>,
-    #[sqlx(rename = "app")]
+    #[sqlx(rename = "app_name")]
     pub app_name: String,
-    #[sqlx(rename = "window")]
+    #[sqlx(rename = "window_name")]
     pub window_name: String,
     pub initial_traversal_at: Option<DateTime<Utc>>,
     pub file_path: String,
     pub offset_index: i64,
+    pub frame_name: Option<String>,
+    pub browser_url: Option<String>,
 }
 
 #[derive(OaSchema, Debug, Clone)]
 pub struct FrameData {
+    pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
     pub offset_index: i64,
     pub ocr_entries: Vec<OCREntry>,
@@ -171,11 +188,11 @@ pub enum ContentSource {
     Audio,
 }
 
-impl ToString for ContentSource {
-    fn to_string(&self) -> String {
+impl Display for ContentSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ContentSource::Screen => "screen".to_string(),
-            ContentSource::Audio => "audio".to_string(),
+            ContentSource::Screen => write!(f, "screen"),
+            ContentSource::Audio => write!(f, "audio"),
         }
     }
 }
@@ -194,4 +211,68 @@ pub struct AudioChunksResponse {
     pub end_time: Option<f64>,
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OcrTextBlock {
+    pub block_num: String,
+    pub conf: String,
+    pub page_num: String,
+    pub left: String,
+    pub height: String,
+    pub level: String,
+    pub text: String,
+    pub par_num: String,
+    pub top: String,
+    pub word_num: String,
+    pub width: String,
+    pub line_num: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct TextPosition {
+    pub text: String,
+    pub confidence: f32,
+    pub bounds: TextBounds,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct TextBounds {
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Serialize)]
+pub struct SearchMatch {
+    pub frame_id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub text_positions: Vec<TextPosition>,
+    pub app_name: String,
+    pub window_name: String,
+    pub confidence: f32,
+    // pub context: Option<String>,
+    pub text: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct FrameRow {
+    pub id: i64,
+    pub timestamp: DateTime<Utc>,
+    pub url: String,
+    pub app_name: String,
+    pub window_name: String,
+    pub ocr_text: String,
+    pub text_json: String,
+}
+
+#[derive(Deserialize, PartialEq, Default)]
+pub enum Order {
+    #[serde(rename = "ascending")]
+    Ascending,
+    #[serde(rename = "descending")]
+    #[default]
+    Descending,
 }

@@ -16,18 +16,47 @@ export type ContentType =
  * Parameters for querying Screenpipe.
  */
 export interface ScreenpipeQueryParams {
+  /** Optional search query text */
   q?: string;
+
+  /** Type of content to search for (default: "all") */
   contentType?: ContentType;
+
+  /** Maximum number of results to return (default: 10) */
   limit?: number;
+
+  /** Number of results to skip (for pagination) */
   offset?: number;
+
+  /** Filter results after this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   startTime?: string;
+
+  /** Filter results before this ISO timestamp (e.g. "2023-01-01T00:00:00Z") */
   endTime?: string;
+
+  /** Filter by application name (e.g. "chrome", "vscode") */
   appName?: string;
+
+  /** Filter by window title */
   windowName?: string;
+
+  /** Include base64-encoded screenshot frames in results */
   includeFrames?: boolean;
+
+  /** Filter by minimum text length */
   minLength?: number;
+
+  /** Filter by maximum text length */
   maxLength?: number;
+
+  /** Filter by specific speaker IDs */
   speakerIds?: number[];
+
+  /** Filter by frame name */
+  frameName?: string;
+
+  /** Filter by browser URL (for web content) */
+  browserUrl?: string;
 }
 
 /**
@@ -43,6 +72,9 @@ export interface OCRContent {
   windowName: string;
   tags: string[];
   frame?: string;
+  frameName?: string;
+  browserUrl?: string;
+  focused?: boolean;
 }
 
 /**
@@ -74,6 +106,8 @@ export interface UiContent {
   initialTraversalAt?: string;
   filePath: string;
   offsetIndex: number;
+  frameName?: string;
+  browserUrl?: string;
 }
 
 /**
@@ -206,8 +240,15 @@ export interface Settings {
   enableFrameCache: boolean;
   enableUiMonitoring: boolean;
   aiMaxContextChars: number;
+  analyticsEnabled: boolean;
   user: User;
   customSettings?: Record<string, any>;
+  monitorIds: string[];
+  audioDevices: string[];
+  audioTranscriptionEngine: string;
+  enableRealtimeAudioTranscription: boolean;
+  realtimeAudioTranscriptionEngine: string;
+  disableVision: boolean;
 }
 
 /**
@@ -223,4 +264,50 @@ export interface ParsedConfig<T = unknown> {
     value?: T;
     default?: T;
   }[];
+}
+
+export interface TranscriptionChunk {
+  transcription: string;
+  timestamp: string; // ISO string
+  device: string;
+  is_input: boolean;
+  is_final: boolean;
+  speaker?: string;
+}
+
+export interface TranscriptionStreamResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    text: string;
+    index: number;
+    finish_reason: string | null;
+  }>;
+  metadata?: {
+    timestamp: string;
+    device: string;
+    isInput: boolean;
+    speaker?: string;
+  };
+}
+
+export interface VisionEvent {
+  image?: string; // base64 encoded image
+  text: string;
+  timestamp: string;
+  app_name?: string;
+  window_name?: string;
+  browser_url?: string;
+}
+
+export interface VisionStreamResponse {
+  type: string;
+  data: VisionEvent;
+}
+
+export interface EventStreamResponse {
+  name: string;
+  data: VisionEvent | TranscriptionChunk | any;
 }

@@ -4,14 +4,10 @@ use once_cell::sync::Lazy;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
-use std::time::Duration;
-use tokio::time;
 
-#[cfg(target_os = "macos")]
-use xcap_macos::{Monitor, Window, XCapError};
+use xcap::{Window, XCapError};
 
-#[cfg(not(target_os = "macos"))]
-use xcap::{Monitor, Window, XCapError};
+use crate::monitor::SafeMonitor;
 
 #[derive(Debug)]
 enum CaptureError {
@@ -143,6 +139,7 @@ pub struct CapturedWindow {
     pub image: DynamicImage,
     pub app_name: String,
     pub window_name: String,
+    pub process_id: i32,
     pub is_focused: bool,
 }
 
@@ -193,123 +190,57 @@ impl WindowFilters {
 }
 
 pub async fn capture_all_visible_windows(
-    monitor: &Monitor,
+    monitor: &SafeMonitor,
     window_filters: &WindowFilters,
     capture_unfocused_windows: bool,
 ) -> Result<Vec<CapturedWindow>, Box<dyn Error>> {
     let mut all_captured_images = Vec::new();
 
-    let windows = retry_with_backoff(
-        || {
-            let windows = Window::all()?;
-            if windows.is_empty() {
-                Err(CaptureError::NoWindows)
-            } else {
-                Ok(windows)
+    // Get windows and immediately extract the data we need
+    let windows_data = Window::all()?
+        .into_iter()
+        .filter_map(|window| {
+            // Extract all necessary data from the window while in the main thread
+            let app_name = window.app_name().to_string();
+            let title = window.title().to_string();
+            let is_focused = window.is_focused();
+            let process_id = window.pid();
+            // Capture image immediately while we have access to the window
+            match window.capture_image() {
+                Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),
+                Err(_) => None,
             }
-        },
-        3,
-        Duration::from_millis(500),
-    )
-    .await?;
+        })
+        .collect::<Vec<_>>();
 
-    for window in &windows {
-        let is_valid = is_valid_window(window, monitor, window_filters, capture_unfocused_windows);
+    if windows_data.is_empty() {
+        return Err(Box::new(CaptureError::NoWindows));
+    }
 
-        if !is_valid {
-            continue;
-        }
+    // Process the captured data
+    for (app_name, window_name, is_focused, buffer, process_id) in windows_data {
+        // Convert to DynamicImage
+        let image = DynamicImage::ImageRgba8(
+            image::ImageBuffer::from_raw(buffer.width(), buffer.height(), buffer.into_raw())
+                .unwrap(),
+        );
 
-        let app_name = window.app_name();
-        let window_name = window.title();
+        // Apply filters
+        let is_valid = !SKIP_APPS.contains(app_name.as_str())
+            && !SKIP_TITLES.contains(window_name.as_str())
+            && (capture_unfocused_windows || (is_focused && monitor.id() == monitor.id()))
+            && window_filters.is_valid(&app_name, &window_name);
 
-        match window.capture_image() {
-            Ok(buffer) => {
-                let image = DynamicImage::ImageRgba8(
-                    image::ImageBuffer::from_raw(
-                        buffer.width() as u32,
-                        buffer.height() as u32,
-                        buffer.into_raw(),
-                    )
-                    .unwrap(),
-                );
-
-                all_captured_images.push(CapturedWindow {
-                    image,
-                    app_name: app_name.to_string(),
-                    window_name: window_name.to_string(),
-                    is_focused: is_valid,
-                });
-            }
-            Err(e) => error!(
-                "Failed to capture image for window {} on monitor {}: {}",
+        if is_valid {
+            all_captured_images.push(CapturedWindow {
+                image,
+                app_name,
                 window_name,
-                monitor.name(),
-                e
-            ),
+                process_id: process_id as i32,
+                is_focused,
+            });
         }
     }
 
     Ok(all_captured_images)
-}
-
-pub fn is_valid_window(
-    window: &Window,
-    monitor: &Monitor,
-    filters: &WindowFilters,
-    capture_unfocused_windows: bool,
-) -> bool {
-    if !capture_unfocused_windows {
-        // Early returns for simple checks
-        #[cfg(target_os = "macos")]
-        let is_focused = window.current_monitor().id() == monitor.id() && window.is_focused();
-
-        #[cfg(not(target_os = "macos"))]
-        let is_focused = window.current_monitor().id() == monitor.id() && !window.is_minimized();
-
-        if !is_focused {
-            return false;
-        }
-    }
-
-    // Fast O(1) lookups using HashSet
-    let app_name = window.app_name();
-    let title = window.title();
-
-    if SKIP_APPS.contains(app_name) || SKIP_TITLES.contains(title) {
-        return false;
-    }
-
-    filters.is_valid(app_name, title)
-}
-
-async fn retry_with_backoff<F, T, E>(
-    mut f: F,
-    max_retries: u32,
-    initial_delay: Duration,
-) -> Result<T, E>
-where
-    F: FnMut() -> Result<T, E>,
-    E: Error + 'static,
-{
-    let mut delay = initial_delay;
-    for attempt in 1..=max_retries {
-        // info!("Attempt {} to execute function", attempt);
-        match f() {
-            Ok(result) => {
-                // info!("Function executed successfully on attempt {}", attempt);
-                return Ok(result);
-            }
-            Err(e) => {
-                if attempt == max_retries {
-                    error!("All {} attempts failed. Last error: {}", max_retries, e);
-                    return Err(e);
-                }
-                // warn!("Attempt {} failed: {}. Retrying in {:?}", attempt, e, delay);
-                time::sleep(delay).await;
-                delay *= 2;
-            }
-        }
-    }
-    unreachable!()
 }

@@ -5,6 +5,11 @@
   "windows": [
     "*"
   ],
+  "remote": {
+    "urls": [
+      "http://localhost:*"
+    ]
+  },
   "permissions": [
     "core:event:allow-listen",
     "core:event:default",
@@ -16,6 +21,7 @@
     "core:menu:default",
     "core:tray:default",
     "shell:default",
+    "shell:allow-open",
     "store:default",
     "shell:allow-open",
     "fs:allow-watch",
@@ -37,6 +43,8 @@
     "global-shortcut:allow-unregister",
     "global-shortcut:allow-unregister-all",
     "global-shortcut:default",
+    "sentry:default",
+    "opener:allow-open-url",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -128,66 +136,7 @@
         {
           "name": "screenpipe",
           "cmd": "screenpipe",
-          "args": [
-            "pipe",
-            "purge",
-            "-y"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "screenpipe",
-          "cmd": "screenpipe",
-          "args": [
-            "setup"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "screenpipe",
-          "cmd": "screenpipe",
-          "args": [
-            "migrate"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "ollama",
-          "cmd": "ollama",
-          "args": [
-            "serve"
-          ],
-          "sidecar": true
-        }
-      ]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "ollama-run",
-          "cmd": "ollama",
-          "args": [
-            "run",
-            {
-              "validator": "\\S*"
-            }
-          ],
+          "args": true,
           "sidecar": true
         }
       ]
@@ -359,6 +308,20 @@
         }
       ]
     },
-    "deep-link:default"
+    "deep-link:default",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPLOCALDATA"
+        },
+        {
+          "path": "$APPLOCALDATA/**"
+        }
+      ]
+    },
+    "opener:default",
+    "opener:default"
   ]
 }

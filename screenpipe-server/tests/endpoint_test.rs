@@ -6,7 +6,7 @@ mod tests {
     use axum::Router;
     use chrono::DateTime;
     use chrono::{Duration, Utc};
-    use crossbeam::queue::SegQueue;
+    use lru::LruCache;
     use screenpipe_audio::{AudioDevice, DeviceType};
     use screenpipe_server::db_types::ContentType;
     use screenpipe_server::db_types::SearchResult;
@@ -17,10 +17,10 @@ mod tests {
     };
     use screenpipe_vision::OcrEngine; // Adjust this import based on your actual module structure
     use serde::Deserialize;
-    use std::collections::HashMap;
+    use std::num::NonZeroUsize;
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use tokio::sync::Mutex;
     use tower::ServiceExt; // for `oneshot` and `ready`
 
     // Before the test function, add:
@@ -33,9 +33,6 @@ mod tests {
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
-            vision_control: Arc::new(AtomicBool::new(false)),
-            audio_devices_control: Arc::new(SegQueue::new()),
-            devices_status: HashMap::new(),
             app_start_time: Utc::now(),
             screenpipe_dir: PathBuf::from(""),
             pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
@@ -45,8 +42,9 @@ mod tests {
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
             ui_monitoring_enabled: false,
-            realtime_transcription_sender: Arc::new(tokio::sync::broadcast::channel(1000).0),
-            realtime_transcription_enabled: false,
+            frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
+                NonZeroUsize::new(100).unwrap(),
+            )))),
         });
 
         let router = create_router();
@@ -174,32 +172,30 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
-        let frame_id2 = db.insert_frame("test_device", None).await.unwrap();
-        let _ = db
-            .insert_ocr_text(
-                frame_id1,
-                "This is a test OCR text", // 21 chars
-                "",
-                "TestApp",
-                "TestWindow",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
             .await
             .unwrap();
-        let _ = db
-            .insert_ocr_text(
-                frame_id2,
-                "Another OCR text for testing that should be longer than thirty characters", // >30 chars
-                "",
-                "TestApp2",
-                "TestWindow2",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
+        let frame_id2 = db
+            .insert_frame("test_device", None, None, None, None, true)
             .await
             .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "This is a test OCR text", // 21 chars
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
+        db.insert_ocr_text(
+            frame_id2,
+            "Another OCR text for testing that should be longer than thirty characters", // >30 chars
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
         let audio_chunk_id2 = db.insert_audio_chunk("test_audio2.wav").await.unwrap();
@@ -242,6 +238,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -252,6 +251,9 @@ mod tests {
             .count_search_results(
                 "OCR",
                 ContentType::OCR,
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -276,6 +278,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -289,6 +294,9 @@ mod tests {
                 None,
                 None,
                 Some("TestApp"),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -310,6 +318,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -325,6 +336,9 @@ mod tests {
                 None,
                 None,
                 Some(30),
+                None,
+                None,
+                None,
                 None,
                 None,
             )
@@ -344,6 +358,9 @@ mod tests {
                 None,
                 Some(25),
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -360,7 +377,10 @@ mod tests {
             .insert_video_chunk("test_video1.mp4", "test_device")
             .await
             .unwrap();
-        let frame_id1 = db.insert_frame("test_device", None).await.unwrap();
+        let frame_id1 = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
         let audio_chunk_id1 = db.insert_audio_chunk("test_audio1.wav").await.unwrap();
 
         let now = DateTime::parse_from_rfc3339("2024-09-21T10:49:23.240367Z")
@@ -377,18 +397,14 @@ mod tests {
             .unwrap();
 
         // insert ocr and audio data
-        let _ = db
-            .insert_ocr_text(
-                frame_id1,
-                "old ocr text",
-                "",
-                "testapp",
-                "testwindow",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            frame_id1,
+            "old ocr text",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         let audio_transcription_id1 = db
             .insert_audio_transcription(
@@ -424,6 +440,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -436,6 +455,9 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::minutes(1)),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -456,6 +478,9 @@ mod tests {
                 0,
                 None,
                 Some(now - Duration::minutes(10)),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -484,6 +509,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -506,6 +534,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -516,6 +547,9 @@ mod tests {
                 "audio",
                 ContentType::Audio,
                 Some(two_hours_ago - Duration::minutes(100)),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -543,14 +577,20 @@ mod tests {
             .insert_video_chunk("old_video.mp4", "test_device")
             .await
             .unwrap();
-        let old_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let old_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert recent data
         let _ = db
             .insert_video_chunk("recent_video.mp4", "test_device")
             .await
             .unwrap();
-        let recent_frame_id = db.insert_frame("test_device", None).await.unwrap();
+        let recent_frame_id = db
+            .insert_frame("test_device", None, None, None, None, true)
+            .await
+            .unwrap();
 
         // Insert OCR data with different timestamps
         sqlx::query("UPDATE frames SET timestamp = ? WHERE id = ?")
@@ -567,31 +607,23 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = db
-            .insert_ocr_text(
-                old_frame_id,
-                "old task: write documentation",
-                "",
-                "vscode",
-                "tasks.md",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            old_frame_id,
+            "old task: write documentation",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
-        let _ = db
-            .insert_ocr_text(
-                recent_frame_id,
-                "current task: fix bug #123",
-                "",
-                "vscode",
-                "tasks.md",
-                Arc::new(OcrEngine::Tesseract),
-                false,
-            )
-            .await
-            .unwrap();
+        db.insert_ocr_text(
+            recent_frame_id,
+            "current task: fix bug #123",
+            "",
+            Arc::new(OcrEngine::Tesseract),
+        )
+        .await
+        .unwrap();
 
         // Search with 30-second window
         let results = db
@@ -601,6 +633,9 @@ mod tests {
                 10,
                 0,
                 Some(now - Duration::seconds(30)),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -634,6 +669,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -645,6 +683,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore] // only local
     async fn test_recent_tasks_no_bleeding_production_db() {
         // Get home directory safely
         let home = std::env::var("HOME").expect("HOME environment variable not set");
@@ -676,6 +715,9 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -691,6 +733,9 @@ mod tests {
                 0,
                 Some(four_hours_ago - Duration::minutes(5)),
                 Some(four_hours_ago + Duration::minutes(5)),
+                None,
+                None,
+                None,
                 None,
                 None,
                 None,

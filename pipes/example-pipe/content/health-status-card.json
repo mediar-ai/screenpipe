@@ -1,0 +1,24 @@
+[
+  {
+    "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/health-status.tsx",
+    "endpoint_optional": "http://localhost:3030/health",
+    "llmModel": "claude-3.7-sonnet",
+    "llmUserPrompt": "Can we have another component to call screenpipe health endpoint and render raw json output? can we display the output more user friendly, with some animation (framer motion), etc., keep code short",
+    "llmContextUrl": "https://docs.screenpi.pe/docs/api-reference",
+    "title": "Health Status"
+  },
+  {
+    "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/last-ui-record.tsx",
+    "title": "Latest UI Record",
+    "llmModel": "claude-3.7-sonnet",
+    "llmUserPrompt": "Create a component that fetches and displays the latest UI_monitoring record from Screenpipe, showing details like app name, window name, timestamp, and text content",
+    "llmContextUrl": "https://docs.screenpi.pe/docs/api-reference"
+  },
+  {
+    "componentPath": "/pipes/example-pipe/components/ready-to-use-examples/last-ocr-image.tsx",
+    "title": "Latest OCR Image",
+    "llmModel": "claude-3.7-sonnet",
+    "llmUserPrompt": "Create a component that fetches and displays the latest OCR image from Screenpipe, showing the image along with any extracted text and metadata",
+    "llmContextUrl": "https://docs.screenpi.pe/docs/api-reference"
+  }
+]

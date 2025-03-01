@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a>
+   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | <a href="README-ja.md">日本語</a>
 </p>
 
 <!-- ScreenPipe 标题和副标题 -->
@@ -98,14 +98,10 @@ screenpipe
 ## 创建插件
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx --bun @screenpipe/dev@latest pipe create
 ```
 
 screenpipe有一个名为"pipe"的插件系统，允许你在Rust代码的沙盒环境中运行代码，[了解更多](https://docs.screenpi.pe/docs/plugins)
-
-## 其他示例
-
-[查看示例](https://docs.screenpi.pe/docs/examples)
 
 ## Star历史
 

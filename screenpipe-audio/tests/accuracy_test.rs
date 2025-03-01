@@ -106,7 +106,7 @@ async fn test_transcription_accuracy() {
                 audio_input.data.as_ref().to_vec()
             };
 
-            let mut segments = prepare_segments(
+            let (mut segments, _) = prepare_segments(
                 &audio_data,
                 vad_engine.clone(),
                 &segmentation_model_path,

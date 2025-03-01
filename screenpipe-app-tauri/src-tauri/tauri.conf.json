@@ -1,5 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "screenpipe",
+  "identifier": "screenpi.pe",
   "build": {
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build",
@@ -11,12 +13,7 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": [
-      "app",
-      "dmg",
-      "appimage",
-      "nsis"
-    ],
+    "targets": ["app", "dmg", "appimage", "nsis"],
     "externalBin": [],
     "icon": [
       "icons/32x32.png",
@@ -30,40 +27,8 @@
       "icons/screenpipe-logo-tray-failed.png",
       "icons/screenpipe-logo-tray-black.png"
     ],
-    "longDescription": "",
-    "resources": [
-      "assets/*"
-    ],
-    "shortDescription": "",
-    "fileAssociations": [
-      {
-        "description": "Video files",
-        "ext": [
-          "mp4",
-          "mkv",
-          "avi",
-          "mov",
-          "wmv",
-          "webm"
-        ]
-      },
-      {
-        "description": "Audio files",
-        "ext": [
-          "mp3",
-          "wav",
-          "aac",
-          "flac",
-          "oga",
-          "ogg",
-          "opic",
-          "opus"
-        ]
-      }
-    ]
+    "resources": ["assets/*"]
   },
-  "productName": "screenpipe",
-  "identifier": "screenpi.pe",
   "plugins": {
     "updater": {
       "active": true,
@@ -81,6 +46,30 @@
         {
           "host": "screenpi.pe",
           "pathPrefix": ["/auth"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/stripe-connect"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/purchase-successful"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/settings"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/changelog"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/onboarding"]
+        },
+        {
+          "host": "screenpi.pe",
+          "pathPrefix": ["/status"]
         }
       ]
     }
@@ -96,17 +85,13 @@
         "title": "screenpipe",
         "width": 1200,
         "height": 850,
-        "minWidth": 1200,
-        "minHeight": 850,
         "resizable": true
       }
     ],
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": [
-          "$APPDATA/**"
-        ]
+        "scope": ["$APPDATA/**"]
       },
       "csp": null
     },

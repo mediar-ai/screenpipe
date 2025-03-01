@@ -1,12 +1,11 @@
 use chrono::Utc;
 use crossbeam::queue::ArrayQueue;
 use image::ImageFormat::{self};
-use log::{debug, error};
-use log::{info, warn};
 use screenpipe_core::{find_ffmpeg_path, Language};
 use screenpipe_vision::{
     capture_screenshot_by_window::WindowFilters, continuous_capture, CaptureResult, OcrEngine,
 };
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -17,6 +16,7 @@ use tokio::io::BufReader;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
+use tracing::{debug, error, info, warn};
 
 pub(crate) const MAX_FPS: f64 = 30.0; // Adjust based on your needs
 const MAX_QUEUE_SIZE: usize = 10;
@@ -28,6 +28,7 @@ pub struct VideoCapture {
 }
 
 impl VideoCapture {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         output_path: &str,
         fps: f64,
@@ -61,7 +62,7 @@ impl VideoCapture {
             continuous_capture(
                 result_sender,
                 interval,
-                *ocr_engine,
+                (*ocr_engine).clone(),
                 monitor_id,
                 window_filters_clone,
                 languages.clone(),
@@ -384,8 +385,9 @@ pub async fn finish_ffmpeg_process(child: Child, stdin: Option<ChildStdin>) {
     match child.wait_with_output().await {
         Ok(output) => {
             debug!("FFmpeg process exited with status: {}", output.status);
-            if !output.status.success() {
-                error!("FFmpeg stderr: {}", String::from_utf8_lossy(&output.stderr));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if !output.status.success() && stderr != Cow::Borrowed("") {
+                error!("FFmpeg stderr: {}", stderr);
             }
         }
         Err(e) => error!("Failed to wait for FFmpeg process: {}", e),

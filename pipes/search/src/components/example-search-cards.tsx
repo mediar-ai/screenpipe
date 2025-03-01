@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 export interface ExampleSearch {
   title: string;
@@ -27,6 +28,7 @@ interface ExampleSearchCardsProps {
 export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
   const [exampleSearches, setExampleSearches] = useState<ExampleSearch[]>([]);
   const { health } = useHealthCheck();
+  const { settings } = useSettings();
 
   useEffect(() => {
     setExampleSearches([
@@ -68,7 +70,9 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
     }
   };
 
-  const isHealthError = health?.status === "error";
+  const isHealthError = !health || health?.status === "error";
+  const isAiDisabled =
+    !settings.user?.token && settings.aiProviderType === "screenpipe-cloud";
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -78,7 +82,7 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
             <TooltipTrigger asChild>
               <div
                 className={`relative group h-[150px] ${
-                  isHealthError ? "opacity-50 cursor-not-allowed" : ""
+                  (isHealthError || isAiDisabled) ? "opacity-50 cursor-not-allowed" : ""
                 }`}
               >
                 <div className="absolute inset-0 rounded-lg transition-all duration-300 ease-out group-hover:before:opacity-100 group-hover:before:scale-100 before:absolute before:inset-0 before:rounded-lg before:border-2 before:border-black dark:before:border-white before:opacity-0 before:scale-95 group-hover:before:opacity-100 group-hover:before:scale-100 before:transition-all before:duration-300 before:ease-out" />
@@ -115,12 +119,28 @@ export function ExampleSearchCards({ onSelect }: ExampleSearchCardsProps) {
                 </Card>
               </div>
             </TooltipTrigger>
-            {isHealthError && (
+            {(isHealthError || isAiDisabled) && (
               <TooltipContent>
-                <div className="flex items-center">
-                  <AlertCircle className="mr-2 h-4 w-4 text-red-500" />
-                  <p>screenpipe is not running. examples are disabled.</p>
-                </div>
+                <p>
+                  {(isAiDisabled && isHealthError) ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      you don't have access to screenpipe-cloud, <br /> and screenpipe backend is not running!
+                    </>
+                  ) : isHealthError ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      screenpipe is not running. examples are disabled!
+                    </>
+                  ) : isAiDisabled ? (
+                    <>
+                      <AlertCircle className="mr-1 h-4 w-4 text-red-500 inline" />
+                      you don't have access to screenpipe-cloud :( <br/> please consider login!
+                    </>
+                  ) : (
+                    ""
+                  )}
+                </p>
               </TooltipContent>
             )}
           </Tooltip>

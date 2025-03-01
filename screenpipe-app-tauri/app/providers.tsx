@@ -3,11 +3,9 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
-import { initOpenTelemetry } from "@/lib/opentelemetry";
-import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
-import { store as SettingsStore } from "@/lib/hooks/use-settings";
+import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";
 import { profilesStore as ProfilesStore } from "@/lib/hooks/use-profiles";
 
 export const Providers = forwardRef<
@@ -23,18 +21,15 @@ export const Providers = forwardRef<
         person_profiles: "identified_only",
         capture_pageview: false,
       });
-      initOpenTelemetry("82688", new Date().toISOString());
     }
   }, []);
 
   return (
     <SettingsStore.Provider>
       <ProfilesStore.Provider>
-        <OnboardingProvider>
-          <ChangelogDialogProvider>
-            <PostHogProvider client={posthog}>{children}</PostHogProvider>
-          </ChangelogDialogProvider>
-        </OnboardingProvider>
+        <ChangelogDialogProvider>
+          <PostHogProvider client={posthog}>{children}</PostHogProvider>
+        </ChangelogDialogProvider>
       </ProfilesStore.Provider>
     </SettingsStore.Provider>
   );

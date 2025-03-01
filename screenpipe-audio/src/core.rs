@@ -1,5 +1,5 @@
 use crate::audio_processing::audio_to_mono;
-use crate::realtime::{realtime_stt, RealtimeTranscriptionEvent};
+use crate::realtime::realtime_stt;
 use crate::AudioInput;
 use anyhow::{anyhow, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -25,11 +25,12 @@ lazy_static! {
     );
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum AudioTranscriptionEngine {
     Deepgram,
     WhisperTiny,
     WhisperDistilLargeV3,
+    #[default]
     WhisperLargeV3Turbo,
     WhisperLargeV3,
 }
@@ -46,13 +47,7 @@ impl fmt::Display for AudioTranscriptionEngine {
     }
 }
 
-impl Default for AudioTranscriptionEngine {
-    fn default() -> Self {
-        AudioTranscriptionEngine::WhisperLargeV3Turbo
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DeviceControl {
     pub is_running: bool,
     pub is_paused: bool,
@@ -206,18 +201,14 @@ pub async fn record_and_transcribe(
 
 pub async fn start_realtime_recording(
     audio_stream: Arc<AudioStream>,
-    realtime_transcription_engine: Arc<AudioTranscriptionEngine>,
     languages: Vec<Language>,
     is_running: Arc<AtomicBool>,
-    realtime_transcription_sender: Arc<tokio::sync::broadcast::Sender<RealtimeTranscriptionEvent>>,
     deepgram_api_key: Option<String>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
         match realtime_stt(
             audio_stream.clone(),
-            realtime_transcription_engine.clone(),
             languages.clone(),
-            realtime_transcription_sender.clone(),
             is_running.clone(),
             deepgram_api_key.clone(),
         )
@@ -404,7 +395,7 @@ pub fn default_output_device() -> Result<AudioDevice> {
         let device = host
             .default_output_device()
             .ok_or_else(|| anyhow!("No default output device found"))?;
-        return Ok(AudioDevice::new(device.name()?, DeviceType::Output));
+        Ok(AudioDevice::new(device.name()?, DeviceType::Output))
     }
 
     #[cfg(not(target_os = "macos"))]

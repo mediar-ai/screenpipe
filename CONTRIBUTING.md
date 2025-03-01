@@ -45,7 +45,6 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -117,7 +116,6 @@ before you begin:
    cargo build --release
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
 
@@ -150,9 +148,12 @@ before you begin:
    ```bash
    cd screenpipe-app-tauri
    bun install
-   bun scripts/pre_build.js
    bun tauri build
    ```
+
+### docker
+
+[check out the docker setup here](https://github.com/sabrehagen/desktop-environment/blob/730a3134362927f8965589f6322b4554e0a5e388/docker/Dockerfile#L403)
 
 ## how can i contribute?
 
@@ -182,12 +183,17 @@ this section guides you through submitting an enhancement suggestion for screen 
 
 ## styleguides
 
+### use cursor rules
+
+check [.cursorrules](.cursorrules) for more details, see any instructions we could add / remove? send a PR to update this file.
+
 ### git commit messages
 
 - use the present tense ("add feature" not "added feature")
 - use the imperative mood ("move cursor to..." not "moves cursor to...")
 - limit the first line to 72 characters or less
 - reference issues and pull requests liberally after the first line
+- we use git commit history to generate changelog with AI, so make sure to write relevant commit messages
 
 ### rust styleguide
 
@@ -200,6 +206,8 @@ we follow [this](https://doc.rust-lang.org/cargo/guide/project-layout.html) fold
 ### try to keep files small (under 600 lines of code)
 
 AI is quite bad when files are big, we should try to keep small so we move faster (also it's nice for humans too 🤓)
+
+**expand & distill**: iterate fast on long files, then split them up
 
 ### principles 
 
@@ -233,55 +241,6 @@ before submitting a pull request, run all the tests to ensure nothing has broken
 
 ```bash
 cargo test
-# on macos you need to set DYLD_LIBRARY_PATH for apple native OCR tests to run
-DYLD_LIBRARY_PATH=$(pwd)/screenpipe-vision/lib cargo test
-```
-
-you can add env var to `.vscode/settings.json`:
-
-```json
-{
-    "terminal.integrated.env.osx": {
-        "DYLD_LIBRARY_PATH": "$(pwd)/screenpipe-vision/lib"
-    }
-}
-```
-
-this is @louis030195 whole `.vscode/settings.json` file:
-
-```json
-{
-    "rust-analyzer.server.extraEnv": {
-        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
-        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
-        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
-        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
-    },
-    "rust-analyzer.cargo.extraEnv": {
-        "PKG_CONFIG_ALLOW_SYSTEM_LIBS": "1",
-        "PKG_CONFIG_ALLOW_SYSTEM_CFLAGS": "1",
-        "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig",
-        "PATH": "/usr/bin:/opt/homebrew/bin:${env:PATH}",
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}"
-    },
-    // add env to integrated terminal
-    "terminal.integrated.env.osx": {
-        "DYLD_LIBRARY_PATH": "${workspaceFolder}/screenpipe-vision/lib:${env:DYLD_LIBRARY_PATH}",
-        "SCREENPIPE_APP_DEV": "true",
-    },
-    "rust-analyzer.cargo.features": [
-        "pipes"
-    ],
-    "rust-analyzer.cargo.runBuildScripts": true,
-    "rust-analyzer.checkOnSave.command": "clippy",
-    "rust-analyzer.checkOnSave.extraArgs": [
-        "--features",
-        "pipes"
-    ],
-    "rust-analyzer.cargo.allFeatures": false,
-    "rust-analyzer.cargo.noDefaultFeatures": false
-}
 ```
 
 ## other hacks
@@ -313,6 +272,16 @@ ssh into the runner:
 run locally: https://github.com/nektos/act
 
 ### debugging memory errors
+
+using tokio-console:
+
+```bash
+# terminal 1
+RUST_LOG="tokio=debug,runtime=debug" RUSTFLAGS="--cfg tokio_unstable" cargo run --bin screenpipe --features debug-console
+# terminal 2
+cargo install tokio-console
+tokio-console
+```
 
 ```bash
 RUSTFLAGS="-Z sanitizer=address" cargo run --bin screenpipe
@@ -436,6 +405,6 @@ now you can either dev screenpipe on linux or run screenpipe in the cloud that r
 
 ## join the community
 
-say 👋 in our [public discord channel](https://discord.gg/du9ebuw7uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
+say 👋 in our [public discord channel](https://discord.gg/dU9EBuw7Uq). we discuss how to bring this lib to production, help each other with contributions, personal projects or just hang out ☕.
 
 thank you for contributing to screen pipe! 🎉

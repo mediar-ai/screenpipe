@@ -97,6 +97,19 @@ pub fn show_main_window(app_handle: &tauri::AppHandle<tauri::Wry>, overlay: bool
         if !overlay {
             let _ = window.set_focus();
         }
+
+        // event listener for the window close event
+        let window_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window_clone.is_fullscreen().unwrap_or(false) {
+                    let _ = window_clone.destroy().unwrap();
+                } else {
+                    let _ = window_clone.hide().unwrap();
+                    api.prevent_close();
+                }
+            }
+        });
     } else {
         let _ = tauri::WebviewWindowBuilder::new(
             app_handle,
@@ -115,61 +128,8 @@ pub fn hide_main_window(app_handle: &tauri::AppHandle<tauri::Wry>) {
     }
 }
 
-#[tauri::command]
-pub fn show_meetings(app_handle: tauri::AppHandle<tauri::Wry>) {
-    if let Some(window) = app_handle.get_webview_window("meetings") {
-        #[cfg(target_os = "macos")]
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-        // let _ = window.set_visible_on_all_workspaces(true);
-        // let _ = window.set_always_on_top(true);
-        let _ = window.set_decorations(true);
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            "meetings",
-            tauri::WebviewUrl::App("meetings.html".into()),
-        )
-        .title("meetings")
-        .decorations(true)
-        .transparent(true)
-        // .always_on_top(true)
-        // .visible_on_all_workspaces(true) // Added this
-        .center()
-        .build()
-        .unwrap();
-    }
-}
 
-#[tauri::command]
-pub fn show_identify_speakers(app_handle: tauri::AppHandle<tauri::Wry>) {
-    if let Some(window) = app_handle.get_webview_window("identify-speakers") {
-        #[cfg(target_os = "macos")]
-        let _ = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-        // let _ = window.set_visible_on_all_workspaces(true);
-        // let _ = window.set_always_on_top(true);
-        let _ = window.set_decorations(true);
-        let _ = window.show();
-        let _ = window.set_focus();
-    } else {
-        let _window = tauri::WebviewWindowBuilder::new(
-            &app_handle,
-            "identify-speakers",
-            tauri::WebviewUrl::App("identify-speakers.html".into()),
-        )
-        .title("identify-speakers")
-        .decorations(true)
-        .transparent(true)
-        // .always_on_top(true)
-        // .visible_on_all_workspaces(true) // Added this
-        .center()
-        .build()
-        .unwrap();
-    }
-}
 
 const DEFAULT_SHORTCUT: &str = "Super+Alt+S";
 
@@ -247,8 +207,6 @@ pub struct AuthStatus {
     message: Option<String>,
 }
 
-
-
 #[tauri::command]
 pub async fn open_pipe_window(
     app_handle: tauri::AppHandle<tauri::Wry>,
@@ -270,8 +228,9 @@ pub async fn open_pipe_window(
     )
     .title(title)
     .inner_size(1200.0, 850.0)
-    .always_on_top(true)
-    .visible_on_all_workspaces(true)
+    .min_inner_size(600.0, 400.0)
+    .focused(true)
+    .fullscreen(false)
     .build()
     {
         Ok(window) => window,
@@ -280,6 +239,28 @@ pub async fn open_pipe_window(
             return Err(format!("failed to create window: {}", e));
         }
     };
+
+    // flag to prevent infinite loop
+    let is_closing = std::sync::Arc::new(std::sync::Mutex::new(false));
+    let is_closing_clone = std::sync::Arc::clone(&is_closing);
+
+    // event listener for the window close event
+    let window_clone = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            let mut is_closing = is_closing_clone.lock().unwrap();
+            if *is_closing {
+                return;
+            }
+            *is_closing = true;
+            if window_clone.is_fullscreen().unwrap_or(false) {
+                let _ = window_clone.destroy().unwrap();
+            } else {
+                api.prevent_close();
+                let _ = window_clone.close().unwrap();
+            }
+        }
+    });
 
     // Only try to manipulate window if creation succeeded
     if let Err(e) = window.set_focus() {
@@ -290,9 +271,31 @@ pub async fn open_pipe_window(
     }
 
     #[cfg(target_os = "macos")]
-    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Accessory) {
+    if let Err(e) = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular) {
         error!("failed to set activation policy: {}", e);
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_disk_usage(
+    app_handle: tauri::AppHandle<tauri::Wry>,
+) -> Result<serde_json::Value, String> {
+    let screenpipe_dir_path =
+        get_data_dir(&app_handle).unwrap_or_else(|_| dirs::home_dir().unwrap().join(".screenpipe"));
+    match crate::disk_usage::disk_usage(&screenpipe_dir_path).await {
+        Ok(Some(disk_usage)) => match serde_json::to_value(&disk_usage) {
+            Ok(json_value) => Ok(json_value),
+            Err(e) => {
+                error!("Failed to serialize disk usage: {}", e);
+                Err(format!("Failed to serialize disk usage: {}", e))
+            }
+        },
+        Ok(None) => Err("No disk usage data found".to_string()),
+        Err(e) => {
+            error!("Failed to get disk usage: {}", e);
+            Err(format!("Failed to get disk usage: {}", e))
+        }
+    }
 }

@@ -1,0 +1,3 @@
+[toolchain]
+channel = "stable"
+versioned = "1.84.0"

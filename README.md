@@ -1,5 +1,6 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c3628864-a0cb-47a1-a822-2f936cff50b2" />
 <p align="center">
-   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a>
+   <a href="README.md">English</a> | <a href="README-zh_CN.md">简体中文</a> | <a href="README-ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -8,13 +9,16 @@
    </a>
 </p>
 
+<p align="center">
+   <a href="https://trendshift.io/repositories/11785" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11785" alt="mediar-ai%2Fscreenpipe | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+</p>
 
 
 <!-- ScreenPipe Title and Subtitle -->
 <p align="center" style="font-family: 'Press Start 2P', monospace;">
    <h1 align="center">[ screenpipe ]</h1>
-   <p align="center">build ai agents that have the full context</p>
-   <p align="center">open source | runs locally | developer friendly | 24/7 screen, mic, keyboard recording and control</p>
+   <p align="center">AI app store powered by 24/7 desktop history</p>
+   <p align="center">open source | 100% local | dev friendly | 24/7 screen, mic recording</p>
 </p>
 
 <!-- Slogan -->
@@ -50,11 +54,20 @@
 
 <p align="center">
    
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/87f12fb6-71c4-434f-9881-2901830d940b" />
-<img width="1312" alt="Screenshot 2024-12-16 at 2 39 32 PM" src="https://github.com/user-attachments/assets/0da6e948-4fa2-48ab-b18c-d8fbd1246261" />
 
-<img width="1142" alt="Screenshot 2024-12-16 at 12 39 18 PM" src="https://github.com/user-attachments/assets/5b6f7015-b522-4894-a0d7-d91d648895f5" />
-<img width="1312" alt="Screenshot 2024-12-11 at 1 39 09 PM" src="https://github.com/user-attachments/assets/08f1d8bd-803e-4cc5-8b8f-ad33bfebfd7e" />
+<img width="1312" alt="Screenshot 2025-02-15 at 7 51 18 PM" src="https://github.com/user-attachments/assets/5a9f29ce-69ae-463f-b338-186b8cdb2d12" />
+
+![image](https://github.com/user-attachments/assets/dec2e07c-b3d5-46dd-9f36-c0c26a82c9fb)
+
+
+
+https://github.com/user-attachments/assets/628c6c01-a580-4b21-bce9-3e7b186914a4
+
+
+
+
+https://github.com/user-attachments/assets/973ee8e5-5240-4d36-83fe-d38c53efe6a9
+
 
 
 
@@ -63,21 +76,21 @@
 ---
 
 *news* 🔥
-- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Loom pipe, LinkedIn agent ...)
+- [2025/01] we're partnering with Different AI to bring you [financial automations based on your screen](https://github.com/different-ai/hypr-v0) and [drop-in replacement for granola within obsidian](https://github.com/different-ai/file-organizer-2000)
+- [2024/12] pipe store stripe integration: devs build cool shit - few lines of JS and make passive income (available Reddit agent, LinkedIn agent, Timeline ...)
 - [2024/11] [screenpipe is number 1 github trending repo (again)](https://x.com/louis030195/status/1859628763425931479)
 - [2024/10] screenpipe has been backed by [Founders, Inc](https://f.inc/)
 - [2024/09] [screenpipe is number 1 github trending repo & on hackernews!](https://x.com/louis030195/status/1840859691754344483)
 - [2024/08] anyone can now [create, share, install pipes](https://docs.screenpi.pe/docs/plugins) (plugins) from the app interface based on a github repo/dir
 - [2024/08] we're running bounties! contribute to screenpipe & make money, [check issues](https://github.com/mediar-ai/screenpipe/issues)
 - [2024/08] we released Apple & Windows Native OCR.
-- [2024/07] 🎁 screenpipe won Friends (the AI necklace) hackathon at AGI House (integrations soon)
 - [2024/07] **we just launched the desktop app! [Download now!](https://screenpi.pe)**
 
 ---
 
 # how it works?
 
-- we record everything 24/7, 100% locally
+- we record everything 24/7, 100% locally, uses 10% CPU, 4 GB ram, 15 gb/m
 - we index it into an api
 - dev build ai apps w user's full context, desktop native, nextjs, publish, monetize
 
@@ -89,21 +102,23 @@
 
 # why?
 
-1. data is the biggest bottleneck in AI right now
-2. every second you are not recording is a missing context for AGI
+- ai models are commoditized 
+- ai is as good as its context
+- the most valuable context is all contained in your screen
+
 
 ## get started
 
 macos, linux:
 
 ```bash
-curl -fsSL raw.githubusercontent.com/mediar-ai/screenpipe/main/install.sh | sh
+curl -fsSL get.screenpi.pe/cli | sh
 ```
 
 or on windows
 
 ```bash
-irm https://raw.githubusercontent.com/mediar-ai/screenpipe/main/install.ps1 | iex
+iwr get.screenpi.pe/cli.ps1 | iex
 ```
 
 then
@@ -120,14 +135,24 @@ make sure to allow permissions on macos (screen, mic)
 ## create plugins
 
 ```bash
-bunx @screenpipe/create-pipe@latest
+bunx --bun @screenpipe/dev@latest pipe create
 ```
 
 screenpipe has a plugin system called "pipe" which lets you create desktop app in nextjs in a sandboxed environment within our Rust code, [read more](https://docs.screenpi.pe/docs/plugins)
 
-## other examples
+you can then publish these to our store and make money:
 
-[check examples](https://docs.screenpi.pe/docs/examples)
+```bash
+cd foo
+bunx --bun @screenpipe/dev@latest pipe register --name foo [--paid --price 50] # subscription
+bun run build
+bunx --bun @screenpipe/dev@latest pipe publish --name foo
+```
+
+## community 
+
+- [template to build screenpipe-powered desktop native app using Tauri](https://github.com/LorenzoBloedow/screenpipe-tauri-template-dev)
+- [template to build screenpipe-powered desktop native app using Electron](https://github.com/neo773/screenpipe-electron)
 
 ## star history
 

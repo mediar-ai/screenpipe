@@ -21,8 +21,9 @@ import {
   Folder,
   Book,
   User,
-  Fingerprint,
   Settings2,
+  Upload,
+  Mail,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -35,11 +36,9 @@ import { useOnboarding } from "@/lib/hooks/use-onboarding";
 import { listen } from "@tauri-apps/api/event";
 import localforage from "localforage";
 import { useChangelogDialog } from "@/lib/hooks/use-changelog-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { useSettingsDialog } from "@/lib/hooks/use-settings-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { ShareLogsButton } from "./share-logs-button";
 
 export default function Header() {
   const [showInbox, setShowInbox] = useState(false);
@@ -47,9 +46,8 @@ export default function Header() {
 
   useEffect(() => {
     const loadMessages = async () => {
-      const savedMessages = await localforage.getItem<Message[]>(
-        "inboxMessages"
-      );
+      const savedMessages =
+        await localforage.getItem<Message[]>("inboxMessages");
       if (savedMessages) {
         setMessages(savedMessages);
       }
@@ -108,6 +106,8 @@ export default function Header() {
 
   const { setShowOnboarding } = useOnboarding();
   const { setShowChangelogDialog } = useChangelogDialog();
+  const { setIsOpen: setSettingsOpen } = useSettingsDialog();
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   return (
     <div>
@@ -117,7 +117,19 @@ export default function Header() {
         </div>
       </div>
       <div className="flex space-x-4 absolute top-4 right-4">
+        <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline">
+              <Mail className="h-3.5 w-3.5 mr-2" />
+              feedback
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-100 rounded-2xl" >
+            <ShareLogsButton showShareLink={false} onComplete={() => setIsFeedbackOpen(false)} />
+          </PopoverContent>
+        </Popover>
         <HealthStatus className="mt-3 cursor-pointer" />
+        <Settings />
 
         <Button
           variant="ghost"
@@ -143,24 +155,16 @@ export default function Header() {
             <DropdownMenuLabel>account</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <Dialog modal={true}>
-                <DialogTrigger asChild>
-                  <DropdownMenuItem
-                    onSelect={(e) => e.preventDefault()}
-                    className="cursor-pointer  p-1.5"
-                  >
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    <span>settings</span>
-                  </DropdownMenuItem>
-                </DialogTrigger>
-
-                <DialogContent
-                  className="max-w-[80vw] w-full max-h-[80vh] h-full overflow-hidden p-0 [&>button]:hidden"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Settings />
-                </DialogContent>
-              </Dialog>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setSettingsOpen(true);
+                }}
+                className="cursor-pointer p-1.5"
+              >
+                <Settings2 className="mr-2 h-4 w-4" />
+                <span>settings</span>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -170,17 +174,6 @@ export default function Header() {
               >
                 <Book className="mr-2 h-4 w-4" />
                 <span>check docs</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer"
-                onClick={() =>
-                  open(
-                    "mailto:louis@screenpi.pe?subject=Screenpipe%20Feedback&body=Please%20enter%20your%20feedback%20here...%0A%0A...%20or%20let's%20chat?%0Ahttps://cal.com/louis030195/screenpipe"
-                  )
-                }
-              >
-                <MessageSquare className="mr-2 h-4 w-4" />
-                <span>send feedback</span>
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"

@@ -1,0 +1,382 @@
+import MotionDiv from '../../components/motion-div'
+
+# cli reference for screenpipe
+
+<MotionDiv>
+
+below is the detailed cli reference for screenpipe's core functionality.
+
+</MotionDiv>
+
+<MotionDiv delay={0.3}>
+
+### core options
+
+- **fps** (`-f, --fps <FLOAT>`): frames per second for continuous recording
+  - default: `1.0` (non-macos), `0.5` (macos)
+  - storage impact: `1 FPS ≈ 30 GB/month`, `5 FPS ≈ 150 GB/month`
+
+- **port** (`-p, --port <INT>`): port to run the server on
+  - default: `3030`
+
+- **data-dir** (`--data-dir <PATH>`): data directory
+  - default: `$HOME/.screenpipe`
+
+- **debug** (`--debug`): enable debug logging
+  - default: `false`
+
+</MotionDiv>
+
+<MotionDiv delay={0.5}>
+
+### audio options
+
+- **audio-chunk-duration** (`-d, --audio-chunk-duration <INT>`): audio chunk duration in seconds
+  - default: `30`
+
+- **disable-audio** (`--disable-audio`): disable audio recording
+  - default: `false`
+
+- **audio-device** (`-i, --audio-device <STRING>`): audio devices to use (can specify multiple)
+
+- **realtime-audio-device** (`-r, --realtime-audio-device <STRING>`): devices for realtime transcription
+
+- **list-audio-devices** (`--list-audio-devices`): list available audio devices
+
+- **audio-transcription-engine** (`-a, --audio-transcription-engine <ENGINE>`): transcription engine
+  - options:
+    - `deepgram`: cloud-based, high quality (free tier available)
+    - `whisper-tiny`: local, lightweight, privacy-focused
+    - `whisper-large`: local, higher quality than tiny
+    - `whisper-large-v3-turbo`: local, highest quality
+  - default: `whisper-large-v3-turbo`
+
+
+- **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
+  - default: `false`
+
+</MotionDiv>
+
+<MotionDiv delay={0.7}>
+
+### vision options
+
+- **disable-vision** (`--disable-vision`): disable vision recording
+  - default: `false`
+
+- **list-monitors** (`--list-monitors`): list available monitors
+
+- **monitor-id** (`-m, --monitor-id <INT>`): monitor IDs to record (can specify multiple)
+
+- **ignored-windows** (`--ignored-windows <STRING>`): windows to ignore by title
+  - example: `--ignored-windows "Spotify" --ignored-windows "Chrome"`
+
+- **included-windows** (`--included-windows <STRING>`): windows to include by title
+  - example: `--included-windows "Code" --included-windows "Terminal"`
+
+- **video-chunk-duration** (`--video-chunk-duration <INT>`): video chunk duration in seconds
+  - default: `60`
+
+- **ocr-engine** (`-o, --ocr-engine <ENGINE>`): OCR engine selection
+  - options:
+    - `apple-native`: default for macos
+    - `windows-native`: default for windows
+    - `tesseract`: default for linux
+    - `unstructured`: cloud-based (free tier available)
+    - `custom`: configurable via `SCREENPIPE_CUSTOM_OCR_CONFIG`
+
+#### custom ocr engine example
+
+```bash
+# 1. setup python environment & ocr server
+python -m venv venv
+source venv/bin/activate
+
+pip install fastapi uvicorn easyocr pillow numpy
+
+# create ocr server file
+cat > app.py << EOF
+from fastapi import FastAPI, HTTPException
+import base64
+import io
+from PIL import Image
+import numpy as np
+import time
+import easyocr
+
+app = FastAPI()
+reader = easyocr.Reader(['en', 'ch_sim'])
+
+@app.post("/ocr")
+async def read_ocr(payload: dict):
+    image_b64 = payload.get("image")
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="no image data provided")
+    try:
+        start = time.time()
+        image_data = base64.b64decode(image_b64)
+        image = Image.open(io.BytesIO(image_data))
+        image_np = np.array(image)
+        result = reader.readtext(image_np)
+        text = "\n".join([item[1] for item in result])
+        confidence = sum([item[2] for item in result]) / len(result) if result else 0.0
+        print(f"ocr took {time.time() - start:.2f} seconds")
+        return {
+            "text": text,
+            "structured_data": {},
+            "confidence": confidence
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ocr error: {str(e)}")
+EOF
+
+# start the ocr server
+uvicorn app:app --host 0.0.0.0 --port 8000
+
+# 2. configure screenpipe
+export SCREENPIPE_CUSTOM_OCR_CONFIG='{
+  "api_url": "http://localhost:8000/ocr",
+  "api_key": "",
+  "timeout_ms": 5000
+}'
+
+# 3. run screenpipe with custom ocr
+screenpipe add \
+  path/to/videos \
+  --ocr-engine custom \
+  --data-dir /tmp/sp
+
+# 4. cleanup
+# stop server with ctrl+c
+deactivate
+rm -rf venv app.py
+```
+
+</MotionDiv>
+
+<MotionDiv delay={0.9}>
+
+### language & privacy
+
+- **language** (`-l, --language <LANG>`): languages to support (can specify multiple)
+
+- **use-pii-removal** (`--use-pii-removal`): enable PII removal from OCR text
+  - default: `false`
+
+</MotionDiv>
+
+<MotionDiv delay={1.1}>
+
+### voice activity detection
+
+- **vad-engine** (`--vad-engine <ENGINE>`): voice activity detection engine
+  - options: `silero`, `webrtc`
+  - default: `silero`
+
+- **vad-sensitivity** (`--vad-sensitivity <LEVEL>`): VAD sensitivity level
+  - options: `low`, `medium`, `high`
+  - default: `high`
+
+</MotionDiv>
+
+<MotionDiv delay={1.3}>
+
+### experimental features
+
+- **enable-llm** (`--enable-llm`): enable local LLM API
+  - default: `false`
+
+- **enable-ui-monitoring** (`--enable-ui-monitoring`): enable UI monitoring (macos only)
+  - default: `false`
+
+- **enable-frame-cache** (`--enable-frame-cache`): enable experimental video frame cache
+  - default: `false`
+
+- **capture-unfocused-windows** (`--capture-unfocused-windows`): capture unfocused windows
+  - default: `false`
+
+- **enable-realtime-audio-transcription** (`--enable-realtime-audio-transcription`): enable realtime transcription
+  - default: `false`
+  - requires: at least one `--realtime-audio-device`
+  - note: experimental feature, may impact system performance
+
+</MotionDiv>
+
+<MotionDiv delay={1.5}>
+
+### subcommands
+
+#### pipe management
+```bash
+# list all pipes
+screenpipe pipe list [--output <FORMAT>] [--port <PORT>]
+
+# install a new pipe
+screenpipe pipe install <URL> [--output <FORMAT>] [--port <PORT>]
+
+# get pipe info
+screenpipe pipe info <ID> [--output <FORMAT>] [--port <PORT>]
+
+# enable/disable pipe
+screenpipe pipe enable <ID> [--port <PORT>]
+screenpipe pipe disable <ID> [--port <PORT>]
+
+# delete pipe
+screenpipe pipe delete <ID> [-y] [--port <PORT>]
+
+# purge all pipes
+screenpipe pipe purge [-y] [--port <PORT>]
+```
+
+#### add external data to screenpipe (OCR only)
+
+allows you to add external screen recordings to screenpipe, for example it could be your iphone screen recordings, your physical journal photos, etc.
+
+companies use this to index their product's screen recordings, for example.
+
+```bash
+# add video files
+screenpipe add <PATH> [--data-dir <DIR>] [--output <FORMAT>] [--pattern <REGEX>] [--ocr-engine <ENGINE>] [--metadata-override <PATH>]
+```
+
+by default, screenpipe extracts metadata (fps, duration, creation time) directly from video files. however, you can override these with a metadata file:
+
+#### metadata override example
+
+```bash
+# 1. setup test videos
+mkdir -p $HOME/Downloads/tmpvideos
+
+# copy 3 videos with random names
+find $HOME/.screenpipe/data -type f -name "*monitor*.mp4" | head -n 3 | while read -r file; do
+    case $RANDOM in
+        [0-9][0-9][0-9][0-9])
+            cp "$file" "$HOME/Downloads/tmpvideos/video1.mp4"
+            ;;
+        [0-9][0-9][0-9][0-9][0-9])
+            cp "$file" "$HOME/Downloads/tmpvideos/video2.mp4"
+            ;;
+        *)
+            cp "$file" "$HOME/Downloads/tmpvideos/video3.mp4"
+            ;;
+    esac
+done
+
+# 2. create metadata override file
+cat > metadata.json << EOF
+{
+  "overrides": [
+    {
+      "file_path": "$HOME/Downloads/tmpvideos/video1.mp4",
+      "metadata": {
+        "creation_time": "2024-03-20T10:00:00Z",
+        "fps": 30.0,
+        "duration": 300.0,
+        "device_name": "MacBook Pro"
+      }
+    },
+    {
+      "file_path": "$HOME/Downloads/tmpvideos/video2.mp4", 
+      "metadata": {
+        "creation_time": "2024-03-21T15:30:00Z",
+        "fps": 24.0,
+        "duration": 400.0,
+        "device_name": "External Monitor"
+      }
+    },
+    {
+      "file_path": "$HOME/Downloads/tmpvideos/video3.mp4",
+      "metadata": {
+        "creation_time": "2024-03-22T09:15:00Z",
+        "fps": 60.0,
+        "duration": 200.0,
+        "device_name": "iPad Screen"
+      }
+    }
+  ]
+}
+EOF
+
+# 3. run screenpipe with metadata override
+screenpipe add \
+  $HOME/Downloads/tmpvideos \
+  --metadata-override metadata.json \
+  --data-dir /tmp/sp
+
+# 4. cleanup
+rm -rf $HOME/Downloads/tmpvideos
+rm metadata.json
+```
+
+note: if you don't provide a metadata override file, screenpipe will automatically extract metadata from the video files. use overrides when you need to specify custom metadata or when the automatic extraction fails.
+
+#### database
+```bash
+# run migrations
+screenpipe migrate
+```
+
+
+### Shell Completions  
+
+The `screenpipe` CLI supports generating shell completions for popular shells. Follow the steps below to enable autocompletion for your shell:  
+
+#### Bash  
+1. Add the following to your `.bashrc` profile:  
+   ```bash
+   eval "$(screenpipe completions bash)" 
+   ```  
+2. Reload your profile:  
+   ```bash  
+   source ~/.bashrc  
+   ```  
+
+#### Zsh  
+1. Add the following to your `.zshrc` profile:
+   ```bash  
+   eval "$(screenpipe completions zsh)"
+   ```  
+2. Reload your profile:  
+   ```bash  
+   source ~/.zshrc  
+   ```  
+`
+#### Fish  
+1. Create `~/.config/fish/conf.d/screenpipe.fish` and add this line to it:
+   ```fish  
+   screenpipe completions fish | source  
+   ```  
+
+#### PowerShell  
+1. Add the following to the end of your profile file:
+   ```powershell  
+   screenpipe completions powershell | Out-String | Invoke-Expression 
+   ```
+   
+- For macOS/Linux, the profile is located at `~/.config/powershell/Microsoft.PowerShell_profile.ps1`
+- For Windows location is either:
+  - `%userprofile%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` Powershell 5
+  - `%userprofile%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` Powershell 6+
+- To create the profile file you can run this in PowerShell:
+  ```powershell
+  if (-not (Test-Path $profile)) { New-Item $profile -Force }
+  ```
+- To edit your profile run this in PowerShell:
+  ```powershell
+  Invoke-Item $profile
+  ```
+2. Reload your profile:  
+   ```powershell  
+   . $PROFILE  
+   ```  
+
+
+</MotionDiv> 
+
+### LLM links 
+
+paste these links into your Cursor chat for context:
+
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/bin/screenpipe-server.rs
+- https://github.com/mediar-ai/screenpipe/blob/main/screenpipe-server/src/cli.rs
+
