@@ -268,7 +268,7 @@ pub struct FrameRow {
     pub text_json: String,
 }
 
-#[derive(Deserialize, PartialEq, Default)]
+#[derive(Deserialize, OaSchema, PartialEq, Default)]
 pub enum Order {
     #[serde(rename = "ascending")]
     Ascending,

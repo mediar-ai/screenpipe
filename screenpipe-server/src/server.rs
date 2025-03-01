@@ -9,6 +9,8 @@ use axum::{
     routing::{get, post},
     serve, Router,
 };
+use oasgen::{oasgen, OaSchema, Server};
+
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -86,7 +88,7 @@ pub struct AppState {
 }
 
 // Update the SearchQuery struct
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub(crate) struct SearchQuery {
     q: Option<String>,
     #[serde(flatten)]
@@ -120,7 +122,7 @@ pub(crate) struct SearchQuery {
     browser_url: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub(crate) struct PaginationQuery {
     #[serde(default = "default_limit")]
     #[serde(deserialize_with = "deserialize_number_from_string")]
@@ -145,7 +147,7 @@ pub struct PaginatedResponse<T> {
     pub pagination: PaginationInfo,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct PaginationInfo {
     pub limit: u32,
     pub offset: u32,
@@ -169,7 +171,7 @@ pub struct DeleteSpeakerRequest {
     pub id: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct MarkAsHallucinationRequest {
     speaker_id: i64,
 }
@@ -227,7 +229,7 @@ pub struct UiContent {
     pub browser_url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub(crate) struct ListDeviceResponse {
     name: String,
     is_default: bool,
@@ -242,7 +244,7 @@ pub struct MonitorInfo {
     pub is_default: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddTagsRequest {
     tags: Vec<String>,
 }
@@ -252,7 +254,7 @@ pub struct AddTagsResponse {
     success: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct RemoveTagsRequest {
     tags: Vec<String>,
 }
@@ -267,7 +269,7 @@ fn default_limit() -> u32 {
     20
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct HealthCheckResponse {
     pub status: String,
     pub status_code: u16,
@@ -433,6 +435,7 @@ pub(crate) async fn search(
     }))
 }
 
+#[oasgen]
 pub(crate) async fn api_list_audio_devices(
     State(_state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Vec<ListDeviceResponse>>, (StatusCode, JsonResponse<serde_json::Value>)> {
@@ -679,30 +682,30 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     })
 }
 // Request and response structs
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct DownloadPipeRequest {
     url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct DownloadPipePrivateRequest {
     url: String,
     pipe_name: String,
     pipe_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct RunPipeRequest {
     pipe_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct UpdatePipeConfigRequest {
     pipe_id: String,
     config: serde_json::Value,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct UpdatePipeVersionRequest {
     pipe_id: String,
     source: String,
@@ -911,7 +914,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
     }))
 }
 
-pub struct Server {
+pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     // device_manager: Arc<DeviceManager>,
@@ -922,7 +925,7 @@ pub struct Server {
     ui_monitoring_enabled: bool,
 }
 
-impl Server {
+impl SCServer {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: Arc<DatabaseManager>,
@@ -933,7 +936,7 @@ impl Server {
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
     ) -> Self {
-        Server {
+        SCServer {
             db,
             addr,
             screenpipe_dir,
@@ -979,36 +982,88 @@ impl Server {
             },
         });
 
-        let app = create_router()
-            .layer(ApiPluginLayer::new(api_plugin))
-            .layer(
-                CorsLayer::new()
-                    .allow_origin(Any)
-                    .allow_methods(Any)
-                    .allow_headers(Any)
-                    .expose_headers([
-                        axum::http::header::CONTENT_TYPE,
-                        axum::http::header::CACHE_CONTROL,
-                    ]), // Important for SSE
-            )
-            .layer(
-                TraceLayer::new_for_http()
-                    .make_span_with(DefaultMakeSpan::new().include_headers(true)),
-            )
-            .with_state(app_state);
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+            .expose_headers([
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::CACHE_CONTROL,
+            ]);
 
-        info!("Server starting on {}", self.addr);
+        // Create the OpenAPI server
+        let server = Server::axum()
+            .get("/audio/list", api_list_audio_devices)
+            .get("/vision/list", api_list_monitors)
+            .post("/tags/:content_type/:id", add_tags)
+            .delete("/tags/:content_type/:id", remove_tags)
+            .get("/pipes/info/:pipe_id", get_pipe_info_handler)
+            .get("/pipes/list", list_pipes_handler)
+            .post("/pipes/download", download_pipe_handler)
+            .post("/pipes/download-private", download_pipe_private_handler)
+            .post("/pipes/enable", run_pipe_handler)
+            .post("/pipes/disable", stop_pipe_handler)
+            .post("/pipes/update", update_pipe_config_handler)
+            .post("/pipes/update-version", update_pipe_version_handler)
+            .post("/pipes/delete", delete_pipe_handler)
+            .post("/pipes/purge", purge_pipe_handler)
+            .get("/health", health_check)
+            .post("/raw_sql", execute_raw_sql)
+            .post("/add", add_to_database)
+            .get("/stream/frames", stream_frames_handler)
+            .get("/speakers/unnamed", get_unnamed_speakers_handler)
+            .post("/speakers/update", update_speaker_handler)
+            .get("/speakers/search", search_speakers_handler)
+            .post("/speakers/delete", delete_speaker_handler)
+            .post("/speakers/hallucination", mark_as_hallucination_handler)
+            .post("/speakers/merge", merge_speakers_handler)
+            .get("/speakers/similar", get_similar_speakers_handler)
+            .post("/experimental/frames/merge", merge_frames_handler)
+            .get("/experimental/validate/media", validate_media_handler)
+            // .post("/audio/start", start_audio_device)
+            // .post("/audio/stop", stop_audio_device)
+            .get("/semantic-search", semantic_search_handler)
+            .get("/frames/:frame_id", get_frame_data)
+            .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
+            .get("/search/keyword", keyword_search_handler)
+            .post("/v1/embeddings", create_embeddings)
+            // .post("/vision/start", start_vision_device)
+            // .post("/vision/stop", stop_vision_device)
+            // .post("/audio/restart", restart_audio_devices)
+            // .post("/vision/restart", restart_vision_devices)
+            .route_yaml_spec("/openapi.yaml")
+            .route_json_spec("/openapi.json")
+            .freeze();
 
-        match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
-            Ok(_) => {
-                info!("Server stopped gracefully");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Server error: {}", e);
-                Err(e)
-            }
-        }
+        // Build the main router with all routes
+        let app = Router::new()
+            .merge(server.into_router())
+            // TODO: Make this route work possibly remove generic type that prevents codegen
+            .route("/search", get(search))
+            // Need to figure this out too
+            .route("/stream/frames", get(stream_frames_handler))
+            .route("/ws/events", get(ws_events_handler))
+            .route("/ws/health", get(ws_health_handler))
+            .with_state(app_state)
+            .layer(cors)
+            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
+
+        #[cfg(feature = "experimental")]
+        let app = app.route("/experimental/input_control", post(input_control_handler));
+
+        // Create the listener
+        let listener = TcpListener::bind(&self.addr).await?;
+        info!("Server listening on {}", self.addr);
+
+        // Start serving
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(())
     }
 }
 
@@ -1043,7 +1098,7 @@ async fn validate_media_handler(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct RawSqlQuery {
     query: String,
 }
@@ -1064,26 +1119,26 @@ async fn execute_raw_sql(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddContentRequest {
     pub device_name: String,     // Moved device_name to the top level
     pub content: AddContentData, // The actual content (either Frame or Transcription)
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddContentData {
     pub content_type: String,
     pub data: ContentData,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 #[serde(untagged)]
 pub enum ContentData {
     Frames(Vec<FrameContent>),
     Transcription(AudioTranscription),
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct FrameContent {
     pub file_path: String,
     pub timestamp: Option<DateTime<Utc>>,
@@ -1093,7 +1148,7 @@ pub struct FrameContent {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, OaSchema, Deserialize, Debug)]
 pub struct OCRResult {
     pub text: String,
     pub text_json: Option<String>,
@@ -1101,7 +1156,7 @@ pub struct OCRResult {
     pub focused: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AudioTranscription {
     pub transcription: String,
     pub transcription_engine: String,
@@ -1681,7 +1736,7 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-// #[derive(Deserialize)]
+// #[derive(OaSchema, Deserialize)]
 // pub struct AudioDeviceControlRequest {
 //     device_name: String,
 //     #[serde(default)]
@@ -1784,12 +1839,12 @@ pub struct AudioDeviceControlResponse {
 //     }))
 // }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct EventsQuery {
     images: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 struct SemanticSearchQuery {
     text: String,
     limit: Option<u32>,
@@ -1840,7 +1895,7 @@ async fn semantic_search_handler(
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct VisionDeviceControlRequest {
     device_id: u32,
 }
@@ -2181,7 +2236,7 @@ where
     Ok(s.map(|s| s.split(',').map(String::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct KeywordSearchRequest {
     query: String,
     #[serde(default = "default_limit")]
@@ -2507,24 +2562,21 @@ async fn stream_frames_handler(
 pub async fn delete_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<DeletePipeRequest>,
-) -> impl IntoResponse {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     match state.pipe_manager.delete_pipe(&request.pipe_id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "message": "pipe deleted successfully"
-            })),
-        ),
+        Ok(_) => Ok(JsonResponse(json!({
+            "success": true,
+            "message": "pipe deleted successfully"
+        }))),
         Err(e) => {
             error!("failed to delete pipe: {}", e);
-            (
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                "success": false,
-                "error": format!("failed to delete pipe: {}", e)
+                JsonResponse(json!({
+                    "success": false,
+                    "error": format!("failed to delete pipe: {}", e)
                 })),
-            )
+            ))
         }
     }
 }
@@ -2555,7 +2607,7 @@ pub async fn purge_pipe_handler(
 }
 
 // Add this struct for the request payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 pub struct DeletePipeRequest {
     pipe_id: String,
 }
@@ -2573,7 +2625,7 @@ pub struct RestartAudioDevicesResponse {
     restarted_devices: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
 
 // async fn restart_audio_devices(
