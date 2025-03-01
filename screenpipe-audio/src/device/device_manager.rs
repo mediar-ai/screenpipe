@@ -7,7 +7,7 @@ use crate::core::{
     device::{list_audio_devices, AudioDevice},
     stream::AudioStream,
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use tracing::{error, warn};
 
@@ -40,6 +40,9 @@ impl DeviceManager {
     }
 
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
+        if self.is_running(device) {
+            return Err(anyhow!("Device {} already running.", device));
+        }
         let is_running = Arc::new(AtomicBool::new(false));
         let stream =
             match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
@@ -74,6 +77,10 @@ impl DeviceManager {
     }
 
     pub fn stop_device(&self, device: &AudioDevice) -> Result<()> {
+        if !self.is_running(device) {
+            return Err(anyhow!("Device {} already stopped", device));
+        }
+
         if let Some(is_running) = self.states.get(device) {
             is_running.store(false, Ordering::Relaxed)
         }
