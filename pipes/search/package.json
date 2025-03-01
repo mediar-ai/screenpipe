@@ -1,6 +1,6 @@
 {
   "name": "search",
-  "version": "0.1.23",
+  "version": "0.1.32",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -59,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@screenpipe/dev": "1.1.26",
     "@types/node": "^22.10.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",

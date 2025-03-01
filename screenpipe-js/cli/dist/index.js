@@ -9704,7 +9704,7 @@ var require_CreateFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (b2.hasOwnProperty(p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -9749,7 +9749,7 @@ var require_LaunchEditorError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (b2.hasOwnProperty(p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -9794,7 +9794,7 @@ var require_ReadFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (b2.hasOwnProperty(p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -9839,7 +9839,7 @@ var require_RemoveFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (b2.hasOwnProperty(p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -10484,7 +10484,7 @@ var require_Subscriber = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -10878,7 +10878,7 @@ var require_OperatorSubscriber = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -10990,7 +10990,7 @@ var require_ConnectableObservable = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11119,18 +11119,18 @@ var require_animationFrameProvider = __commonJS({
     exports.animationFrameProvider = {
       schedule: function(callback) {
         var request = requestAnimationFrame;
-        var cancel6 = cancelAnimationFrame;
+        var cancel7 = cancelAnimationFrame;
         var delegate = exports.animationFrameProvider.delegate;
         if (delegate) {
           request = delegate.requestAnimationFrame;
-          cancel6 = delegate.cancelAnimationFrame;
+          cancel7 = delegate.cancelAnimationFrame;
         }
         var handle = request(function(timestamp) {
-          cancel6 = void 0;
+          cancel7 = void 0;
           callback(timestamp);
         });
         return new Subscription_1.Subscription(function() {
-          return cancel6 === null || cancel6 === void 0 ? void 0 : cancel6(handle);
+          return cancel7 === null || cancel7 === void 0 ? void 0 : cancel7(handle);
         });
       },
       requestAnimationFrame: function() {
@@ -11223,7 +11223,7 @@ var require_Subject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11422,7 +11422,7 @@ var require_BehaviorSubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11499,7 +11499,7 @@ var require_ReplaySubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11589,7 +11589,7 @@ var require_AsyncSubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11653,7 +11653,7 @@ var require_Action = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11745,7 +11745,7 @@ var require_AsyncAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -11954,7 +11954,7 @@ var require_AsapAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12050,7 +12050,7 @@ var require_AsyncScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12114,7 +12114,7 @@ var require_AsapScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12197,7 +12197,7 @@ var require_QueueAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12262,7 +12262,7 @@ var require_QueueScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12312,7 +12312,7 @@ var require_AnimationFrameAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12380,7 +12380,7 @@ var require_AnimationFrameScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -12450,7 +12450,7 @@ var require_VirtualTimeScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p7 in b2) if (Object.prototype.hasOwnProperty.call(b2, p7)) d2[p7] = b2[p7];
+          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
         };
         return extendStatics(d, b);
       };
@@ -17052,9 +17052,9 @@ var require_pairwise = __commonJS({
         var prev;
         var hasPrev = false;
         source.subscribe(OperatorSubscriber_1.createOperatorSubscriber(subscriber, function(value) {
-          var p7 = prev;
+          var p8 = prev;
           prev = value;
-          hasPrev && subscriber.next([p7, value]);
+          hasPrev && subscriber.next([p8, value]);
           hasPrev = true;
         }));
       });
@@ -17082,9 +17082,9 @@ var require_pluck = __commonJS({
       return map_1.map(function(x) {
         var currentProp = x;
         for (var i = 0; i < length; i++) {
-          var p7 = currentProp === null || currentProp === void 0 ? void 0 : currentProp[properties[i]];
-          if (typeof p7 !== "undefined") {
-            currentProp = p7;
+          var p8 = currentProp === null || currentProp === void 0 ? void 0 : currentProp[properties[i]];
+          if (typeof p8 !== "undefined") {
+            currentProp = p8;
           } else {
             return void 0;
           }
@@ -18761,7 +18761,7 @@ var require_cjs = __commonJS({
       o[k2] = m[k];
     });
     var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p7 in m) if (p7 !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p7)) __createBinding(exports2, m, p7);
+      for (var p8 in m) if (p8 !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p8)) __createBinding(exports2, m, p8);
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.interval = exports.iif = exports.generate = exports.fromEventPattern = exports.fromEvent = exports.from = exports.forkJoin = exports.empty = exports.defer = exports.connectable = exports.concat = exports.combineLatest = exports.bindNodeCallback = exports.bindCallback = exports.UnsubscriptionError = exports.TimeoutError = exports.SequenceError = exports.ObjectUnsubscribedError = exports.NotFoundError = exports.EmptyError = exports.ArgumentOutOfRangeError = exports.firstValueFrom = exports.lastValueFrom = exports.isObservable = exports.identity = exports.noop = exports.pipe = exports.NotificationKind = exports.Notification = exports.Subscriber = exports.Subscription = exports.Scheduler = exports.VirtualAction = exports.VirtualTimeScheduler = exports.animationFrameScheduler = exports.animationFrame = exports.queueScheduler = exports.queue = exports.asyncScheduler = exports.async = exports.asapScheduler = exports.asap = exports.AsyncSubject = exports.ReplaySubject = exports.BehaviorSubject = exports.Subject = exports.animationFrames = exports.observable = exports.ConnectableObservable = exports.Observable = void 0;
@@ -19974,11 +19974,53 @@ import { Command as Command7 } from "commander";
 // src/commands/pipe/register.ts
 import fs2 from "fs";
 import { Command as Command3 } from "commander";
-var registerCommand = new Command3().name("register").description("register a new pipe").requiredOption("--name <name>", "name of the pipe").option("--paid", "set this flag to create a paid pipe").option(
+import * as p3 from "@clack/prompts";
+var registerCommand = new Command3().name("register").description("register a new pipe").requiredOption("--name <name>", "name of the pipe", (value) => {
+  if (value.includes(" ")) {
+    throw new Error("name cannot contain spaces");
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(value)) {
+    throw new Error("name can only contain letters, numbers, and hyphens");
+  }
+  if (value.length > 10) {
+    throw new Error("name cannot be longer than 10 characters");
+  }
+  return value;
+}).option("--paid", "set this flag to create a paid pipe").option(
   "--price <price>",
   "price in usd (required for paid pipes)",
   parseFloat
-).option("--source <source>", "source code url (e.g., github repository)").action(async (opts) => {
+).requiredOption(
+  "--source <source>",
+  "source code url (e.g., github repository)",
+  (value) => {
+    if (!value.startsWith("https://github.com/")) {
+      throw new Error("source must start with https://github.com/");
+    }
+    return value;
+  }
+).option("--discord <handle>", "your discord handle (e.g., username#1234)").action(async (opts) => {
+  p3.intro(`${colors.highlight("\u26A0\uFE0F IMPORTANT: Publishing Process \u26A0\uFE0F")}`);
+  p3.note(
+    `Before publishing your pipe, you MUST contact ${colors.highlight(
+      "louis030195"
+    )} on Discord.
+      Join the Discord server: ${colors.highlight(
+      "https://discord.gg/dU9EBuw7Uq"
+    )}
+      This step is required to complete the publishing process.`,
+    "Contact Required"
+  );
+  const confirmed = await p3.confirm({
+    message: "Have you contacted louis030195 on Discord before proceeding?",
+    initialValue: false
+  });
+  if (p3.isCancel(confirmed) || !confirmed) {
+    p3.cancel(
+      "Please contact louis030195 on Discord before publishing your pipe."
+    );
+    process.exit(0);
+  }
   if (opts.paid && opts.price == null) {
     handleError(
       "error: price is required for paid pipes, i.e., --price <amount>"
@@ -19992,14 +20034,6 @@ var registerCommand = new Command3().name("register").description("register a ne
     if (!apiKey) {
       handleError(
         symbols.error + " not logged in. please login first using" + colors.highlight("screenpipe login")
-      );
-    }
-    let packageJson;
-    try {
-      packageJson = JSON.parse(fs2.readFileSync("package.json", "utf-8"));
-    } catch (error) {
-      handleError(
-        `${symbols.error} failed to read package.json. make sure you're in the correct directory.`
       );
     }
     const isPaid = opts.paid || false;
@@ -20026,14 +20060,14 @@ var registerCommand = new Command3().name("register").description("register a ne
         description,
         is_paid: isPaid,
         price: isPaid ? price : null,
-        source_url: opts.source || null
+        source_url: opts.source,
+        discord_handle: opts.discord
       })
     });
     if (!response.ok) {
       const errorData = await response.json();
       handleError(errorData.error || "failed to create plugin");
     }
-    const data = await response.json();
     logger.success(
       `
 ${symbols.success} successfully created pipe: ${colors.highlight(
@@ -20048,11 +20082,11 @@ ${symbols.info} plugin details:`);
         `${colors.label("type")} ${isPaid ? `paid ($${price})` : "free"}`
       )
     );
-    if (opts.source) {
-      console.log(
-        colors.listItem(`${colors.label("source")} ${opts.source}`)
-      );
-    }
+    console.log(colors.listItem(`${colors.label("source")} ${opts.source}`));
+    console.log(
+      colors.listItem(`${colors.label("discord")} ${opts.discord}`)
+    );
+    p3.outro(`Successfully registered your pipe! \u{1F389}`);
   } catch (error) {
     if (error instanceof Error) {
       handleError(`
@@ -20482,7 +20516,7 @@ ${symbols.error} list versions failed with unexpected error`
 // src/commands/pipe/create.ts
 import fs4 from "fs-extra";
 import path3 from "path";
-import * as p3 from "@clack/prompts";
+import * as p4 from "@clack/prompts";
 import chalk2 from "chalk";
 import { Command as Command6 } from "commander";
 import { extract } from "tar-stream";
@@ -20499,7 +20533,7 @@ var PIPE_ADDITIONS = {
 };
 async function downloadAndExtractSubdir(subdir, destPath) {
   const tempDir = path3.join(destPath, "_temp");
-  const s = p3.spinner();
+  const s = p4.spinner();
   try {
     s.start("preparing to download template...");
     await fs4.ensureDir(destPath);
@@ -20572,8 +20606,8 @@ async function extractTarball(buffer, tempDir, targetSubdir) {
   });
 }
 var createPipeCommand = new Command6().name("create").description("create a new pipe").action(async () => {
-  p3.intro(chalk2.bold("\nwelcome to screenpipe!\n"));
-  const pipeNameInput = await p3.text({
+  p4.intro(chalk2.bold("\nwelcome to screenpipe!\n"));
+  const pipeNameInput = await p4.text({
     message: "what is your pipe name?",
     placeholder: "my-screenpipe",
     validate: (value) => {
@@ -20581,12 +20615,12 @@ var createPipeCommand = new Command6().name("create").description("create a new 
       return void 0;
     }
   });
-  if (p3.isCancel(pipeNameInput)) {
-    p3.cancel("operation cancelled");
+  if (p4.isCancel(pipeNameInput)) {
+    p4.cancel("operation cancelled");
     process.exit(1);
   }
   const pipeName = pipeNameInput;
-  const directoryInput = await p3.text({
+  const directoryInput = await p4.text({
     message: "where would you like to create your pipe?",
     placeholder: pipeName,
     validate: (value) => {
@@ -20594,12 +20628,12 @@ var createPipeCommand = new Command6().name("create").description("create a new 
       return void 0;
     }
   });
-  if (p3.isCancel(directoryInput)) {
-    p3.cancel("operation cancelled");
+  if (p4.isCancel(directoryInput)) {
+    p4.cancel("operation cancelled");
     process.exit(1);
   }
   const directory = directoryInput;
-  const s = p3.spinner();
+  const s = p4.spinner();
   s.start("creating your pipe...");
   try {
     const absoluteDirectory = path3.resolve(process.cwd(), directory);
@@ -20645,7 +20679,7 @@ pipeCommands.addCommand(listVersionsCommand);
 import { Command as Command9 } from "commander";
 
 // src/commands/app/create.ts
-import * as p4 from "@clack/prompts";
+import * as p5 from "@clack/prompts";
 import { Command as Command8 } from "commander";
 import simpleGit from "simple-git";
 var TEMPLATE_REPOS = {
@@ -20656,15 +20690,15 @@ var createAppCommand = new Command8().name("create").description("create a new d
   let { name, appType } = options;
   if (!appType) {
     try {
-      appType = await p4.select({
+      appType = await p5.select({
         message: "what type of desktop app would you like to create?",
         options: [
           { value: "electron", label: "electron" },
           { value: "tauri", label: "tauri" }
         ]
       });
-      if (p4.isCancel(appType)) {
-        p4.cancel("operation cancelled");
+      if (p5.isCancel(appType)) {
+        p5.cancel("operation cancelled");
         process.exit(1);
       }
     } catch (error) {
@@ -20673,7 +20707,7 @@ var createAppCommand = new Command8().name("create").description("create a new d
   }
   if (!name || name.length === 0) {
     try {
-      name = await p4.text({
+      name = await p5.text({
         message: "what is your project name?",
         placeholder: "my-desktop-app",
         validate: (input) => {
@@ -20681,8 +20715,8 @@ var createAppCommand = new Command8().name("create").description("create a new d
           return;
         }
       });
-      if (p4.isCancel(name)) {
-        p4.cancel("operation cancelled");
+      if (p5.isCancel(name)) {
+        p5.cancel("operation cancelled");
         process.exit(1);
       }
     } catch (error) {
@@ -20723,7 +20757,7 @@ appCommands.addCommand(createAppCommand);
 
 // src/commands/components/commands/add/utils/prompt-for-component.ts
 import { z as z4 } from "zod";
-import * as p5 from "@clack/prompts";
+import * as p6 from "@clack/prompts";
 
 // src/commands/components/commands/add/registry/schema.ts
 import { z as z3 } from "zod";
@@ -20923,15 +20957,15 @@ async function promptForRegistryComponents(all) {
   if (all) {
     return Object.values(registryIndex).map((entry) => entry.name);
   }
-  const components = await p5.multiselect({
+  const components = await p6.multiselect({
     message: "Which components would you like to add?",
     options: Object.values(registryIndex).filter((item) => item.internal !== true).map((entry) => ({
       value: entry.name,
       label: entry.name
     }))
   });
-  if (p5.isCancel(components)) {
-    p5.cancel("No components selected");
+  if (p6.isCancel(components)) {
+    p6.cancel("No components selected");
     logger.info("");
     process.exit(1);
   }
@@ -20994,7 +21028,7 @@ async function updateDependencies(dependencies, cwd, options) {
 // src/commands/components/commands/add/utils/updaters/update-files.ts
 import fs7 from "fs-extra";
 import path5 from "path";
-import * as p6 from "@clack/prompts";
+import * as p7 from "@clack/prompts";
 import { existsSync } from "fs";
 
 // src/commands/components/commands/add/utils/download-file-from-github.ts
@@ -21038,13 +21072,13 @@ async function updateFiles(componentLocations, options) {
     const existingFile = existsSync(location.target);
     if (existingFile && !options.overwrite) {
       filesCreatedSpinner.succeed("");
-      const overwrite = await p6.confirm({
+      const overwrite = await p7.confirm({
         message: `The file ${highlighter.info(
           location.target
         )} already exists. Would you like to overwrite?`,
         initialValue: false
       });
-      if (p6.isCancel(overwrite) || !overwrite) {
+      if (p7.isCancel(overwrite) || !overwrite) {
         filesSkipped.push(path5.relative(options.cwd, location.target));
         continue;
       }
@@ -22390,9 +22424,9 @@ var SignalExit = class extends SignalExitBase {
       this.#sigListeners[sig] = () => {
         const listeners = this.#process.listeners(sig);
         let { count } = this.#emitter;
-        const p7 = process4;
-        if (typeof p7.__signal_exit_emitter__ === "object" && typeof p7.__signal_exit_emitter__.count === "number") {
-          count += p7.__signal_exit_emitter__.count;
+        const p8 = process4;
+        if (typeof p8.__signal_exit_emitter__ === "object" && typeof p8.__signal_exit_emitter__.count === "number") {
+          count += p8.__signal_exit_emitter__.count;
         }
         if (listeners.length === count) {
           this.unload();
@@ -22627,12 +22661,12 @@ function createPrompt(view) {
     });
     const screen = new ScreenManager(rl);
     const { promise, resolve, reject } = PromisePolyfill.withResolver();
-    const cancel6 = () => reject(new CancelPromptError());
+    const cancel7 = () => reject(new CancelPromptError());
     if (signal) {
       const abort = () => reject(new AbortPromptError({ cause: signal.reason }));
       if (signal.aborted) {
         abort();
-        return Object.assign(promise, { cancel: cancel6 });
+        return Object.assign(promise, { cancel: cancel7 });
       }
       signal.addEventListener("abort", abort);
       cleanups.add(() => signal.removeEventListener("abort", abort));
@@ -22673,7 +22707,7 @@ function createPrompt(view) {
         cleanups.forEach((cleanup) => cleanup());
         screen.done({ clearContent: Boolean(context.clearPromptOnDone) });
         output.end();
-      }).then(() => promise), { cancel: cancel6 });
+      }).then(() => promise), { cancel: cancel7 });
     });
   };
   return prompt2;
