@@ -79,14 +79,17 @@ impl DeviceManager {
             let device = pair.key();
 
             if self.is_running(device) {
-                self.stop_device(device)?;
+                self.stop_device(device).await?;
             }
         }
+
+        self.states.clear();
+        self.streams.clear();
 
         Ok(())
     }
 
-    pub fn stop_device(&self, device: &AudioDevice) -> Result<()> {
+    pub async fn stop_device(&self, device: &AudioDevice) -> Result<()> {
         if !self.is_running(device) {
             return Err(anyhow!("Device {} already stopped", device));
         }
@@ -94,6 +97,8 @@ impl DeviceManager {
         if let Some(is_running) = self.states.get(device) {
             is_running.store(false, Ordering::Relaxed)
         }
+
+        self.streams.remove(device);
 
         Ok(())
     }
