@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{env, path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc, time::Duration};
 use tracing::info;
 
 use screenpipe_core::Language;
@@ -23,7 +23,7 @@ pub struct AudioManagerOptions {
     pub deepgram_api_key: Option<String>,
     pub enable_diarization: bool,
     pub enable_realtime: bool,
-    pub audio_chunk_duration: usize,
+    pub audio_chunk_duration: Duration,
     pub vad_sensitivity: VadSensitivity,
     pub health_check_grace_period: usize,
     pub enabled_devices: Vec<String>,
@@ -48,7 +48,7 @@ impl Default for AudioManagerOptions {
             deepgram_api_key,
             enable_diarization: true,
             enable_realtime: false,
-            audio_chunk_duration: 30,
+            audio_chunk_duration: Duration::from_secs(30),
             vad_sensitivity: VadSensitivity::High,
             health_check_grace_period: 10,
             enabled_devices,
@@ -102,7 +102,7 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn audio_chunk_duration(mut self, audio_chunk_duration: usize) -> Self {
+    pub fn audio_chunk_duration(mut self, audio_chunk_duration: Duration) -> Self {
         self.options.audio_chunk_duration = audio_chunk_duration;
         self
     }
@@ -175,8 +175,6 @@ impl AudioManagerBuilder {
                 "Deepgram API key is required for realtime transcription"
             ));
         }
-
-        info!("{:?}", self.options.deepgram_api_key);
 
         Ok(())
     }

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use screenpipe_db::DatabaseManager;
 
@@ -107,7 +107,7 @@ impl AudioManager {
         }
 
         info!("Starting audio manager");
-        self.start_device_check().await;
+        let _ = self.start_device_check().await;
 
         let transcription_receiver = self.transcription_receiver.clone();
         let transcription_sender = self.transcription_sender.clone();
@@ -143,7 +143,7 @@ impl AudioManager {
             Err(_) => return Err(anyhow!("Device {} not found", device_name)),
         };
 
-        self.device_manager.stop_device(&device)?;
+        self.device_manager.stop_device(&device).await?;
 
         if let Some(pair) = self.recording_handles.get(&device) {
             let handle = pair.value();
@@ -163,6 +163,11 @@ impl AudioManager {
         }
 
         self.recording_handles.clear();
+        let mut device_check_handle = self.device_check_handle.lock().await;
+        if let Some(handle) = device_check_handle.take() {
+            handle.abort();
+        }
+
         let _ = self.device_manager.stop_all_devices().await;
         *self.status.lock().await = AudioManagerStatus::Stopped;
         Ok(())
@@ -206,7 +211,7 @@ impl AudioManager {
 
     async fn record_device(&self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
         let stream = self.device_manager.stream(device).unwrap();
-        let audio_chunk_duration = self.options.audio_chunk_duration as u64;
+        let audio_chunk_duration = self.options.audio_chunk_duration;
         let recording_sender = self.recording_sender.clone();
         let is_running = self.device_manager.is_running_mut(device).unwrap();
         let languages = self.options.languages.clone();
@@ -215,7 +220,7 @@ impl AudioManager {
         let recording_handle = tokio::spawn(async move {
             let record_and_transcribe_handle = record_and_transcribe(
                 stream.clone(),
-                Duration::from_secs(audio_chunk_duration),
+                audio_chunk_duration,
                 recording_sender.clone(),
                 is_running.clone(),
             );

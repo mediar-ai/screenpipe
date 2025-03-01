@@ -681,8 +681,7 @@ async fn main() -> anyhow::Result<()> {
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
 
     let mut audio_manager_builder = AudioManagerBuilder::new()
-        // TODO: Fix this to duration not usize...
-        .audio_chunk_duration(audio_chunk_duration.as_secs() as usize)
+        .audio_chunk_duration(audio_chunk_duration)
         .vad_engine(vad_engine.into())
         .vad_sensitivity(cli.vad_sensitivity.into())
         .languages(languages.clone())
@@ -692,7 +691,7 @@ async fn main() -> anyhow::Result<()> {
         .deepgram_api_key(cli.deepgram_api_key.clone())
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
-    let mut audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
+    let audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
 
     let audio_manager_clone = audio_manager.clone();
     let handle = {
