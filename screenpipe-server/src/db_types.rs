@@ -229,14 +229,14 @@ pub struct OcrTextBlock {
     pub line_num: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(OaSchema, Debug, Serialize, Clone)]
 pub struct TextPosition {
     pub text: String,
     pub confidence: f32,
     pub bounds: TextBounds,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(OaSchema, Debug, Serialize, Clone)]
 pub struct TextBounds {
     pub left: f32,
     pub top: f32,
@@ -244,7 +244,7 @@ pub struct TextBounds {
     pub height: f32,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct SearchMatch {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
