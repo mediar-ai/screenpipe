@@ -1,4 +1,4 @@
-import { Spinner } from "@topcli/spinner";
+import ora from "ora";
 import { colors } from "../../../../../utils/colors";
 
 export const highlighter = {
@@ -35,8 +35,18 @@ export function spinner(
     silent?: boolean;
   }
 ) {
-  return new Spinner({
-    verbose: !options?.silent,
-    color: "white", // you can customize this
-  }).start(text);
+  if (options?.silent) {
+    return {
+      start: () => ({ succeed: () => {}, fail: () => {}, stop: () => {}, info: () => {} }),
+      succeed: () => {},
+      fail: () => {},
+      stop: () => {},
+      info: () => {},
+    };
+  }
+  const spinner = ora({
+    text: text,
+    color: "white",
+  });
+  return spinner;
 }
