@@ -15,7 +15,10 @@ import {
 	EyeOff,
 	HelpCircle,
 	Loader2,
+	Plus,
 	RefreshCw,
+	Settings2,
+	Trash2,
 	XIcon,
 } from "lucide-react";
 import { Textarea } from "../ui/textarea";
@@ -39,82 +42,168 @@ import { Badge } from "../ui/badge";
 import { toast } from "../ui/use-toast";
 import { Card } from "../ui/card";
 import { AIProviderType } from "@screenpipe/browser";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
 const AISection = ({
 	preset,
 	setDialog,
+	isDuplicating,
 }: {
 	preset?: AIPreset;
 	setDialog: (value: boolean) => void;
+	isDuplicating?: boolean;
 }) => {
 	const { settings, updateSettings } = useSettings();
 	const [settingsPreset, setSettingsPreset] = useState<
 		Partial<AIPreset> | undefined
 	>(preset);
-
+	const [isLoading, setIsLoading] = useState(false);
 	const [showApiKey, setShowApiKey] = useState(false);
+	const [nameError, setNameError] = useState<string | null>(null);
 
-	const updateStoreSettings = () => {
-		if (!settingsPreset?.id) {
-			toast({
-				title: "please enter a name of this preset",
-				description: "it's required, should be unique",
-				variant: "destructive",
-			});
-			return;
+	const validateName = (name: string) => {
+		if (!name) {
+			setNameError("name is required");
+			return false;
 		}
-
-		const checkIfIDPresent = settings.aiPresets.find(
-			(preset) => preset.id === settingsPreset.id,
-		);
-
-		if (checkIfIDPresent) {
-			toast({
-				title: "name already exists",
-				description: "it's required, should be unique",
-				variant: "destructive",
-			});
-			return;
+		if (name.trim().toLowerCase().endsWith("copy")) {
+			setNameError("name cannot end with 'copy'");
+			return false;
 		}
-
-		if (!settings.aiPresets.length) {
-			const defaultPreset = {
-				...settingsPreset,
-				prompt: settingsPreset?.prompt || DEFAULT_PROMPT,
-				maxContextChars: settingsPreset?.maxContextChars || 512000,
-				defaultPreset: true,
-			} as AIPreset;
-
-			updateSettings({
-				aiModel: defaultPreset?.model,
-				aiProviderType: defaultPreset?.provider,
-				customPrompt: defaultPreset?.prompt,
-				aiMaxContextChars: defaultPreset?.maxContextChars,
-				aiUrl: defaultPreset?.url,
-				...("apiKey" in defaultPreset && {
-					openaiApiKey: defaultPreset.apiKey,
-				}),
-				aiPresets: [defaultPreset],
-			});
-
-			setDialog(false);
-			return;
+		if (settings.aiPresets.find(
+			(p) => p.id.toLowerCase() === name.toLowerCase() && p.id !== preset?.id
+		)) {
+			setNameError("name already exists");
+			return false;
 		}
+		setNameError(null);
+		return true;
+	};
 
-		const prevPresets = settings.aiPresets;
-		updateSettings({
-			aiPresets: [
-				...prevPresets,
-				{
+	const updateStoreSettings = async () => {
+		setIsLoading(true);
+		try {
+			if (!settingsPreset?.id) {
+				toast({
+					title: "please enter a name",
+					description: "name is required",
+					variant: "destructive",
+				});
+				return;
+			}
+
+			if (!validateName(settingsPreset.id)) {
+				return;
+			}
+
+			// If this is the first preset, make it default
+			if (!settings.aiPresets.length) {
+				const defaultPreset = {
 					...settingsPreset,
+					prompt: settingsPreset?.prompt || DEFAULT_PROMPT,
+					maxContextChars: settingsPreset?.maxContextChars || 512000,
+					defaultPreset: true,
+				} as AIPreset;
 
+				await updateSettings({
+					aiModel: defaultPreset?.model,
+					aiProviderType: defaultPreset?.provider,
+					customPrompt: defaultPreset?.prompt,
+					aiMaxContextChars: defaultPreset?.maxContextChars,
+					aiUrl: defaultPreset?.url,
+					...("apiKey" in defaultPreset && {
+						openaiApiKey: defaultPreset.apiKey,
+					}),
+					aiPresets: [defaultPreset],
+				});
+
+				toast({
+					title: "preset created",
+					description: "default preset has been created",
+				});
+
+				setDialog(false);
+				return;
+			}
+
+			// Handle update case
+			if (preset && !isDuplicating) {
+				const updatedPresets = settings.aiPresets.map((p) => {
+					if (p.id === preset.id) {
+						const updatedPreset = {
+							...settingsPreset,
+							prompt: settingsPreset?.prompt || DEFAULT_PROMPT,
+							maxContextChars: settingsPreset?.maxContextChars || 512000,
+							defaultPreset: p.defaultPreset,
+						} as AIPreset;
+
+						// If this is the default preset, update global settings too
+						if (p.defaultPreset) {
+							updateSettings({
+								aiModel: updatedPreset.model,
+								aiProviderType: updatedPreset.provider,
+								customPrompt: updatedPreset.prompt,
+								aiMaxContextChars: updatedPreset.maxContextChars,
+								aiUrl: updatedPreset.url,
+								...("apiKey" in updatedPreset && {
+									openaiApiKey: updatedPreset.apiKey,
+								}),
+							});
+						}
+
+						return updatedPreset;
+					}
+					return p;
+				});
+
+				await updateSettings({
+					aiPresets: updatedPresets,
+				});
+
+				toast({
+					title: "preset updated",
+					description: "changes have been saved",
+				});
+			} else {
+				// Handle create case (new preset or duplicate)
+				const newPreset = {
+					...settingsPreset,
 					prompt: settingsPreset?.prompt || DEFAULT_PROMPT,
 					maxContextChars: settingsPreset?.maxContextChars || 512000,
 					defaultPreset: false,
-				} as AIPreset,
-			],
-		});
-		setDialog(false);
+				} as AIPreset;
+
+				await updateSettings({
+					aiPresets: [...settings.aiPresets, newPreset],
+				});
+
+				toast({
+					title: isDuplicating ? "preset duplicated" : "preset created",
+					description: isDuplicating ? "duplicate has been saved" : "new preset has been added",
+				});
+			}
+
+			setDialog(false);
+		} catch (error) {
+			toast({
+				title: "error saving preset",
+				description: "something went wrong while saving the preset",
+				variant: "destructive",
+			});
+		} finally {
+			setIsLoading(false);
+		}
 	};
 
 	const updateSettingsPreset = (presetsObject: Partial<AIPreset>) => {
@@ -129,7 +218,6 @@ const AISection = ({
 	};
 
 	const handleMaxContextCharsChange = (value: number[]) => {
-		// updateSettings({ aiMaxContextChars: value[0] });
 		updateSettingsPreset({
 			maxContextChars: value[0],
 		});
@@ -138,14 +226,12 @@ const AISection = ({
 	const handleCustomPromptChange = (
 		e: React.ChangeEvent<HTMLTextAreaElement>,
 	) => {
-		//updateSettings({ customPrompt: e.target.value });
 		updateSettingsPreset({
 			prompt: e.target.value ?? DEFAULT_PROMPT,
 		});
 	};
 
 	const handleResetCustomPrompt = () => {
-		//resetSetting("customPrompt");
 		updateSettingsPreset({
 			prompt: DEFAULT_PROMPT,
 		});
@@ -162,10 +248,6 @@ const AISection = ({
 			case "native-ollama":
 				newUrl = "http://localhost:11434/v1";
 				break;
-			//case "embedded":
-			//	newUrl = `http://localhost:${settings.embeddedLLM.port}/v1`;
-			//	newModel = settings.embeddedLLM.model;
-			//	break;
 			case "screenpipe-cloud":
 				newUrl = "https://ai-proxy.i-f9f.workers.dev/v1";
 				break;
@@ -173,12 +255,6 @@ const AISection = ({
 				newUrl = settingsPreset?.url || "";
 				break;
 		}
-
-		//updateSettings({
-		//	aiProviderType: newValue,
-		//	aiUrl: newUrl,
-		//	aiModel: newModel,
-		//});
 
 		updateSettingsPreset({
 			provider: newValue,
@@ -299,16 +375,20 @@ const AISection = ({
 
 	return (
 		<div className="w-full space-y-6 py-4">
-			<h1 className="text-2xl font-bold">ai settings</h1>
+			<div className="flex flex-col gap-2">
+				<Button
+					className="w-max flex gap-2"
+					variant={"link"}
+					onClick={() => setDialog(false)}
+				>
+					<ArrowLeft className="w-4 h-4" /> back
+				</Button>
+				<h1 className="text-2xl font-bold">
+					{preset ? "update preset" : "create preset"}
+				</h1>
+			</div>
 			<div className="w-full">
 				<div className="flex flex-col gap-2">
-					<Button
-						className="w-max flex gap-2"
-						variant={"link"}
-						onClick={() => setDialog(false)}
-					>
-						<ArrowLeft className="w-4 h-4" /> Back
-					</Button>
 					<Label htmlFor="aiUrl" className="min-w-[80px]">
 						ai provider
 					</Label>
@@ -361,20 +441,32 @@ const AISection = ({
 			</div>
 			<div className="w-full">
 				<div className="flex flex-col gap-4 mb-4">
-					<Label htmlFor="preset_id">Name</Label>
+					<Label htmlFor="preset_id" className="flex items-center gap-2">
+						name
+						{nameError && (
+							<span className="text-xs text-destructive font-normal">
+								{nameError}
+							</span>
+						)}
+					</Label>
 					<Input
 						id="preset_id"
 						value={settingsPreset?.id}
 						onChange={(e) => {
 							const namePreset = e.target.value;
+							validateName(namePreset);
 							updateSettingsPreset({ id: namePreset });
 						}}
-						className="flex-grow"
+						className={cn(
+							"flex-grow",
+							nameError && "border-destructive focus-visible:ring-destructive"
+						)}
 						placeholder="enter name"
 						autoCorrect="off"
 						autoCapitalize="off"
 						autoComplete="off"
 						type="text"
+						disabled={!!preset && !isDuplicating && preset.id !== undefined}
 					/>
 				</div>
 			</div>
@@ -388,7 +480,6 @@ const AISection = ({
 							value={settingsPreset?.url}
 							onChange={(e) => {
 								const newUrl = e.target.value;
-								// updateSettings({ aiUrl: newUrl });
 								updateSettingsPreset({ url: newUrl });
 							}}
 							className="flex-grow"
@@ -555,7 +646,15 @@ const AISection = ({
 				</div>
 			</div>
 			<div className="flex justify-end">
-				<Button onClick={() => updateStoreSettings()}>Create Preset</Button>
+				<Button 
+					onClick={() => updateStoreSettings()}
+					disabled={isLoading}
+				>
+					{isLoading ? (
+						<Loader2 className="w-4 h-4 animate-spin mr-2" />
+					) : null}
+					{preset ? "update preset" : "create preset"}
+				</Button>
 			</div>
 		</div>
 	);
@@ -572,107 +671,297 @@ export const AIPresets = () => {
 	const { settings, updateSettings } = useSettings();
 	const [createPresetsDialog, setCreatePresentDialog] = useState(false);
 	const [selectedPreset, setSelectedPreset] = useState<AIPreset | undefined>();
+	const [isLoading, setIsLoading] = useState(false);
+	const [presetToDelete, setPresetToDelete] = useState<string | null>(null);
+	const [presetToSetDefault, setPresetToSetDefault] = useState<string | null>(null);
+	const [isDuplicating, setIsDuplicating] = useState(false);
 
 	useEffect(() => {
 		if (!createPresetsDialog) {
 			setSelectedPreset(undefined);
+			setIsDuplicating(false);
 		}
 	}, [createPresetsDialog]);
 
 	if (createPresetsDialog)
 		return (
-			<AISection setDialog={setCreatePresentDialog} preset={selectedPreset} />
+			<AISection 
+				setDialog={setCreatePresentDialog} 
+				preset={selectedPreset} 
+				isDuplicating={isDuplicating}
+			/>
 		);
 
-	const removePreset = (id: string) => {
-		const checkIfDefault = settings.aiPresets.find(
-			(preset) => preset.id === id,
-		)?.defaultPreset;
+	const removePreset = async (id: string) => {
+		setIsLoading(true);
+		try {
+			const checkIfDefault = settings.aiPresets.find(
+				(preset) => preset.id === id,
+			)?.defaultPreset;
 
-		if (checkIfDefault) {
+			if (checkIfDefault) {
+				toast({
+					title: "cannot delete default preset",
+					description: "please set another preset as default first",
+					variant: "destructive",
+				});
+				return;
+			}
+
+			const checkIfIDPresent = settings.aiPresets.find(
+				(preset) => preset.id === id,
+			);
+
+			if (!checkIfIDPresent) {
+				toast({
+					title: "preset not found",
+					description: "the preset you're trying to delete doesn't exist",
+					variant: "destructive",
+				});
+				return;
+			}
+
+			const filteredPresets = settings.aiPresets.filter(
+				(preset) => preset.id !== id,
+			);
+
+			await updateSettings({
+				aiPresets: filteredPresets,
+			});
+
 			toast({
-				title: "default preset cannot be deleted",
-				description: "preset cannot be deleted",
+				title: "preset deleted",
+				description: "the preset has been removed successfully",
+			});
+		} catch (error) {
+			toast({
+				title: "error deleting preset",
+				description: "something went wrong while deleting the preset",
 				variant: "destructive",
 			});
-			return;
+		} finally {
+			setIsLoading(false);
+			setPresetToDelete(null);
 		}
-
-		const checkIfIDPresent = settings.aiPresets.find(
-			(preset) => preset.id === id,
-		);
-
-		if (!checkIfIDPresent) {
-			toast({
-				title: "id doesn't exist",
-				description: "please check if id exists",
-				variant: "destructive",
-			});
-			return;
-		}
-
-		const filteredPresets = settings.aiPresets.filter(
-			(preset) => preset.id !== id,
-		);
-
-		updateSettings({
-			aiPresets: filteredPresets,
-		});
 	};
+
+	const setDefaultPreset = async (id: string) => {
+		setIsLoading(true);
+		try {
+			const selectedPreset = settings.aiPresets.find((p) => p.id === id);
+			if (!selectedPreset) return;
+
+			const updatedPresets = settings.aiPresets.map((preset) => ({
+				...preset,
+				defaultPreset: preset.id === id,
+			}));
+
+			const updateData: any = {
+				aiPresets: updatedPresets,
+				aiModel: selectedPreset.model,
+				aiProviderType: selectedPreset.provider,
+				customPrompt: selectedPreset.prompt,
+				aiMaxContextChars: selectedPreset.maxContextChars,
+				aiUrl: selectedPreset.url,
+			};
+
+			if ('apiKey' in selectedPreset) {
+				updateData.openaiApiKey = selectedPreset.apiKey;
+			}
+
+			await updateSettings(updateData);
+
+			toast({
+				title: "default preset updated",
+				description: "the preset has been set as default",
+			});
+		} catch (error) {
+			toast({
+				title: "error updating default preset",
+				description: "something went wrong while updating the default preset",
+				variant: "destructive",
+			});
+		} finally {
+			setIsLoading(false);
+			setPresetToSetDefault(null);
+		}
+	};
+
+	const duplicatePreset = async (id: string) => {
+		const presetToDuplicate = settings.aiPresets.find((p) => p.id === id);
+		if (!presetToDuplicate) return;
+
+		const newPreset = {
+			...presetToDuplicate,
+			id: `${presetToDuplicate.id} copy`,
+			defaultPreset: false,
+		};
+
+		setSelectedPreset(newPreset);
+		setIsDuplicating(true);
+		setCreatePresentDialog(true);
+	};
+
+	if (!settings.aiPresets?.length) {
+		return (
+			<div className="w-full h-[400px] flex flex-col items-center justify-center space-y-4">
+				<Settings2 className="w-12 h-12 text-muted-foreground" />
+				<h2 className="text-xl font-medium text-muted-foreground">no presets yet</h2>
+				<p className="text-sm text-muted-foreground">create your first ai preset to get started</p>
+				<Button onClick={() => setCreatePresentDialog(true)}>
+					<Plus className="w-4 h-4 mr-2" />
+					create preset
+				</Button>
+			</div>
+		);
+	}
 
 	return (
 		<div className="w-full space-y-6 py-4">
-			<h1 className="text-2xl font-bold">ai settings</h1>
-			<div className="w-full flex flex-col gap-4">
+			<div className="flex items-center justify-between">
+				<h1 className="text-2xl font-bold">ai settings</h1>
+				<Button onClick={() => setCreatePresentDialog(true)}>
+					<Plus className="w-4 h-4 mr-2" />
+					create preset
+				</Button>
+			</div>
+			<div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
 				{settings.aiPresets.map((preset) => {
+					const isDefault = preset.defaultPreset;
 					return (
 						<Card
 							key={preset.id}
-							className="py-2 px-5 relative group"
-							onClick={() => {
-								setSelectedPreset(preset);
-								setCreatePresentDialog(true);
-							}}
+							className="p-4 relative group transition-all hover:shadow-md"
 						>
-							<div className="flex justify-between items-center">
-								<div className="text-sm text-muted-foreground">
-									<div className="text-lg text-foreground flex gap-2">
+							<div 
+								className="flex justify-between items-start cursor-pointer"
+								onClick={() => {
+									setSelectedPreset(preset);
+									setIsDuplicating(false);
+									setCreatePresentDialog(true);
+								}}
+							>
+								<div className="space-y-2">
+									<div className="text-lg font-semibold text-foreground flex items-center gap-2">
 										{preset.id}
-										{preset.defaultPreset && <Badge>default</Badge>}
+										{isDefault && (
+											<Badge variant="secondary" className="font-normal">
+												default
+											</Badge>
+										)}
 									</div>
-									<div>{preset.model}</div>
-									<div>{preset.maxContextChars}</div>
+									<div className="text-sm text-muted-foreground space-y-1">
+										<div className="flex items-center gap-2">
+											<span>model:</span>
+											<span className="font-medium">{preset.model}</span>
+										</div>
+										<div className="flex items-center gap-2">
+											<span>context:</span>
+											<span className="font-medium">
+												{preset.maxContextChars?.toLocaleString()}
+											</span>
+										</div>
+									</div>
 								</div>
 								<img
 									src={providerImageSrc[preset.provider]}
-									alt="proivder logo"
-									className="w-10 h-10"
+									alt={`${preset.provider} logo`}
+									className="w-10 h-10 opacity-80 group-hover:opacity-100 transition-opacity"
 								/>
 							</div>
-							{
-								<div className="flex justify-between">
-									<Button
-										className="px-0"
-										disabled={preset.defaultPreset}
-										variant={"link"}
-										size={"sm"}
-									>
-										Default
-									</Button>
-
-									<Button className="px-0" variant={"link"} size={"sm"}>
-										Remove
-									</Button>
-								</div>
-							}
+							<div className="flex justify-end gap-2 mt-4">
+								<Button
+									className="text-xs"
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										duplicatePreset(preset.id);
+									}}
+									disabled={isLoading}
+								>
+									duplicate
+								</Button>
+								<Button
+									className="text-xs"
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										setPresetToSetDefault(preset.id);
+									}}
+									disabled={isLoading || isDefault}
+								>
+									{isDefault ? "current default" : "set as default"}
+								</Button>
+								<Button
+									className="text-xs text-destructive"
+									variant="ghost"
+									size="sm"
+									onClick={(e) => {
+										e.stopPropagation();
+										setPresetToDelete(preset.id);
+									}}
+									disabled={isLoading || isDefault}
+								>
+									<Trash2 className="w-3 h-3 mr-1" />
+									remove
+								</Button>
+							</div>
 						</Card>
 					);
 				})}
-
-				<Button onClick={() => setCreatePresentDialog(!createPresetsDialog)}>
-					Create
-				</Button>
 			</div>
+
+			<AlertDialog open={!!presetToDelete} onOpenChange={() => setPresetToDelete(null)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>are you sure?</AlertDialogTitle>
+						<AlertDialogDescription>
+							this action cannot be undone. this will permanently delete the preset.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>cancel</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							onClick={() => presetToDelete && removePreset(presetToDelete)}
+						>
+							{isLoading ? (
+								<Loader2 className="w-4 h-4 animate-spin" />
+							) : (
+								"delete"
+							)}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog
+				open={!!presetToSetDefault}
+				onOpenChange={() => setPresetToSetDefault(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>change default preset?</AlertDialogTitle>
+						<AlertDialogDescription>
+							this will set this preset as the default and apply its settings.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>cancel</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => presetToSetDefault && setDefaultPreset(presetToSetDefault)}
+						>
+							{isLoading ? (
+								<Loader2 className="w-4 h-4 animate-spin" />
+							) : (
+								"continue"
+							)}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 };

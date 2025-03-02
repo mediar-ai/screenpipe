@@ -66,21 +66,21 @@ export type AIPreset = {
   prompt: string;
   //provider: AIProviderType;
 } & (
-  | {
+    | {
       provider: "openai";
       apiKey: string;
     }
-  | {
+    | {
       provider: "native-ollama";
     }
-  | {
+    | {
       provider: "screenpipe-cloud";
     }
-  | {
+    | {
       provider: "custom";
       apiKey?: string;
     }
-);
+  );
 
 export type Settings = {
   openaiApiKey: string;
@@ -395,7 +395,7 @@ export function useSettings() {
     let p = "macos";
     try {
       p = platform();
-    } catch (e) {}
+    } catch (e) { }
 
     return p === "macos" || p === "linux"
       ? `${homeDirPath}/.screenpipe`
