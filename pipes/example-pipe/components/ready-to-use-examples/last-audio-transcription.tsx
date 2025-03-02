@@ -1,20 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { pipe, type OCRContent, type ContentItem } from "@screenpipe/browser";
+import { pipe, type AudioContent, type ContentItem } from "@screenpipe/browser";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
-export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, error: string | null) => void }) {
-  const [ocrData, setOcrData] = useState<OCRContent | null>(null);
+export function LastAudioTranscription({ onDataChange }: { onDataChange?: (data: any, error: string | null) => void }) {
+  const [audioData, setAudioData] = useState<AudioContent | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLatestOCR = async () => {
+  const fetchLatestAudio = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      console.log("fetching latest ocr...");
+      console.log("fetching latest audio transcription...");
       
       // Add error handling for the analytics connection issue
       const originalConsoleError = console.error;
@@ -31,7 +31,7 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
       
       const startTime = performance.now();
       const result = await pipe.queryScreenpipe({
-        contentType: "ocr",
+        contentType: "audio",
         limit: 1,
       });
       const requestTime = performance.now() - startTime;
@@ -45,8 +45,8 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
       }
       
       if (!result || !result.data || result.data.length === 0) {
-        console.log("no ocr data found");
-        const errorMsg = "No OCR data available";
+        console.log("no audio data found");
+        const errorMsg = "No audio transcription data available";
         setError(errorMsg);
         if (onDataChange) {
           onDataChange(null, errorMsg);
@@ -54,14 +54,14 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
         return;
       }
       
-      const item = result.data[0] as ContentItem & { type: "OCR" };
-      console.log("got ocr data:", item.content);
-      setOcrData(item.content);
+      const item = result.data[0] as ContentItem & { type: "Audio" };
+      console.log("got audio data:", item.content);
+      setAudioData(item.content);
     } catch (error) {
-      console.error("error fetching ocr:", error);
+      console.error("error fetching audio:", error);
       const errorMessage = error instanceof Error 
-        ? `Failed to fetch OCR data: ${error.message}`
-        : "Failed to fetch OCR data";
+        ? `Failed to fetch audio data: ${error.message}`
+        : "Failed to fetch audio data";
       setError(errorMessage);
       
       // Pass the error to the parent component
@@ -73,33 +73,33 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
     }
   };
 
-  const renderOcrContent = (ocrData: OCRContent) => {
+  const renderAudioContent = (audioData: AudioContent) => {
     return (
       <div className="space-y-2 text-xs">
         <div className="flex flex-col text-slate-600">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <span className="font-semibold">appName: </span>
-              <span>{ocrData.appName || "Unknown"}</span>
+              <span className="font-semibold">deviceName: </span>
+              <span>{audioData.deviceName || "Unknown"}</span>
             </div>
             <div>
               <span className="font-semibold">timestamp: </span>
-              <span>{new Date(ocrData.timestamp).toLocaleString()}</span>
+              <span>{new Date(audioData.timestamp).toLocaleString()}</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <span className="font-semibold">windowName: </span>
-              <span>{ocrData.windowName || "Unknown"}</span>
+              <span className="font-semibold">deviceType: </span>
+              <span>{audioData.deviceType || "Unknown"}</span>
             </div>
             <div>
-              <span className="font-semibold">type: </span>
-              <span>Window</span>
+              <span className="font-semibold">speaker: </span>
+              <span>{audioData.speaker?.name || `ID: ${audioData.speaker?.id || "Unknown"}`}</span>
             </div>
           </div>
         </div>
         <div className="bg-slate-100 rounded p-2 overflow-auto h-[230px] whitespace-pre-wrap font-mono text-xs">
-          {ocrData.text}
+          {audioData.transcription}
         </div>
       </div>
     );
@@ -109,7 +109,7 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
     <div className="space-y-2">
       <div className="flex justify-between items-center">
         <Button 
-          onClick={fetchLatestOCR} 
+          onClick={fetchLatestAudio} 
           disabled={isLoading}
           size="sm"
         >
@@ -119,13 +119,23 @@ export function LastOcrImage({ onDataChange }: { onDataChange?: (data: any, erro
               Loading...
             </>
           ) : (
-            'Fetch OCR'
+            'Fetch Audio'
           )}
         </Button>
+        
+        {audioData && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => navigator.clipboard.writeText(audioData.transcription)}
+          >
+            Copy
+          </Button>
+        )}
       </div>
       
       {error && <p className="text-xs text-red-500">{error}</p>}
-      {ocrData && renderOcrContent(ocrData)}
+      {audioData && renderAudioContent(audioData)}
     </div>
   );
-}
+} 
