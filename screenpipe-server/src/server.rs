@@ -27,8 +27,8 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
-        MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
+        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
@@ -2071,6 +2071,7 @@ pub fn create_router() -> Router<Arc<AppState>> {
         // .route("/vision/stop", post(stop_vision_device))
         // .route("/audio/restart", post(restart_audio_devices))
         // .route("/vision/restart", post(restart_vision_devices))
+        .route("/frames/export", get(handle_video_export_ws))
         .layer(cors);
 
     #[cfg(feature = "experimental")]
@@ -2078,6 +2079,231 @@ pub fn create_router() -> Router<Arc<AppState>> {
         router = router.route("/experimental/input_control", post(input_control_handler));
     }
     router
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct VideoExportRequest {
+    #[serde(deserialize_with = "deserialize_frame_ids")]
+    frame_ids: Vec<i64>,
+    fps: f64,
+}
+
+fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = String::deserialize(deserializer)?;
+    Ok(s.split(',').filter_map(|id| id.parse().ok()).collect())
+}
+
+#[derive(Debug, Serialize)]
+struct ExportProgress {
+    status: String,
+    progress: f32,
+    video_data: Option<Vec<u8>>,
+    error: Option<String>,
+}
+
+pub async fn handle_video_export_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+    Query(payload): Query<VideoExportRequest>,
+) -> impl IntoResponse {
+    if payload.frame_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "No valid frame IDs provided" })),
+        )
+            .into_response();
+    }
+
+    ws.on_upgrade(move |socket| async move { handle_video_export(socket, state, payload).await })
+}
+
+async fn handle_video_export(
+    mut socket: WebSocket,
+    state: Arc<AppState>,
+    payload: VideoExportRequest,
+) {
+    let temp_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::to_string(&ExportProgress {
+                        status: "error".to_string(),
+                        progress: 0.0,
+                        video_data: None,
+                        error: Some(format!("Failed to create temp directory: {}", e)),
+                    })
+                    .unwrap(),
+                ))
+                .await;
+            return;
+        }
+    };
+
+    let frames_dir = temp_dir.path().join("frames");
+    if let Err(e) = tokio::fs::create_dir_all(&frames_dir).await {
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "error".to_string(),
+                    progress: 0.0,
+                    video_data: None,
+                    error: Some(format!("Failed to create frames directory: {}", e)),
+                })
+                .unwrap(),
+            ))
+            .await;
+        return;
+    }
+
+    let output_filename = format!(
+        "screenpipe_export_{}.mp4",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
+    let output_path = temp_dir.path().join(&output_filename);
+
+    let mut frames = Vec::new();
+    let mut skipped_frames = Vec::new();
+
+    // Send initial status
+    let _ = socket
+        .send(Message::Text(
+            serde_json::to_string(&ExportProgress {
+                status: "extracting".to_string(),
+                progress: 0.0,
+                video_data: None,
+                error: None,
+            })
+            .unwrap(),
+        ))
+        .await;
+
+    // Process frames
+    for (index, frame_id) in payload.frame_ids.iter().enumerate() {
+        let progress = (index as f32 / payload.frame_ids.len() as f32) * 0.5;
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "extracting".to_string(),
+                    progress,
+                    video_data: None,
+                    error: None,
+                })
+                .unwrap(),
+            ))
+            .await;
+
+        match state.db.get_frame(*frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_high_quality_frame(&file_path, offset_index, &frames_dir).await {
+                    Ok(frame_path) => {
+                        frames.push(FrameContent {
+                            file_path: frame_path,
+                            timestamp: Some(chrono::Utc::now()),
+                            window_name: None,
+                            app_name: None,
+                            ocr_results: None,
+                            tags: None,
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        skipped_frames.push(*frame_id);
+                    }
+                }
+            }
+            Ok(None) => {
+                error!("Frame {} not found in database", frame_id);
+                skipped_frames.push(*frame_id);
+            }
+            Err(e) => {
+                error!("Database error for frame {}: {}", frame_id, e);
+                skipped_frames.push(*frame_id);
+            }
+        }
+    }
+
+    if frames.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "error".to_string(),
+                    progress: 0.0,
+                    video_data: None,
+                    error: Some("No valid frames to process".to_string()),
+                })
+                .unwrap(),
+            ))
+            .await;
+        return;
+    }
+
+    // Send encoding status
+    let _ = socket
+        .send(Message::Text(
+            serde_json::to_string(&ExportProgress {
+                status: "encoding".to_string(),
+                progress: 0.5,
+                video_data: None,
+                error: None,
+            })
+            .unwrap(),
+        ))
+        .await;
+
+    // Create video
+    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await {
+        Ok(_) => match tokio::fs::read(&output_path).await {
+            Ok(video_data) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "completed".to_string(),
+                            progress: 1.0,
+                            video_data: Some(video_data),
+                            error: None,
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+            }
+            Err(e) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "error".to_string(),
+                            progress: 1.0,
+                            video_data: None,
+                            error: Some(format!("Failed to read video file: {}", e)),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+            }
+        },
+        Err(e) => {
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::to_string(&ExportProgress {
+                        status: "error".to_string(),
+                        progress: 1.0,
+                        video_data: None,
+                        error: Some(format!("Failed to create video: {}", e)),
+                    })
+                    .unwrap(),
+                ))
+                .await;
+        }
+    }
+
+    // Cleanup
+    if let Err(e) = tokio::fs::remove_dir_all(&temp_dir).await {
+        error!("Failed to clean up temp directory: {}", e);
+    }
 }
 
 async fn get_pipe_build_status(

@@ -159,7 +159,7 @@ export const TimelineSlider = ({
 		setSelectedIndices(new Set([index]));
 
 		const startDate = new Date(frames[index].timestamp);
-		setSelectionRange({ start: startDate, end: startDate });
+		setSelectionRange({ start: startDate, end: startDate, frameIds: [] });
 	};
 
 	const handleDragOver = (index: number) => {
@@ -174,9 +174,16 @@ export const TimelineSlider = ({
 
 			setSelectedIndices(newSelection);
 
+			// Get frame IDs for the selection
+			const selectedFrameIds = Array.from(newSelection).map(
+				(i) => frames[i].devices[0].frame_id,
+			);
+
+			// Update selection range with frame IDs
 			setSelectionRange({
 				end: new Date(frames[start].timestamp),
 				start: new Date(frames[end].timestamp),
+				frameIds: selectedFrameIds,
 			});
 
 			if (onSelectionChange) {

@@ -98,6 +98,7 @@
     }
   },
   "app": {
+    "withGlobalTauri": true,
     "trayIcon": {
       "id": "screenpipe_main",
       "iconPath": "icons/screenpipe-logo-tray-black.png",
