@@ -97,6 +97,14 @@ bunx --bun @screenpipe/dev@latest login
 bunx --bun @screenpipe/dev@latest pipe register --name my-pipe [--paid --price 9.99] # MAKE SURE TO SET THE PRICE IF YOU WANT TO SELL IT - IRREVERSIBLE
 # you'll receive payouts to your stripe account on a daily basis
 
+# publish your pipe to the store
+bunx --bun @screenpipe/dev@latest pipe publish --name my-pipe
+# our team will review your pipe and publish it to the store
+# if approved, your pipe will be available in the store to everyone
+
+# list all versions of your pipe
+bunx --bun @screenpipe/dev@latest pipe list-versions --name my-pipe
+
 # add predefined components to your pipe (shadcn style)
 bunx --bun @screenpipe/dev@latest components add
 # select components from the interactive menu:
@@ -107,14 +115,6 @@ bunx --bun @screenpipe/dev@latest components add
 # - sql-autocomplete-input: SQL input component
 # - use-search-history: search history management
 # - use-ai-provider: AI integration hooks
-
-# publish your pipe to the store
-bunx --bun @screenpipe/dev@latest pipe publish --name my-pipe
-# our team will review your pipe and publish it to the store
-# if approved, your pipe will be available in the store to everyone
-
-# list all versions of your pipe
-bunx --bun @screenpipe/dev@latest pipe list-versions --name my-pipe
 
 # end current session
 bunx --bun @screenpipe/dev@latest logout

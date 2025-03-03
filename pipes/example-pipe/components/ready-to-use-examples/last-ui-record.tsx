@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UiContent } from "@screenpipe/browser";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export function LastUiRecord() {
+export function LastUiRecord({ onDataChange }: { onDataChange?: (data: any, error: string | null) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uiRecord, setUiRecord] = useState<UiContent | null>(null);
@@ -17,24 +17,39 @@ export function LastUiRecord() {
       setLoading(true);
       setError(null);
       
+      const startTime = performance.now();
       const response = await pipe.queryScreenpipe({
         contentType: "ui",
         limit: 1,
         // Sort by most recent
         offset: 0,
       });
+      const requestTime = performance.now() - startTime;
       
       console.log("ui record response:", response);
+      
+      // Pass the raw response to the parent component for display in the raw output tab
+      if (onDataChange) {
+        onDataChange(response, null);
+      }
       
       if (response && response.data.length > 0 && response.data[0].type === "UI") {
         setUiRecord(response.data[0].content);
       } else {
         console.log("no ui records found");
-        setError("No UI records found");
+        const errorMsg = "No UI records found";
+        setError(errorMsg);
+        if (onDataChange) {
+          onDataChange(null, errorMsg);
+        }
       }
     } catch (err) {
       console.error("error fetching ui record:", err);
-      setError(`Failed to fetch UI record: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMsg = `Failed to fetch UI record: ${err instanceof Error ? err.message : String(err)}`;
+      setError(errorMsg);
+      if (onDataChange) {
+        onDataChange(null, errorMsg);
+      }
     } finally {
       setLoading(false);
     }

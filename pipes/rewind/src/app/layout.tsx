@@ -5,6 +5,7 @@ import { SearchCommand } from "@/components/search-command";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { getScreenpipeAppSettings } from "@/lib/actions/get-screenpipe-app-settings";
 import { SettingsProvider } from "@/components/settings-provider";
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
 	variable: "--font-geist-sans",
@@ -62,6 +63,7 @@ export default async function RootLayout({
 							<NuqsAdapter>
 								<SearchCommand />
 								{children}
+								<Toaster />
 							</NuqsAdapter>
 						</>
 					)}

@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
-import { input } from "@inquirer/prompts"; // Import select from inquirer prompts
+import * as p from "@clack/prompts";
 import { Command } from "commander";
-import inquirer from "inquirer";
 import simpleGit from "simple-git";
 import { logger, spinner } from "../components/commands/add/utils/logger";
 import { handleError } from "../components/commands/add/utils/handle-error";
@@ -21,17 +20,18 @@ export const createAppCommand = new Command()
 
     if (!appType) {
       try {
-        let { appTypePrompt } = await inquirer.prompt({
-          name: "appTypePrompt",
-          type: "select",
-          message: "> what type of desktop app would you like to create?",
-          choices: [
-            { name: "electron", value: "electron" },
-            { name: "tauri", value: "tauri" },
+        appType = await p.select({
+          message: "what type of desktop app would you like to create?",
+          options: [
+            { value: "electron", label: "electron" },
+            { value: "tauri", label: "tauri" },
           ],
-          default: "tauri",
         });
-        appType = appTypePrompt;
+
+        if (p.isCancel(appType)) {
+          p.cancel("operation cancelled");
+          process.exit(1);
+        }
       } catch (error) {
         handleError(error);
       }
@@ -39,14 +39,19 @@ export const createAppCommand = new Command()
 
     if (!name || name.length === 0) {
       try {
-        name = await input({
-          message: "> what is your project name?",
-          default: "my-desktop-app",
+        name = await p.text({
+          message: "what is your project name?",
+          placeholder: "my-desktop-app",
           validate: (input) => {
             if (input.trim().length === 0) return "project name is required.";
-            return true;
+            return;
           },
         });
+
+        if (p.isCancel(name)) {
+          p.cancel("operation cancelled");
+          process.exit(1);
+        }
       } catch (error) {
         handleError(error);
       }

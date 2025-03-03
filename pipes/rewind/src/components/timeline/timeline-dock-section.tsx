@@ -399,6 +399,7 @@ export function TimelineIconsSection({
                   setSelectionRange({
                     start: selectedApp.timestamp,
                     end: new Date(selectedApp.timestamp.getTime() + 60000),
+                    frameIds: [],
                   });
                 }}
               >

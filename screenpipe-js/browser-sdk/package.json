@@ -1,6 +1,6 @@
 {
   "name": "@screenpipe/browser",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -20,7 +20,6 @@
     "tsup": "^8.0.0"
   },
   "dependencies": {
-    "@scarf/scarf": "^1.4.0",
     "@types/express": "^5.0.0",
     "@types/node-cron": "^3.0.11",
     "@types/uuid": "^10.0.0",

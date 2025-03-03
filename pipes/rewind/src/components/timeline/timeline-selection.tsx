@@ -33,7 +33,7 @@ export function TimelineSelection({
 		setStartChunk(chunkIndex);
 		setCurrentChunk(chunkIndex);
 		const date = getDateFromChunk(chunkIndex);
-		setSelectionRange({ start: date, end: date });
+		setSelectionRange({ start: date, end: date, frameIds: [] });
 	};
 
 	const handleMouseMove = (e: MouseEvent, chunkIndex: number) => {
@@ -46,6 +46,7 @@ export function TimelineSelection({
 		setSelectionRange({
 			start: getDateFromChunk(start),
 			end: getDateFromChunk(end + 1), // +1 to include the full chunk
+			frameIds: [],
 		});
 	};
 
