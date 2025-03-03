@@ -2320,6 +2320,7 @@ async fn handle_video_export(
     }
 }
 
+#[oasgen]
 async fn get_pipe_build_status(
     Path(pipe_id): Path<String>,
     State(state): State<Arc<AppState>>,
