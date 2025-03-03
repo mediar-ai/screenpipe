@@ -1,10 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use screenpipe_audio::core::device::{default_input_device, AudioDevice};
-use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::core::record_and_transcribe;
 use screenpipe_audio::core::stream::AudioStream;
-use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
-use screenpipe_audio::{create_whisper_channel, AudioInput};
+use screenpipe_audio::AudioInput;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -18,18 +16,7 @@ async fn setup_test() -> (
 ) {
     let audio_device = default_input_device().unwrap(); // TODO feed voice in automatically somehow
     let output_path = PathBuf::from("/tmp/test_audio.mp4");
-    // let (whisper_sender, _) = mpsc::unbounded_channel();
-    let (whisper_sender, _, _) = create_whisper_channel(
-        Arc::new(AudioTranscriptionEngine::WhisperDistilLargeV3),
-        VadEngineEnum::Silero,
-        None,
-        &output_path,
-        VadSensitivity::High,
-        vec![],
-        None,
-    )
-    .await
-    .unwrap();
+    let (whisper_sender, _) = crossbeam::channel::bounded(1000);
     let is_running = Arc::new(AtomicBool::new(true));
 
     (
