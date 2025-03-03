@@ -1,20 +1,12 @@
-use anyhow::{anyhow, Result};
-use clap::Parser;
-use log::info;
-use screenpipe_audio::core::device::{
-    default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-    AudioDevice,
-};
-use screenpipe_audio::core::engine::AudioTranscriptionEngine;
-use screenpipe_audio::core::record_and_transcribe;
-use screenpipe_audio::core::stream::AudioStream;
-use screenpipe_audio::create_whisper_channel;
-use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
-use screenpipe_core::Language;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Duration;
+
+use anyhow::Result;
+use clap::Parser;
+use futures::pin_mut;
+use screenpipe_audio::{audio_manager::AudioManagerBuilder, core::device::list_audio_devices};
+use screenpipe_core::Language;
+use screenpipe_db::DatabaseManager;
+use tokio::signal::{self};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -39,7 +31,7 @@ struct Args {
     language: Vec<Language>,
 }
 
-fn print_devices(devices: &[AudioDevice]) {
+fn print_devices(devices: &[String]) {
     println!("Available audio devices:");
     for device in devices.iter() {
         println!("  {}", device);
@@ -57,7 +49,7 @@ async fn main() -> Result<()> {
     use log::LevelFilter;
 
     Builder::new()
-        .filter(None, LevelFilter::Debug)
+        .filter(None, LevelFilter::Info)
         .filter_module("tokenizers", LevelFilter::Error)
         .init();
 
@@ -65,10 +57,36 @@ async fn main() -> Result<()> {
 
     let languages = args.language;
 
-    let devices = list_audio_devices().await?;
+    let devices = list_audio_devices()
+        .await?
+        .iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<String>>();
 
     if args.list_audio_devices {
         print_devices(&devices);
         return Ok(());
     }
+
+    let ctrl_c_future = signal::ctrl_c();
+    pin_mut!(ctrl_c_future);
+
+    let db = DatabaseManager::new("sqlite::memory:").await?;
+
+    let mut builder = AudioManagerBuilder::new()
+        .languages(languages)
+        .enabled_devices(args.audio_device)
+        .output_path("/tmp/screenpipe".into());
+
+    let manager = builder.build(Arc::new(db)).await?;
+
+    manager.start().await?;
+
+    tokio::select! {
+        _ = ctrl_c_future => {
+            manager.stop().await?;
+        }
+    }
+
+    Ok(())
 }

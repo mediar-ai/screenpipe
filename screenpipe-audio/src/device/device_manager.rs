@@ -27,14 +27,6 @@ impl DeviceManager {
         list_audio_devices().await.unwrap_or_default()
     }
 
-    pub async fn device(&self, device_name: &str) -> Option<AudioDevice> {
-        self.devices()
-            .await
-            .iter()
-            .find(|d| d.name == device_name)
-            .cloned()
-    }
-
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
         if !self.devices().await.contains(device) {
             return Err(anyhow!("device {device} not found"));
