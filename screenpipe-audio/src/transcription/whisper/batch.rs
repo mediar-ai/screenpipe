@@ -2,7 +2,7 @@ use super::detect_language;
 use anyhow::Result;
 use screenpipe_core::Language;
 use std::sync::Arc;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperToken};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext};
 /// Processes audio data using the Whisper model to generate transcriptions.
 ///
 /// # Returns

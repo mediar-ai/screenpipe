@@ -111,6 +111,7 @@ impl AudioStream {
     }
 
     pub async fn stop(&self) -> Result<()> {
+        info!("stopping cpal recording for {}", self.device.name);
         self.is_disconnected.store(true, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.stream_control.send(StreamControl::Stop(tx))?;

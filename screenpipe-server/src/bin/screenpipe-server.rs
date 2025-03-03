@@ -10,7 +10,7 @@ use screenpipe_audio::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
         trigger_audio_permission,
     },
-    transcription::whisper::model::WhisperModel,
+    transcription::whisper::model::download_whisper_model,
     vad::silero::SileroVad,
 };
 use screenpipe_core::find_ffmpeg_path;
@@ -300,7 +300,7 @@ async fn main() -> anyhow::Result<()> {
                 // this command just download models and stuff (useful to have specific step to display in UI)
 
                 // ! should prob skip if deepgram?
-                WhisperModel::new(&cli.audio_transcription_engine.into()).unwrap();
+                download_whisper_model(Arc::new(cli.audio_transcription_engine.into())).unwrap();
                 // ! assuming silero is used
                 SileroVad::new().await.unwrap();
 
@@ -697,7 +697,6 @@ async fn main() -> anyhow::Result<()> {
 
     let audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
 
-    let audio_manager_clone = audio_manager.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -724,15 +723,10 @@ async fn main() -> anyhow::Result<()> {
                 let result = tokio::select! {
                     result = recording_future => result,
                     _ = shutdown_rx.recv() => {
-                        let _ = audio_manager_clone.stop().await;
                         info!("received shutdown signal for recording");
                         break;
                     }
                 };
-
-                while audio_manager_clone.status().await == AudioManagerStatus::Running {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                }
 
                 if let Err(e) = result {
                     error!("continuous recording error: {:?}", e);
@@ -1165,6 +1159,7 @@ async fn main() -> anyhow::Result<()> {
         }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
+            let _ = audio_manager.stop().await;
             let _ = shutdown_tx.send(());
         }
     }

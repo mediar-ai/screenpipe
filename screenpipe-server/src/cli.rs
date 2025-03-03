@@ -15,8 +15,12 @@ pub enum CliAudioTranscriptionEngine {
     Deepgram,
     #[clap(name = "whisper-tiny")]
     WhisperTiny,
+    #[clap(name = "whisper-tiny-quantized")]
+    WhisperTinyQuantized,
     #[clap(name = "whisper-large")]
-    WhisperDistilLargeV3,
+    WhisperLargeV3,
+    #[clap(name = "whisper-large-quantized")]
+    WhisperLargeV3Quantized,
     #[clap(name = "whisper-large-v3-turbo")]
     WhisperLargeV3Turbo,
     #[clap(name = "whisper-large-v3-turbo-quantized")]
@@ -28,13 +32,13 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
         match cli_engine {
             CliAudioTranscriptionEngine::Deepgram => CoreAudioTranscriptionEngine::Deepgram,
             CliAudioTranscriptionEngine::WhisperTiny => CoreAudioTranscriptionEngine::WhisperTiny,
-            CliAudioTranscriptionEngine::WhisperDistilLargeV3 => {
-                CoreAudioTranscriptionEngine::WhisperDistilLargeV3
-            }
+            CliAudioTranscriptionEngine::WhisperTinyQuantized => CoreAudioTranscriptionEngine::WhisperTinyQuantized,
+            CliAudioTranscriptionEngine::WhisperLargeV3 => CoreAudioTranscriptionEngine::WhisperLargeV3,
+            CliAudioTranscriptionEngine::WhisperLargeV3Quantized => CoreAudioTranscriptionEngine::WhisperLargeV3Quantized,
             CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
             }
-        CliAudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
+            CliAudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3TurboQuantized
             }
         }
