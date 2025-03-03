@@ -30,12 +30,11 @@ pub use migration_worker::{
 pub use pipe_manager::PipeManager;
 pub use resource_monitor::{ResourceMonitor, RestartSignal};
 pub use screenpipe_core::Language;
-pub use server::create_router;
 pub use server::health_check;
 pub use server::AppState;
 pub use server::ContentItem;
 pub use server::HealthCheckResponse;
 pub use server::PaginatedResponse;
-pub use server::Server;
+pub use server::SCServer;
 pub use server::{api_list_monitors, MonitorInfo};
 pub use video::VideoCapture;

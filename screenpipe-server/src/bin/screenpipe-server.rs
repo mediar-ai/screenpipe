@@ -18,7 +18,7 @@ use screenpipe_server::{
     create_migration_worker, handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, MigrationCommand, MigrationConfig,
-    MigrationStatus, PipeManager, ResourceMonitor, Server,
+    MigrationStatus, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -796,7 +796,7 @@ async fn main() -> anyhow::Result<()> {
     let (audio_devices_tx, _) = broadcast::channel(100);
 
     // TODO: Add SSE stream for realtime audio transcription
-    let server = Server::new(
+    let server = SCServer::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         local_data_dir_clone_2,

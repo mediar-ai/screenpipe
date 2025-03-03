@@ -14,6 +14,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{fmt, thread};
 use tokio::sync::{broadcast, oneshot};
+use oasgen::OaSchema;
+
 lazy_static! {
     pub static ref LAST_AUDIO_CAPTURE: AtomicU64 = AtomicU64::new(
         std::time::SystemTime::now()
@@ -51,13 +53,13 @@ pub struct DeviceControl {
     pub is_paused: bool,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
+#[derive(OaSchema, Clone, Eq, PartialEq, Hash, Serialize, Debug, Deserialize)]
 pub enum DeviceType {
     Input,
     Output,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Serialize, Debug)]
+#[derive(OaSchema, Clone, Eq, PartialEq, Hash, Serialize, Debug)]
 pub struct AudioDevice {
     pub name: String,
     pub device_type: DeviceType,
