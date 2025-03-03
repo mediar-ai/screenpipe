@@ -1050,7 +1050,6 @@ impl SCServer {
             // .post("/vision/stop", stop_vision_device)
             // .post("/audio/restart", restart_audio_devices)
             // .post("/vision/restart", restart_vision_devices)
-            .post("/frames/export", handle_video_export_ws)
             .route_yaml_spec("/openapi.yaml")
             .route_json_spec("/openapi.json")
             .freeze();
@@ -1062,6 +1061,7 @@ impl SCServer {
             .route("/stream/frames", get(stream_frames_handler))
             .route("/ws/events", get(ws_events_handler))
             .route("/ws/health", get(ws_health_handler))
+            .route("/frames/export", get(handle_video_export_ws))
             .with_state(app_state)
             .layer(cors)
             .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
