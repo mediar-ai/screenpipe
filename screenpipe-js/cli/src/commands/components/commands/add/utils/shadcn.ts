@@ -5,6 +5,7 @@ import { spinner } from "./logger"
 import { detectPackageManager, PackageManager } from "./package-manager"
 import { handleError } from "./handle-error"
 import prompts from "prompts"
+import * as p from "@clack/prompts"
 
 // Add delay utility
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -125,16 +126,11 @@ async function initializeShadcn(cwd: string, silent: boolean = false): Promise<b
   try {
     if (!silent) {
       // Clear the line instead of showing initial spinner
-      process.stdout.write('\r\x1b[K');
-      await delay(100); // Small delay to ensure clean output
-      const shouldInit = await prompts({
-        type: 'confirm',
-        name: 'value',
-        message: 'shadcn-ui is not initialized in this project. Would you like to initialize it now?',
-        initial: false
+      const shouldInit = await p.confirm({
+        message: 'shadcn-ui is not initialized in this project. Would you like to initialize it now?'
       });
       
-      if (!shouldInit.value) {
+      if (p.isCancel(shouldInit) || !shouldInit) {
         console.log('Please initialize shadcn-ui manually by running: npx shadcn@latest init');
         return false;
       }
@@ -155,11 +151,9 @@ async function initializeShadcn(cwd: string, silent: boolean = false): Promise<b
       }
     });
     
-    await delay(500);
     initSpinner.succeed('Initialized shadcn-ui');
     return true;
   } catch (error) {
-    await delay(500);
     initSpinner.fail('Failed to initialize shadcn-ui');
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     throw new Error(`Failed to initialize shadcn-ui: ${errorMessage}`);
@@ -210,7 +204,8 @@ export async function installShadcnComponents(
       noPrompt: options.silent
     });
 
-    const shadcnSpinner = spinner(`Installing shadcn components: ${componentList}...`).start();
+    const shadcnSpinner = spinner(`Installing shadcn components: ${componentList}...`, { silent: options.silent });
+    shadcnSpinner.start();
     
     try {
       execSync(commandParts.join(' '), {
@@ -223,10 +218,8 @@ export async function installShadcnComponents(
         }
       });
 
-      await delay(500);
       shadcnSpinner.succeed(`Installed shadcn components: ${componentList}\n`);
     } catch (error) {
-      await delay(500);
       shadcnSpinner.fail(`Failed to install shadcn components\n`);
       throw error;
     }

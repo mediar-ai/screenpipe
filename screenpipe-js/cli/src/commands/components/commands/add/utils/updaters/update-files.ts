@@ -1,7 +1,7 @@
 import fs from "fs-extra";
 import path from "path";
 import { highlighter, logger, spinner } from "../logger";
-import prompts from "prompts";
+import * as p from "@clack/prompts";
 import { existsSync } from "fs";
 import { fetchFileFromGitHubAPI } from "../download-file-from-github";
 
@@ -41,21 +41,13 @@ export async function updateFiles(
 
     const existingFile = existsSync(location.target);
     if (existingFile && !options.overwrite) {
-      filesCreatedSpinner.succeed("");
+      filesCreatedSpinner.stop();
 
-      const response = await prompts({
-        type: 'confirm',
-        name: 'overwrite',
+      const overwrite = await p.confirm({
         message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
-        initial: false
-      }, {
-        onCancel: () => {
-          filesSkipped.push(path.relative(options.cwd, location.target));
-          return false;
-        }
       });
 
-      if (!response.overwrite) {
+      if (p.isCancel(overwrite) || !overwrite) {
         filesSkipped.push(path.relative(options.cwd, location.target));
         continue;
       }
@@ -86,39 +78,32 @@ export async function updateFiles(
   }
 
   if (!options.silent) {
+    filesCreatedSpinner.stop();
+    
     if (filesCreated.length) {
-      filesCreatedSpinner.succeed(
-        `Created ${filesCreated.length} ${
-          filesCreated.length === 1 ? "file" : "files"
-        }:`
+      p.note(
+        [`Created ${filesCreated.length} ${filesCreated.length === 1 ? "file" : "files"}:`,
+        ...filesCreated.map(file => `  - ${file}`)].join('\n'),
+        'Created'
       );
-      for (const file of filesCreated) {
-        logger.log(`  - ${file}`);
-      }
-    } else {
-      filesCreatedSpinner.stop();
     }
 
     if (filesUpdated.length) {
-      logger.info(
-        `Updated ${filesUpdated.length} ${
-          filesUpdated.length === 1 ? "file" : "files"
-        }:`
+      p.note(
+        [`Updated ${filesUpdated.length} ${filesUpdated.length === 1 ? "file" : "files"}:`,
+        ...filesUpdated.map(file => `  - ${file}`)].join('\n'),
+        'Updated'
       );
-      for (const file of filesUpdated) {
-        logger.log(`  - ${file}`);
-      }
     }
 
     if (filesSkipped.length) {
-      logger.info(
-        `Skipped ${filesSkipped.length} ${
-          filesSkipped.length === 1 ? "file" : "files"
-        }: (use --overwrite to overwrite)`
+      p.note(
+        [`Skipped ${filesSkipped.length} ${filesSkipped.length === 1 ? "file" : "files"}:`,
+        ...filesSkipped.map(file => `  - ${file}`),
+        '',
+        'Use --overwrite to overwrite existing files'].join('\n'),
+        'Skipped'
       );
-      for (const file of filesSkipped) {
-        logger.log(`  - ${file}`);
-      }
     }
   }
 

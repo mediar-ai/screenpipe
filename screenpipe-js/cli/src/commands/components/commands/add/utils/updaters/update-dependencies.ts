@@ -1,51 +1,57 @@
-import { execa } from "execa"
-import ora from "ora"
-import { detectPackageManager, getPackageManagerCommands } from "../package-manager"
+import { execSync } from "child_process"
+import { spinner } from "../logger"
+import { detectPackageManager, getPackageManagerCommands, PackageManager } from "../package-manager"
 
 export async function updateDependencies(
     dependencies: string[] | undefined,
-    cwd: string,
     options: {
+      cwd: string,
       silent?: boolean,
       devDependency?: boolean
     }
   ) {
-    dependencies = Array.from(new Set(dependencies ?? []));
-  
-    options = {
-      silent: false,
-      ...options,
-    }
-
     if (!dependencies?.length) {
       return;
     }
 
-    const packageManager = detectPackageManager(cwd);
-    const commands = getPackageManagerCommands(packageManager);
-  
-    const spinnerText = `Installing ${options.devDependency ? 'dev dependencies' : 'dependencies'}: ${dependencies.join(', ')}...`;
-    const dependenciesSpinner = options.silent ? null : ora({
-      text: spinnerText,
-      color: "white",
-    }).start();
+    // Remove duplicate dependencies
+    const uniqueDependencies = Array.from(new Set(dependencies));
 
     try {
-      const command = [
-        ...(options.devDependency ? commands.addDev : commands.add),
-        ...dependencies,
-      ];
+      const packageManager = detectPackageManager(options.cwd);
+      const command = getPackageManagerCommand(packageManager, uniqueDependencies, options.devDependency);
 
-      await execa(
-        packageManager,
-        command,
-        {
-          cwd: cwd,
+      const spinnerText = `Installing ${options.devDependency ? 'dev dependencies' : 'dependencies'}: ${uniqueDependencies.join(', ')}...`;
+      const dependenciesSpinner = spinner(spinnerText, { silent: options.silent });
+      dependenciesSpinner.start();
+
+      try {
+        execSync(command.join(' '), {
+          cwd: options.cwd,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        if (!options.silent) {
+          dependenciesSpinner.succeed(`Installed ${options.devDependency ? 'dev dependencies' : 'dependencies'}: ${uniqueDependencies.join(', ')}`);
         }
-      );
-      dependenciesSpinner?.succeed(`${options.devDependency ? 'Dev dependencies' : 'Dependencies'} installed successfully!`);
+      } catch (error) {
+        if (!options.silent) {
+          dependenciesSpinner.fail(`Failed to install ${options.devDependency ? 'dev dependencies' : 'dependencies'}`);
+        }
+        throw error;
+      }
     } catch (error) {
-      dependenciesSpinner?.fail(`Failed to install ${options.devDependency ? 'dev dependencies' : 'dependencies'}`);
       throw error;
     }
   }
+
+function getPackageManagerCommand(packageManager: PackageManager, dependencies: string[], isDevDependency: boolean = false): string[] {
+  const commands = {
+    npm: ['npm', isDevDependency ? 'install --save-dev' : 'install', ...dependencies],
+    yarn: ['yarn', 'add', isDevDependency ? '--dev' : '', ...dependencies],
+    pnpm: ['pnpm', 'add', isDevDependency ? '--save-dev' : '', ...dependencies],
+    bun: ['bun', 'add', isDevDependency ? '--dev' : '', ...dependencies],
+  };
+
+  return commands[packageManager].filter(Boolean);
+}
