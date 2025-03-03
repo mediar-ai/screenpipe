@@ -1,5 +1,5 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "screenpipe",
   "identifier": "screenpi.pe",
   "build": {
@@ -13,7 +13,12 @@
     "active": true,
     "category": "DeveloperTool",
     "copyright": "",
-    "targets": ["app", "dmg", "appimage", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "appimage",
+      "nsis"
+    ],
     "externalBin": [],
     "icon": [
       "icons/32x32.png",
@@ -27,7 +32,9 @@
       "icons/screenpipe-logo-tray-failed.png",
       "icons/screenpipe-logo-tray-black.png"
     ],
-    "resources": ["assets/*"]
+    "resources": [
+      "assets/*"
+    ]
   },
   "plugins": {
     "updater": {
@@ -40,36 +47,52 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["screenpipe"]
+        "schemes": [
+          "screenpipe"
+        ]
       },
       "mobile": [
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/auth"]
+          "pathPrefix": [
+            "/auth"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/stripe-connect"]
+          "pathPrefix": [
+            "/stripe-connect"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/purchase-successful"]
+          "pathPrefix": [
+            "/purchase-successful"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/settings"]
+          "pathPrefix": [
+            "/settings"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/changelog"]
+          "pathPrefix": [
+            "/changelog"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/onboarding"]
+          "pathPrefix": [
+            "/onboarding"
+          ]
         },
         {
           "host": "screenpi.pe",
-          "pathPrefix": ["/status"]
+          "pathPrefix": [
+            "/status"
+          ]
         }
       ]
     }
@@ -91,7 +114,9 @@
     "security": {
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/**"]
+        "scope": [
+          "$APPDATA/**"
+        ]
       },
       "csp": null
     },
