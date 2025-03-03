@@ -6,6 +6,7 @@ use std::{
 };
 use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
 use tracing::{error, info};
+use whisper_rs::{WhisperContext, WhisperContextParameters};
 
 use screenpipe_db::DatabaseManager;
 
@@ -18,7 +19,7 @@ use crate::{
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{
         deepgram::streaming::stream_transcription_deepgram, process_transcription_result,
-        stt::process_audio_input, whisper::model::WhisperModel,
+        stt::process_audio_input, whisper::model::download_quantized_whisper,
     },
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
     AudioInput, TranscriptionResult,
@@ -47,7 +48,7 @@ pub struct AudioManager {
     status: Arc<Mutex<AudioManagerStatus>>,
     db: Arc<DatabaseManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
-    whisper_model: Arc<Mutex<WhisperModel>>,
+    whisper_context: Arc<WhisperContext>,
     recording_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     recording_handles: DashMap<AudioDevice, Arc<Mutex<tokio::task::JoinHandle<Result<()>>>>>,
     recording_sender: crossbeam::channel::Sender<AudioInput>,
@@ -74,9 +75,17 @@ impl AudioManager {
 
         let recording_handles = DashMap::new();
 
-        let whisper_model = Arc::new(Mutex::new(WhisperModel::new(
-            &options.transcription_engine,
-        )?));
+        whisper_rs::install_logging_hooks();
+        let mut context_param = WhisperContextParameters::default();
+        context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset {
+            model_preset: whisper_rs::DtwModelPreset::LargeV3Turbo,
+        };
+        context_param.use_gpu(true);
+
+        let quantized_path = download_quantized_whisper(options.transcription_engine.clone())?;
+        let whisper_context =
+            WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
+                .expect("failed to load model");
 
         Ok(AudioManager {
             options,
@@ -85,7 +94,6 @@ impl AudioManager {
             status: Arc::new(status),
             db,
             vad_engine,
-            whisper_model,
             recording_sender: whisper_sender,
             recording_receiver: whisper_receiver,
             transcription_receiver,
@@ -93,6 +101,7 @@ impl AudioManager {
             recording_handles,
             recording_receiver_handle: Arc::new(Mutex::new(None)),
             transcription_receiver_handle: Arc::new(Mutex::new(None)),
+            whisper_context: Arc::new(whisper_context),
             device_check_handle: Arc::new(Mutex::new(None)), // health: AudioManagerHealth::Healthy,
         })
     }
@@ -162,12 +171,22 @@ impl AudioManager {
             return Err(anyhow!("AudioManager already stopped"));
         }
 
-        self.recording_handles.clear();
+        let mut recording_receiver_handle = self.recording_receiver_handle.lock().await;
+        if let Some(handle) = recording_receiver_handle.take() {
+            handle.abort();
+        }
+
+        let mut transcription_receiver_handle = self.transcription_receiver_handle.lock().await;
+        if let Some(handle) = transcription_receiver_handle.take() {
+            handle.abort();
+        }
 
         let mut device_check_handle = self.device_check_handle.lock().await;
         if let Some(handle) = device_check_handle.take() {
             handle.abort();
         }
+
+        self.recording_handles.clear();
 
         let _ = self.device_manager.stop_all_devices().await;
         *self.status.lock().await = AudioManagerStatus::Stopped;
@@ -281,15 +300,14 @@ impl AudioManager {
         let deepgram_api_key = self.options.deepgram_api_key.clone();
         let audio_transcription_engine = self.options.transcription_engine.clone();
         let vad_engine = self.vad_engine.clone();
-        let whisper_model = self.whisper_model.clone();
         let whisper_receiver = self.recording_receiver.clone();
+        let whisper_context = self.whisper_context.clone();
 
         Ok(tokio::spawn(async move {
             while let Ok(audio) = whisper_receiver.recv() {
                 info!("Received audio from device: {:?}", audio.device.name);
                 if let Err(e) = process_audio_input(
                     audio.clone(),
-                    whisper_model.clone(),
                     vad_engine.clone(),
                     segmentation_model_path.clone(),
                     embedding_manager.clone(),
@@ -299,6 +317,7 @@ impl AudioManager {
                     deepgram_api_key.clone(),
                     languages.clone(),
                     &transcription_sender.clone(),
+                    whisper_context.clone(),
                 )
                 .await
                 {
@@ -370,7 +389,7 @@ impl AudioManager {
         let device_manager = self.device_manager.clone();
 
         *self.device_check_handle.lock().await = Some(tokio::spawn(async move {
-            loop {
+            while self_clone.status().await != AudioManagerStatus::Stopped {
                 let currently_available_devices = device_manager.devices().await;
                 for device_name in enabled_devices.iter() {
                     let device = match parse_audio_device(device_name) {

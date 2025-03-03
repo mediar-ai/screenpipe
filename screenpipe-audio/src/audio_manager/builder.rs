@@ -1,9 +1,8 @@
 use anyhow::Result;
 use std::{env, path::PathBuf, sync::Arc, time::Duration};
-use tracing::info;
 
 use screenpipe_core::Language;
-use screenpipe_db::{AudioDevice, DatabaseManager};
+use screenpipe_db::DatabaseManager;
 
 use crate::{
     core::{
@@ -13,7 +12,7 @@ use crate::{
     vad::{VadEngineEnum, VadSensitivity},
 };
 
-use super::audio_manager::AudioManager;
+use crate::audio_manager::AudioManager;
 
 #[derive(Clone)]
 pub struct AudioManagerOptions {

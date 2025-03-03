@@ -1,131 +1,66 @@
-use super::decoder::{Decoder, Segment};
 use super::detect_language;
-use super::model::WhisperModel;
-use crate::utils::audio::pcm_to_mel;
 use anyhow::Result;
-use candle::Tensor;
-use lazy_static::lazy_static;
-use regex::Regex;
 use screenpipe_core::Language;
-use std::collections::HashSet;
-use tracing::debug;
-
-lazy_static! {
-    static ref TOKEN_REGEX: Regex = Regex::new(r"<\|\d{1,2}\.\d{1,2}\|>").unwrap();
-}
-
+use std::sync::Arc;
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperToken};
 /// Processes audio data using the Whisper model to generate transcriptions.
-///
-/// # Arguments
-/// * `whisper_model` - The Whisper model instance
-/// * `audio` - Raw audio PCM data
-/// * `mel_filters` - Mel filter bank coefficients
-/// * `languages` - List of languages to consider for detection
 ///
 /// # Returns
 /// A string containing the processed transcript
 pub async fn process_with_whisper(
-    whisper_model: &mut WhisperModel,
     audio: &[f32],
-    mel_filters: &[f32],
     languages: Vec<Language>,
+    whisper_context: Arc<WhisperContext>,
 ) -> Result<String> {
-    let model = &mut whisper_model.model.lock().await;
-    let tokenizer = &whisper_model.tokenizer.lock().await;
-    let device = &whisper_model.device.lock().await;
+    let mut whisper_state = whisper_context
+        .create_state()
+        .expect("failed to create key");
+    // process_segments(segments)
 
-    debug!("converting pcm to mel spectrogram");
-    let mel = pcm_to_mel(model.config(), audio, mel_filters).await;
-    let mel_len = mel.len();
+    let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
 
-    debug!("creating tensor from mel spectrogram");
-    let mel = Tensor::from_vec(
-        mel,
-        (
-            1,
-            model.config().num_mel_bins,
-            mel_len / model.config().num_mel_bins,
-        ),
-        device,
-    )?;
+    let mut audio = audio.to_vec();
 
-    debug!("detecting language");
-    let language_token = Some(detect_language(model, tokenizer, &mel, languages.clone())?);
+    if audio.len() < 16000 {
+        audio.resize(16000, 0.0);
+    }
 
-    debug!("initializing decoder");
-    let mut dc = Decoder::new(model, tokenizer, 42, device, language_token, true, false)?;
+    // Edit params as needed.
+    // Set the number of threads to use to 2.
+    params.set_n_threads(2);
+    // Disable anything that prints to stdout.
+    params.set_print_special(false);
+    params.set_print_progress(false);
+    params.set_print_realtime(false);
+    params.set_print_timestamps(false);
+    // Enable token level timestamps
+    params.set_token_timestamps(true);
+    whisper_state.pcm_to_mel(&audio, 2)?;
+    let (_, lang_tokens) = whisper_state.lang_detect(0, 2)?;
+    let lang = detect_language(lang_tokens, languages);
+    params.set_language(lang);
+    params.set_debug_mode(false);
+    params.set_logprob_thold(-2.0);
+    params.set_translate(false);
 
-    debug!("starting decoding process");
-    let segments = dc.run(&mel)?;
-    debug!("decoding complete");
+    whisper_state
+        .full(params, &audio)
+        .expect("failed to run model");
 
-    process_segments(segments)
-}
+    let num_segments = whisper_state
+        .full_n_segments()
+        .expect("failed to get number of segments");
 
-fn process_segments(segments: Vec<Segment>) -> Result<String> {
-    let mut unique_ranges = HashSet::new();
     let mut transcript = String::new();
 
-    let time_bounds = segments
-        .iter()
-        .fold((f32::MAX, f32::MIN), |(min, max), _| (min, max));
-    let (mut min_time, mut max_time) = time_bounds;
+    for i in 0..num_segments {
+        // Get the transcribed text and timestamps for the current segment.
+        let segment = whisper_state
+            .full_get_segment_text(i)
+            .expect("failed to get segment");
 
-    for (idx, segment) in segments.iter().enumerate() {
-        let text = segment.dr.text.clone();
-        let (start_token, end_token) = extract_time_tokens(&text)?;
-        let (start_time, end_time) =
-            parse_time_tokens(&start_token, &end_token, &mut min_time, &mut max_time);
-
-        // Skip if this is the last segment and spans the entire time range
-        if segments.len() > 1
-            && idx == segments.len() - 1
-            && start_time == min_time
-            && end_time == max_time
-        {
-            continue;
-        }
-
-        let range_key = format!("{}{}", start_token, end_token);
-        if unique_ranges.insert(range_key) {
-            let cleaned_text = TOKEN_REGEX.replace_all(&text, "").into_owned();
-            transcript.push_str(&cleaned_text);
-            transcript.push('\n');
-        }
+        transcript.push_str(&segment);
     }
 
     Ok(transcript)
-}
-
-fn extract_time_tokens(text: &str) -> Result<(String, String)> {
-    let tokens: Vec<&str> = TOKEN_REGEX.find_iter(text).map(|m| m.as_str()).collect();
-
-    let start = tokens
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("Missing start time token"))?
-        .to_string();
-    let end = tokens
-        .last()
-        .ok_or_else(|| anyhow::anyhow!("Missing end time token"))?
-        .to_string();
-
-    Ok((start, end))
-}
-
-fn parse_time_tokens(start: &str, end: &str, min_time: &mut f32, max_time: &mut f32) -> (f32, f32) {
-    lazy_static! {
-        static ref NUM_REGEX: Regex = Regex::new(r"([<>|])").unwrap();
-    }
-
-    let parse_token = |token: &str, default: f32| -> f32 {
-        NUM_REGEX.replace_all(token, "").parse().unwrap_or(default)
-    };
-
-    let start_time = parse_token(start, *min_time);
-    let end_time = parse_token(end, *max_time);
-
-    *min_time = start_time.min(*min_time);
-    *max_time = end_time.max(*max_time);
-
-    (start_time, end_time)
 }

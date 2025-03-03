@@ -1,15 +1,13 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
-
 use crate::core::{
     device::{list_audio_devices, AudioDevice},
     stream::AudioStream,
 };
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use tokio::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tracing::info;
 
 pub struct DeviceManager {

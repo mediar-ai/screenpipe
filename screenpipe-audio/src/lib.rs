@@ -1,7 +1,7 @@
 pub mod core;
 mod utils;
 pub mod vad;
-pub use transcription::stt::{create_whisper_channel, stt};
+pub use transcription::stt::stt;
 pub use transcription::{AudioInput, TranscriptionResult};
 pub mod speaker;
 pub mod transcription;
