@@ -8,7 +8,6 @@ use screenpipe_audio::core::device::{
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::core::record_and_transcribe;
 use screenpipe_audio::core::stream::AudioStream;
-use screenpipe_audio::create_whisper_channel;
 use screenpipe_audio::vad::{VadEngineEnum, VadSensitivity};
 use screenpipe_core::Language;
 use std::path::PathBuf;

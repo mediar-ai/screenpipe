@@ -1,127 +1,10 @@
-use std::{path::PathBuf, sync::Arc};
-
-use anyhow::{Error as E, Result};
-use candle::{Device, Tensor};
-use candle_nn::VarBuilder;
-use candle_transformers::models::whisper::{self as m, Config};
-use hf_hub::{api::sync::Api, Repo, RepoType};
-use tokenizers::Tokenizer;
-use tokio::sync::Mutex;
-use tracing::debug;
-
 use crate::core::engine::AudioTranscriptionEngine;
+use anyhow::Result;
+use hf_hub::{api::sync::Api, Repo, RepoType};
+use std::{path::PathBuf, sync::Arc};
+use whisper_rs::WhisperContextParameters;
 
-#[derive(Clone)]
-pub struct WhisperModel {
-    pub model: Arc<Mutex<Model>>,
-    pub tokenizer: Arc<Mutex<Tokenizer>>,
-    pub device: Arc<Mutex<Device>>,
-}
-
-impl WhisperModel {
-    pub fn new(engine: &AudioTranscriptionEngine) -> Result<Self> {
-        debug!("Initializing WhisperModel");
-        let device = Device::new_metal(0).unwrap_or(Device::new_cuda(0).unwrap_or(Device::Cpu));
-        debug!("device = {:?}", device);
-
-        debug!("Fetching model files");
-        let (config_filename, tokenizer_filename, weights_filename) = {
-            let api = Api::new()?;
-            let repo = match engine {
-                AudioTranscriptionEngine::WhisperTiny => Repo::with_revision(
-                    "openai/whisper-tiny".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                AudioTranscriptionEngine::WhisperDistilLargeV3 => Repo::with_revision(
-                    "distil-whisper/distil-large-v3".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                AudioTranscriptionEngine::WhisperLargeV3Turbo => Repo::with_revision(
-                    "openai/whisper-large-v3-turbo".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-                _ => Repo::with_revision(
-                    "openai/whisper-large-v3-turbo".to_string(),
-                    RepoType::Model,
-                    "main".to_string(),
-                ),
-            };
-            let api_repo = api.repo(repo);
-            let config = api_repo.get("config.json")?;
-            let tokenizer = api_repo.get("tokenizer.json")?;
-            let model = api_repo.get("model.safetensors")?;
-            (config, tokenizer, model)
-        };
-
-        debug!("Parsing config and tokenizer");
-        let config: Config = serde_json::from_str(&std::fs::read_to_string(config_filename)?)?;
-        let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
-        // tokenizer.with_pre_tokenizer(PreT)
-        debug!("Loading model weights");
-        let vb =
-            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], m::DTYPE, &device)? };
-        let whisper = m::model::Whisper::load(&vb, config.clone())?;
-
-        let model = Model::Normal(whisper);
-
-        debug!("WhisperModel initialization complete");
-        Ok(Self {
-            model: Arc::new(Mutex::new(model)),
-            tokenizer: Arc::new(Mutex::new(tokenizer)),
-            device: Arc::new(Mutex::new(device)),
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Model {
-    Normal(m::model::Whisper),
-    Quantized(m::quantized_model::Whisper),
-}
-
-impl Model {
-    pub fn config(&self) -> &Config {
-        match self {
-            Self::Normal(m) => &m.config,
-            Self::Quantized(m) => &m.config,
-        }
-    }
-
-    pub fn encoder_forward(&mut self, x: &Tensor, flush: bool) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.encoder.forward(x, flush),
-            Self::Quantized(m) => m.encoder.forward(x, flush),
-        }
-    }
-
-    pub fn decoder_forward(
-        &mut self,
-        x: &Tensor,
-        xa: &Tensor,
-        flush: bool,
-    ) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.decoder.forward(x, xa, flush),
-            Self::Quantized(m) => m.decoder.forward(x, xa, flush),
-        }
-    }
-
-    pub fn decoder_final_linear(&self, x: &Tensor) -> candle::Result<Tensor> {
-        match self {
-            Self::Normal(m) => m.decoder.final_linear(x),
-            Self::Quantized(m) => m.decoder.final_linear(x),
-        }
-    }
-}
-
-pub fn download_quantized_whisper(engine: Arc<AudioTranscriptionEngine>) -> Result<PathBuf> {
-    if *engine != AudioTranscriptionEngine::WhisperLargeV3TurboQuantized {
-        return Err(anyhow::anyhow!("Unsupported transcription engine {engine}"));
-    }
-
+pub fn download_whisper_model(engine: Arc<AudioTranscriptionEngine>) -> Result<PathBuf> {
     let api = Api::new()?;
     let repo = Repo::with_revision(
         "ggerganov/whisper.cpp".to_string(),
@@ -129,6 +12,36 @@ pub fn download_quantized_whisper(engine: Arc<AudioTranscriptionEngine>) -> Resu
         "main".to_string(),
     );
     let api_repo = api.repo(repo);
-    let model = api_repo.get("ggml-large-v3-turbo-q8_0.bin")?;
+    let model_name = match *engine {
+        AudioTranscriptionEngine::WhisperLargeV3Turbo => "ggml-large-v3-turbo.bin",
+        AudioTranscriptionEngine::WhisperTiny => "ggml-tiny.bin",
+        AudioTranscriptionEngine::WhisperTinyQuantized => "ggml-tiny-q8_0.bin",
+        AudioTranscriptionEngine::WhisperLargeV3 => "ggml-large-v3.bin",
+        AudioTranscriptionEngine::WhisperLargeV3Quantized => "ggml-large-v3-q5_0.bin",
+        _ => "ggml-large-v3-turbo-q8_0.bin",
+    };
+
+    let model = api_repo.get(model_name)?;
+
     Ok(model)
+}
+
+pub fn create_whisper_context_parameters<'a>(
+    engine: Arc<AudioTranscriptionEngine>,
+) -> Result<WhisperContextParameters<'a>> {
+    let model_preset = match *engine {
+        AudioTranscriptionEngine::WhisperLargeV3
+        | AudioTranscriptionEngine::WhisperLargeV3Quantized => whisper_rs::DtwModelPreset::LargeV3,
+        AudioTranscriptionEngine::WhisperTiny | AudioTranscriptionEngine::WhisperTinyQuantized => {
+            whisper_rs::DtwModelPreset::Tiny
+        }
+        _ => whisper_rs::DtwModelPreset::LargeV3Turbo,
+    };
+
+    let mut context_param = WhisperContextParameters::default();
+    context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset { model_preset };
+    context_param.use_gpu(true);
+    context_param.gpu_device(0); // TODO: is this necessary?
+
+    Ok(context_param)
 }

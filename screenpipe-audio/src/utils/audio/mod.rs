@@ -1,7 +1,6 @@
 mod convert;
 mod normalization;
 mod pcm_decode;
-mod pcm_to_mel;
 mod resample;
 mod spectral_subtraction;
 

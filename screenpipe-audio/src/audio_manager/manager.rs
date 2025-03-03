@@ -6,7 +6,7 @@ use std::{
 };
 use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
 use tracing::{error, info};
-use whisper_rs::{WhisperContext, WhisperContextParameters};
+use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
 
@@ -18,8 +18,10 @@ use crate::{
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
     transcription::{
-        deepgram::streaming::stream_transcription_deepgram, process_transcription_result,
-        stt::process_audio_input, whisper::model::download_quantized_whisper,
+        deepgram::streaming::stream_transcription_deepgram,
+        process_transcription_result,
+        stt::process_audio_input,
+        whisper::model::{create_whisper_context_parameters, download_whisper_model},
     },
     vad::{silero::SileroVad, webrtc::WebRtcVad, VadEngine, VadEngineEnum},
     AudioInput, TranscriptionResult,
@@ -76,13 +78,10 @@ impl AudioManager {
         let recording_handles = DashMap::new();
 
         whisper_rs::install_logging_hooks();
-        let mut context_param = WhisperContextParameters::default();
-        context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset {
-            model_preset: whisper_rs::DtwModelPreset::LargeV3Turbo,
-        };
-        context_param.use_gpu(true);
+        let context_param =
+            create_whisper_context_parameters(options.transcription_engine.clone())?;
 
-        let quantized_path = download_quantized_whisper(options.transcription_engine.clone())?;
+        let quantized_path = download_whisper_model(options.transcription_engine.clone())?;
         let whisper_context =
             WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
                 .expect("failed to load model");
@@ -337,6 +336,14 @@ impl AudioManager {
             let mut previous_transcript = "".to_string();
             let mut previous_transcript_id: Option<i64> = None;
             while let Ok(mut transcription) = transcription_receiver.recv() {
+                if transcription
+                    .transcription
+                    .clone()
+                    .is_some_and(|t| t.is_empty())
+                {
+                    continue;
+                }
+
                 info!(
                     "device {} received transcription {:?}",
                     transcription.input.device, transcription.transcription
