@@ -1,42 +1,51 @@
 import { execa } from "execa"
-import { spinner } from "../logger"
-import { ComponentSchema } from "../../registry/schema"
+import ora from "ora"
+import { detectPackageManager, getPackageManagerCommands } from "../package-manager"
 
 export async function updateDependencies(
-    dependencies: ComponentSchema["dependencies"],
+    dependencies: string[] | undefined,
     cwd: string,
     options: {
       silent?: boolean,
       devDependency?: boolean
     }
   ) {
-    dependencies = Array.from(new Set(dependencies))
-    if (!dependencies?.length) {
-      return
-    }
+    dependencies = Array.from(new Set(dependencies ?? []));
   
     options = {
       silent: false,
       ...options,
     }
-  
-    const dependenciesSpinner = spinner(`Installing dependencies.`, {
-      silent: options.silent,
-    })?.start()
 
-    dependenciesSpinner?.start()
+    if (!dependencies?.length) {
+      return;
+    }
+
+    const packageManager = detectPackageManager(cwd);
+    const commands = getPackageManagerCommands(packageManager);
   
-    await execa(
-      'bun',
-      [
-        "add",
+    const spinnerText = `Installing ${options.devDependency ? 'dev dependencies' : 'dependencies'}: ${dependencies.join(', ')}...`;
+    const dependenciesSpinner = options.silent ? null : ora({
+      text: spinnerText,
+      color: "white",
+    }).start();
+
+    try {
+      const command = [
+        ...(options.devDependency ? commands.addDev : commands.add),
         ...dependencies,
-        ...(options.devDependency ? [`--dev`] : []),
-      ],
-      {
-        cwd: cwd,
-      }
-    )
-  
-    dependenciesSpinner?.succeed()
+      ];
+
+      await execa(
+        packageManager,
+        command,
+        {
+          cwd: cwd,
+        }
+      );
+      dependenciesSpinner?.succeed(`${options.devDependency ? 'Dev dependencies' : 'Dependencies'} installed successfully!`);
+    } catch (error) {
+      dependenciesSpinner?.fail(`Failed to install ${options.devDependency ? 'dev dependencies' : 'dependencies'}`);
+      throw error;
+    }
   }

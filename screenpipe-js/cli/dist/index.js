@@ -9681,7 +9681,7 @@ var require_CreateFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (b2.hasOwnProperty(p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -9726,7 +9726,7 @@ var require_LaunchEditorError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (b2.hasOwnProperty(p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -9771,7 +9771,7 @@ var require_ReadFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (b2.hasOwnProperty(p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -9816,7 +9816,7 @@ var require_RemoveFileError = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (b2.hasOwnProperty(p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (b2.hasOwnProperty(p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -10461,7 +10461,7 @@ var require_Subscriber = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -10855,7 +10855,7 @@ var require_OperatorSubscriber = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -10967,7 +10967,7 @@ var require_ConnectableObservable = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11096,18 +11096,18 @@ var require_animationFrameProvider = __commonJS({
     exports.animationFrameProvider = {
       schedule: function(callback) {
         var request = requestAnimationFrame;
-        var cancel7 = cancelAnimationFrame;
+        var cancel6 = cancelAnimationFrame;
         var delegate = exports.animationFrameProvider.delegate;
         if (delegate) {
           request = delegate.requestAnimationFrame;
-          cancel7 = delegate.cancelAnimationFrame;
+          cancel6 = delegate.cancelAnimationFrame;
         }
         var handle = request(function(timestamp) {
-          cancel7 = void 0;
+          cancel6 = void 0;
           callback(timestamp);
         });
         return new Subscription_1.Subscription(function() {
-          return cancel7 === null || cancel7 === void 0 ? void 0 : cancel7(handle);
+          return cancel6 === null || cancel6 === void 0 ? void 0 : cancel6(handle);
         });
       },
       requestAnimationFrame: function() {
@@ -11200,7 +11200,7 @@ var require_Subject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11399,7 +11399,7 @@ var require_BehaviorSubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11476,7 +11476,7 @@ var require_ReplaySubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11566,7 +11566,7 @@ var require_AsyncSubject = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11630,7 +11630,7 @@ var require_Action = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11652,9 +11652,9 @@ var require_Action = __commonJS({
       function Action2(scheduler, work) {
         return _super.call(this) || this;
       }
-      Action2.prototype.schedule = function(state, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      Action2.prototype.schedule = function(state, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
         return this;
       };
@@ -11722,7 +11722,7 @@ var require_AsyncAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11750,10 +11750,10 @@ var require_AsyncAction = __commonJS({
         _this.pending = false;
         return _this;
       }
-      AsyncAction2.prototype.schedule = function(state, delay) {
+      AsyncAction2.prototype.schedule = function(state, delay2) {
         var _a;
-        if (delay === void 0) {
-          delay = 0;
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
         if (this.closed) {
           return this;
@@ -11762,24 +11762,24 @@ var require_AsyncAction = __commonJS({
         var id = this.id;
         var scheduler = this.scheduler;
         if (id != null) {
-          this.id = this.recycleAsyncId(scheduler, id, delay);
+          this.id = this.recycleAsyncId(scheduler, id, delay2);
         }
         this.pending = true;
-        this.delay = delay;
-        this.id = (_a = this.id) !== null && _a !== void 0 ? _a : this.requestAsyncId(scheduler, this.id, delay);
+        this.delay = delay2;
+        this.id = (_a = this.id) !== null && _a !== void 0 ? _a : this.requestAsyncId(scheduler, this.id, delay2);
         return this;
       };
-      AsyncAction2.prototype.requestAsyncId = function(scheduler, _id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      AsyncAction2.prototype.requestAsyncId = function(scheduler, _id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        return intervalProvider_1.intervalProvider.setInterval(scheduler.flush.bind(scheduler, this), delay);
+        return intervalProvider_1.intervalProvider.setInterval(scheduler.flush.bind(scheduler, this), delay2);
       };
-      AsyncAction2.prototype.recycleAsyncId = function(_scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      AsyncAction2.prototype.recycleAsyncId = function(_scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay != null && this.delay === delay && this.pending === false) {
+        if (delay2 != null && this.delay === delay2 && this.pending === false) {
           return id;
         }
         if (id != null) {
@@ -11787,12 +11787,12 @@ var require_AsyncAction = __commonJS({
         }
         return void 0;
       };
-      AsyncAction2.prototype.execute = function(state, delay) {
+      AsyncAction2.prototype.execute = function(state, delay2) {
         if (this.closed) {
           return new Error("executing a cancelled action");
         }
         this.pending = false;
-        var error = this._execute(state, delay);
+        var error = this._execute(state, delay2);
         if (error) {
           return error;
         } else if (this.pending === false && this.id != null) {
@@ -11931,7 +11931,7 @@ var require_AsapAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -11957,23 +11957,23 @@ var require_AsapAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      AsapAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      AsapAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay !== null && delay > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
+        if (delay2 !== null && delay2 > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
         }
         scheduler.actions.push(this);
         return scheduler._scheduled || (scheduler._scheduled = immediateProvider_1.immediateProvider.setImmediate(scheduler.flush.bind(scheduler, void 0)));
       };
-      AsapAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+      AsapAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
         var _a;
-        if (delay === void 0) {
-          delay = 0;
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay != null ? delay > 0 : this.delay > 0) {
-          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay);
+        if (delay2 != null ? delay2 > 0 : this.delay > 0) {
+          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay2);
         }
         var actions = scheduler.actions;
         if (id != null && ((_a = actions[actions.length - 1]) === null || _a === void 0 ? void 0 : _a.id) !== id) {
@@ -12005,11 +12005,11 @@ var require_Scheduler = __commonJS({
         this.schedulerActionCtor = schedulerActionCtor;
         this.now = now;
       }
-      Scheduler2.prototype.schedule = function(work, delay, state) {
-        if (delay === void 0) {
-          delay = 0;
+      Scheduler2.prototype.schedule = function(work, delay2, state) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        return new this.schedulerActionCtor(this, work).schedule(state, delay);
+        return new this.schedulerActionCtor(this, work).schedule(state, delay2);
       };
       Scheduler2.now = dateTimestampProvider_1.dateTimestampProvider.now;
       return Scheduler2;
@@ -12027,7 +12027,7 @@ var require_AsyncScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12091,7 +12091,7 @@ var require_AsapScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12174,7 +12174,7 @@ var require_QueueAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12199,27 +12199,27 @@ var require_QueueAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      QueueAction2.prototype.schedule = function(state, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      QueueAction2.prototype.schedule = function(state, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay > 0) {
-          return _super.prototype.schedule.call(this, state, delay);
+        if (delay2 > 0) {
+          return _super.prototype.schedule.call(this, state, delay2);
         }
-        this.delay = delay;
+        this.delay = delay2;
         this.state = state;
         this.scheduler.flush(this);
         return this;
       };
-      QueueAction2.prototype.execute = function(state, delay) {
-        return delay > 0 || this.closed ? _super.prototype.execute.call(this, state, delay) : this._execute(state, delay);
+      QueueAction2.prototype.execute = function(state, delay2) {
+        return delay2 > 0 || this.closed ? _super.prototype.execute.call(this, state, delay2) : this._execute(state, delay2);
       };
-      QueueAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      QueueAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay != null && delay > 0 || delay == null && this.delay > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
+        if (delay2 != null && delay2 > 0 || delay2 == null && this.delay > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
         }
         scheduler.flush(this);
         return 0;
@@ -12239,7 +12239,7 @@ var require_QueueScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12289,7 +12289,7 @@ var require_AnimationFrameAction = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12315,25 +12315,25 @@ var require_AnimationFrameAction = __commonJS({
         _this.work = work;
         return _this;
       }
-      AnimationFrameAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      AnimationFrameAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay !== null && delay > 0) {
-          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay);
+        if (delay2 !== null && delay2 > 0) {
+          return _super.prototype.requestAsyncId.call(this, scheduler, id, delay2);
         }
         scheduler.actions.push(this);
         return scheduler._scheduled || (scheduler._scheduled = animationFrameProvider_1.animationFrameProvider.requestAnimationFrame(function() {
           return scheduler.flush(void 0);
         }));
       };
-      AnimationFrameAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
+      AnimationFrameAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
         var _a;
-        if (delay === void 0) {
-          delay = 0;
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (delay != null ? delay > 0 : this.delay > 0) {
-          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay);
+        if (delay2 != null ? delay2 > 0 : this.delay > 0) {
+          return _super.prototype.recycleAsyncId.call(this, scheduler, id, delay2);
         }
         var actions = scheduler.actions;
         if (id != null && id === scheduler._scheduled && ((_a = actions[actions.length - 1]) === null || _a === void 0 ? void 0 : _a.id) !== id) {
@@ -12357,7 +12357,7 @@ var require_AnimationFrameScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12432,7 +12432,7 @@ var require_VirtualTimeScheduler = __commonJS({
         extendStatics = Object.setPrototypeOf || { __proto__: [] } instanceof Array && function(d2, b2) {
           d2.__proto__ = b2;
         } || function(d2, b2) {
-          for (var p8 in b2) if (Object.prototype.hasOwnProperty.call(b2, p8)) d2[p8] = b2[p8];
+          for (var p6 in b2) if (Object.prototype.hasOwnProperty.call(b2, p6)) d2[p6] = b2[p6];
         };
         return extendStatics(d, b);
       };
@@ -12504,41 +12504,41 @@ var require_VirtualTimeScheduler = __commonJS({
         _this.index = scheduler.index = index;
         return _this;
       }
-      VirtualAction2.prototype.schedule = function(state, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      VirtualAction2.prototype.schedule = function(state, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        if (Number.isFinite(delay)) {
+        if (Number.isFinite(delay2)) {
           if (!this.id) {
-            return _super.prototype.schedule.call(this, state, delay);
+            return _super.prototype.schedule.call(this, state, delay2);
           }
           this.active = false;
           var action = new VirtualAction2(this.scheduler, this.work);
           this.add(action);
-          return action.schedule(state, delay);
+          return action.schedule(state, delay2);
         } else {
           return Subscription_1.Subscription.EMPTY;
         }
       };
-      VirtualAction2.prototype.requestAsyncId = function(scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      VirtualAction2.prototype.requestAsyncId = function(scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
-        this.delay = scheduler.frame + delay;
+        this.delay = scheduler.frame + delay2;
         var actions = scheduler.actions;
         actions.push(this);
         actions.sort(VirtualAction2.sortActions);
         return 1;
       };
-      VirtualAction2.prototype.recycleAsyncId = function(scheduler, id, delay) {
-        if (delay === void 0) {
-          delay = 0;
+      VirtualAction2.prototype.recycleAsyncId = function(scheduler, id, delay2) {
+        if (delay2 === void 0) {
+          delay2 = 0;
         }
         return void 0;
       };
-      VirtualAction2.prototype._execute = function(state, delay) {
+      VirtualAction2.prototype._execute = function(state, delay2) {
         if (this.active === true) {
-          return _super.prototype._execute.call(this, state, delay);
+          return _super.prototype._execute.call(this, state, delay2);
         }
       };
       VirtualAction2.sortActions = function(a, b) {
@@ -13181,9 +13181,9 @@ var require_executeSchedule = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.executeSchedule = void 0;
-    function executeSchedule(parentSubscription, scheduler, work, delay, repeat) {
-      if (delay === void 0) {
-        delay = 0;
+    function executeSchedule(parentSubscription, scheduler, work, delay2, repeat) {
+      if (delay2 === void 0) {
+        delay2 = 0;
       }
       if (repeat === void 0) {
         repeat = false;
@@ -13191,11 +13191,11 @@ var require_executeSchedule = __commonJS({
       var scheduleSubscription = scheduler.schedule(function() {
         work();
         if (repeat) {
-          parentSubscription.add(this.schedule(null, delay));
+          parentSubscription.add(this.schedule(null, delay2));
         } else {
           this.unsubscribe();
         }
-      }, delay);
+      }, delay2);
       parentSubscription.add(scheduleSubscription);
       if (!repeat) {
         return scheduleSubscription;
@@ -13214,23 +13214,23 @@ var require_observeOn = __commonJS({
     var executeSchedule_1 = require_executeSchedule();
     var lift_1 = require_lift();
     var OperatorSubscriber_1 = require_OperatorSubscriber();
-    function observeOn(scheduler, delay) {
-      if (delay === void 0) {
-        delay = 0;
+    function observeOn(scheduler, delay2) {
+      if (delay2 === void 0) {
+        delay2 = 0;
       }
       return lift_1.operate(function(source, subscriber) {
         source.subscribe(OperatorSubscriber_1.createOperatorSubscriber(subscriber, function(value) {
           return executeSchedule_1.executeSchedule(subscriber, scheduler, function() {
             return subscriber.next(value);
-          }, delay);
+          }, delay2);
         }, function() {
           return executeSchedule_1.executeSchedule(subscriber, scheduler, function() {
             return subscriber.complete();
-          }, delay);
+          }, delay2);
         }, function(err) {
           return executeSchedule_1.executeSchedule(subscriber, scheduler, function() {
             return subscriber.error(err);
-          }, delay);
+          }, delay2);
         }));
       });
     }
@@ -13245,14 +13245,14 @@ var require_subscribeOn = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.subscribeOn = void 0;
     var lift_1 = require_lift();
-    function subscribeOn(scheduler, delay) {
-      if (delay === void 0) {
-        delay = 0;
+    function subscribeOn(scheduler, delay2) {
+      if (delay2 === void 0) {
+        delay2 = 0;
       }
       return lift_1.operate(function(source, subscriber) {
         subscriber.add(scheduler.schedule(function() {
           return source.subscribe(subscriber);
-        }, delay));
+        }, delay2));
       });
     }
     exports.subscribeOn = subscribeOn;
@@ -13773,7 +13773,7 @@ var require_timeout = __commonJS({
         var timerSubscription;
         var lastValue = null;
         var seen = 0;
-        var startTimer = function(delay) {
+        var startTimer = function(delay2) {
           timerSubscription = executeSchedule_1.executeSchedule(subscriber, scheduler, function() {
             try {
               originalSourceSubscription.unsubscribe();
@@ -13785,7 +13785,7 @@ var require_timeout = __commonJS({
             } catch (err) {
               subscriber.error(err);
             }
-          }, delay);
+          }, delay2);
         };
         originalSourceSubscription = source.subscribe(OperatorSubscriber_1.createOperatorSubscriber(subscriber, function(value) {
           timerSubscription === null || timerSubscription === void 0 ? void 0 : timerSubscription.unsubscribe();
@@ -16125,7 +16125,7 @@ var require_delay = __commonJS({
     var async_1 = require_async();
     var delayWhen_1 = require_delayWhen();
     var timer_1 = require_timer();
-    function delay(due, scheduler) {
+    function delay2(due, scheduler) {
       if (scheduler === void 0) {
         scheduler = async_1.asyncScheduler;
       }
@@ -16134,7 +16134,7 @@ var require_delay = __commonJS({
         return duration;
       });
     }
-    exports.delay = delay;
+    exports.delay = delay2;
   }
 });
 
@@ -17032,9 +17032,9 @@ var require_pairwise = __commonJS({
         var prev;
         var hasPrev = false;
         source.subscribe(OperatorSubscriber_1.createOperatorSubscriber(subscriber, function(value) {
-          var p8 = prev;
+          var p6 = prev;
           prev = value;
-          hasPrev && subscriber.next([p8, value]);
+          hasPrev && subscriber.next([p6, value]);
           hasPrev = true;
         }));
       });
@@ -17062,9 +17062,9 @@ var require_pluck = __commonJS({
       return map_1.map(function(x) {
         var currentProp = x;
         for (var i = 0; i < length; i++) {
-          var p8 = currentProp === null || currentProp === void 0 ? void 0 : currentProp[properties[i]];
-          if (typeof p8 !== "undefined") {
-            currentProp = p8;
+          var p6 = currentProp === null || currentProp === void 0 ? void 0 : currentProp[properties[i]];
+          if (typeof p6 !== "undefined") {
+            currentProp = p6;
           } else {
             return void 0;
           }
@@ -17216,10 +17216,10 @@ var require_repeat = __commonJS({
     function repeat(countOrConfig) {
       var _a;
       var count = Infinity;
-      var delay;
+      var delay2;
       if (countOrConfig != null) {
         if (typeof countOrConfig === "object") {
-          _a = countOrConfig.count, count = _a === void 0 ? Infinity : _a, delay = countOrConfig.delay;
+          _a = countOrConfig.count, count = _a === void 0 ? Infinity : _a, delay2 = countOrConfig.delay;
         } else {
           count = countOrConfig;
         }
@@ -17232,8 +17232,8 @@ var require_repeat = __commonJS({
         var resubscribe = function() {
           sourceSub === null || sourceSub === void 0 ? void 0 : sourceSub.unsubscribe();
           sourceSub = null;
-          if (delay != null) {
-            var notifier = typeof delay === "number" ? timer_1.timer(delay) : innerFrom_1.innerFrom(delay(soFar));
+          if (delay2 != null) {
+            var notifier = typeof delay2 === "number" ? timer_1.timer(delay2) : innerFrom_1.innerFrom(delay2(soFar));
             var notifierSubscriber_1 = OperatorSubscriber_1.createOperatorSubscriber(subscriber, function() {
               notifierSubscriber_1.unsubscribe();
               subscribeToSource();
@@ -17346,7 +17346,7 @@ var require_retry = __commonJS({
           count: configOrCount
         };
       }
-      var _a = config.count, count = _a === void 0 ? Infinity : _a, delay = config.delay, _b = config.resetOnSuccess, resetOnSuccess = _b === void 0 ? false : _b;
+      var _a = config.count, count = _a === void 0 ? Infinity : _a, delay2 = config.delay, _b = config.resetOnSuccess, resetOnSuccess = _b === void 0 ? false : _b;
       return count <= 0 ? identity_1.identity : lift_1.operate(function(source, subscriber) {
         var soFar = 0;
         var innerSub;
@@ -17368,8 +17368,8 @@ var require_retry = __commonJS({
                   syncUnsub = true;
                 }
               };
-              if (delay != null) {
-                var notifier = typeof delay === "number" ? timer_1.timer(delay) : innerFrom_1.innerFrom(delay(err, soFar));
+              if (delay2 != null) {
+                var notifier = typeof delay2 === "number" ? timer_1.timer(delay2) : innerFrom_1.innerFrom(delay2(err, soFar));
                 var notifierSubscriber_1 = OperatorSubscriber_1.createOperatorSubscriber(subscriber, function() {
                   notifierSubscriber_1.unsubscribe();
                   resub_1();
@@ -18741,7 +18741,7 @@ var require_cjs = __commonJS({
       o[k2] = m[k];
     });
     var __exportStar = exports && exports.__exportStar || function(m, exports2) {
-      for (var p8 in m) if (p8 !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p8)) __createBinding(exports2, m, p8);
+      for (var p6 in m) if (p6 !== "default" && !Object.prototype.hasOwnProperty.call(exports2, p6)) __createBinding(exports2, m, p6);
     };
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.interval = exports.iif = exports.generate = exports.fromEventPattern = exports.fromEvent = exports.from = exports.forkJoin = exports.empty = exports.defer = exports.connectable = exports.concat = exports.combineLatest = exports.bindNodeCallback = exports.bindCallback = exports.UnsubscriptionError = exports.TimeoutError = exports.SequenceError = exports.ObjectUnsubscribedError = exports.NotFoundError = exports.EmptyError = exports.ArgumentOutOfRangeError = exports.firstValueFrom = exports.lastValueFrom = exports.isObservable = exports.identity = exports.noop = exports.pipe = exports.NotificationKind = exports.Notification = exports.Subscriber = exports.Subscription = exports.Scheduler = exports.VirtualAction = exports.VirtualTimeScheduler = exports.animationFrameScheduler = exports.animationFrame = exports.queueScheduler = exports.queue = exports.asyncScheduler = exports.async = exports.asapScheduler = exports.asap = exports.AsyncSubject = exports.ReplaySubject = exports.BehaviorSubject = exports.Subject = exports.animationFrames = exports.observable = exports.ConnectableObservable = exports.Observable = void 0;
@@ -20754,7 +20754,7 @@ appCommands.addCommand(createAppCommand);
 
 // src/commands/components/commands/add/utils/prompt-for-component.ts
 import { z as z4 } from "zod";
-import * as p6 from "@clack/prompts";
+import prompts from "prompts";
 
 // src/commands/components/commands/add/registry/schema.ts
 import { z as z3 } from "zod";
@@ -20766,13 +20766,15 @@ var registryComponentSchema = z3.object({
   target: z3.string(),
   dependencies: z3.array(z3.string()).optional(),
   registryDependencies: z3.array(z3.string()).optional(),
-  devDependencies: z3.array(z3.string()).optional()
+  devDependencies: z3.array(z3.string()).optional(),
+  shadcnComponent: z3.array(z3.string()).optional()
 });
 var registrySchema = z3.record(z3.string(), registryComponentSchema);
 var registryResolvedComponentsTreeSchema = registryComponentSchema.pick({
   dependencies: true,
   devDependencies: true,
-  docs: true
+  docs: true,
+  shadcnComponent: true
 }).merge(
   z3.object({
     files: z3.array(z3.object({
@@ -20793,7 +20795,8 @@ var registry_default = {
     ],
     devDependencies: [
       "@types/lodash"
-    ]
+    ],
+    shadcnComponent: ["dialog"]
   },
   "update-pipe-config": {
     name: "update-pipe-config",
@@ -20939,41 +20942,53 @@ function registryResolveItemsTree(names) {
         target: item.target
       };
     }),
-    docs
+    docs,
+    shadcnComponent: Array.from(new Set(
+      componentArray.flatMap((item) => item.shadcnComponent ?? [])
+    ))
   });
 }
 
 // src/commands/components/commands/add/utils/prompt-for-component.ts
 async function promptForRegistryComponents(all) {
+  const registrySpinner = spinner("Checking registry...");
+  registrySpinner.start();
   const registryIndex = getRegistry();
   if (!registryIndex) {
+    registrySpinner.fail("Failed to fetch registry index.");
     logger.break();
     handleError(new Error("Failed to fetch registry index."));
     return [];
   }
+  registrySpinner.succeed("Registry checked successfully.");
   if (all) {
     return Object.values(registryIndex).map((entry) => entry.name);
   }
-  const components = await p6.multiselect({
-    message: "Which components would you like to add?",
-    options: Object.values(registryIndex).filter((item) => item.internal !== true).map((entry) => ({
-      value: entry.name,
-      label: entry.name
-    }))
+  const response = await prompts([
+    {
+      type: "multiselect",
+      name: "components",
+      message: "Which components would you like to add?",
+      instructions: false,
+      hint: "Space to select, Enter to confirm",
+      choices: Object.values(registryIndex).filter((item) => item.internal !== true).map((entry) => ({
+        title: entry.name,
+        value: entry.name,
+        selected: false
+      })),
+      validate: (value) => {
+        if (!value.length) return "Please select at least one component";
+        return true;
+      }
+    }
+  ], {
+    onCancel: () => {
+      logger.warn("No components selected. Exiting.");
+      process.exit(1);
+    }
   });
-  if (p6.isCancel(components)) {
-    p6.cancel("No components selected");
-    logger.info("");
-    process.exit(1);
-  }
-  if (!components?.length) {
-    logger.warn("No components selected. Exiting.");
-    logger.info("");
-    process.exit(1);
-  }
-  const result = z4.array(z4.string()).safeParse(components);
+  const result = z4.array(z4.string()).safeParse(response.components);
   if (!result.success) {
-    logger.error("");
     handleError(new Error("Something went wrong. Please try again."));
     return [];
   }
@@ -20995,38 +21010,85 @@ function preFlightAdd(cwd) {
 
 // src/commands/components/commands/add/utils/updaters/update-dependencies.ts
 import { execa } from "execa";
-async function updateDependencies(dependencies, cwd, options) {
-  dependencies = Array.from(new Set(dependencies));
-  if (!dependencies?.length) {
-    return;
+import ora2 from "ora";
+
+// src/commands/components/commands/add/utils/package-manager.ts
+import { existsSync } from "fs";
+import { join } from "path";
+var packageManagerCommands = {
+  npm: {
+    install: ["install"],
+    add: ["install"],
+    addDev: ["install", "--save-dev"]
+  },
+  yarn: {
+    install: ["install"],
+    add: ["add"],
+    addDev: ["add", "--dev"]
+  },
+  pnpm: {
+    install: ["install"],
+    add: ["add"],
+    addDev: ["add", "--save-dev"]
+  },
+  bun: {
+    install: ["install"],
+    add: ["add"],
+    addDev: ["add", "--dev"]
   }
+};
+function detectPackageManager(cwd) {
+  if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bun.lock"))) return "bun";
+  if (existsSync(join(cwd, "pnpm-lock.yaml"))) return "pnpm";
+  if (existsSync(join(cwd, "yarn.lock"))) return "yarn";
+  if (existsSync(join(cwd, "package-lock.json"))) return "npm";
+  return "npm";
+}
+function getPackageManagerCommands(packageManager) {
+  return packageManagerCommands[packageManager];
+}
+
+// src/commands/components/commands/add/utils/updaters/update-dependencies.ts
+async function updateDependencies(dependencies, cwd, options) {
+  dependencies = Array.from(new Set(dependencies ?? []));
   options = {
     silent: false,
     ...options
   };
-  const dependenciesSpinner = spinner(`Installing dependencies.`, {
-    silent: options.silent
-  })?.start();
-  dependenciesSpinner?.start();
-  await execa(
-    "bun",
-    [
-      "add",
-      ...dependencies,
-      ...options.devDependency ? [`--dev`] : []
-    ],
-    {
-      cwd
-    }
-  );
-  dependenciesSpinner?.succeed();
+  if (!dependencies?.length) {
+    return;
+  }
+  const packageManager = detectPackageManager(cwd);
+  const commands = getPackageManagerCommands(packageManager);
+  const spinnerText = `Installing ${options.devDependency ? "dev dependencies" : "dependencies"}: ${dependencies.join(", ")}...`;
+  const dependenciesSpinner = options.silent ? null : ora2({
+    text: spinnerText,
+    color: "white"
+  }).start();
+  try {
+    const command = [
+      ...options.devDependency ? commands.addDev : commands.add,
+      ...dependencies
+    ];
+    await execa(
+      packageManager,
+      command,
+      {
+        cwd
+      }
+    );
+    dependenciesSpinner?.succeed(`${options.devDependency ? "Dev dependencies" : "Dependencies"} installed successfully!`);
+  } catch (error) {
+    dependenciesSpinner?.fail(`Failed to install ${options.devDependency ? "dev dependencies" : "dependencies"}`);
+    throw error;
+  }
 }
 
 // src/commands/components/commands/add/utils/updaters/update-files.ts
 import fs7 from "fs-extra";
 import path5 from "path";
-import * as p7 from "@clack/prompts";
-import { existsSync } from "fs";
+import prompts2 from "prompts";
+import { existsSync as existsSync2 } from "fs";
 
 // src/commands/components/commands/add/utils/download-file-from-github.ts
 import fs6 from "fs-extra";
@@ -21058,33 +21120,39 @@ async function updateFiles(componentLocations, options) {
     silent: false,
     ...options
   };
-  const filesCreatedSpinner = spinner(`Updating files.`, {
+  const filesCreatedSpinner = spinner(`Creating files...`, {
     silent: options.silent
-  })?.start();
+  });
+  filesCreatedSpinner.start();
   const filesCreated = [];
   const filesUpdated = [];
   const filesSkipped = [];
   for (const location of componentLocations) {
     const targetDir = path5.dirname(location.target);
-    const existingFile = existsSync(location.target);
+    const existingFile = existsSync2(location.target);
     if (existingFile && !options.overwrite) {
       filesCreatedSpinner.succeed("");
-      const overwrite = await p7.confirm({
-        message: `The file ${highlighter.info(
-          location.target
-        )} already exists. Would you like to overwrite?`,
-        initialValue: false
+      const response = await prompts2({
+        type: "confirm",
+        name: "overwrite",
+        message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
+        initial: false
+      }, {
+        onCancel: () => {
+          filesSkipped.push(path5.relative(options.cwd, location.target));
+          return false;
+        }
       });
-      if (p7.isCancel(overwrite) || !overwrite) {
+      if (!response.overwrite) {
         filesSkipped.push(path5.relative(options.cwd, location.target));
         continue;
       }
-      filesCreatedSpinner?.start();
-      if (!existsSync(targetDir)) {
+      filesCreatedSpinner.start();
+      if (!existsSync2(targetDir)) {
         await fs7.mkdir(targetDir, { recursive: true });
       }
     }
-    if (!existsSync(targetDir)) {
+    if (!existsSync2(targetDir)) {
       await fs7.mkdir(targetDir, { recursive: true });
     }
     await fetchFileFromGitHubAPI(location.src, location.target);
@@ -21092,54 +21160,221 @@ async function updateFiles(componentLocations, options) {
   }
   const hasUpdatedFiles = filesCreated.length || filesUpdated.length;
   if (!hasUpdatedFiles && !filesSkipped.length) {
-    filesCreatedSpinner?.info("No files updated.");
+    filesCreatedSpinner.info("No files created.");
+    return { filesCreated, filesUpdated, filesSkipped };
   }
-  if (filesCreated.length) {
-    filesCreatedSpinner?.succeed(
-      `Created ${filesCreated.length} ${filesCreated.length === 1 ? "file" : "files"}:`
-    );
-    if (!options.silent) {
+  if (!options.silent) {
+    if (filesCreated.length) {
+      filesCreatedSpinner.succeed(
+        `Created ${filesCreated.length} ${filesCreated.length === 1 ? "file" : "files"}:`
+      );
       for (const file of filesCreated) {
         logger.log(`  - ${file}`);
       }
+    } else {
+      filesCreatedSpinner.stop();
     }
-  } else {
-    filesCreatedSpinner?.stop();
-  }
-  if (filesUpdated.length) {
-    spinner(
-      `Updated ${filesUpdated.length} ${filesUpdated.length === 1 ? "file" : "files"}:`,
-      {
-        silent: options.silent
-      }
-    )?.info();
-    if (!options.silent) {
+    if (filesUpdated.length) {
+      logger.info(
+        `Updated ${filesUpdated.length} ${filesUpdated.length === 1 ? "file" : "files"}:`
+      );
       for (const file of filesUpdated) {
         logger.log(`  - ${file}`);
       }
     }
-  }
-  if (filesSkipped.length) {
-    spinner(
-      `Skipped ${filesSkipped.length} ${filesUpdated.length === 1 ? "file" : "files"}: (use --overwrite to overwrite)`,
-      {
-        silent: options.silent
-      }
-    )?.info();
-    if (!options.silent) {
+    if (filesSkipped.length) {
+      logger.info(
+        `Skipped ${filesSkipped.length} ${filesSkipped.length === 1 ? "file" : "files"}: (use --overwrite to overwrite)`
+      );
       for (const file of filesSkipped) {
         logger.log(`  - ${file}`);
       }
     }
-  }
-  if (!options.silent) {
-    logger.break();
   }
   return {
     filesCreated,
     filesUpdated,
     filesSkipped
   };
+}
+
+// src/commands/components/commands/add/utils/shadcn.ts
+import { execSync as execSync2 } from "child_process";
+import { existsSync as existsSync3 } from "fs";
+import { join as join2 } from "path";
+import prompts3 from "prompts";
+var delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function getValidShadcnComponents() {
+  try {
+    const response = await fetch("https://ui.shadcn.com/r/index.json");
+    const data = await response.json();
+    return data.map((item) => item.name);
+  } catch (error) {
+    return [
+      "accordion",
+      "alert",
+      "alert-dialog",
+      "aspect-ratio",
+      "avatar",
+      "badge",
+      "button",
+      "calendar",
+      "card",
+      "carousel",
+      "checkbox",
+      "collapsible",
+      "command",
+      "context-menu",
+      "dialog",
+      "dropdown-menu",
+      "form",
+      "hover-card",
+      "input",
+      "label",
+      "menubar",
+      "navigation-menu",
+      "popover",
+      "progress",
+      "radio-group",
+      "scroll-area",
+      "select",
+      "separator",
+      "sheet",
+      "skeleton",
+      "slider",
+      "switch",
+      "table",
+      "tabs",
+      "textarea",
+      "toast",
+      "toggle",
+      "tooltip"
+    ];
+  }
+}
+function getShadcnAddCommand(components, packageManager, options = {}) {
+  const flags = [];
+  if (options.noPrompt) {
+    flags.push("-y");
+  }
+  if (options.overwrite) {
+    flags.push("--overwrite");
+  }
+  const baseCommand = {
+    bun: ["bunx", "--bun", "shadcn@latest"],
+    pnpm: ["pnpm", "dlx", "shadcn@latest"],
+    yarn: ["yarn", "dlx", "shadcn@latest"],
+    npm: ["npx", "shadcn@latest"]
+  };
+  const command = baseCommand[packageManager] || baseCommand.npm;
+  return [...command, "add", ...components, ...flags];
+}
+function getShadcnInitCommand(packageManager) {
+  const baseCommand = {
+    bun: ["bunx", "--bun", "shadcn@latest"],
+    pnpm: ["pnpm", "dlx", "shadcn@latest"],
+    yarn: ["yarn", "dlx", "shadcn@latest"],
+    npm: ["npx", "shadcn@latest"]
+  };
+  const command = baseCommand[packageManager] || baseCommand.npm;
+  return [...command, "init", "-yd"];
+}
+function isShadcnInitialized(cwd) {
+  return existsSync3(join2(cwd, "components.json"));
+}
+async function initializeShadcn(cwd, silent = false) {
+  const initSpinner = spinner("Checking shadcn-ui initialization...");
+  try {
+    if (!silent) {
+      process.stdout.write("\r\x1B[K");
+      await delay(100);
+      const shouldInit = await prompts3({
+        type: "confirm",
+        name: "value",
+        message: "shadcn-ui is not initialized in this project. Would you like to initialize it now?",
+        initial: false
+      });
+      if (!shouldInit.value) {
+        console.log("Please initialize shadcn-ui manually by running: npx shadcn@latest init");
+        return false;
+      }
+    }
+    initSpinner.start("Initializing shadcn-ui...");
+    const packageManager = detectPackageManager(cwd);
+    const commandParts = getShadcnInitCommand(packageManager);
+    execSync2(commandParts.join(" "), {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        FORCE_COLOR: "true",
+        CI: "true"
+        // Always run in CI mode for init
+      }
+    });
+    await delay(500);
+    initSpinner.succeed("Initialized shadcn-ui");
+    return true;
+  } catch (error) {
+    await delay(500);
+    initSpinner.fail("Failed to initialize shadcn-ui");
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    throw new Error(`Failed to initialize shadcn-ui: ${errorMessage}`);
+  }
+}
+async function installShadcnComponents(components = [], options) {
+  if (!components?.length) {
+    return;
+  }
+  try {
+    if (!isShadcnInitialized(options.cwd)) {
+      const initialized = await initializeShadcn(options.cwd, options.silent);
+      if (!initialized) {
+        return handleError(
+          new Error("shadcn-ui must be initialized before installing components")
+        );
+      }
+    }
+    const validComponents = await getValidShadcnComponents();
+    const invalidComponents = components.filter((component) => !validComponents.includes(component));
+    if (invalidComponents.length > 0) {
+      return handleError(
+        new Error(
+          `Invalid shadcn components: ${invalidComponents.join(", ")}
+Available components are: ${validComponents.join(", ")}`
+        )
+      );
+    }
+    const packageManager = detectPackageManager(options.cwd);
+    const componentList = components.join(", ");
+    const commandParts = getShadcnAddCommand(components, packageManager, {
+      overwrite: options.overwrite,
+      noPrompt: options.silent
+    });
+    const shadcnSpinner = spinner(`Installing shadcn components: ${componentList}...`).start();
+    try {
+      execSync2(commandParts.join(" "), {
+        cwd: options.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          FORCE_COLOR: "true",
+          CI: options.silent ? "true" : "false"
+        }
+      });
+      await delay(500);
+      shadcnSpinner.succeed(`Installed shadcn components: ${componentList}
+`);
+    } catch (error) {
+      await delay(500);
+      shadcnSpinner.fail(`Failed to install shadcn components
+`);
+      throw error;
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    return handleError(new Error(`Failed to install shadcn components: ${errorMessage}`));
+  }
 }
 
 // src/commands/components/commands/add/utils/add-components.ts
@@ -21153,12 +21388,20 @@ async function addComponents(components, options) {
     return handleError(new Error("Failed to fetch components from registry."));
   }
   registrySpinner?.succeed();
-  await updateDependencies(tree.dependencies, options.cwd, {
-    silent: options.silent
-  });
-  await updateDependencies(tree.devDependencies, options.cwd, {
+  await updateDependencies(
+    tree.dependencies,
+    options.cwd,
+    { silent: options.silent }
+  );
+  await updateDependencies(
+    tree.devDependencies,
+    options.cwd,
+    { silent: options.silent, devDependency: true }
+  );
+  await installShadcnComponents(tree.shadcnComponent ?? [], {
+    cwd: options.cwd,
     silent: options.silent,
-    devDependency: true
+    overwrite: options.overwrite
   });
   await updateFiles(tree.files, {
     cwd: options.cwd,
@@ -22421,9 +22664,9 @@ var SignalExit = class extends SignalExitBase {
       this.#sigListeners[sig] = () => {
         const listeners = this.#process.listeners(sig);
         let { count } = this.#emitter;
-        const p8 = process4;
-        if (typeof p8.__signal_exit_emitter__ === "object" && typeof p8.__signal_exit_emitter__.count === "number") {
-          count += p8.__signal_exit_emitter__.count;
+        const p6 = process4;
+        if (typeof p6.__signal_exit_emitter__ === "object" && typeof p6.__signal_exit_emitter__.count === "number") {
+          count += p6.__signal_exit_emitter__.count;
         }
         if (listeners.length === count) {
           this.unload();
@@ -22658,12 +22901,12 @@ function createPrompt(view) {
     });
     const screen = new ScreenManager(rl);
     const { promise, resolve, reject } = PromisePolyfill.withResolver();
-    const cancel7 = () => reject(new CancelPromptError());
+    const cancel6 = () => reject(new CancelPromptError());
     if (signal) {
       const abort = () => reject(new AbortPromptError({ cause: signal.reason }));
       if (signal.aborted) {
         abort();
-        return Object.assign(promise, { cancel: cancel7 });
+        return Object.assign(promise, { cancel: cancel6 });
       }
       signal.addEventListener("abort", abort);
       cleanups.add(() => signal.removeEventListener("abort", abort));
@@ -22704,7 +22947,7 @@ function createPrompt(view) {
         cleanups.forEach((cleanup) => cleanup());
         screen.done({ clearContent: Boolean(context.clearPromptOnDone) });
         output.end();
-      }).then(() => promise), { cancel: cancel7 });
+      }).then(() => promise), { cancel: cancel6 });
     });
   };
   return prompt2;
@@ -23764,9 +24007,9 @@ var PromptsRunner = class {
   process = import_rxjs.EMPTY;
   abortController = new AbortController();
   opt;
-  constructor(prompts, opt = {}) {
+  constructor(prompts4, opt = {}) {
     this.opt = opt;
-    this.prompts = prompts;
+    this.prompts = prompts4;
   }
   async run(questions, answers) {
     this.abortController = new AbortController();

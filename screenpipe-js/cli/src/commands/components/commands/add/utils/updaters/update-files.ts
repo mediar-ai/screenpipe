@@ -1,7 +1,7 @@
 import fs from "fs-extra";
 import path from "path";
 import { highlighter, logger, spinner } from "../logger";
-import * as p from "@clack/prompts";
+import prompts from "prompts";
 import { existsSync } from "fs";
 import { fetchFileFromGitHubAPI } from "../download-file-from-github";
 
@@ -27,9 +27,10 @@ export async function updateFiles(
     ...options,
   };
 
-  const filesCreatedSpinner = spinner(`Updating files.`, {
+  const filesCreatedSpinner = spinner(`Creating files...`, {
     silent: options.silent,
-  })?.start();
+  });
+  filesCreatedSpinner.start();
 
   const filesCreated = [];
   const filesUpdated = [];
@@ -42,19 +43,24 @@ export async function updateFiles(
     if (existingFile && !options.overwrite) {
       filesCreatedSpinner.succeed("");
 
-      const overwrite = await p.confirm({
-        message: `The file ${highlighter.info(
-          location.target
-        )} already exists. Would you like to overwrite?`,
-        initialValue: false,
+      const response = await prompts({
+        type: 'confirm',
+        name: 'overwrite',
+        message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
+        initial: false
+      }, {
+        onCancel: () => {
+          filesSkipped.push(path.relative(options.cwd, location.target));
+          return false;
+        }
       });
 
-      if (p.isCancel(overwrite) || !overwrite) {
+      if (!response.overwrite) {
         filesSkipped.push(path.relative(options.cwd, location.target));
         continue;
       }
 
-      filesCreatedSpinner?.start();
+      filesCreatedSpinner.start();
 
       // Create the target directory if it doesn't exist.
       if (!existsSync(targetDir)) {
@@ -75,58 +81,45 @@ export async function updateFiles(
 
   const hasUpdatedFiles = filesCreated.length || filesUpdated.length;
   if (!hasUpdatedFiles && !filesSkipped.length) {
-    filesCreatedSpinner?.info("No files updated.");
+    filesCreatedSpinner.info("No files created.");
+    return { filesCreated, filesUpdated, filesSkipped };
   }
 
-  if (filesCreated.length) {
-    filesCreatedSpinner?.succeed(
-      `Created ${filesCreated.length} ${
-        filesCreated.length === 1 ? "file" : "files"
-      }:`
-    );
-    if (!options.silent) {
+  if (!options.silent) {
+    if (filesCreated.length) {
+      filesCreatedSpinner.succeed(
+        `Created ${filesCreated.length} ${
+          filesCreated.length === 1 ? "file" : "files"
+        }:`
+      );
       for (const file of filesCreated) {
         logger.log(`  - ${file}`);
       }
+    } else {
+      filesCreatedSpinner.stop();
     }
-  } else {
-    filesCreatedSpinner?.stop();
-  }
 
-  if (filesUpdated.length) {
-    spinner(
-      `Updated ${filesUpdated.length} ${
-        filesUpdated.length === 1 ? "file" : "files"
-      }:`,
-      {
-        silent: options.silent,
-      }
-    )?.info();
-    if (!options.silent) {
+    if (filesUpdated.length) {
+      logger.info(
+        `Updated ${filesUpdated.length} ${
+          filesUpdated.length === 1 ? "file" : "files"
+        }:`
+      );
       for (const file of filesUpdated) {
         logger.log(`  - ${file}`);
       }
     }
-  }
 
-  if (filesSkipped.length) {
-    spinner(
-      `Skipped ${filesSkipped.length} ${
-        filesUpdated.length === 1 ? "file" : "files"
-      }: (use --overwrite to overwrite)`,
-      {
-        silent: options.silent,
-      }
-    )?.info();
-    if (!options.silent) {
+    if (filesSkipped.length) {
+      logger.info(
+        `Skipped ${filesSkipped.length} ${
+          filesSkipped.length === 1 ? "file" : "files"
+        }: (use --overwrite to overwrite)`
+      );
       for (const file of filesSkipped) {
         logger.log(`  - ${file}`);
       }
     }
-  }
-
-  if (!options.silent) {
-    logger.break();
   }
 
   return {

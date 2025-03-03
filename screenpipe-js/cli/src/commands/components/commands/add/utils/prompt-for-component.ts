@@ -1,47 +1,55 @@
 import { z } from "zod";
-import * as p from "@clack/prompts";
+import prompts from "prompts";
 import { handleError } from "./handle-error";
 import { getRegistry } from "../registry/api";
-import { logger } from "./logger";
+import { logger, spinner } from "./logger";
 
 export async function promptForRegistryComponents(all?: boolean) {
+  const registrySpinner = spinner('Checking registry...');
+  registrySpinner.start();
   const registryIndex = getRegistry();
 
   if (!registryIndex) {
+    registrySpinner.fail('Failed to fetch registry index.');
     logger.break();
     handleError(new Error("Failed to fetch registry index."));
     return [];
   }
 
+  registrySpinner.succeed('Registry checked successfully.');
+
   if (all) {
     return Object.values(registryIndex).map((entry) => entry.name);
   }
 
-  const components = await p.multiselect({
-    message: "Which components would you like to add?",
-    options: Object.values(registryIndex)
-      .filter((item) => item.internal !== true)
-      .map((entry) => ({
-        value: entry.name,
-        label: entry.name,
-      })),
+  const response = await prompts([
+    {
+      type: 'multiselect',
+      name: 'components',
+      message: 'Which components would you like to add?',
+      instructions: false,
+      hint: 'Space to select, Enter to confirm',
+      choices: Object.values(registryIndex)
+        .filter((item) => item.internal !== true)
+        .map((entry) => ({
+          title: entry.name,
+          value: entry.name,
+          selected: false
+        })),
+      validate: (value) => {
+        if (!value.length) return 'Please select at least one component';
+        return true;
+      }
+    }
+  ], {
+    onCancel: () => {
+      logger.warn("No components selected. Exiting.");
+      process.exit(1);
+    }
   });
 
-  if (p.isCancel(components)) {
-    p.cancel("No components selected");
-    logger.info("");
-    process.exit(1);
-  }
-
-  if (!components?.length) {
-    logger.warn("No components selected. Exiting.");
-    logger.info("");
-    process.exit(1);
-  }
-
-  const result = z.array(z.string()).safeParse(components);
+  const result = z.array(z.string()).safeParse(response.components);
   if (!result.success) {
-    logger.error("");
     handleError(new Error("Something went wrong. Please try again."));
     return [];
   }

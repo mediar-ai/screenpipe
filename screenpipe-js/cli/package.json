@@ -29,6 +29,7 @@
     "lodash": "^4.17.21",
     "nanoid": "^5.0.9",
     "ora": "^8.2.0",
+    "prompts": "^2.4.2",
     "simple-git": "^3.27.0",
     "tar-stream": "^3.1.7",
     "unzip-stream": "^0.3.4",

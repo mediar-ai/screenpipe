@@ -3,6 +3,7 @@ import { registryResolveItemsTree } from "../registry/api"
 import { updateDependencies } from "./updaters/update-dependencies"
 import { spinner } from "./logger"
 import { updateFiles } from "./updaters/update-files"
+import { installShadcnComponents } from "./shadcn"
 
 export async function addComponents(
     components: string[],
@@ -24,17 +25,27 @@ export async function addComponents(
     }
     registrySpinner?.succeed()
 
+    // Install regular dependencies first
+    await updateDependencies(
+      tree.dependencies,
+      options.cwd,
+      { silent: options.silent }
+    )
 
-    await updateDependencies(tree.dependencies, options.cwd, {
+    await updateDependencies(
+      tree.devDependencies,
+      options.cwd,
+      { silent: options.silent, devDependency: true }
+    )
+
+    // Install shadcn components if specified in the tree
+    await installShadcnComponents(tree.shadcnComponent ?? [], {
+      cwd: options.cwd,
       silent: options.silent,
-    })
+      overwrite: options.overwrite
+    });
 
-    await updateDependencies(tree.devDependencies, options.cwd, {
-      silent: options.silent,
-      devDependency: true
-    })
-
-
+    // Finally update the files
     await updateFiles(tree.files, {
       cwd: options.cwd,
       overwrite: options.overwrite,
