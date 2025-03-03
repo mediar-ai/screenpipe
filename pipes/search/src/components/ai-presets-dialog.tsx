@@ -7,23 +7,23 @@ import {
 	CommandInput,
 	CommandItem,
 } from "./ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
+	DialogTrigger,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import {
 	Check,
-	ChevronsUpDown,
 	Plus,
 	Copy,
 	Edit2,
 	Star,
 	Trash2,
+	Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AIProviderConfig } from "./ai-provider-config";
@@ -129,12 +129,16 @@ export const AIPresetDialog = ({
 	);
 };
 
-export const AIPresetsSelector = () => {
+interface AIPresetsDialogProps {
+	children?: React.ReactNode;
+}
+
+export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
 	const { settings: pipeSettings, updateSettings: updatePipeSettings } =
 		usePipeSettings("search");
 	const { settings, updateSettings } = useSettings();
-	const [open, setOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
+	const [presetDialogOpen, setPresetDialogOpen] = useState(false);
 	const [selectedPresetToEdit, setSelectedPresetToEdit] = useState<
 		AIPreset | undefined
 	>();
@@ -146,7 +150,7 @@ export const AIPresetsSelector = () => {
 			(preset) => preset.id == pipeSettings?.aiPresetId,
 		);
 
-		return preset?.id;
+		return preset;
 	}, [settings?.aiPresets, pipeSettings?.aiPresetId]);
 
 	useEffect(() => {
@@ -157,7 +161,7 @@ export const AIPresetsSelector = () => {
 				if (!aiPresets.length) return;
 
 				const currentIndex = selectedPreset
-					? aiPresets.findIndex((p) => p.id === selectedPreset)
+					? aiPresets.findIndex((p) => p.id === selectedPreset.id)
 					: -1;
 				const nextIndex = (currentIndex + 1) % aiPresets.length;
 				const nextPreset = aiPresets[nextIndex];
@@ -317,7 +321,7 @@ export const AIPresetsSelector = () => {
 			});
 		}
 
-		setDialogOpen(false);
+		setPresetDialogOpen(false);
 		setSelectedPresetToEdit(undefined);
 	};
 
@@ -327,12 +331,12 @@ export const AIPresetsSelector = () => {
 			id: `${preset.id}-copy`,
 			defaultPreset: false,
 		});
-		setDialogOpen(true);
+		setPresetDialogOpen(true);
 	};
 
 	const handleEditPreset = (preset: AIPreset) => {
 		setSelectedPresetToEdit(preset);
-		setDialogOpen(true);
+		setPresetDialogOpen(true);
 	};
 
 	const handleSetDefaultPreset = (preset: AIPreset) => {
@@ -390,52 +394,78 @@ export const AIPresetsSelector = () => {
 		});
 	};
 
+	const renderTrigger = () => {
+		const trigger = children || (
+			<Button variant="outline" className="w-full">
+				<Settings className="mr-2 h-4 w-4" />
+				Manage AI Presets
+			</Button>
+		);
+
+		if (!selectedPreset) {
+			return (
+				<TooltipProvider>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<div>{trigger}</div>
+						</TooltipTrigger>
+						<TooltipContent>
+							<p className="flex items-center gap-2">
+								<span>Press</span>
+								<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
+								<span>to cycle presets</span>
+							</p>
+						</TooltipContent>
+					</Tooltip>
+				</TooltipProvider>
+			);
+		}
+
+		return (
+			<TooltipProvider>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<div>
+							{trigger}
+						</div>
+					</TooltipTrigger>
+					<TooltipContent className="space-y-1 text-justify">
+						<div className="font-medium">{selectedPreset.id}</div>
+						<div className="text-xs text-muted-foreground space-y-0.5">
+							<div>Provider: {selectedPreset.provider}</div>
+							<div>Model: {selectedPreset.model}</div>
+							<div>Context: {(selectedPreset.maxContextChars / 1000).toFixed(0)}k chars</div>
+							{selectedPreset.defaultPreset && (
+								<div className="text-primary">Default Preset</div>
+							)}
+							<div className="pt-2 mt-2 border-t">
+								<p className="flex items-center gap-2">
+									<span>Press</span>
+									<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
+									<span>to cycle presets</span>
+								</p>
+							</div>
+						</div>
+					</TooltipContent>
+				</Tooltip>
+			</TooltipProvider>
+		);
+	};
+
 	return (
 		<>
-			<div className="flex w-full items-center gap-2">
-				<Popover open={open} onOpenChange={setOpen}>
-					<PopoverTrigger asChild>
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="outline"
-										role="combobox"
-										aria-expanded={open}
-										className="w-full justify-between"
-									>
-										{selectedPreset ? (
-											<div className="flex items-center gap-2">
-												<span className="font-medium w-32 truncate text-justify">
-													{aiPresets.find((preset) => preset.id === selectedPreset)?.id}
-												</span>
-												<div className="flex items-center gap-2 text-xs text-muted-foreground">
-													<span className="rounded bg-muted px-1.5 py-0.5">
-														{aiPresets.find((preset) => preset.id === selectedPreset)?.provider}
-													</span>
-													<span>{aiPresets.find((preset) => preset.id === selectedPreset)?.model}</span>
-													<span>
-														{((aiPresets.find((preset) => preset.id === selectedPreset)?.maxContextChars || 0) / 1000).toFixed(0)}k chars
-													</span>
-												</div>
-											</div>
-										) : (
-											"select ai preset..."
-										)}
-										<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p className="flex items-center gap-2">
-										<span>Press</span>
-										<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
-										<span>to cycle presets</span>
-									</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					</PopoverTrigger>
-					<PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+				<DialogTrigger>
+					{renderTrigger()}
+				</DialogTrigger>
+				<DialogContent className="w-2/4 max-w-screen-2xl">
+					<DialogHeader>
+						<DialogTitle>AI Presets</DialogTitle>
+						<DialogDescription>
+							Manage your AI presets. You can create, edit, duplicate, and delete presets.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
 						<Command>
 							<CommandInput placeholder="search presets..." />
 							<CommandEmpty>no presets found.</CommandEmpty>
@@ -447,9 +477,8 @@ export const AIPresetsSelector = () => {
 										onSelect={(currentValue) => {
 											updatePipeSettings({
 												aiPresetId:
-													currentValue === selectedPreset ? "" : currentValue,
+													currentValue === selectedPreset?.id ? "" : currentValue,
 											});
-											setOpen(false);
 										}}
 										className="flex py-2"
 									>
@@ -458,7 +487,7 @@ export const AIPresetsSelector = () => {
 												<Check
 													className={cn(
 														"h-4 w-4",
-														selectedPreset === preset.id
+														selectedPreset?.id === preset.id
 															? "opacity-100"
 															: "opacity-0",
 													)}
@@ -540,9 +569,8 @@ export const AIPresetsSelector = () => {
 							<CommandGroup>
 								<CommandItem
 									onSelect={() => {
-										setOpen(false);
 										setSelectedPresetToEdit(undefined);
-										setDialogOpen(true);
+										setPresetDialogOpen(true);
 									}}
 								>
 									<Plus className="mr-2 h-4 w-4" />
@@ -550,15 +578,15 @@ export const AIPresetsSelector = () => {
 								</CommandItem>
 							</CommandGroup>
 						</Command>
-					</PopoverContent>
-				</Popover>
-			</div>
+					</div>
+				</DialogContent>
+			</Dialog>
 			<AIPresetDialog
-				open={dialogOpen}
-				onOpenChange={setDialogOpen}
+				open={presetDialogOpen}
+				onOpenChange={setPresetDialogOpen}
 				onSave={handleSavePreset}
 				preset={selectedPresetToEdit}
 			/>
 		</>
 	);
-};
+}; 

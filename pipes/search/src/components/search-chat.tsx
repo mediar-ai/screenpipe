@@ -39,6 +39,7 @@ import {
 	Bot,
 	Settings,
 	Copy,
+	SparklesIcon,
 } from "lucide-react";
 import { useToast } from "@/lib/use-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -105,9 +106,10 @@ import {
 	MultiSelectCombobox,
 	type BaseOption,
 } from "@/components/ui/multi-select-combobox";
-import { AIPresetsSelector } from "./ai-presets-selector";
+import { AIPresetsDialog } from "./ai-presets-dialog";
 import { usePipeSettings, useSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
+import { AIPresetsSelector } from "./ai-presets-selector";
 
 interface Agent {
 	id: string;
@@ -2016,18 +2018,11 @@ export function SearchChat() {
 							className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
 						>
 							<div className="relative flex-grow flex items-center space-x-2">
-								<TooltipProvider>
-									<Tooltip>
-										<TooltipTrigger>
-											<div className="text-muted-foreground">
-												<Bot className="h-4 w-4 mr-2" />
-											</div>
-										</TooltipTrigger>
-										<TooltipContent>
-											<p>using {getPreset()?.model}</p>
-										</TooltipContent>
-									</Tooltip>
-								</TooltipProvider>
+								<AIPresetsDialog>
+									<Button type="button" variant="outline" size="icon" className="w-full p-2">
+										<SparklesIcon className="h-4 w-4" />
+									</Button>
+								</AIPresetsDialog>
 								<TooltipProvider>
 									<Tooltip open={!isAvailable}>
 										<TooltipTrigger asChild>
@@ -2151,7 +2146,9 @@ export function SearchChat() {
 				</>
 			)}
 
-			<AIPresetsSelector />
+				{/* <AIPresetsSelector /> */}
+
+			{/* <AIPresetsDialog /> */}
 
 			{/* Scroll to Bottom Button */}
 			{showScrollButton && (
