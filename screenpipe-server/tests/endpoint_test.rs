@@ -7,7 +7,7 @@ mod tests {
     use chrono::DateTime;
     use chrono::{Duration, Utc};
     use lru::LruCache;
-    use screenpipe_audio::core::device::{AudioDevice, DeviceType};
+    use screenpipe_audio::audio_manager::AudioManagerBuilder;
     use screenpipe_db::{ContentType, DatabaseManager, SearchResult};
     use screenpipe_server::video_cache::FrameCache;
     use screenpipe_server::PipeManager;
@@ -27,6 +27,13 @@ mod tests {
     }
     async fn setup_test_app() -> (Router, Arc<AppState>) {
         let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
+        let audio_manager = Arc::new(
+            AudioManagerBuilder::new()
+                .output_path("/tmp/screenpipe".into())
+                .build(db.clone())
+                .await
+                .unwrap(),
+        );
 
         let app_state = Arc::new(AppState {
             db: db.clone(),
@@ -38,6 +45,7 @@ mod tests {
             frame_cache: Some(Arc::new(
                 FrameCache::new(PathBuf::from(""), db).await.unwrap(),
             )),
+            audio_manager,
             ui_monitoring_enabled: false,
             frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(100).unwrap(),

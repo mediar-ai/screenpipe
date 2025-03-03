@@ -1,15 +1,13 @@
 use clap::Parser;
 #[allow(unused_imports)]
 use colored::Colorize;
-use dashmap::DashMap;
 use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
-    audio_manager::{AudioManager, AudioManagerBuilder, AudioManagerOptions, AudioManagerStatus},
+    audio_manager::AudioManagerBuilder,
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
-        AudioDevice, DeviceControl,
     },
     transcription::whisper::model::download_whisper_model,
 };
@@ -29,7 +27,6 @@ use screenpipe_vision::monitor::list_monitors;
 use screenpipe_vision::run_ui;
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
     env, fs,
     io::Write,
     net::SocketAddr,
@@ -251,7 +248,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             Command::Completions { shell } => {
-                cli.handle_completions(shell.clone())?;
+                cli.handle_completions(*shell)?;
                 return Ok(());
             }
             Command::Pipe { subcommand } => {
@@ -347,7 +344,7 @@ async fn main() -> anyhow::Result<()> {
                 debug,
                 use_embedding,
             } => {
-                let local_data_dir = get_base_dir(&data_dir)?;
+                let local_data_dir = get_base_dir(data_dir)?;
 
                 // Update logging filter if debug is enabled
                 if *debug {
@@ -1091,7 +1088,7 @@ async fn handle_pipe_command(
                         ),
                     }
                 }
-                _ => match pipe_manager.download_pipe(&url).await {
+                _ => match pipe_manager.download_pipe(url).await {
                     Ok(pipe_id) => match output {
                         OutputFormat::Json => println!(
                             "{}",
@@ -1134,7 +1131,7 @@ async fn handle_pipe_command(
                 _ => {
                     println!("note: server not running, showing pipe configuration");
                     pipe_manager
-                        .get_pipe_info(&id)
+                        .get_pipe_info(id)
                         .await
                         .ok_or_else(|| anyhow::anyhow!("pipe not found"))?
                 }
@@ -1157,7 +1154,7 @@ async fn handle_pipe_command(
                 }
                 _ => {
                     pipe_manager
-                        .update_config(&id, json!({"enabled": true}))
+                        .update_config(id, json!({"enabled": true}))
                         .await?;
                     println!("note: server not running, updated config only. pipe will start on next server launch");
                 }
@@ -1176,7 +1173,7 @@ async fn handle_pipe_command(
                 }
                 _ => {
                     pipe_manager
-                        .update_config(&id, json!({"enabled": false}))
+                        .update_config(id, json!({"enabled": false}))
                         .await?;
                     println!("note: server not running, updated config only");
                 }
@@ -1184,8 +1181,8 @@ async fn handle_pipe_command(
         }
 
         PipeCommand::Update { id, config, port } => {
-            let config: Value = serde_json::from_str(&config)
-                .map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
+            let config: Value =
+                serde_json::from_str(config).map_err(|e| anyhow::anyhow!("invalid json: {}", e))?;
 
             match client
                 .post(format!("{}:{}/pipes/update", server_url, port))
@@ -1200,7 +1197,7 @@ async fn handle_pipe_command(
                     println!("pipe {} config updated in running server", id);
                 }
                 _ => {
-                    pipe_manager.update_config(&id, config).await?;
+                    pipe_manager.update_config(id, config).await?;
                     println!("note: server not running, updated config only");
                 }
             }
@@ -1226,7 +1223,7 @@ async fn handle_pipe_command(
                 Ok(response) if response.status().is_success() => {
                     println!("pipe '{}' deleted from running server", id);
                 }
-                _ => match pipe_manager.delete_pipe(&id).await {
+                _ => match pipe_manager.delete_pipe(id).await {
                     Ok(_) => println!("pipe '{}' deleted from local files", id),
                     Err(e) => println!("failed to delete pipe: {}", e),
                 },

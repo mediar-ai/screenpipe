@@ -10,8 +10,7 @@ use axum::{
     serve, Router,
 };
 use screenpipe_db::{
-    ContentType, DatabaseManager, FrameData, OCRResult as OCRResultDB, SearchResult, Speaker,
-    TagContentType,
+    ContentType, DatabaseManager, FrameData, SearchResult, Speaker, TagContentType,
 };
 use tokio_util::io::ReaderStream;
 
