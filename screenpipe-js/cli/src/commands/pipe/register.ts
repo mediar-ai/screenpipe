@@ -19,8 +19,8 @@ export const registerCommand = new Command()
       throw new Error("name can only contain letters, numbers, and hyphens");
     }
     // Check maximum length
-    if (value.length > 10) {
-      throw new Error("name cannot be longer than 10 characters");
+    if (value.length > 20) {
+      throw new Error("name cannot be longer than 20 characters");
     }
     return value;
   })
