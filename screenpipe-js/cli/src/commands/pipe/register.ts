@@ -14,9 +14,11 @@ export const registerCommand = new Command()
     if (value.includes(" ")) {
       throw new Error("name cannot contain spaces");
     }
-    // Check for valid characters (only letters, hyphens, and numbers)
-    if (!/^[a-zA-Z0-9-]+$/.test(value)) {
-      throw new Error("name can only contain letters, numbers, and hyphens");
+    // Check for valid characters (letters, numbers, hyphens, underscores, and periods)
+    if (!/^[a-zA-Z0-9-_.]+$/.test(value)) {
+      throw new Error(
+        "name can only contain letters, numbers, hyphens, underscores, and periods"
+      );
     }
     // Check maximum length
     if (value.length > 20) {

@@ -19979,11 +19979,13 @@ var registerCommand = new Command3().name("register").description("register a ne
   if (value.includes(" ")) {
     throw new Error("name cannot contain spaces");
   }
-  if (!/^[a-zA-Z0-9-]+$/.test(value)) {
-    throw new Error("name can only contain letters, numbers, and hyphens");
+  if (!/^[a-zA-Z0-9-_.]+$/.test(value)) {
+    throw new Error(
+      "name can only contain letters, numbers, hyphens, underscores, and periods"
+    );
   }
-  if (value.length > 10) {
-    throw new Error("name cannot be longer than 10 characters");
+  if (value.length > 20) {
+    throw new Error("name cannot be longer than 20 characters");
   }
   return value;
 }).option("--paid", "set this flag to create a paid pipe").option(
