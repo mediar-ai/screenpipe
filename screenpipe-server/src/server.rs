@@ -36,7 +36,7 @@ use crate::{
 use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
-    audio_manager::audio_manager::AudioManager,
+    audio_manager::AudioManager,
     core::device::{
         default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
     },

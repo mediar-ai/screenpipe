@@ -19,6 +19,8 @@ pub enum CliAudioTranscriptionEngine {
     WhisperDistilLargeV3,
     #[clap(name = "whisper-large-v3-turbo")]
     WhisperLargeV3Turbo,
+    #[clap(name = "whisper-large-v3-turbo-quantized")]
+    WhisperLargeV3TurboQuantized,
 }
 
 impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
@@ -31,6 +33,9 @@ impl From<CliAudioTranscriptionEngine> for CoreAudioTranscriptionEngine {
             }
             CliAudioTranscriptionEngine::WhisperLargeV3Turbo => {
                 CoreAudioTranscriptionEngine::WhisperLargeV3Turbo
+            }
+        CliAudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
+                CoreAudioTranscriptionEngine::WhisperLargeV3TurboQuantized
             }
         }
     }

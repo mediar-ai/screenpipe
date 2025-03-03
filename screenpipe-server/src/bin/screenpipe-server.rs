@@ -6,11 +6,7 @@ use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
-    audio_manager::{
-        self,
-        audio_manager::{AudioManager, AudioManagerStatus},
-        AudioManagerBuilder, AudioManagerOptions,
-    },
+    audio_manager::{AudioManager, AudioManagerBuilder, AudioManagerOptions, AudioManagerStatus},
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
         AudioDevice, DeviceControl,
@@ -84,12 +80,16 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
+    //TODO FIX NO DEVICES AVAILABLE IN SETTINGS LOGGING
+
     let env_filter = EnvFilter::from_default_env()
         .add_directive("info".parse().unwrap())
         .add_directive("tokenizers=error".parse().unwrap())
         .add_directive("rusty_tesseract=error".parse().unwrap())
         .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap());
+        .add_directive("hf_hub=error".parse().unwrap())
+        .add_directive("hf_hub=error".parse().unwrap())
+        .add_directive("whisper_rs=error".parse().unwrap());
 
     #[cfg(target_os = "windows")]
     let env_filter = env_filter.add_directive("xcap::platform::impl_window=off".parse().unwrap());
@@ -406,7 +406,6 @@ async fn main() -> anyhow::Result<()> {
     let all_monitors = list_monitors().await;
 
     let mut audio_devices = Vec::new();
-    let audio_devices_clone = audio_devices.clone();
 
     let mut realtime_audio_devices = Vec::new();
 
@@ -453,6 +452,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    let audio_devices_clone = audio_devices.clone();
     let resource_monitor = ResourceMonitor::new(!cli.disable_telemetry);
     resource_monitor.start_monitoring(Duration::from_secs(10), Some(Duration::from_secs(60)));
 

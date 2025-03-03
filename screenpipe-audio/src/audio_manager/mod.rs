@@ -2,4 +2,5 @@ mod builder;
 
 pub use builder::*;
 
-pub mod audio_manager;
+mod manager;
+pub use manager::*;

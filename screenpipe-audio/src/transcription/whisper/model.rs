@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{Error as E, Result};
 use candle::{Device, Tensor};
@@ -115,4 +115,20 @@ impl Model {
             Self::Quantized(m) => m.decoder.final_linear(x),
         }
     }
+}
+
+pub fn download_quantized_whisper(engine: Arc<AudioTranscriptionEngine>) -> Result<PathBuf> {
+    if *engine != AudioTranscriptionEngine::WhisperLargeV3TurboQuantized {
+        return Err(anyhow::anyhow!("Unsupported transcription engine {engine}"));
+    }
+
+    let api = Api::new()?;
+    let repo = Repo::with_revision(
+        "ggerganov/whisper.cpp".to_string(),
+        RepoType::Model,
+        "main".to_string(),
+    );
+    let api_repo = api.repo(repo);
+    let model = api_repo.get("ggml-large-v3-turbo-q8_0.bin")?;
+    Ok(model)
 }

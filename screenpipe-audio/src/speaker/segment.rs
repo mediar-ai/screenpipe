@@ -43,10 +43,31 @@ fn create_speech_segment(
     let start_f64 = start * (sample_rate as f64);
     let end_f64 = end * (sample_rate as f64);
 
-    let start_idx = start_f64.min((samples.len() - 1) as f64) as usize;
-    let end_idx = end_f64.min(samples.len() as f64) as usize;
+    let start_idx = start_f64.min((samples.len() - 1600) as f64) as usize;
+    let mut end_idx = end_f64.min(samples.len() as f64) as usize;
 
-    let segment_samples = &padded_samples[start_idx..end_idx];
+    // TODO: Why is this empty sometimes?
+    let mut samples = padded_samples[start_idx..end_idx].to_vec();
+    // // Ensure the segment has at least 1600 samples
+    let min_length = 1600;
+    let segment_samples = if end_idx - start_idx < min_length {
+        if end_idx + (min_length - (end_idx - start_idx)) <= samples.len() {
+            // Increase the end index if possible
+            end_idx += min_length - (end_idx - start_idx);
+            &padded_samples[start_idx..end_idx]
+        } else if start_idx >= min_length - (end_idx - start_idx) {
+            // Otherwise, pad the samples.
+
+            samples.resize(1600, 0.0);
+
+            samples.as_slice()
+        } else {
+            &padded_samples[start_idx..end_idx]
+        }
+    } else {
+        &padded_samples[start_idx..end_idx]
+    };
+
     let embedding = match get_speaker_embedding(embedding_extractor, segment_samples) {
         Ok(embedding) => embedding,
         Err(e) => {
