@@ -49,7 +49,7 @@ impl Default for AudioManagerOptions {
             enable_realtime: false,
             audio_chunk_duration: Duration::from_secs(30),
             vad_sensitivity: VadSensitivity::High,
-            health_check_grace_period: 10,
+            health_check_grace_period: 15,
             enabled_devices,
             use_all_devices: false,
             db_path: None,
