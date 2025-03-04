@@ -62,9 +62,11 @@ pub async fn prepare_segments(
         audio_frames.len(),
         speech_frame_count
     );
+
+    let threshold_met = speech_ratio > min_speech_ratio;
+
     let (tx, rx) = tokio::sync::mpsc::channel(100);
-    let speech_ratio_ok = speech_ratio >= min_speech_ratio;
-    if !audio_frames.is_empty() && speech_ratio_ok {
+    if !audio_frames.is_empty() && threshold_met {
         let segments = get_segments(
             &audio_data,
             16000,
@@ -89,5 +91,5 @@ pub async fn prepare_segments(
         }
     }
 
-    Ok((rx, speech_ratio_ok))
+    Ok((rx, threshold_met))
 }
