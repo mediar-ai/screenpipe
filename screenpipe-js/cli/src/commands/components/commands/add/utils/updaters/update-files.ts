@@ -27,9 +27,10 @@ export async function updateFiles(
     ...options,
   };
 
-  const filesCreatedSpinner = spinner(`Updating files.`, {
+  const filesCreatedSpinner = spinner(`Creating files...`, {
     silent: options.silent,
-  })?.start();
+  });
+  filesCreatedSpinner.start();
 
   const filesCreated = [];
   const filesUpdated = [];
@@ -40,13 +41,10 @@ export async function updateFiles(
 
     const existingFile = existsSync(location.target);
     if (existingFile && !options.overwrite) {
-      filesCreatedSpinner.succeed("");
+      filesCreatedSpinner.stop();
 
       const overwrite = await p.confirm({
-        message: `The file ${highlighter.info(
-          location.target
-        )} already exists. Would you like to overwrite?`,
-        initialValue: false,
+        message: `The file ${highlighter.info(location.target)} already exists. Would you like to overwrite?`,
       });
 
       if (p.isCancel(overwrite) || !overwrite) {
@@ -54,7 +52,7 @@ export async function updateFiles(
         continue;
       }
 
-      filesCreatedSpinner?.start();
+      filesCreatedSpinner.start();
 
       // Create the target directory if it doesn't exist.
       if (!existsSync(targetDir)) {
@@ -75,58 +73,38 @@ export async function updateFiles(
 
   const hasUpdatedFiles = filesCreated.length || filesUpdated.length;
   if (!hasUpdatedFiles && !filesSkipped.length) {
-    filesCreatedSpinner?.info("No files updated.");
-  }
-
-  if (filesCreated.length) {
-    filesCreatedSpinner?.succeed(
-      `Created ${filesCreated.length} ${
-        filesCreated.length === 1 ? "file" : "files"
-      }:`
-    );
-    if (!options.silent) {
-      for (const file of filesCreated) {
-        logger.log(`  - ${file}`);
-      }
-    }
-  } else {
-    filesCreatedSpinner?.stop();
-  }
-
-  if (filesUpdated.length) {
-    spinner(
-      `Updated ${filesUpdated.length} ${
-        filesUpdated.length === 1 ? "file" : "files"
-      }:`,
-      {
-        silent: options.silent,
-      }
-    )?.info();
-    if (!options.silent) {
-      for (const file of filesUpdated) {
-        logger.log(`  - ${file}`);
-      }
-    }
-  }
-
-  if (filesSkipped.length) {
-    spinner(
-      `Skipped ${filesSkipped.length} ${
-        filesUpdated.length === 1 ? "file" : "files"
-      }: (use --overwrite to overwrite)`,
-      {
-        silent: options.silent,
-      }
-    )?.info();
-    if (!options.silent) {
-      for (const file of filesSkipped) {
-        logger.log(`  - ${file}`);
-      }
-    }
+    filesCreatedSpinner.info("No files created.");
+    return { filesCreated, filesUpdated, filesSkipped };
   }
 
   if (!options.silent) {
-    logger.break();
+    filesCreatedSpinner.stop();
+    
+    if (filesCreated.length) {
+      p.note(
+        [`Created ${filesCreated.length} ${filesCreated.length === 1 ? "file" : "files"}:`,
+        ...filesCreated.map(file => `  - ${file}`)].join('\n'),
+        'Created'
+      );
+    }
+
+    if (filesUpdated.length) {
+      p.note(
+        [`Updated ${filesUpdated.length} ${filesUpdated.length === 1 ? "file" : "files"}:`,
+        ...filesUpdated.map(file => `  - ${file}`)].join('\n'),
+        'Updated'
+      );
+    }
+
+    if (filesSkipped.length) {
+      p.note(
+        [`Skipped ${filesSkipped.length} ${filesSkipped.length === 1 ? "file" : "files"}:`,
+        ...filesSkipped.map(file => `  - ${file}`),
+        '',
+        'Use --overwrite to overwrite existing files'].join('\n'),
+        'Skipped'
+      );
+    }
   }
 
   return {

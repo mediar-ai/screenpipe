@@ -3,6 +3,7 @@ import { registryResolveItemsTree } from "../registry/api"
 import { updateDependencies } from "./updaters/update-dependencies"
 import { spinner } from "./logger"
 import { updateFiles } from "./updaters/update-files"
+import { installShadcnComponents } from "./shadcn"
 
 export async function addComponents(
     components: string[],
@@ -14,27 +15,43 @@ export async function addComponents(
 ) {
     const registrySpinner = spinner(`Checking registry.`, {
       silent: options.silent,
-    })?.start()
+    });
+    registrySpinner.start();
 
     const tree = registryResolveItemsTree(components)
 
     if (!tree) {
-      registrySpinner?.fail()
+      registrySpinner.fail("Failed to fetch components from registry.");
       return handleError(new Error("Failed to fetch components from registry."))
     }
-    registrySpinner?.succeed()
+    registrySpinner.succeed("Registry checked successfully.");
 
+    // Install regular dependencies first
+      await updateDependencies(
+        tree.dependencies,
+        {
+          cwd: options.cwd,
+          silent: options.silent
+        }
+      )
 
-    await updateDependencies(tree.dependencies, options.cwd, {
+      await updateDependencies(
+        tree.devDependencies,
+        {
+          cwd: options.cwd,
+          silent: options.silent,
+          devDependency: true
+        }
+      )
+
+    // Install shadcn components if specified in the tree
+    await installShadcnComponents(tree.shadcnComponent ?? [], {
+      cwd: options.cwd,
       silent: options.silent,
-    })
+      overwrite: options.overwrite
+    });
 
-    await updateDependencies(tree.devDependencies, options.cwd, {
-      silent: options.silent,
-      devDependency: true
-    })
-
-
+    // Finally update the files
     await updateFiles(tree.files, {
       cwd: options.cwd,
       overwrite: options.overwrite,

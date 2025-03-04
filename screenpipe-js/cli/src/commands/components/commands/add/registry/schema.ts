@@ -8,8 +8,10 @@ export const registryComponentSchema = z.object({
   target: z.string(),
   dependencies: z.array(z.string()).optional(),
   registryDependencies: z.array(z.string()).optional(),
-  devDependencies: z.array(z.string()).optional()
+  devDependencies: z.array(z.string()).optional(),
+  shadcnComponent: z.array(z.string()).optional()
 })
+
 export type ComponentSchema = z.infer<typeof registryComponentSchema>
 
 export const registrySchema = z.record(z.string(), registryComponentSchema)
@@ -19,6 +21,7 @@ export const registryResolvedComponentsTreeSchema = registryComponentSchema.pick
   dependencies: true,
   devDependencies: true,
   docs: true,
+  shadcnComponent: true,
 }).merge(
   z.object({
     files: z.array(z.object({

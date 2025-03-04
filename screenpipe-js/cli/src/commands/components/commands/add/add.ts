@@ -4,6 +4,8 @@ import { promptForRegistryComponents } from "./utils/prompt-for-component";
 import { preFlightAdd } from "./preflights/preflight-add";
 import { addComponents } from "./utils/add-components";
 import { Command } from "commander";
+import { detectPackageManager } from "./utils/package-manager";
+import { log } from "@clack/prompts";
 
 export const addComponentCommand = new Command()
   .name("add")
@@ -28,7 +30,7 @@ export const addComponentCommand = new Command()
         components = [comps];
       }
 
-      // Before addig check a few things
+      // Before adding check a few things
       const result = preFlightAdd(opts.cwd);
 
       // If the current directory is not a pipe, create one
