@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IconPlus, IconStop } from "@/components/ui/icons";
 import { Separator } from "@/components/ui/separator";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings } from "@/lib/settings-provider";
 import { runBot, stopBot } from "@/lib/actions/run-bot";
 import type { CookieParam } from "puppeteer-core";
 
@@ -29,7 +29,12 @@ export function ControlPanel({
   const { settings } = useSettings();
 
   const start = async () => {
-    const success = await runBot(settings, cookies, frequency, prompt);
+    const success = await runBot(
+      settings.screenpipeAppSettings,
+      cookies,
+      frequency,
+      prompt,
+    );
     if (success) {
       setIsRunning(true);
     }

@@ -8,6 +8,7 @@ import { FrequencySlider } from "@/components/frequency-slider";
 import { PromptInput } from "@/components/prompt-input";
 import { SuggestionList } from "@/components/suggestion-list";
 import { useToast } from "@/hooks/use-toast";
+import { SettingsProvider } from "@/lib/settings-provider";
 import * as store from "@/lib/store";
 import type { Error } from "@/app/api/errors/route";
 import type { CookieParam } from "puppeteer-core";
@@ -58,14 +59,16 @@ export default function Page() {
       <div className="flex flex-col gap-8 lg:flex-row xl:gap-16 h-full px-8 lg:px-16">
         <div className="flex flex-col gap-8 h-full">
           <ConnectionPanel setCookies={setCookies} isConnected={isConnected} />
-          <ControlPanel
-            cookies={cookies}
-            isConnected={isConnected}
-            isRunning={isRunning}
-            setIsRunning={setIsRunning}
-            frequency={frequency}
-            prompt={prompt}
-          />
+          <SettingsProvider>
+            <ControlPanel
+              cookies={cookies}
+              isConnected={isConnected}
+              isRunning={isRunning}
+              setIsRunning={setIsRunning}
+              frequency={frequency}
+              prompt={prompt}
+            />
+          </SettingsProvider>
           {isRunning && <Status />}
           {!isRunning && (
             <FrequencySlider
