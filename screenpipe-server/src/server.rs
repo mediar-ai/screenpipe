@@ -6,9 +6,11 @@ use axum::{
     },
     http::StatusCode,
     response::{IntoResponse, Json as JsonResponse, Response},
-    routing::{get, post},
+    routing::get,
     serve, Router,
 };
+use oasgen::{oasgen, OaSchema, Server};
+
 use tokio_util::io::ReaderStream;
 
 use tokio::fs::File;
@@ -20,6 +22,7 @@ use futures::{
 use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
+use crate::video_utils::extract_frame;
 use crate::{
     db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
@@ -27,12 +30,11 @@ use crate::{
     video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
-        extract_frame_from_video, merge_videos, validate_media, MergeVideosRequest,
-        MergeVideosResponse, ValidateMediaParams,
+        extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
+        MergeVideosRequest, MergeVideosResponse, ValidateMediaParams,
     },
     DatabaseManager,
 };
-use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
@@ -86,7 +88,7 @@ pub struct AppState {
 }
 
 // Update the SearchQuery struct
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub(crate) struct SearchQuery {
     q: Option<String>,
     #[serde(flatten)]
@@ -120,7 +122,7 @@ pub(crate) struct SearchQuery {
     browser_url: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub(crate) struct PaginationQuery {
     #[serde(default = "default_limit")]
     #[serde(deserialize_with = "deserialize_number_from_string")]
@@ -145,36 +147,36 @@ pub struct PaginatedResponse<T> {
     pub pagination: PaginationInfo,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct PaginationInfo {
     pub limit: u32,
     pub offset: u32,
     pub total: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct UpdateSpeakerRequest {
     pub id: i64,
     pub name: Option<String>,
     pub metadata: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct SearchSpeakersRequest {
     pub name: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct DeleteSpeakerRequest {
     pub id: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct MarkAsHallucinationRequest {
     speaker_id: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "content")]
 pub enum ContentItem {
     OCR(OCRContent),
@@ -182,7 +184,7 @@ pub enum ContentItem {
     UI(UiContent),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct OCRContent {
     pub frame_id: i64,
     pub text: String,
@@ -198,7 +200,7 @@ pub struct OCRContent {
     pub focused: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct AudioContent {
     pub chunk_id: i64,
     pub transcription: String,
@@ -213,7 +215,7 @@ pub struct AudioContent {
     pub end_time: Option<f64>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(OaSchema, Serialize, Deserialize, Debug)]
 pub struct UiContent {
     pub id: i64,
     pub text: String,
@@ -227,13 +229,13 @@ pub struct UiContent {
     pub browser_url: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub(crate) struct ListDeviceResponse {
     name: String,
     is_default: bool,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct MonitorInfo {
     pub id: u32,
     pub name: String,
@@ -242,22 +244,22 @@ pub struct MonitorInfo {
     pub is_default: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddTagsRequest {
     tags: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct AddTagsResponse {
     success: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct RemoveTagsRequest {
     tags: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct RemoveTagsResponse {
     success: bool,
 }
@@ -267,7 +269,7 @@ fn default_limit() -> u32 {
     20
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct HealthCheckResponse {
     pub status: String,
     pub status_code: u16,
@@ -281,14 +283,18 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
+#[derive(OaSchema, Serialize, Deserialize)]
+pub struct SearchResponse {
+    pub data: Vec<ContentItem>,
+    pub pagination: PaginationInfo,
+}
+
 // Update the search function
+#[oasgen]
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> Result<
-    JsonResponse<PaginatedResponse<ContentItem>>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
+) -> Result<JsonResponse<SearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
     info!(
         "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
         query.q.as_deref().unwrap_or(""),
@@ -423,7 +429,7 @@ pub(crate) async fn search(
     }
 
     info!("search completed: found {} results", total);
-    Ok(JsonResponse(PaginatedResponse {
+    Ok(JsonResponse(SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
@@ -433,6 +439,7 @@ pub(crate) async fn search(
     }))
 }
 
+#[oasgen]
 pub(crate) async fn api_list_audio_devices(
     State(_state): State<Arc<AppState>>,
 ) -> Result<JsonResponse<Vec<ListDeviceResponse>>, (StatusCode, JsonResponse<serde_json::Value>)> {
@@ -478,6 +485,7 @@ pub(crate) async fn api_list_audio_devices(
     }
 }
 
+#[oasgen]
 pub async fn api_list_monitors(
 ) -> Result<JsonResponse<Vec<MonitorInfo>>, (StatusCode, JsonResponse<serde_json::Value>)> {
     let monitors = list_monitors().await;
@@ -512,11 +520,12 @@ pub async fn api_list_monitors(
     }
 }
 
+#[oasgen]
 pub(crate) async fn add_tags(
     State(state): State<Arc<AppState>>,
     Path((content_type, id)): Path<(String, i64)>,
     JsonResponse(payload): JsonResponse<AddTagsRequest>,
-) -> Result<JsonResponse<AddTagsResponse>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Json<AddTagsResponse>, (StatusCode, JsonResponse<Value>)> {
     let content_type = match content_type.as_str() {
         "vision" => TagContentType::Vision,
         "audio" => TagContentType::Audio,
@@ -540,11 +549,12 @@ pub(crate) async fn add_tags(
     }
 }
 
+#[oasgen]
 pub(crate) async fn remove_tags(
     State(state): State<Arc<AppState>>,
     Path((content_type, id)): Path<(String, i64)>,
     JsonResponse(payload): JsonResponse<RemoveTagsRequest>,
-) -> Result<JsonResponse<RemoveTagsResponse>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Json<RemoveTagsResponse>, (StatusCode, JsonResponse<Value>)> {
     let content_type = match content_type.as_str() {
         "vision" => TagContentType::Vision,
         "audio" => TagContentType::Audio,
@@ -568,6 +578,7 @@ pub(crate) async fn remove_tags(
     }
 }
 
+#[oasgen]
 pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<HealthCheckResponse> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -679,36 +690,36 @@ pub async fn health_check(State(state): State<Arc<AppState>>) -> JsonResponse<He
     })
 }
 // Request and response structs
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct DownloadPipeRequest {
     url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct DownloadPipePrivateRequest {
     url: String,
     pipe_name: String,
     pipe_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct RunPipeRequest {
     pipe_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct UpdatePipeConfigRequest {
     pipe_id: String,
     config: serde_json::Value,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct UpdatePipeVersionRequest {
     pipe_id: String,
     source: String,
 }
 
-// Handler functions
+#[oasgen]
 async fn download_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipeRequest>,
@@ -735,6 +746,7 @@ async fn download_pipe_handler(
     }
 }
 
+#[oasgen]
 async fn download_pipe_private_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<DownloadPipePrivateRequest>,
@@ -764,6 +776,7 @@ async fn download_pipe_private_handler(
     }
 }
 
+#[oasgen]
 async fn run_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
@@ -797,6 +810,7 @@ async fn run_pipe_handler(
     }
 }
 
+#[oasgen]
 async fn stop_pipe_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RunPipeRequest>,
@@ -829,6 +843,7 @@ async fn stop_pipe_handler(
     }
 }
 
+#[oasgen]
 async fn update_pipe_config_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<UpdatePipeConfigRequest>,
@@ -856,6 +871,7 @@ async fn update_pipe_config_handler(
     }
 }
 
+#[oasgen]
 async fn update_pipe_version_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<UpdatePipeVersionRequest>,
@@ -883,6 +899,7 @@ async fn update_pipe_version_handler(
     }
 }
 
+#[oasgen]
 async fn get_pipe_info_handler(
     State(state): State<Arc<AppState>>,
     Path(pipe_id): Path<String>,
@@ -903,6 +920,7 @@ async fn get_pipe_info_handler(
     }
 }
 
+#[oasgen]
 async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<Value> {
     let pipes = state.pipe_manager.list_pipes().await;
     JsonResponse(json!({
@@ -911,7 +929,7 @@ async fn list_pipes_handler(State(state): State<Arc<AppState>>) -> JsonResponse<
     }))
 }
 
-pub struct Server {
+pub struct SCServer {
     db: Arc<DatabaseManager>,
     addr: SocketAddr,
     // device_manager: Arc<DeviceManager>,
@@ -922,7 +940,7 @@ pub struct Server {
     ui_monitoring_enabled: bool,
 }
 
-impl Server {
+impl SCServer {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: Arc<DatabaseManager>,
@@ -933,7 +951,7 @@ impl Server {
         audio_disabled: bool,
         ui_monitoring_enabled: bool,
     ) -> Self {
-        Server {
+        SCServer {
             db,
             addr,
             screenpipe_dir,
@@ -944,14 +962,7 @@ impl Server {
         }
     }
 
-    pub async fn start<F>(
-        self,
-        api_plugin: F,
-        enable_frame_cache: bool,
-    ) -> Result<(), std::io::Error>
-    where
-        F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
-    {
+    pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             // device_manager: self.device_manager.clone(),
@@ -979,39 +990,91 @@ impl Server {
             },
         });
 
-        let app = create_router()
-            .layer(ApiPluginLayer::new(api_plugin))
-            .layer(
-                CorsLayer::new()
-                    .allow_origin(Any)
-                    .allow_methods(Any)
-                    .allow_headers(Any)
-                    .expose_headers([
-                        axum::http::header::CONTENT_TYPE,
-                        axum::http::header::CACHE_CONTROL,
-                    ]), // Important for SSE
-            )
-            .layer(
-                TraceLayer::new_for_http()
-                    .make_span_with(DefaultMakeSpan::new().include_headers(true)),
-            )
-            .with_state(app_state);
+        let cors = CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any)
+            .expose_headers([
+                axum::http::header::CONTENT_TYPE,
+                axum::http::header::CACHE_CONTROL,
+            ]);
 
-        info!("Server starting on {}", self.addr);
+        // Create the OpenAPI server
+        let server = Server::axum()
+            .get("/search", search)
+            .get("/audio/list", api_list_audio_devices)
+            .get("/vision/list", api_list_monitors)
+            .post("/tags/:content_type/:id", add_tags)
+            .delete("/tags/:content_type/:id", remove_tags)
+            .get("/pipes/info/:pipe_id", get_pipe_info_handler)
+            .get("/pipes/list", list_pipes_handler)
+            .post("/pipes/download", download_pipe_handler)
+            .post("/pipes/download-private", download_pipe_private_handler)
+            .post("/pipes/enable", run_pipe_handler)
+            .post("/pipes/disable", stop_pipe_handler)
+            .post("/pipes/update", update_pipe_config_handler)
+            .post("/pipes/update-version", update_pipe_version_handler)
+            .post("/pipes/delete", delete_pipe_handler)
+            .post("/pipes/purge", purge_pipe_handler)
+            .get("/frames/:frame_id", get_frame_data)
+            .get("/health", health_check)
+            .post("/raw_sql", execute_raw_sql)
+            .post("/add", add_to_database)
+            .get("/speakers/unnamed", get_unnamed_speakers_handler)
+            .post("/speakers/update", update_speaker_handler)
+            .get("/speakers/search", search_speakers_handler)
+            .post("/speakers/delete", delete_speaker_handler)
+            .post("/speakers/hallucination", mark_as_hallucination_handler)
+            .post("/speakers/merge", merge_speakers_handler)
+            .get("/speakers/similar", get_similar_speakers_handler)
+            .post("/experimental/frames/merge", merge_frames_handler)
+            .get("/experimental/validate/media", validate_media_handler)
+            // .post("/audio/start", start_audio_device)
+            // .post("/audio/stop", stop_audio_device)
+            .get("/semantic-search", semantic_search_handler)
+            .get("/pipes/build-status/:pipe_id", get_pipe_build_status)
+            .get("/search/keyword", keyword_search_handler)
+            .post("/v1/embeddings", create_embeddings)
+            // .post("/vision/start", start_vision_device)
+            // .post("/vision/stop", stop_vision_device)
+            // .post("/audio/restart", restart_audio_devices)
+            // .post("/vision/restart", restart_vision_devices)
+            .route_yaml_spec("/openapi.yaml")
+            .route_json_spec("/openapi.json")
+            .freeze();
 
-        match serve(TcpListener::bind(self.addr).await?, app.into_make_service()).await {
-            Ok(_) => {
-                info!("Server stopped gracefully");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Server error: {}", e);
-                Err(e)
-            }
-        }
+        // Build the main router with all routes
+        let app = Router::new()
+            .merge(server.into_router())
+            // NOTE: websockerts and sse is not supported by openapi so we move it down here
+            .route("/stream/frames", get(stream_frames_handler))
+            .route("/ws/events", get(ws_events_handler))
+            .route("/ws/health", get(ws_health_handler))
+            .route("/frames/export", get(handle_video_export_ws))
+            .with_state(app_state)
+            .layer(cors)
+            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
+
+        #[cfg(feature = "experimental")]
+        let app = app.route("/experimental/input_control", post(input_control_handler));
+
+        // Create the listener
+        let listener = TcpListener::bind(&self.addr).await?;
+        info!("Server listening on {}", self.addr);
+
+        // Start serving
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(())
     }
 }
 
+#[oasgen]
 async fn merge_frames_handler(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<MergeVideosRequest>,
@@ -1030,6 +1093,7 @@ async fn merge_frames_handler(
     }
 }
 
+#[oasgen]
 async fn validate_media_handler(
     State(_state): State<Arc<AppState>>,
     Query(params): Query<ValidateMediaParams>,
@@ -1043,11 +1107,12 @@ async fn validate_media_handler(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct RawSqlQuery {
     query: String,
 }
 
+#[oasgen]
 async fn execute_raw_sql(
     State(state): State<Arc<AppState>>,
     JsonResponse(payload): JsonResponse<RawSqlQuery>,
@@ -1064,26 +1129,26 @@ async fn execute_raw_sql(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddContentRequest {
     pub device_name: String,     // Moved device_name to the top level
     pub content: AddContentData, // The actual content (either Frame or Transcription)
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AddContentData {
     pub content_type: String,
     pub data: ContentData,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 #[serde(untagged)]
 pub enum ContentData {
     Frames(Vec<FrameContent>),
     Transcription(AudioTranscription),
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct FrameContent {
     pub file_path: String,
     pub timestamp: Option<DateTime<Utc>>,
@@ -1093,7 +1158,7 @@ pub struct FrameContent {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, OaSchema, Deserialize, Debug)]
 pub struct OCRResult {
     pub text: String,
     pub text_json: Option<String>,
@@ -1101,13 +1166,13 @@ pub struct OCRResult {
     pub focused: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct AudioTranscription {
     pub transcription: String,
     pub transcription_engine: String,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct AddContentResponse {
     pub success: bool,
     pub message: Option<String>,
@@ -1210,10 +1275,11 @@ async fn add_transcription_to_db(
     Ok(())
 }
 
+#[oasgen]
 pub(crate) async fn add_to_database(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<AddContentRequest>,
-) -> Result<JsonResponse<AddContentResponse>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Json<AddContentResponse>, (StatusCode, Json<serde_json::Value>)> {
     let device_name = payload.device_name.clone();
     let mut success_messages = Vec::new();
 
@@ -1474,7 +1540,7 @@ impl From<TimeSeriesFrame> for StreamTimeSeriesResponse {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(OaSchema, Deserialize, Debug)]
 pub struct GetUnnamedSpeakersRequest {
     limit: u32,
     offset: u32,
@@ -1490,7 +1556,7 @@ fn default_speaker_ids() -> Option<Vec<i64>> {
     None
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(OaSchema, Deserialize, Debug)]
 pub struct GetSimilarSpeakersRequest {
     speaker_id: i64,
     limit: u32,
@@ -1511,6 +1577,7 @@ where
         .map(Some)
 }
 
+#[oasgen]
 async fn get_unnamed_speakers_handler(
     State(state): State<Arc<AppState>>,
     Query(request): Query<GetUnnamedSpeakersRequest>,
@@ -1544,6 +1611,7 @@ async fn get_unnamed_speakers_handler(
     Ok(JsonResponse(speakers))
 }
 
+#[oasgen]
 async fn update_speaker_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<UpdateSpeakerRequest>,
@@ -1577,6 +1645,7 @@ async fn update_speaker_handler(
     ))
 }
 
+#[oasgen]
 async fn search_speakers_handler(
     State(state): State<Arc<AppState>>,
     Query(request): Query<SearchSpeakersRequest>,
@@ -1587,6 +1656,7 @@ async fn search_speakers_handler(
     ))
 }
 
+#[oasgen]
 async fn delete_speaker_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<DeleteSpeakerRequest>,
@@ -1625,6 +1695,7 @@ async fn delete_speaker_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+#[oasgen]
 async fn mark_as_hallucination_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<MarkAsHallucinationRequest>,
@@ -1640,6 +1711,7 @@ async fn mark_as_hallucination_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+#[oasgen]
 async fn merge_speakers_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<MergeSpeakersRequest>,
@@ -1661,6 +1733,7 @@ async fn merge_speakers_handler(
     Ok(JsonResponse(json!({"success": true})))
 }
 
+#[oasgen]
 async fn get_similar_speakers_handler(
     State(state): State<Arc<AppState>>,
     Query(request): Query<GetSimilarSpeakersRequest>,
@@ -1681,7 +1754,7 @@ async fn get_similar_speakers_handler(
 
     Ok(JsonResponse(similar_speakers))
 }
-// #[derive(Deserialize)]
+// #[derive(OaSchema, Deserialize)]
 // pub struct AudioDeviceControlRequest {
 //     device_name: String,
 //     #[serde(default)]
@@ -1784,18 +1857,19 @@ pub struct AudioDeviceControlResponse {
 //     }))
 // }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 struct EventsQuery {
     images: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 struct SemanticSearchQuery {
     text: String,
     limit: Option<u32>,
     threshold: Option<f32>,
 }
 
+#[oasgen]
 async fn semantic_search_handler(
     Query(query): Query<SemanticSearchQuery>,
     State(state): State<Arc<AppState>>,
@@ -1840,7 +1914,7 @@ async fn semantic_search_handler(
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, OaSchema, Deserialize)]
 pub struct VisionDeviceControlRequest {
     device_id: u32,
 }
@@ -2010,76 +2084,232 @@ async fn handle_health_socket(mut socket: WebSocket, state: Arc<AppState>) {
     debug!("WebSocket connection closed gracefully");
 }
 
-pub fn create_router() -> Router<Arc<AppState>> {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any)
-        .expose_headers([
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::CACHE_CONTROL,
-        ]); // Important for SSE
-
-    #[allow(unused_mut)]
-    let mut router = Router::new()
-        .route("/search", get(search))
-        .route("/audio/list", get(api_list_audio_devices))
-        .route("/vision/list", get(api_list_monitors))
-        .route(
-            "/tags/:content_type/:id",
-            post(add_tags).delete(remove_tags),
-        )
-        .route("/pipes/info/:pipe_id", get(get_pipe_info_handler))
-        .route("/pipes/list", get(list_pipes_handler))
-        .route("/pipes/download", post(download_pipe_handler))
-        .route(
-            "/pipes/download-private",
-            post(download_pipe_private_handler),
-        )
-        .route("/pipes/enable", post(run_pipe_handler))
-        .route("/pipes/disable", post(stop_pipe_handler))
-        .route("/pipes/update", post(update_pipe_config_handler))
-        .route("/pipes/update-version", post(update_pipe_version_handler))
-        .route("/pipes/delete", post(delete_pipe_handler))
-        .route("/pipes/purge", post(purge_pipe_handler))
-        .route("/health", get(health_check))
-        .route("/ws/health", get(ws_health_handler))
-        .route("/raw_sql", post(execute_raw_sql))
-        .route("/add", post(add_to_database))
-        .route("/stream/frames", get(stream_frames_handler))
-        .route("/speakers/unnamed", get(get_unnamed_speakers_handler))
-        .route("/speakers/update", post(update_speaker_handler))
-        .route("/speakers/search", get(search_speakers_handler))
-        .route("/speakers/delete", post(delete_speaker_handler))
-        .route(
-            "/speakers/hallucination",
-            post(mark_as_hallucination_handler),
-        )
-        .route("/speakers/merge", post(merge_speakers_handler))
-        .route("/speakers/similar", get(get_similar_speakers_handler))
-        .route("/experimental/frames/merge", post(merge_frames_handler))
-        .route("/experimental/validate/media", get(validate_media_handler))
-        // .route("/audio/start", post(start_audio_device))
-        // .route("/audio/stop", post(stop_audio_device))
-        .route("/ws/events", get(ws_events_handler))
-        .route("/semantic-search", get(semantic_search_handler))
-        .route("/frames/:frame_id", get(get_frame_data))
-        .route("/pipes/build-status/:pipe_id", get(get_pipe_build_status))
-        .route("/search/keyword", get(keyword_search_handler))
-        .route("/v1/embeddings", axum::routing::post(create_embeddings))
-        // .route("/vision/start", post(start_vision_device))
-        // .route("/vision/stop", post(stop_vision_device))
-        // .route("/audio/restart", post(restart_audio_devices))
-        // .route("/vision/restart", post(restart_vision_devices))
-        .layer(cors);
-
-    #[cfg(feature = "experimental")]
-    {
-        router = router.route("/experimental/input_control", post(input_control_handler));
-    }
-    router
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct VideoExportRequest {
+    #[serde(deserialize_with = "deserialize_frame_ids")]
+    frame_ids: Vec<i64>,
+    fps: f64,
 }
 
+fn deserialize_frame_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = String::deserialize(deserializer)?;
+    Ok(s.split(',').filter_map(|id| id.parse().ok()).collect())
+}
+
+#[derive(Debug, Serialize)]
+struct ExportProgress {
+    status: String,
+    progress: f32,
+    video_data: Option<Vec<u8>>,
+    error: Option<String>,
+}
+
+pub async fn handle_video_export_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+    Query(payload): Query<VideoExportRequest>,
+) -> impl IntoResponse {
+    if payload.frame_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "No valid frame IDs provided" })),
+        )
+            .into_response();
+    }
+
+    ws.on_upgrade(move |socket| async move { handle_video_export(socket, state, payload).await })
+}
+
+async fn handle_video_export(
+    mut socket: WebSocket,
+    state: Arc<AppState>,
+    payload: VideoExportRequest,
+) {
+    let temp_dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::to_string(&ExportProgress {
+                        status: "error".to_string(),
+                        progress: 0.0,
+                        video_data: None,
+                        error: Some(format!("Failed to create temp directory: {}", e)),
+                    })
+                    .unwrap(),
+                ))
+                .await;
+            return;
+        }
+    };
+
+    let frames_dir = temp_dir.path().join("frames");
+    if let Err(e) = tokio::fs::create_dir_all(&frames_dir).await {
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "error".to_string(),
+                    progress: 0.0,
+                    video_data: None,
+                    error: Some(format!("Failed to create frames directory: {}", e)),
+                })
+                .unwrap(),
+            ))
+            .await;
+        return;
+    }
+
+    let output_filename = format!(
+        "screenpipe_export_{}.mp4",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
+    let output_path = temp_dir.path().join(&output_filename);
+
+    let mut frames = Vec::new();
+    let mut skipped_frames = Vec::new();
+
+    // Send initial status
+    let _ = socket
+        .send(Message::Text(
+            serde_json::to_string(&ExportProgress {
+                status: "extracting".to_string(),
+                progress: 0.0,
+                video_data: None,
+                error: None,
+            })
+            .unwrap(),
+        ))
+        .await;
+
+    // Process frames
+    for (index, frame_id) in payload.frame_ids.iter().enumerate() {
+        let progress = (index as f32 / payload.frame_ids.len() as f32) * 0.5;
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "extracting".to_string(),
+                    progress,
+                    video_data: None,
+                    error: None,
+                })
+                .unwrap(),
+            ))
+            .await;
+
+        match state.db.get_frame(*frame_id).await {
+            Ok(Some((file_path, offset_index))) => {
+                match extract_high_quality_frame(&file_path, offset_index, &frames_dir).await {
+                    Ok(frame_path) => {
+                        frames.push(FrameContent {
+                            file_path: frame_path,
+                            timestamp: Some(chrono::Utc::now()),
+                            window_name: None,
+                            app_name: None,
+                            ocr_results: None,
+                            tags: None,
+                        });
+                    }
+                    Err(e) => {
+                        error!("Failed to extract frame {}: {}", frame_id, e);
+                        skipped_frames.push(*frame_id);
+                    }
+                }
+            }
+            Ok(None) => {
+                error!("Frame {} not found in database", frame_id);
+                skipped_frames.push(*frame_id);
+            }
+            Err(e) => {
+                error!("Database error for frame {}: {}", frame_id, e);
+                skipped_frames.push(*frame_id);
+            }
+        }
+    }
+
+    if frames.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                serde_json::to_string(&ExportProgress {
+                    status: "error".to_string(),
+                    progress: 0.0,
+                    video_data: None,
+                    error: Some("No valid frames to process".to_string()),
+                })
+                .unwrap(),
+            ))
+            .await;
+        return;
+    }
+
+    // Send encoding status
+    let _ = socket
+        .send(Message::Text(
+            serde_json::to_string(&ExportProgress {
+                status: "encoding".to_string(),
+                progress: 0.5,
+                video_data: None,
+                error: None,
+            })
+            .unwrap(),
+        ))
+        .await;
+
+    // Create video
+    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await {
+        Ok(_) => match tokio::fs::read(&output_path).await {
+            Ok(video_data) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "completed".to_string(),
+                            progress: 1.0,
+                            video_data: Some(video_data),
+                            error: None,
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+            }
+            Err(e) => {
+                let _ = socket
+                    .send(Message::Text(
+                        serde_json::to_string(&ExportProgress {
+                            status: "error".to_string(),
+                            progress: 1.0,
+                            video_data: None,
+                            error: Some(format!("Failed to read video file: {}", e)),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+            }
+        },
+        Err(e) => {
+            let _ = socket
+                .send(Message::Text(
+                    serde_json::to_string(&ExportProgress {
+                        status: "error".to_string(),
+                        progress: 1.0,
+                        video_data: None,
+                        error: Some(format!("Failed to create video: {}", e)),
+                    })
+                    .unwrap(),
+                ))
+                .await;
+        }
+    }
+
+    // Cleanup
+    if let Err(e) = tokio::fs::remove_dir_all(&temp_dir).await {
+        error!("Failed to clean up temp directory: {}", e);
+    }
+}
+
+#[oasgen]
 async fn get_pipe_build_status(
     Path(pipe_id): Path<String>,
     State(state): State<Arc<AppState>>,
@@ -2146,10 +2376,11 @@ async fn get_pipe_build_status(
     Ok(JsonResponse(json!({ "buildStatus": build_status })))
 }
 
+#[oasgen]
 async fn keyword_search_handler(
     Query(query): Query<KeywordSearchRequest>,
     State(state): State<Arc<AppState>>,
-) -> Result<JsonResponse<Vec<SearchMatch>>, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Json<Vec<SearchMatch>>, (StatusCode, JsonResponse<Value>)> {
     let matches = state
         .db
         .search_with_text_positions(
@@ -2181,7 +2412,7 @@ where
     Ok(s.map(|s| s.split(',').map(String::from).collect()))
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 pub struct KeywordSearchRequest {
     query: String,
     #[serde(default = "default_limit")]
@@ -2201,10 +2432,11 @@ pub struct KeywordSearchRequest {
     app_names: Option<Vec<String>>,
 }
 
+#[oasgen]
 pub async fn get_frame_data(
     State(state): State<Arc<AppState>>,
     Path(frame_id): Path<i64>,
-) -> Result<impl IntoResponse, (StatusCode, JsonResponse<Value>)> {
+) -> Result<Response<Body>, (StatusCode, JsonResponse<Value>)> {
     let start_time = Instant::now();
 
     match timeout(Duration::from_secs(5), async {
@@ -2503,64 +2735,59 @@ async fn stream_frames_handler(
     ws.on_upgrade(move |socket| handle_stream_frames_socket(socket, state))
 }
 
-// Add this new handler function
+#[oasgen]
 pub async fn delete_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(request): Json<DeletePipeRequest>,
-) -> impl IntoResponse {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     match state.pipe_manager.delete_pipe(&request.pipe_id).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "message": "pipe deleted successfully"
-            })),
-        ),
+        Ok(_) => Ok(JsonResponse(json!({
+            "success": true,
+            "message": "pipe deleted successfully"
+        }))),
         Err(e) => {
             error!("failed to delete pipe: {}", e);
-            (
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                "success": false,
-                "error": format!("failed to delete pipe: {}", e)
+                JsonResponse(json!({
+                    "success": false,
+                    "error": format!("failed to delete pipe: {}", e)
                 })),
-            )
+            ))
         }
     }
 }
 
+#[oasgen]
 pub async fn purge_pipe_handler(
     State(state): State<Arc<AppState>>,
     Json(_request): Json<PurgePipeRequest>,
-) -> impl IntoResponse {
+) -> Result<JsonResponse<Value>, (StatusCode, JsonResponse<Value>)> {
     match state.pipe_manager.purge_pipes().await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(json!({
-                "success": true,
-                "message": "pipes purged successfully"
-            })),
-        ),
+        Ok(_) => Ok(JsonResponse(json!({
+            "success": true,
+            "message": "pipes purged successfully"
+        }))),
         Err(e) => {
             error!("failed to purge pipes: {}", e);
-            (
+            Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                "success": false,
-                "error": format!("failed to purge pipes: {}", e)
+                JsonResponse(json!({
+                    "success": false,
+                    "error": format!("failed to purge pipes: {}", e)
                 })),
-            )
+            ))
         }
     }
 }
 
 // Add this struct for the request payload
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 pub struct DeletePipeRequest {
     pipe_id: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(OaSchema, Deserialize, Debug)]
 struct MergeSpeakersRequest {
     speaker_to_keep_id: i64,
     speaker_to_merge_id: i64,
@@ -2573,7 +2800,7 @@ pub struct RestartAudioDevicesResponse {
     restarted_devices: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, OaSchema, Deserialize)]
 pub struct PurgePipeRequest {}
 
 // async fn restart_audio_devices(

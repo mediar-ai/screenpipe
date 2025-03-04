@@ -1,4 +1,4 @@
-use anyhow::{Result, Error};
+use anyhow::{Error, Result};
 use image::DynamicImage;
 use std::sync::Arc;
 use xcap::Monitor;
@@ -26,7 +26,7 @@ impl SafeMonitor {
             name: monitor.name().to_string(),
             is_primary: monitor.is_primary(),
         });
-        
+
         Self {
             monitor_id,
             monitor_data,
@@ -35,7 +35,7 @@ impl SafeMonitor {
 
     pub async fn capture_image(&self) -> Result<DynamicImage> {
         let monitor_id = self.monitor_id;
-        
+
         let image = std::thread::spawn(move || -> Result<DynamicImage> {
             let monitor = Monitor::all()
                 .map_err(Error::from)?
@@ -46,14 +46,15 @@ impl SafeMonitor {
             if monitor.width() == 0 || monitor.height() == 0 {
                 return Err(anyhow::anyhow!("Invalid monitor dimensions"));
             }
-            
-            monitor.capture_image()
+
+            monitor
+                .capture_image()
                 .map_err(Error::from)
                 .map(DynamicImage::ImageRgba8)
         })
         .join()
         .unwrap()?;
-            
+
         Ok(image)
     }
 
