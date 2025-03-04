@@ -8,8 +8,6 @@ import { parseHtmlContent } from '../lib/html-content-parser';
 import { Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Import the JSON data
-import healthStatusCardData from '../content/health-status-card.json';
 
 // Create a component registry that will be properly typed
 const COMPONENT_REGISTRY: Record<string, any> = {};
