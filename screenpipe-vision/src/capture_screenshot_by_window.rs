@@ -201,10 +201,10 @@ pub async fn capture_all_visible_windows(
         .into_iter()
         .filter_map(|window| {
             // Extract all necessary data from the window while in the main thread
-            let app_name = window.app_name().unwrap();
-            let title = window.title().unwrap();
-            let is_focused = window.is_focused().unwrap();
-            let process_id = window.pid().unwrap();
+            let app_name = window.app_name().to_string();
+            let title = window.title().to_string();
+            let is_focused = window.is_focused();
+            let process_id = window.pid();
             // Capture image immediately while we have access to the window
             match window.capture_image() {
                 Ok(buffer) => Some((app_name, title, is_focused, buffer, process_id)),

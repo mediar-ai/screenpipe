@@ -9,7 +9,6 @@ pub mod embedding;
 pub mod filtering;
 pub mod migration_worker;
 pub mod pipe_manager;
-mod plugin;
 mod resource_monitor;
 mod server;
 pub mod text_embeds;

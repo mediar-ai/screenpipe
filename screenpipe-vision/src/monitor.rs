@@ -19,12 +19,12 @@ pub struct MonitorData {
 
 impl SafeMonitor {
     pub fn new(monitor: Monitor) -> Self {
-        let monitor_id = monitor.id().unwrap();
+        let monitor_id = monitor.id();
         let monitor_data = Arc::new(MonitorData {
-            width: monitor.width().unwrap(),
-            height: monitor.height().unwrap(),
-            name: monitor.name().unwrap(),
-            is_primary: monitor.is_primary().unwrap(),
+            width: monitor.width(),
+            height: monitor.height(),
+            name: monitor.name().to_string(),
+            is_primary: monitor.is_primary(),
         });
 
         Self {
@@ -40,10 +40,10 @@ impl SafeMonitor {
             let monitor = Monitor::all()
                 .map_err(Error::from)?
                 .into_iter()
-                .find(|m| m.id().unwrap() == monitor_id)
+                .find(|m| m.id() == monitor_id)
                 .ok_or_else(|| anyhow::anyhow!("Monitor not found"))?;
 
-            if monitor.width().unwrap() == 0 || monitor.height().unwrap() == 0 {
+            if monitor.width() == 0 || monitor.height() == 0 {
                 return Err(anyhow::anyhow!("Invalid monitor dimensions"));
             }
 
@@ -112,7 +112,7 @@ pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
         Monitor::all()
             .unwrap()
             .into_iter()
-            .find(|m| m.id().unwrap() == id)
+            .find(|m| m.id() == id)
             .map(SafeMonitor::new)
     })
     .await

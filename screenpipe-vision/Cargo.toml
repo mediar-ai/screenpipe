@@ -43,7 +43,7 @@ tracing = { workspace = true }
 which = "6.0"
 serde = "1.0.200"
 
-xcap = "0.4.0"
+xcap = "0.3.3"
 
 once_cell = { workspace = true }
 base64 = "0.22.1"

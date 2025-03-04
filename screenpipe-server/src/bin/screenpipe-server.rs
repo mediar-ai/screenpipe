@@ -787,15 +787,9 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
 
-    let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-        if req.uri().path() == "/search" {
-            // Track search requests
-        }
-    };
 
     let (audio_devices_tx, _) = broadcast::channel(100);
 
-    // TODO: Add SSE stream for realtime audio transcription
     let server = SCServer::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
@@ -1133,7 +1127,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let server_future = server.start(api_plugin, cli.enable_frame_cache);
+    let server_future = server.start(cli.enable_frame_cache);
     pin_mut!(server_future);
 
     // Add auto-destruct watcher

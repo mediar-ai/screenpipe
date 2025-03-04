@@ -6,7 +6,7 @@ use axum::{
     },
     http::StatusCode,
     response::{IntoResponse, Json as JsonResponse, Response},
-    routing::{get, post},
+    routing::get,
     serve, Router,
 };
 use oasgen::{oasgen, OaSchema, Server};
@@ -22,6 +22,7 @@ use futures::{
 use image::ImageFormat::{self};
 use screenpipe_events::{send_event, subscribe_to_all_events, Event as ScreenpipeEvent};
 
+use crate::video_utils::extract_frame;
 use crate::{
     db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
@@ -34,7 +35,6 @@ use crate::{
     },
     DatabaseManager,
 };
-use crate::{plugin::ApiPluginLayer, video_utils::extract_frame};
 use chrono::{DateTime, Utc};
 use screenpipe_audio::{
     default_input_device, default_output_device, list_audio_devices, AudioDevice, DeviceType,
@@ -283,7 +283,6 @@ pub struct HealthCheckResponse {
     pub verbose_instructions: Option<String>,
 }
 
-
 #[derive(OaSchema, Serialize, Deserialize)]
 pub struct SearchResponse {
     pub data: Vec<ContentItem>,
@@ -295,10 +294,7 @@ pub struct SearchResponse {
 pub(crate) async fn search(
     Query(query): Query<SearchQuery>,
     State(state): State<Arc<AppState>>,
-) -> Result<
-    JsonResponse<SearchResponse>,
-    (StatusCode, JsonResponse<serde_json::Value>),
-> {
+) -> Result<JsonResponse<SearchResponse>, (StatusCode, JsonResponse<serde_json::Value>)> {
     info!(
         "received search request: query='{}', content_type={:?}, limit={}, offset={}, start_time={:?}, end_time={:?}, app_name={:?}, window_name={:?}, min_length={:?}, max_length={:?}, speaker_ids={:?}, frame_name={:?}, browser_url={:?}, focused={:?}",
         query.q.as_deref().unwrap_or(""),
@@ -433,7 +429,7 @@ pub(crate) async fn search(
     }
 
     info!("search completed: found {} results", total);
-    Ok(JsonResponse( SearchResponse {
+    Ok(JsonResponse(SearchResponse {
         data: content_items,
         pagination: PaginationInfo {
             limit: query.pagination.limit,
@@ -966,14 +962,7 @@ impl SCServer {
         }
     }
 
-    pub async fn start<F>(
-        self,
-        api_plugin: F,
-        enable_frame_cache: bool,
-    ) -> Result<(), std::io::Error>
-    where
-        F: Fn(&axum::http::Request<axum::body::Body>) + Clone + Send + Sync + 'static,
-    {
+    pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
             // device_manager: self.device_manager.clone(),
@@ -2786,7 +2775,7 @@ pub async fn purge_pipe_handler(
                 JsonResponse(json!({
                     "success": false,
                     "error": format!("failed to purge pipes: {}", e)
-                }))
+                })),
             ))
         }
     }
