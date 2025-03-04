@@ -2020,6 +2020,7 @@ export function SearchChat() {
 						>
 							<div className="relative flex-grow flex items-center space-x-2">
 								<AIPresetsDialog
+								pipeName={"search"}
 								recommendedPresets={[	
 									{
 										id: "search-chat",

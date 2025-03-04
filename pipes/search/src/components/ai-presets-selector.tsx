@@ -91,6 +91,7 @@ interface AIPresetDialogProps {
 
 interface AIPresetsSelectorProps {
 	recommendedPresets?: RecommendedPreset[];
+	pipeName: string;
 }
 
 export const AIPresetDialog = ({
@@ -153,9 +154,9 @@ export const AIPresetDialog = ({
 	);
 };
 
-export const AIPresetsSelector = ({ recommendedPresets }: AIPresetsSelectorProps) => {
+export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSelectorProps) => {
 	const { settings: pipeSettings, updateSettings: updatePipeSettings } =
-		usePipeSettings("search");
+		usePipeSettings(pipeName);
 	const { settings, updateSettings } = useSettings();
 	const [open, setOpen] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);

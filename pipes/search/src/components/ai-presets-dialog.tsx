@@ -152,11 +152,12 @@ type RecommendedPreset = BaseRecommendedPreset &
 interface AIPresetsDialogProps {
 	children?: React.ReactNode;
 	recommendedPresets?: RecommendedPreset[];
+	pipeName: string;
 }
 
-export const AIPresetsDialog = ({ children, recommendedPresets }: AIPresetsDialogProps) => {
+export const AIPresetsDialog = ({ children, recommendedPresets, pipeName }: AIPresetsDialogProps) => {
 	const { settings: pipeSettings, updateSettings: updatePipeSettings } =
-		usePipeSettings("search");
+		usePipeSettings(pipeName);
 	const { settings, updateSettings } = useSettings();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [presetDialogOpen, setPresetDialogOpen] = useState(false);
