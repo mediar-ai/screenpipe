@@ -11,7 +11,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "./ui/select";
-import { Settings, Terminal, Loader2, HelpCircle } from "lucide-react";
+import { Settings, Terminal, Loader2, HelpCircle, Eye, EyeOff } from "lucide-react";
 import { useSettings } from "@/lib/hooks/use-pipe-settings";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
@@ -89,6 +89,7 @@ export function AIProviderConfig({
 	const [openaiModels, setOpenAIModels] = useState<OpenAIModel[]>([]);
 	const [isLoadingModels, setIsLoadingModels] = useState(false);
 	const [idError, setIdError] = useState<string | null>(null);
+	const [showApiKey, setShowApiKey] = useState(false);
 	const [formData, setFormData] = useState<AIProviderData>({
 		provider: defaultPreset?.provider || "openai",
 		apiKey: defaultPreset?.apiKey || "",
@@ -329,15 +330,31 @@ export function AIProviderConfig({
 					<div className="space-y-4">
 						<div className="space-y-2">
 							<Label htmlFor="apiKey">api key</Label>
-							<Input
-								id="apiKey"
-								type="password"
-								placeholder="sk-..."
-								value={formData.apiKey || ""}
-								onChange={(e) =>
-									setFormData({ ...formData, apiKey: e.target.value })
-								}
-							/>
+							<div className="relative">
+								<Input
+									id="apiKey"
+									type={showApiKey ? "text" : "password"}
+									placeholder="sk-..."
+									value={formData.apiKey || ""}
+									onChange={(e) =>
+										setFormData({ ...formData, apiKey: e.target.value })
+									}
+									className="pr-10"
+								/>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+									onClick={() => setShowApiKey(!showApiKey)}
+								>
+									{showApiKey ? (
+										<EyeOff className="h-4 w-4" />
+									) : (
+										<Eye className="h-4 w-4" />
+									)}
+								</Button>
+							</div>
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="model">model</Label>
@@ -470,15 +487,31 @@ export function AIProviderConfig({
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="apiKey">api key</Label>
-							<Input
-								id="apiKey"
-								type="password"
-								placeholder="your-api-key"
-								value={formData.apiKey || ""}
-								onChange={(e) =>
-									setFormData({ ...formData, apiKey: e.target.value })
-								}
-							/>
+							<div className="relative">
+								<Input
+									id="apiKey"
+									type={showApiKey ? "text" : "password"}
+									placeholder="your-api-key"
+									value={formData.apiKey || ""}
+									onChange={(e) =>
+										setFormData({ ...formData, apiKey: e.target.value })
+									}
+									className="pr-10"
+								/>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+									onClick={() => setShowApiKey(!showApiKey)}
+								>
+									{showApiKey ? (
+										<EyeOff className="h-4 w-4" />
+									) : (
+										<Eye className="h-4 w-4" />
+									)}
+								</Button>
+							</div>
 						</div>
 						<div className="space-y-2">
 							<Label htmlFor="model">model</Label>

@@ -110,6 +110,7 @@ import { AIPresetsDialog } from "./ai-presets-dialog";
 import { usePipeSettings, useSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
 import { AIPresetsSelector } from "./ai-presets-selector";
+import { DEFAULT_PROMPT } from "./ai-provider-config";
 
 interface Agent {
 	id: string;
@@ -2018,8 +2019,18 @@ export function SearchChat() {
 							className="flex flex-col space-y-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden p-4 border border-gray-200 dark:border-gray-700"
 						>
 							<div className="relative flex-grow flex items-center space-x-2">
-								<AIPresetsDialog>
-									<Button type="button" variant="outline" size="icon" className="w-full p-2">
+								<AIPresetsDialog
+								recommendedPresets={[	
+									{
+										id: "search-chat",
+										model: "gemma:2b",
+										provider: "native-ollama",
+										prompt: DEFAULT_PROMPT,
+										maxContextChars: 512000,
+									},
+								]}
+								>
+									<Button type="button" variant="outline" size="icon" className=" p-2">
 										<SparklesIcon className="h-4 w-4" />
 									</Button>
 								</AIPresetsDialog>
@@ -2145,10 +2156,6 @@ export function SearchChat() {
 					</div>
 				</>
 			)}
-
-				{/* <AIPresetsSelector /> */}
-
-			{/* <AIPresetsDialog /> */}
 
 			{/* Scroll to Bottom Button */}
 			{showScrollButton && (

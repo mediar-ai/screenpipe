@@ -129,11 +129,32 @@ export const AIPresetDialog = ({
 	);
 };
 
-interface AIPresetsDialogProps {
-	children?: React.ReactNode;
+interface BaseRecommendedPreset {
+	id: string;
+	maxContextChars: number;
+	model: string;
+	prompt: string;
 }
 
-export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
+type RecommendedPreset = BaseRecommendedPreset &
+	(
+		| {
+				provider: "openai";
+		  }
+		| {
+				provider: "native-ollama";
+		  }
+		| {
+				provider: "screenpipe-cloud";
+		  }
+	);
+
+interface AIPresetsDialogProps {
+	children?: React.ReactNode;
+	recommendedPresets?: RecommendedPreset[];
+}
+
+export const AIPresetsDialog = ({ children, recommendedPresets }: AIPresetsDialogProps) => {
 	const { settings: pipeSettings, updateSettings: updatePipeSettings } =
 		usePipeSettings("search");
 	const { settings, updateSettings } = useSettings();
@@ -395,57 +416,52 @@ export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
 	};
 
 	const renderTrigger = () => {
-		const trigger = children || (
-			<Button variant="outline" className="w-full">
+		const content = children || (
+			<Button 
+			variant="outline"		
+			className="flex w-full items-center">
 				<Settings className="mr-2 h-4 w-4" />
 				Manage AI Presets
 			</Button>
 		);
 
-		if (!selectedPreset) {
-			return (
-				<TooltipProvider>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<div>{trigger}</div>
-						</TooltipTrigger>
-						<TooltipContent>
-							<p className="flex items-center gap-2">
-								<span>Press</span>
-								<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
-								<span>to cycle presets</span>
-							</p>
-						</TooltipContent>
-					</Tooltip>
-				</TooltipProvider>
-			);
-		}
-
 		return (
 			<TooltipProvider>
 				<Tooltip>
 					<TooltipTrigger asChild>
-						<div>
-							{trigger}
-						</div>
+						<DialogTrigger asChild
+								onClick={() => setDialogOpen(true)}
+						>
+								{content}
+						</DialogTrigger>
 					</TooltipTrigger>
 					<TooltipContent className="space-y-1 text-justify">
-						<div className="font-medium">{selectedPreset.id}</div>
-						<div className="text-xs text-muted-foreground space-y-0.5">
-							<div>Provider: {selectedPreset.provider}</div>
-							<div>Model: {selectedPreset.model}</div>
-							<div>Context: {(selectedPreset.maxContextChars / 1000).toFixed(0)}k chars</div>
-							{selectedPreset.defaultPreset && (
-								<div className="text-primary">Default Preset</div>
-							)}
-							<div className="pt-2 mt-2 border-t">
-								<p className="flex items-center gap-2">
-									<span>Press</span>
-									<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
-									<span>to cycle presets</span>
-								</p>
+						<p className="flex items-center gap-2">
+							<span>Press</span>
+							<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
+							<span>to cycle presets</span>
+						</p>
+						{selectedPreset && (
+							<div className="mt-2 pt-2 border-t">
+								<div className="font-medium truncate max-w-[200px]">{selectedPreset.id}</div>
+								<div className="text-xs text-muted-foreground space-y-0.5">
+									<div className="flex items-center gap-2">
+										<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
+											{selectedPreset.provider}
+										</span>
+										<span className="truncate max-w-[120px]">
+											{selectedPreset.model}
+										</span>
+									</div>
+									<div className="whitespace-nowrap">
+										Context: {(selectedPreset.maxContextChars / 1000).toFixed(0)}k chars
+									</div>
+									{selectedPreset.defaultPreset && (
+										<div className="text-primary">Default Preset</div>
+									)}
+								</div>
 							</div>
-						</div>
+						)}
 					</TooltipContent>
 				</Tooltip>
 			</TooltipProvider>
@@ -455,10 +471,8 @@ export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
 	return (
 		<>
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-				<DialogTrigger>
 					{renderTrigger()}
-				</DialogTrigger>
-				<DialogContent className="w-2/4 max-w-screen-2xl">
+				<DialogContent className="w-[95vw] sm:w-[640px] md:w-[768px] lg:w-[1024px] xl:w-[1280px] max-w-[95vw]">
 					<DialogHeader>
 						<DialogTitle>AI Presets</DialogTitle>
 						<DialogDescription>
@@ -469,7 +483,77 @@ export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
 						<Command>
 							<CommandInput placeholder="search presets..." />
 							<CommandEmpty>no presets found.</CommandEmpty>
-							<CommandGroup>
+							{recommendedPresets && recommendedPresets.length > 0 && (
+								<CommandGroup heading="Recommended Presets">
+									{recommendedPresets.map((preset) => (
+										<CommandItem
+											key={preset.id}
+											value={preset.id}
+											className="flex py-3"
+										>
+											<div className="flex w-full items-center justify-between gap-4 overflow-hidden">
+												<div className="flex items-center gap-3 min-w-0">
+													<Check
+														className={cn(
+															"h-4 w-4 shrink-0",
+															selectedPreset?.id === preset.id
+																? "opacity-100"
+																: "opacity-0",
+														)}
+													/>
+													<span className="font-medium truncate max-w-[180px]">
+														{preset.id}
+													</span>
+													<span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium shrink-0">
+														recommended
+													</span>
+												</div>
+												<div className="flex items-center justify-end gap-4 text-xs text-muted-foreground shrink-0">
+													<div className="flex items-center gap-3">
+														<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
+															{preset.provider}
+														</span>
+														<span className="truncate max-w-[180px]">
+															{preset.model}
+														</span>
+													</div>
+													<span className="whitespace-nowrap">
+														{(preset.maxContextChars / 1000).toFixed(0)}k
+													</span>
+													<div className="flex items-center gap-2">
+														<Button
+															variant="ghost"
+															size="icon"
+															className="h-7 w-7 shrink-0"
+															onClick={(e) => {
+																e.stopPropagation();
+																// Create a full preset from the recommended preset with -copy suffix
+																const fullPreset = {
+																	...preset,
+																	id: `${preset.id}-copy`,
+																	url: preset.provider === "openai" 
+																		? "https://api.openai.com/v1" 
+																		: preset.provider === "screenpipe-cloud"
+																		? "https://api.screenpipe.co/v1"
+																		: preset.provider === "native-ollama"
+																		? "http://localhost:11434/v1"
+																		: "",
+																	defaultPreset: false,
+																} as AIPreset;
+																setSelectedPresetToEdit(fullPreset);
+																setPresetDialogOpen(true);
+															}}
+														>
+															<Copy className="h-4 w-4" />
+														</Button>
+													</div>
+												</div>
+											</div>
+										</CommandItem>
+									))}
+								</CommandGroup>
+							)}
+							<CommandGroup heading="Your Presets">
 								{aiPresets.map((preset) => (
 									<CommandItem
 										key={preset.id}
@@ -480,102 +564,104 @@ export const AIPresetsDialog = ({ children }: AIPresetsDialogProps) => {
 													currentValue === selectedPreset?.id ? "" : currentValue,
 											});
 										}}
-										className="flex py-2"
+										className="flex py-3"
 									>
-										<div className="flex w-full items-center justify-between gap-2">
-											<div className="flex items-center gap-2">
+										<div className="flex w-full items-center justify-between gap-4 overflow-hidden">
+											<div className="flex items-center gap-3 min-w-0">
 												<Check
 													className={cn(
-														"h-4 w-4",
+														"h-4 w-4 shrink-0",
 														selectedPreset?.id === preset.id
 															? "opacity-100"
 															: "opacity-0",
 													)}
 												/>
-												<span className="font-medium w-32 truncate">
+												<span className="font-medium truncate max-w-[180px]">
 													{preset.id}
 												</span>
 												{preset.defaultPreset && (
-													<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+													<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium shrink-0">
 														default
 													</span>
 												)}
 											</div>
-											<div className="flex w-full justify-between text-xs text-muted-foreground">
-												<div className="flex items-center gap-2">
-													<span className="rounded bg-muted px-1.5 py-0.5">
+											<div className="flex items-center justify-end gap-4 text-xs text-muted-foreground shrink-0">
+												<div className="flex items-center gap-3">
+													<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
 														{preset.provider}
 													</span>
-													<span>{preset.model}</span>
+													<span className="truncate max-w-[180px]">
+														{preset.model}
+													</span>
 												</div>
-												<span>
-													{(preset.maxContextChars / 1000).toFixed(0)}k chars
+												<span className="whitespace-nowrap">
+													{(preset.maxContextChars / 1000).toFixed(0)}k
 												</span>
-											</div>
-											<div className="flex items-center gap-1">
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-6 w-6"
-													onClick={(e) => {
-														e.stopPropagation();
-														handleEditPreset(preset);
-													}}
-												>
-													<Edit2 className="h-3 w-3" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-6 w-6"
-													onClick={(e) => {
-														e.stopPropagation();
-														handleDuplicatePreset(preset);
-													}}
-												>
-													<Copy className="h-3 w-3" />
-												</Button>
-												{!preset.defaultPreset && (
-													<>
+													<div className="flex items-center gap-2">
 														<Button
 															variant="ghost"
 															size="icon"
-															className="h-6 w-6"
+															className="h-7 w-7 shrink-0"
 															onClick={(e) => {
 																e.stopPropagation();
-																handleSetDefaultPreset(preset);
+																handleEditPreset(preset);
 															}}
 														>
-															<Star className="h-3 w-3" />
+															<Edit2 className="h-4 w-4" />
 														</Button>
 														<Button
 															variant="ghost"
 															size="icon"
-															className="h-6 w-6"
+															className="h-7 w-7 shrink-0"
 															onClick={(e) => {
 																e.stopPropagation();
-																handleRemovePreset(preset);
+																handleDuplicatePreset(preset);
 															}}
 														>
-															<Trash2 className="h-3 w-3" />
+															<Copy className="h-4 w-4" />
 														</Button>
-													</>
-												)}
+														{!preset.defaultPreset && (
+															<>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-7 w-7 shrink-0"
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		handleSetDefaultPreset(preset);
+																	}}
+																>
+																	<Star className="h-4 w-4" />
+																</Button>
+																<Button
+																	variant="ghost"
+																	size="icon"
+																	className="h-7 w-7 shrink-0"
+																	onClick={(e) => {
+																		e.stopPropagation();
+																		handleRemovePreset(preset);
+																	}}
+																>
+																	<Trash2 className="h-4 w-4" />
+																</Button>
+															</>
+														)}
+													</div>
 											</div>
 										</div>
 									</CommandItem>
 								))}
 							</CommandGroup>
 							<CommandGroup>
-								<CommandItem
-									onSelect={() => {
-										setSelectedPresetToEdit(undefined);
-										setPresetDialogOpen(true);
-									}}
-								>
-									<Plus className="mr-2 h-4 w-4" />
-									create new preset
-								</CommandItem>
+									<CommandItem
+										onSelect={() => {
+											setSelectedPresetToEdit(undefined);
+											setPresetDialogOpen(true);
+										}}
+									>
+										<Plus className="mr-2 h-4 w-4" />
+										create new preset
+									</CommandItem>
 							</CommandGroup>
 						</Command>
 					</div>

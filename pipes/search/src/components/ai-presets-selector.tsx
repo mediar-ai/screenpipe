@@ -62,11 +62,35 @@ type AIPreset = BaseAIPreset &
 		  }
 	);
 
+interface BaseRecommendedPreset {
+	id: string;
+	maxContextChars: number;
+	model: string;
+	prompt: string;
+}
+
+type RecommendedPreset = BaseRecommendedPreset &
+	(
+		| {
+				provider: "openai";
+		  }
+		| {
+				provider: "native-ollama";
+		  }
+		| {
+				provider: "screenpipe-cloud";
+		  }
+	);
+
 interface AIPresetDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onSave: (preset: Partial<AIPreset>) => void;
 	preset?: AIPreset;
+}
+
+interface AIPresetsSelectorProps {
+	recommendedPresets?: RecommendedPreset[];
 }
 
 export const AIPresetDialog = ({
@@ -129,7 +153,7 @@ export const AIPresetDialog = ({
 	);
 };
 
-export const AIPresetsSelector = () => {
+export const AIPresetsSelector = ({ recommendedPresets }: AIPresetsSelectorProps) => {
 	const { settings: pipeSettings, updateSettings: updatePipeSettings } =
 		usePipeSettings("search");
 	const { settings, updateSettings } = useSettings();
@@ -394,51 +418,121 @@ export const AIPresetsSelector = () => {
 		<>
 			<div className="flex w-full items-center gap-2">
 				<Popover open={open} onOpenChange={setOpen}>
-					<PopoverTrigger asChild>
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										variant="outline"
-										role="combobox"
-										aria-expanded={open}
-										className="w-full justify-between"
-									>
-										{selectedPreset ? (
-											<div className="flex items-center gap-2">
-												<span className="font-medium w-32 truncate text-justify">
-													{aiPresets.find((preset) => preset.id === selectedPreset)?.id}
+					<TooltipProvider>
+						<Tooltip>
+							<PopoverTrigger asChild>
+								<Button
+									variant="outline"
+									role="combobox"
+									aria-expanded={open}
+									className="w-full justify-between"
+								>
+									{selectedPreset ? (
+										<div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+											<span className="font-medium min-w-20 max-w-[120px] truncate text-left">
+												{aiPresets.find((preset) => preset.id === selectedPreset)?.id}
+											</span>
+											<div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
+												<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
+													{aiPresets.find((preset) => preset.id === selectedPreset)?.provider}
 												</span>
-												<div className="flex items-center gap-2 text-xs text-muted-foreground">
-													<span className="rounded bg-muted px-1.5 py-0.5">
-														{aiPresets.find((preset) => preset.id === selectedPreset)?.provider}
-													</span>
-													<span>{aiPresets.find((preset) => preset.id === selectedPreset)?.model}</span>
-													<span>
-														{((aiPresets.find((preset) => preset.id === selectedPreset)?.maxContextChars || 0) / 1000).toFixed(0)}k chars
-													</span>
-												</div>
+												<span className="truncate max-w-[120px]">
+													{aiPresets.find((preset) => preset.id === selectedPreset)?.model}
+												</span>
+												<span className="whitespace-nowrap">
+													{((aiPresets.find((preset) => preset.id === selectedPreset)?.maxContextChars || 0) / 1000).toFixed(0)}k
+												</span>
 											</div>
-										) : (
-											"select ai preset..."
-										)}
-										<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<p className="flex items-center gap-2">
-										<span>Press</span>
-										<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
-										<span>to cycle presets</span>
-									</p>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
-					</PopoverTrigger>
+										</div>
+									) : (
+										"select ai preset..."
+									)}
+									<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+								</Button>
+							</PopoverTrigger>
+							<TooltipContent>
+								<p className="flex items-center gap-2">
+									<span>Press</span>
+									<kbd className="px-1.5 py-0.5 text-xs font-semibold bg-muted rounded">⌘/</kbd>
+									<span>to cycle presets</span>
+								</p>
+							</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
 					<PopoverContent className="w-[--radix-popover-trigger-width] p-0">
 						<Command>
 							<CommandInput placeholder="search presets..." />
 							<CommandEmpty>no presets found.</CommandEmpty>
+							{recommendedPresets && recommendedPresets.length > 0 && (
+								<CommandGroup heading="Recommended Presets">
+									{recommendedPresets.map((preset) => (
+										<CommandItem
+											key={preset.id}
+											value={preset.id}
+											className="flex py-2"
+										>
+											<div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+												<div className="flex items-center gap-2 min-w-0">
+													<Check
+														className={cn(
+															"h-4 w-4 shrink-0",
+															selectedPreset === preset.id
+																? "opacity-100"
+																: "opacity-0",
+														)}
+													/>
+													<span className="font-medium truncate max-w-[120px]">
+														{preset.id}
+													</span>
+													<span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium shrink-0">
+														recommended
+													</span>
+												</div>
+												<div className="flex items-center justify-end gap-2 text-xs text-muted-foreground shrink-0">
+													<div className="flex items-center gap-2">
+														<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
+															{preset.provider}
+														</span>
+														<span className="truncate max-w-[120px]">
+															{preset.model}
+														</span>
+													</div>
+													<span className="whitespace-nowrap">
+														{(preset.maxContextChars / 1000).toFixed(0)}k
+													</span>
+													<div className="flex items-center gap-1">
+														<Button
+															variant="ghost"
+															size="icon"
+															className="h-6 w-6 shrink-0"
+															onClick={(e) => {
+																e.stopPropagation();
+																// Create a full preset from the recommended preset with -copy suffix
+																const fullPreset = {
+																	...preset,
+																	id: `${preset.id}-copy`,
+																	url: preset.provider === "openai" 
+																		? "https://api.openai.com/v1" 
+																		: preset.provider === "screenpipe-cloud"
+																		? "https://api.screenpipe.co/v1"
+																		: preset.provider === "native-ollama"
+																		? "http://localhost:11434/v1"
+																		: "",
+																	defaultPreset: false,
+																} as AIPreset;
+																setSelectedPresetToEdit(fullPreset);
+																setDialogOpen(true);
+															}}
+														>
+															<Copy className="h-3 w-3" />
+														</Button>
+													</div>
+												</div>
+											</div>
+										</CommandItem>
+									))}
+								</CommandGroup>
+							)}
 							<CommandGroup>
 								{aiPresets.map((preset) => (
 									<CommandItem
@@ -453,85 +547,87 @@ export const AIPresetsSelector = () => {
 										}}
 										className="flex py-2"
 									>
-										<div className="flex w-full items-center justify-between gap-2">
-											<div className="flex items-center gap-2">
+										<div className="flex w-full items-center justify-between gap-2 overflow-hidden">
+											<div className="flex items-center gap-2 min-w-0">
 												<Check
 													className={cn(
-														"h-4 w-4",
+														"h-4 w-4 shrink-0",
 														selectedPreset === preset.id
 															? "opacity-100"
 															: "opacity-0",
 													)}
 												/>
-												<span className="font-medium w-32 truncate">
+												<span className="font-medium truncate max-w-[120px]">
 													{preset.id}
 												</span>
 												{preset.defaultPreset && (
-													<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">
+													<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium shrink-0">
 														default
 													</span>
 												)}
 											</div>
-											<div className="flex w-full justify-between text-xs text-muted-foreground">
+											<div className="flex items-center justify-end gap-2 text-xs text-muted-foreground shrink-0">
 												<div className="flex items-center gap-2">
-													<span className="rounded bg-muted px-1.5 py-0.5">
+													<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
 														{preset.provider}
 													</span>
-													<span>{preset.model}</span>
+													<span className="truncate max-w-[120px]">
+														{preset.model}
+													</span>
 												</div>
-												<span>
-													{(preset.maxContextChars / 1000).toFixed(0)}k chars
+												<span className="whitespace-nowrap">
+													{(preset.maxContextChars / 1000).toFixed(0)}k
 												</span>
-											</div>
-											<div className="flex items-center gap-1">
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-6 w-6"
-													onClick={(e) => {
-														e.stopPropagation();
-														handleEditPreset(preset);
-													}}
-												>
-													<Edit2 className="h-3 w-3" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="h-6 w-6"
-													onClick={(e) => {
-														e.stopPropagation();
-														handleDuplicatePreset(preset);
-													}}
-												>
-													<Copy className="h-3 w-3" />
-												</Button>
-												{!preset.defaultPreset && (
-													<>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-6 w-6"
-															onClick={(e) => {
-																e.stopPropagation();
-																handleSetDefaultPreset(preset);
-															}}
-														>
-															<Star className="h-3 w-3" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															className="h-6 w-6"
-															onClick={(e) => {
-																e.stopPropagation();
-																handleRemovePreset(preset);
-															}}
-														>
-															<Trash2 className="h-3 w-3" />
-														</Button>
-													</>
-												)}
+												<div className="flex items-center gap-1">
+													<Button
+														variant="ghost"
+														size="icon"
+														className="h-6 w-6 shrink-0"
+														onClick={(e) => {
+															e.stopPropagation();
+															handleEditPreset(preset);
+														}}
+													>
+														<Edit2 className="h-3 w-3" />
+													</Button>
+													<Button
+														variant="ghost"
+														size="icon"
+														className="h-6 w-6 shrink-0"
+														onClick={(e) => {
+															e.stopPropagation();
+															handleDuplicatePreset(preset);
+														}}
+													>
+														<Copy className="h-3 w-3" />
+													</Button>
+													{!preset.defaultPreset && (
+														<>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-6 w-6 shrink-0"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleSetDefaultPreset(preset);
+																}}
+															>
+																<Star className="h-3 w-3" />
+															</Button>
+															<Button
+																variant="ghost"
+																size="icon"
+																className="h-6 w-6 shrink-0"
+																onClick={(e) => {
+																	e.stopPropagation();
+																	handleRemovePreset(preset);
+																}}
+															>
+																<Trash2 className="h-3 w-3" />
+															</Button>
+														</>
+													)}
+												</div>
 											</div>
 										</div>
 									</CommandItem>
