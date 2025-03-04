@@ -1,0 +1,2047 @@
+openapi: 3.0.3
+info:
+  title: ''
+  version: ''
+paths:
+  /search:
+    get:
+      operationId: server_search
+      parameters:
+      - name: q
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      - name: limit
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: offset
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: content_type
+        schema:
+          $ref: '#/components/schemas/ContentType'
+        in: query
+        style: form
+      - name: start_time
+        schema:
+          nullable: true
+          type: string
+          format: date-time
+        in: query
+        style: form
+      - name: end_time
+        schema:
+          nullable: true
+          type: string
+          format: date-time
+        in: query
+        style: form
+      - name: app_name
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      - name: window_name
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      - name: frame_name
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      - name: include_frames
+        schema:
+          type: boolean
+        in: query
+        style: form
+      - name: min_length
+        schema:
+          nullable: true
+          type: integer
+        in: query
+        style: form
+      - name: max_length
+        schema:
+          nullable: true
+          type: integer
+        in: query
+        style: form
+      - name: speaker_ids
+        schema:
+          nullable: true
+          type: array
+          items:
+            type: integer
+        in: query
+        style: form
+      - name: focused
+        schema:
+          nullable: true
+          type: boolean
+        in: query
+        style: form
+      - name: browser_url
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /audio/list:
+    get:
+      operationId: server_api_list_audio_devices
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListDeviceResponse'
+  /vision/list:
+    get:
+      operationId: server_api_list_monitors
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitorInfo'
+  /tags/{content_type}/{id}:
+    post:
+      operationId: server_add_tags
+      parameters:
+      - name: content_type
+        schema:
+          type: string
+        in: path
+        style: simple
+      - name: id
+        schema:
+          type: integer
+        in: path
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTagsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddTagsResponse'
+    delete:
+      operationId: server_remove_tags
+      parameters:
+      - name: content_type
+        schema:
+          type: string
+        in: path
+        style: simple
+      - name: id
+        schema:
+          type: integer
+        in: path
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveTagsRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoveTagsResponse'
+  /pipes/info/{pipe_id}:
+    get:
+      operationId: server_get_pipe_info_handler
+      parameters:
+      - name: pipe_id
+        schema:
+          type: string
+        in: path
+        style: simple
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/list:
+    get:
+      operationId: server_list_pipes_handler
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/download:
+    post:
+      operationId: server_download_pipe_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadPipeRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/download-private:
+    post:
+      operationId: server_download_pipe_private_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadPipePrivateRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/enable:
+    post:
+      operationId: server_run_pipe_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunPipeRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/disable:
+    post:
+      operationId: server_stop_pipe_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunPipeRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/update:
+    post:
+      operationId: server_update_pipe_config_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePipeConfigRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/update-version:
+    post:
+      operationId: server_update_pipe_version_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePipeVersionRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/delete:
+    post:
+      operationId: server_delete_pipe_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletePipeRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /pipes/purge:
+    post:
+      operationId: server_purge_pipe_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurgePipeRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /frames/{frame_id}:
+    get:
+      operationId: server_get_frame_data
+      parameters:
+      - name: frame_id
+        schema:
+          type: integer
+        in: path
+        style: simple
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema: {}
+  /health:
+    get:
+      operationId: server_health_check
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheckResponse'
+  /raw_sql:
+    post:
+      operationId: server_execute_raw_sql
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RawSqlQuery'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /add:
+    post:
+      operationId: server_add_to_database
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddContentRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddContentResponse'
+  /speakers/unnamed:
+    get:
+      operationId: server_get_unnamed_speakers_handler
+      parameters:
+      - name: limit
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: offset
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: speaker_ids
+        schema:
+          nullable: true
+          type: array
+          items:
+            type: integer
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Speaker'
+  /speakers/update:
+    post:
+      operationId: server_update_speaker_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSpeakerRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Speaker'
+  /speakers/search:
+    get:
+      operationId: server_search_speakers_handler
+      parameters:
+      - name: name
+        schema:
+          nullable: true
+          type: string
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Speaker'
+  /speakers/delete:
+    post:
+      operationId: server_delete_speaker_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteSpeakerRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /speakers/hallucination:
+    post:
+      operationId: server_mark_as_hallucination_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkAsHallucinationRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /speakers/merge:
+    post:
+      operationId: server_merge_speakers_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeSpeakersRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /speakers/similar:
+    get:
+      operationId: server_get_similar_speakers_handler
+      parameters:
+      - name: speaker_id
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: limit
+        schema:
+          type: integer
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Speaker'
+  /experimental/frames/merge:
+    post:
+      operationId: server_merge_frames_handler
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeVideosRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeVideosResponse'
+  /experimental/validate/media:
+    get:
+      operationId: server_validate_media_handler
+      parameters:
+      - name: file_path
+        schema:
+          type: string
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /semantic-search:
+    get:
+      operationId: server_semantic_search_handler
+      parameters:
+      - name: text
+        schema:
+          type: string
+        in: query
+        style: form
+      - name: limit
+        schema:
+          nullable: true
+          type: integer
+        in: query
+        style: form
+      - name: threshold
+        schema:
+          nullable: true
+          type: number
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OCRResult'
+  /pipes/build-status/{pipe_id}:
+    get:
+      operationId: server_get_pipe_build_status
+      parameters:
+      - name: pipe_id
+        schema:
+          type: string
+        in: path
+        style: simple
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+  /search/keyword:
+    get:
+      operationId: server_keyword_search_handler
+      parameters:
+      - name: query
+        schema:
+          type: string
+        in: query
+        style: form
+      - name: limit
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: offset
+        schema:
+          type: integer
+        in: query
+        style: form
+      - name: start_time
+        schema:
+          nullable: true
+          type: string
+          format: date-time
+        in: query
+        style: form
+      - name: end_time
+        schema:
+          nullable: true
+          type: string
+          format: date-time
+        in: query
+        style: form
+      - name: fuzzy_match
+        schema:
+          type: boolean
+        in: query
+        style: form
+      - name: order
+        schema:
+          $ref: '#/components/schemas/Order'
+        in: query
+        style: form
+      - name: app_names
+        schema:
+          nullable: true
+          type: array
+          items:
+            type: string
+        in: query
+        style: form
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchMatch'
+  /v1/embeddings:
+    post:
+      operationId: embedding_embedding_endpoint_create_embeddings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbeddingRequest'
+        required: true
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbeddingResponse'
+components:
+  schemas:
+    AddContentData:
+      type: object
+      properties:
+        content_type:
+          type: string
+        data:
+          $ref: '#/components/schemas/ContentData'
+      required:
+      - content_type
+      - data
+    AddContentRequest:
+      type: object
+      properties:
+        device_name:
+          type: string
+        content:
+          $ref: '#/components/schemas/AddContentData'
+      required:
+      - device_name
+      - content
+    AddContentResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          nullable: true
+          type: string
+      required:
+      - success
+      - message
+    AddTagsRequest:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+      - tags
+    AddTagsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+      - success
+    AudioChunk:
+      type: object
+      properties:
+        id:
+          type: integer
+        file_path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+      - id
+      - file_path
+      - timestamp
+    AudioChunksResponse:
+      type: object
+      properties:
+        audio_chunk_id:
+          type: integer
+        start_time:
+          nullable: true
+          type: number
+        end_time:
+          nullable: true
+          type: number
+        file_path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+      - audio_chunk_id
+      - start_time
+      - end_time
+      - file_path
+      - timestamp
+    AudioContent:
+      type: object
+      properties:
+        chunk_id:
+          type: integer
+        transcription:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+        offset_index:
+          type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        device_name:
+          type: string
+        device_type:
+          $ref: '#/components/schemas/DeviceType'
+        speaker:
+          $ref: '#/components/schemas/Speaker'
+        start_time:
+          nullable: true
+          type: number
+        end_time:
+          nullable: true
+          type: number
+      required:
+      - chunk_id
+      - transcription
+      - timestamp
+      - file_path
+      - offset_index
+      - tags
+      - device_name
+      - device_type
+      - speaker
+      - start_time
+      - end_time
+    AudioDevice:
+      type: object
+      properties:
+        name:
+          type: string
+        device_type:
+          $ref: '#/components/schemas/DeviceType'
+      required:
+      - name
+      - device_type
+    AudioEntry:
+      type: object
+      properties:
+        transcription:
+          type: string
+        device_name:
+          type: string
+        is_input:
+          type: boolean
+        audio_file_path:
+          type: string
+        duration_secs:
+          type: number
+      required:
+      - transcription
+      - device_name
+      - is_input
+      - audio_file_path
+      - duration_secs
+    AudioResult:
+      type: object
+      properties:
+        audio_chunk_id:
+          type: integer
+        transcription:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+        offset_index:
+          type: integer
+        transcription_engine:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        device_name:
+          type: string
+        device_type:
+          $ref: '#/components/schemas/DeviceType'
+        speaker:
+          $ref: '#/components/schemas/Speaker'
+        start_time:
+          nullable: true
+          type: number
+        end_time:
+          nullable: true
+          type: number
+      required:
+      - audio_chunk_id
+      - transcription
+      - timestamp
+      - file_path
+      - offset_index
+      - transcription_engine
+      - tags
+      - device_name
+      - device_type
+      - speaker
+      - start_time
+      - end_time
+    AudioTranscription:
+      type: object
+      properties:
+        transcription:
+          type: string
+        transcription_engine:
+          type: string
+      required:
+      - transcription
+      - transcription_engine
+    ContentData:
+      oneOf:
+      - type: array
+        items:
+          type: object
+          properties:
+            file_path:
+              type: string
+            timestamp:
+              nullable: true
+              type: string
+              format: date-time
+            app_name:
+              nullable: true
+              type: string
+            window_name:
+              nullable: true
+              type: string
+            ocr_results:
+              nullable: true
+              type: array
+              items:
+                $ref: '#/components/schemas/OCRResult'
+            tags:
+              nullable: true
+              type: array
+              items:
+                type: string
+          required:
+          - file_path
+          - timestamp
+          - app_name
+          - window_name
+          - ocr_results
+          - tags
+      - type: object
+        properties:
+          transcription:
+            type: string
+          transcription_engine:
+            type: string
+        required:
+        - transcription
+        - transcription_engine
+    ContentItem:
+      oneOf:
+      - type: object
+        properties:
+          type:
+            type: string
+            enum:
+            - OCR
+          content:
+            type: object
+            properties:
+              frame_id:
+                type: integer
+              text:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              app_name:
+                type: string
+              window_name:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+              frame:
+                nullable: true
+                type: string
+              frame_name:
+                nullable: true
+                type: string
+              browser_url:
+                nullable: true
+                type: string
+              focused:
+                nullable: true
+                type: boolean
+            required:
+            - frame_id
+            - text
+            - timestamp
+            - file_path
+            - offset_index
+            - app_name
+            - window_name
+            - tags
+            - frame
+            - frame_name
+            - browser_url
+            - focused
+        required:
+        - type
+        - content
+      - type: object
+        properties:
+          type:
+            type: string
+            enum:
+            - Audio
+          content:
+            type: object
+            properties:
+              chunk_id:
+                type: integer
+              transcription:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              tags:
+                type: array
+                items:
+                  type: string
+              device_name:
+                type: string
+              device_type:
+                $ref: '#/components/schemas/DeviceType'
+              speaker:
+                $ref: '#/components/schemas/Speaker'
+              start_time:
+                nullable: true
+                type: number
+              end_time:
+                nullable: true
+                type: number
+            required:
+            - chunk_id
+            - transcription
+            - timestamp
+            - file_path
+            - offset_index
+            - tags
+            - device_name
+            - device_type
+            - speaker
+            - start_time
+            - end_time
+        required:
+        - type
+        - content
+      - type: object
+        properties:
+          type:
+            type: string
+            enum:
+            - UI
+          content:
+            type: object
+            properties:
+              id:
+                type: integer
+              text:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              app_name:
+                type: string
+              window_name:
+                type: string
+              initial_traversal_at:
+                nullable: true
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              frame_name:
+                nullable: true
+                type: string
+              browser_url:
+                nullable: true
+                type: string
+            required:
+            - id
+            - text
+            - timestamp
+            - app_name
+            - window_name
+            - initial_traversal_at
+            - file_path
+            - offset_index
+            - frame_name
+            - browser_url
+        required:
+        - type
+        - content
+    ContentSource:
+      type: string
+      enum:
+      - Screen
+      - Audio
+    ContentType:
+      type: string
+      enum:
+      - all
+      - ocr
+      - audio
+      - ui
+      - audio+ui
+      - ocr+ui
+      - audio+ocr
+    DeletePipeRequest:
+      type: object
+      properties:
+        pipe_id:
+          type: string
+      required:
+      - pipe_id
+    DeleteSpeakerRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+      required:
+      - id
+    DeviceType:
+      type: string
+      enum:
+      - Input
+      - Output
+    DownloadPipePrivateRequest:
+      type: object
+      properties:
+        url:
+          type: string
+        pipe_name:
+          type: string
+        pipe_id:
+          type: string
+      required:
+      - url
+      - pipe_name
+      - pipe_id
+    DownloadPipeRequest:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+      - url
+    EmbeddingData:
+      type: object
+      properties:
+        object:
+          type: string
+        embedding:
+          type: array
+          items:
+            type: number
+        index:
+          type: integer
+      required:
+      - object
+      - embedding
+      - index
+    EmbeddingInput:
+      oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+    EmbeddingRequest:
+      type: object
+      properties:
+        model:
+          type: string
+        input:
+          $ref: '#/components/schemas/EmbeddingInput'
+        encoding_format:
+          type: string
+        user:
+          nullable: true
+          type: string
+      required:
+      - model
+      - input
+      - encoding_format
+      - user
+    EmbeddingResponse:
+      type: object
+      properties:
+        object:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmbeddingData'
+        model:
+          type: string
+        usage:
+          $ref: '#/components/schemas/Usage'
+      required:
+      - object
+      - data
+      - model
+      - usage
+    EventsQuery:
+      type: object
+      properties:
+        images:
+          nullable: true
+          type: boolean
+      required:
+      - images
+    FrameContent:
+      type: object
+      properties:
+        file_path:
+          type: string
+        timestamp:
+          nullable: true
+          type: string
+          format: date-time
+        app_name:
+          nullable: true
+          type: string
+        window_name:
+          nullable: true
+          type: string
+        ocr_results:
+          nullable: true
+          type: array
+          items:
+            $ref: '#/components/schemas/OCRResult'
+        tags:
+          nullable: true
+          type: array
+          items:
+            type: string
+      required:
+      - file_path
+      - timestamp
+      - app_name
+      - window_name
+      - ocr_results
+      - tags
+    FrameData:
+      type: object
+      properties:
+        frame_id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        offset_index:
+          type: integer
+        ocr_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/OCREntry'
+        audio_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioEntry'
+      required:
+      - frame_id
+      - timestamp
+      - offset_index
+      - ocr_entries
+      - audio_entries
+    GetSimilarSpeakersRequest:
+      type: object
+      properties:
+        speaker_id:
+          type: integer
+        limit:
+          type: integer
+      required:
+      - speaker_id
+      - limit
+    GetUnnamedSpeakersRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        speaker_ids:
+          nullable: true
+          type: array
+          items:
+            type: integer
+      required:
+      - limit
+      - offset
+      - speaker_ids
+    HealthCheckResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        status_code:
+          type: integer
+        last_frame_timestamp:
+          nullable: true
+          type: string
+          format: date-time
+        last_audio_timestamp:
+          nullable: true
+          type: string
+          format: date-time
+        last_ui_timestamp:
+          nullable: true
+          type: string
+          format: date-time
+        frame_status:
+          type: string
+        audio_status:
+          type: string
+        ui_status:
+          type: string
+        message:
+          type: string
+        verbose_instructions:
+          nullable: true
+          type: string
+      required:
+      - status
+      - status_code
+      - last_frame_timestamp
+      - last_audio_timestamp
+      - last_ui_timestamp
+      - frame_status
+      - audio_status
+      - ui_status
+      - message
+      - verbose_instructions
+    KeywordSearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+        limit:
+          type: integer
+        offset:
+          type: integer
+        start_time:
+          nullable: true
+          type: string
+          format: date-time
+        end_time:
+          nullable: true
+          type: string
+          format: date-time
+        fuzzy_match:
+          type: boolean
+        order:
+          $ref: '#/components/schemas/Order'
+        app_names:
+          nullable: true
+          type: array
+          items:
+            type: string
+      required:
+      - query
+      - limit
+      - offset
+      - start_time
+      - end_time
+      - fuzzy_match
+      - order
+      - app_names
+    ListDeviceResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        is_default:
+          type: boolean
+      required:
+      - name
+      - is_default
+    MarkAsHallucinationRequest:
+      type: object
+      properties:
+        speaker_id:
+          type: integer
+      required:
+      - speaker_id
+    MergeSpeakersRequest:
+      type: object
+      properties:
+        speaker_to_keep_id:
+          type: integer
+        speaker_to_merge_id:
+          type: integer
+      required:
+      - speaker_to_keep_id
+      - speaker_to_merge_id
+    MergeVideosRequest:
+      type: object
+      properties:
+        video_paths:
+          type: array
+          items:
+            type: string
+      required:
+      - video_paths
+    MergeVideosResponse:
+      type: object
+      properties:
+        video_path:
+          type: string
+      required:
+      - video_path
+    MonitorInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        width:
+          type: integer
+        height:
+          type: integer
+        is_default:
+          type: boolean
+      required:
+      - id
+      - name
+      - width
+      - height
+      - is_default
+    OCRContent:
+      type: object
+      properties:
+        frame_id:
+          type: integer
+        text:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+        offset_index:
+          type: integer
+        app_name:
+          type: string
+        window_name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        frame:
+          nullable: true
+          type: string
+        frame_name:
+          nullable: true
+          type: string
+        browser_url:
+          nullable: true
+          type: string
+        focused:
+          nullable: true
+          type: boolean
+      required:
+      - frame_id
+      - text
+      - timestamp
+      - file_path
+      - offset_index
+      - app_name
+      - window_name
+      - tags
+      - frame
+      - frame_name
+      - browser_url
+      - focused
+    OCREntry:
+      type: object
+      properties:
+        text:
+          type: string
+        app_name:
+          type: string
+        window_name:
+          type: string
+        device_name:
+          type: string
+        video_file_path:
+          type: string
+      required:
+      - text
+      - app_name
+      - window_name
+      - device_name
+      - video_file_path
+    OCRResult:
+      type: object
+      properties:
+        frame_id:
+          type: integer
+        frame_name:
+          type: string
+        ocr_text:
+          type: string
+        text_json:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        file_path:
+          type: string
+        offset_index:
+          type: integer
+        app_name:
+          type: string
+        ocr_engine:
+          type: string
+        window_name:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        browser_url:
+          nullable: true
+          type: string
+        focused:
+          nullable: true
+          type: boolean
+      required:
+      - frame_id
+      - frame_name
+      - ocr_text
+      - text_json
+      - timestamp
+      - file_path
+      - offset_index
+      - app_name
+      - ocr_engine
+      - window_name
+      - tags
+      - browser_url
+      - focused
+    Order:
+      type: string
+      enum:
+      - ascending
+      - descending
+    PaginationInfo:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+      required:
+      - limit
+      - offset
+      - total
+    PaginationQuery:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required:
+      - limit
+      - offset
+    PurgePipeRequest:
+      type: object
+    RawSqlQuery:
+      type: object
+      properties:
+        query:
+          type: string
+      required:
+      - query
+    RemoveTagsRequest:
+      type: object
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+      - tags
+    RemoveTagsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+      - success
+    RunPipeRequest:
+      type: object
+      properties:
+        pipe_id:
+          type: string
+      required:
+      - pipe_id
+    SearchMatch:
+      type: object
+      properties:
+        frame_id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        text_positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TextPosition'
+        app_name:
+          type: string
+        window_name:
+          type: string
+        confidence:
+          type: number
+        text:
+          type: string
+        url:
+          type: string
+      required:
+      - frame_id
+      - timestamp
+      - text_positions
+      - app_name
+      - window_name
+      - confidence
+      - text
+      - url
+    SearchQuery:
+      type: object
+      properties:
+        q:
+          nullable: true
+          type: string
+        limit:
+          type: integer
+        offset:
+          type: integer
+        content_type:
+          $ref: '#/components/schemas/ContentType'
+        start_time:
+          nullable: true
+          type: string
+          format: date-time
+        end_time:
+          nullable: true
+          type: string
+          format: date-time
+        app_name:
+          nullable: true
+          type: string
+        window_name:
+          nullable: true
+          type: string
+        frame_name:
+          nullable: true
+          type: string
+        include_frames:
+          type: boolean
+        min_length:
+          nullable: true
+          type: integer
+        max_length:
+          nullable: true
+          type: integer
+        speaker_ids:
+          nullable: true
+          type: array
+          items:
+            type: integer
+        focused:
+          nullable: true
+          type: boolean
+        browser_url:
+          nullable: true
+          type: string
+      required:
+      - q
+      - limit
+      - offset
+      - content_type
+      - start_time
+      - end_time
+      - app_name
+      - window_name
+      - frame_name
+      - include_frames
+      - min_length
+      - max_length
+      - speaker_ids
+      - focused
+      - browser_url
+    SearchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+      required:
+      - data
+      - pagination
+    SearchResult:
+      oneOf:
+      - type: object
+        properties:
+          OCR:
+            type: object
+            properties:
+              frame_id:
+                type: integer
+              frame_name:
+                type: string
+              ocr_text:
+                type: string
+              text_json:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              app_name:
+                type: string
+              ocr_engine:
+                type: string
+              window_name:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+              browser_url:
+                nullable: true
+                type: string
+              focused:
+                nullable: true
+                type: boolean
+            required:
+            - frame_id
+            - frame_name
+            - ocr_text
+            - text_json
+            - timestamp
+            - file_path
+            - offset_index
+            - app_name
+            - ocr_engine
+            - window_name
+            - tags
+            - browser_url
+            - focused
+        required:
+        - OCR
+      - type: object
+        properties:
+          Audio:
+            type: object
+            properties:
+              audio_chunk_id:
+                type: integer
+              transcription:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              transcription_engine:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+              device_name:
+                type: string
+              device_type:
+                $ref: '#/components/schemas/DeviceType'
+              speaker:
+                $ref: '#/components/schemas/Speaker'
+              start_time:
+                nullable: true
+                type: number
+              end_time:
+                nullable: true
+                type: number
+            required:
+            - audio_chunk_id
+            - transcription
+            - timestamp
+            - file_path
+            - offset_index
+            - transcription_engine
+            - tags
+            - device_name
+            - device_type
+            - speaker
+            - start_time
+            - end_time
+        required:
+        - Audio
+      - type: object
+        properties:
+          UI:
+            type: object
+            properties:
+              id:
+                type: integer
+              text:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
+              app_name:
+                type: string
+              window_name:
+                type: string
+              initial_traversal_at:
+                nullable: true
+                type: string
+                format: date-time
+              file_path:
+                type: string
+              offset_index:
+                type: integer
+              frame_name:
+                nullable: true
+                type: string
+              browser_url:
+                nullable: true
+                type: string
+            required:
+            - id
+            - text
+            - timestamp
+            - app_name
+            - window_name
+            - initial_traversal_at
+            - file_path
+            - offset_index
+            - frame_name
+            - browser_url
+        required:
+        - UI
+    SearchSpeakersRequest:
+      type: object
+      properties:
+        name:
+          nullable: true
+          type: string
+      required:
+      - name
+    SemanticSearchQuery:
+      type: object
+      properties:
+        text:
+          type: string
+        limit:
+          nullable: true
+          type: integer
+        threshold:
+          nullable: true
+          type: number
+      required:
+      - text
+      - limit
+      - threshold
+    Speaker:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        metadata:
+          type: string
+      required:
+      - id
+      - name
+      - metadata
+    TagContentType:
+      type: string
+      enum:
+      - vision
+      - audio
+    TextBounds:
+      type: object
+      properties:
+        left:
+          type: number
+        top:
+          type: number
+        width:
+          type: number
+        height:
+          type: number
+      required:
+      - left
+      - top
+      - width
+      - height
+    TextPosition:
+      type: object
+      properties:
+        text:
+          type: string
+        confidence:
+          type: number
+        bounds:
+          $ref: '#/components/schemas/TextBounds'
+      required:
+      - text
+      - confidence
+      - bounds
+    TimeSeriesChunk:
+      type: object
+      properties:
+        frames:
+          type: array
+          items:
+            $ref: '#/components/schemas/FrameData'
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+      required:
+      - frames
+      - start_time
+      - end_time
+    UiContent:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        app_name:
+          type: string
+        window_name:
+          type: string
+        initial_traversal_at:
+          nullable: true
+          type: string
+          format: date-time
+        file_path:
+          type: string
+        offset_index:
+          type: integer
+        frame_name:
+          nullable: true
+          type: string
+        browser_url:
+          nullable: true
+          type: string
+      required:
+      - id
+      - text
+      - timestamp
+      - app_name
+      - window_name
+      - initial_traversal_at
+      - file_path
+      - offset_index
+      - frame_name
+      - browser_url
+    UpdatePipeConfigRequest:
+      type: object
+      properties:
+        pipe_id:
+          type: string
+        config:
+          type: object
+      required:
+      - pipe_id
+      - config
+    UpdatePipeVersionRequest:
+      type: object
+      properties:
+        pipe_id:
+          type: string
+        source:
+          type: string
+      required:
+      - pipe_id
+      - source
+    UpdateSpeakerRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          nullable: true
+          type: string
+        metadata:
+          nullable: true
+          type: string
+      required:
+      - id
+      - name
+      - metadata
+    Usage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+      required:
+      - prompt_tokens
+      - total_tokens
+    ValidateMediaParams:
+      type: object
+      properties:
+        file_path:
+          type: string
+      required:
+      - file_path
+    VisionDeviceControlRequest:
+      type: object
+      properties:
+        device_id:
+          type: integer
+      required:
+      - device_id

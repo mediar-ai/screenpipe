@@ -1,5 +1,12 @@
 {
     "bundle": {
+        "windows": {
+            "nsis": {
+                "headerImage": "assets/nsis-header.bmp",
+                "sidebarImage": "assets/nsis-sidebar.bmp",
+                "installerIcon": "icons/icon.ico"
+            }
+        },
         "externalBin": [
             "screenpipe",
             "bun"
@@ -17,7 +24,7 @@
             "onnxruntime*\\lib\\onnxruntime_providers_shared.dll": "./",
             "mkl\\*.dll": "./",
             "vcredist\\*.dll": "./",
-            "assets/*" : "./assets/"
+            "assets/*": "./assets/"
         }
     }
 }

@@ -167,6 +167,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub enable_realtime_audio_transcription: bool,
 
+    /// Enable realtime vision
+    #[arg(long, default_value_t = false)]
+    pub enable_realtime_vision: bool,
+
     /// OCR engine to use.
     /// AppleNative is the default local OCR engine for macOS.
     /// WindowsNative is a local OCR engine for Windows.
