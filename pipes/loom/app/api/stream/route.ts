@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   const { settings, chatMessages, floatingInput, selectedAgent, data } = await req.json();
-  const MAX_CONTENT_LENGTH = settings.aiMaxContextChars || 6000;
+  const MAX_CONTENT_LENGTH = settings.aiMaxContextChars || 8000;
 
   // had to trim down the context when the loom video is tooooo long :(
   const removeDuplicateLines = (textContent: string[])  => {
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     let context = rmdups.join('\n');
 
     if (context.length > MAX_CONTENT_LENGTH) {
-      context = context.slice(0, 6000);
+      context = context.substring(0, MAX_CONTENT_LENGTH);
     }
 
     return context;

@@ -227,7 +227,7 @@ export function LLMChat({ data, className }: LLMChatProps) {
                       <Input
                         ref={floatingInputRef}
                         type="text"
-                        placeholder="ask a question about the results..."
+                        placeholder="ask for youtube type description..."
                         value={floatingInput}
                         disabled={ isAiDisabled || !isAvailable }
                         onChange={(e) => setFloatingInput(e.target.value)}

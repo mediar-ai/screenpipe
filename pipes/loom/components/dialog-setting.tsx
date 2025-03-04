@@ -38,6 +38,8 @@ const DialogSettings: React.FC<SettingsDialogProps> = ({
   const [contentType, setContentType] = useState("");
 
 const defaultCustomRules = `- Create a concise  summary of the given context 
+- Don't ask any type of questions
+- Don't include any type of absolute path in answer
 - Ensure the summary is precise and captures the essence of the content.
 - Start with an engaging opening sentence.
 - Follow with a detailed description of the main topics.
@@ -47,7 +49,6 @@ const defaultCustomRules = `- Create a concise  summary of the given context
 - Keep the tone and style consistent throughout the description.
 - Use proper grammar and punctuation.
 - Add relevant tags or keywords to improve searchability.
-- Don't ask any type of question from user.
 - Ensure tags are related to the main topics identified.
 `;
 

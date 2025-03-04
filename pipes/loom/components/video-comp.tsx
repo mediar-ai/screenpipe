@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { memo, useCallback, useEffect, useState } from "react";
 import MediaThemeSutro from 'player.style/sutro/react';
+import MediaThemeTailwindAudio from 'player.style/tailwind-audio/react';
 
 export const VideoComponent = memo(function VideoComponent({
   filePath,
@@ -96,7 +97,16 @@ export const VideoComponent = memo(function VideoComponent({
   }
 
   return (
-    <div className={cn("flex flex-col items-center justify-center", className)}>
+    <>
+      {isAudio ?
+        <MediaThemeTailwindAudio>
+          <audio
+            slot="media"
+            src={mediaSrc}
+            playsInline
+          ></audio>
+        </MediaThemeTailwindAudio>
+        :
       <div className="rounded-xl block w-[80%] overflow-hidden">
         <MediaThemeSutro className="w-full h-full">
           <video 
@@ -107,7 +117,8 @@ export const VideoComponent = memo(function VideoComponent({
           </video>
         </MediaThemeSutro>
       </div>
+      }
       {/* {renderFileLink()} */}
-    </div>
+    </>
   );
 });

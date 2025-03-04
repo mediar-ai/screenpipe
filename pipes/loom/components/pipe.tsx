@@ -1,4 +1,4 @@
-import { Clock, Loader2 } from "lucide-react";
+import { Clock, Loader2, Volume2 } from "lucide-react";
 import { IconCheck, IconCopy } from "@/components/ui/icons";
 import { useToast } from "@/lib/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,8 @@ import { DateTimePicker } from './date-time-picker';
 import { VideoComponent } from "@/components/video-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
-import { OCRContent } from "@screenpipe/browser";
+import { OCRContent, AudioContent } from "@screenpipe/browser";
+import { cn } from "@/lib/utils";
 
 import {
   Tooltip,
@@ -31,6 +32,10 @@ function isOCRContent(item: ContentItem): item is { type: "OCR"; content: OCRCon
   return item.type === "OCR";
 }
 
+function isAudioContent(item: ContentItem): item is { type: "Audio"; content: AudioContent } {
+  return item.type === "Audio";
+}
+
 const Pipe: React.FC = () => {
   const { toast } = useToast();
   const { settings} = useSettings();
@@ -44,6 +49,7 @@ const Pipe: React.FC = () => {
   const [isMerging, setIsMerging] = useState<boolean>(false);
   const [startTime, setStartTime] = useState<Date>(new Date());
   const [mergedVideoPath, setMergedVideoPath] = useState<string>('');
+  const [audioContents, setAudioContents] = useState<AudioContent[]>([]);
 
   const aiDisabled =
     settings.aiProviderType === "screenpipe-cloud" && !settings.user.token;
@@ -100,7 +106,7 @@ const Pipe: React.FC = () => {
         const response = await pipe.queryScreenpipe({
           offset: 0,
           limit: 100000, // limit is fucking annoying
-          contentType:"ocr",
+          contentType:"audio+ocr",
           startTime: startTimeStr,
           endTime: endTimeStr,
           maxLength: settings.customSettings?.loom?.maxLength || 500,
@@ -109,12 +115,18 @@ const Pipe: React.FC = () => {
 
         if (response?.data) {
           setRawData(response.data);
+          console.log("RES", response.data)
           const ocrTexts = response.data
             .filter(isOCRContent)
             .map((item) => item.content.text);
-          setOcrText(ocrTexts);
-          }
 
+          const audioContents = response.data
+            .filter(isAudioContent)
+            .map((item) => item.content);
+
+          setOcrText(ocrTexts);
+          setAudioContents(audioContents);
+        }
         const videoFiles = response?.data
           .filter((item: ContentItem) => item.type === "OCR")
           .map((item: ContentItem) => item.content.filePath);
@@ -283,7 +295,7 @@ const Pipe: React.FC = () => {
       </TooltipProvider>
 
       {mergedVideoPath && (
-        <div className="border-2 mt-16 w-[1200px] relative rounded-lg flex-col flex items-center justify-center" >
+        <div className="border-2 mt-16 pt-10 w-[1200px] relative rounded-lg flex-col flex items-center justify-center" >
           <Button
             variant={"outline"} 
             size={"icon"}
@@ -297,6 +309,42 @@ const Pipe: React.FC = () => {
             filePath={mergedVideoPath}
             className="text-center m-8 "
           />
+          <div className="mt-4 w-[80%]">
+            <div className={cn("flex flex-row items-center justify-center")}>
+              {audioContents.length !== 0 && (
+                audioContents.map((file, index) => {
+                const audioTime = new Date(file.timestamp).getTime();
+                const startTimeMs = startTime.getTime();
+                const endTimeMs = endTime.getTime();
+                const position = ((audioTime - startTimeMs) / (endTimeMs - startTimeMs)) * 100;
+                return (
+                  <TooltipProvider key={index}>
+                    <Tooltip>
+                      <TooltipTrigger asChild className="cursor-pointer">
+                        <Volume2
+                          className="absolute w-4 h-4"
+                          style={{ left: `${position}%` }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <VideoComponent
+                          filePath={file.filePath} 
+                          className="text-center m-8"
+                        />
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              }))}
+            </div>
+            {audioContents.length !== 0 && (
+              <div className="grid-flow-col h-[50px] grid gap-[2px] border rounded-md mt-4 border-slate-800/30">
+                {Array.from({ length: 200 }).map((_, index) => (
+                  <div key={index} className="bg-slate-900/30 h-full rounded-md"></div>
+                ))}
+              </div>
+            )}
+          </div>
           <Divider />
           <LLMChat key={key} data={rawData} />
         </div>
