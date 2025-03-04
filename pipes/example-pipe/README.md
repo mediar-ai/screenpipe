@@ -4,6 +4,15 @@ a flexible playground for displaying, testing, and exploring components with the
 
 <!-- <img width="1312" alt="screenshot of component playground" src="https://github.com/user-attachments/assets/3e5abd07-0a3c-4c3b-8351-5107beb4fb10"> -->
 
+## components listed
+
+- health status check
+- latest UI record
+- latest OCR record
+- latest audio transcription
+- screen streaming
+- audio streaming
+
 ## features
 
 - **interactive component display**: view rendered components in action
