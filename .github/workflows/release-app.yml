@@ -332,7 +332,6 @@ jobs:
             libwebkit2gtk-4.1-dev \
             librsvg2-dev \
             patchelf
-          curl -fsSL https://bun.sh/install | bash
 
       - name: Install frontend dependencies
         working-directory: ./screenpipe-app-tauri

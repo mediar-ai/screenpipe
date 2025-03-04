@@ -264,6 +264,11 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
+    let enable_realtime_vision = store
+        .get("enableRealtimeVision")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     let _use_all_monitors = store
         .get("useAllMonitors")
         .and_then(|v| v.as_bool())
@@ -388,6 +393,10 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<CommandChild, String> {
 
     if enable_realtime_audio_transcription {
         args.push("--enable-realtime-audio-transcription");
+    }
+
+    if enable_realtime_vision {
+        args.push("--enable-realtime-vision");
     }
 
     // if use_all_monitors {

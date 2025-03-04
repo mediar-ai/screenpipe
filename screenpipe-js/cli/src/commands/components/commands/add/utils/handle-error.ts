@@ -2,11 +2,11 @@ import { z } from "zod"
 import { highlighter, logger } from "./logger"
 
 export function handleError(error: unknown) {
-  logger.error(
-    `something went wrong. please check the error below for more details.`
-  )
-  logger.error(`if the problem persists, please open an issue on github.`)
-  logger.error("")
+  // logger.error(
+  //   `something went wrong. please check the error below for more details.`
+  // )
+  // logger.error(`if the problem persists, please open an issue on github.`)
+  // logger.error("")
   if (typeof error === "string") {
     logger.error(error)
     logger.break()

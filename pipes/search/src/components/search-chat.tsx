@@ -1333,17 +1333,15 @@ export function SearchChat() {
         {/* Remove MultiSelectCombobox from here */}
 
         {/* Add browser URL input */}
-        {currentPlatform === "macos" && (
-          <SqlAutocompleteInput
-            id="browser-url"
-            type="url"
-            value={browserUrl}
-            onChange={setBrowserUrl}
-            placeholder="filter by browser URL"
-            className="w-[350px]"
-            icon={<Search className="h-4 w-4" />}
-          />
-        )}
+        <SqlAutocompleteInput
+          id="browser-url"
+          type="url"
+          value={browserUrl}
+          onChange={setBrowserUrl}
+          placeholder="filter by browser URL"
+          className="w-[350px]"
+          icon={<Search className="h-4 w-4" />}
+        />
 
         {/* Window name filter - increased width */}
         <SqlAutocompleteInput

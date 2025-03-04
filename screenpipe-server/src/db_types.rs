@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
+use oasgen::OaSchema;
 use screenpipe_audio::DeviceType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::error::Error as StdError;
 use std::fmt::{self, Display};
 
-#[derive(Debug)]
+#[derive(OaSchema, Debug)]
 pub struct DatabaseError(pub String);
 
 impl fmt::Display for DatabaseError {
@@ -16,7 +17,7 @@ impl fmt::Display for DatabaseError {
 
 impl StdError for DatabaseError {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize)]
 pub enum SearchResult {
     OCR(OCRResult),
     Audio(AudioResult),
@@ -48,7 +49,7 @@ pub struct OCRResultRaw {
     pub focused: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize)]
 pub struct OCRResult {
     pub frame_id: i64,
     pub frame_name: String,
@@ -65,7 +66,7 @@ pub struct OCRResult {
     pub focused: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Default, Clone)]
+#[derive(OaSchema, Debug, Deserialize, PartialEq, Default, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum ContentType {
     #[default]
@@ -100,14 +101,14 @@ pub struct AudioResultRaw {
     pub end_time: Option<f64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct Speaker {
     pub id: i64,
     pub name: String,
     pub metadata: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(OaSchema, Debug, Serialize, Deserialize)]
 pub struct AudioResult {
     pub audio_chunk_id: i64,
     pub transcription: String,
@@ -123,14 +124,14 @@ pub struct AudioResult {
     pub end_time: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(OaSchema, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TagContentType {
     Vision,
     Audio,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(OaSchema, Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UiContent {
     pub id: i64,
     #[sqlx(rename = "text_output")]
@@ -147,7 +148,7 @@ pub struct UiContent {
     pub browser_url: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(OaSchema, Debug, Clone)]
 pub struct FrameData {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
@@ -156,7 +157,7 @@ pub struct FrameData {
     pub audio_entries: Vec<AudioEntry>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(OaSchema, Debug, Clone)]
 pub struct OCREntry {
     pub text: String,
     pub app_name: String,
@@ -165,7 +166,7 @@ pub struct OCREntry {
     pub video_file_path: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(OaSchema, Debug, Clone)]
 pub struct AudioEntry {
     pub transcription: String,
     pub device_name: String,
@@ -174,14 +175,14 @@ pub struct AudioEntry {
     pub duration_secs: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(OaSchema, Debug, Clone)]
 pub struct TimeSeriesChunk {
     pub frames: Vec<FrameData>,
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(OaSchema, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContentSource {
     Screen,
     Audio,
@@ -196,14 +197,14 @@ impl Display for ContentSource {
     }
 }
 
-#[derive(Debug, FromRow)]
+#[derive(OaSchema, Debug, FromRow)]
 pub struct AudioChunk {
     pub id: i64,
     pub file_path: String,
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, FromRow)]
+#[derive(OaSchema, Debug, FromRow)]
 pub struct AudioChunksResponse {
     pub audio_chunk_id: i64,
     pub start_time: Option<f64>,
@@ -228,14 +229,14 @@ pub struct OcrTextBlock {
     pub line_num: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(OaSchema, Debug, Serialize, Clone)]
 pub struct TextPosition {
     pub text: String,
     pub confidence: f32,
     pub bounds: TextBounds,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(OaSchema, Debug, Serialize, Clone)]
 pub struct TextBounds {
     pub left: f32,
     pub top: f32,
@@ -243,7 +244,7 @@ pub struct TextBounds {
     pub height: f32,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct SearchMatch {
     pub frame_id: i64,
     pub timestamp: DateTime<Utc>,
@@ -267,7 +268,7 @@ pub struct FrameRow {
     pub text_json: String,
 }
 
-#[derive(Deserialize, PartialEq, Default)]
+#[derive(Deserialize, OaSchema, PartialEq, Default)]
 pub enum Order {
     #[serde(rename = "ascending")]
     Ascending,
