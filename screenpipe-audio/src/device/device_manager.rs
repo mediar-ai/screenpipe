@@ -36,7 +36,7 @@ impl DeviceManager {
             return Err(anyhow!("Device {} already running.", device));
         }
 
-        let is_running = Arc::new(AtomicBool::new(false)); // TODO: Should this be true?
+        let is_running = Arc::new(AtomicBool::new(false));
         let stream =
             match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
                 Ok(stream) => stream,

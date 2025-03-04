@@ -2,10 +2,10 @@ use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use std::{
     sync::{atomic::Ordering, Arc},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
@@ -13,7 +13,7 @@ use screenpipe_db::DatabaseManager;
 use crate::{
     core::{
         device::{parse_audio_device, AudioDevice},
-        record_and_transcribe,
+        record_and_transcribe, LAST_AUDIO_CAPTURE,
     },
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
@@ -59,6 +59,7 @@ pub struct AudioManager {
     transcription_sender: crossbeam::channel::Sender<TranscriptionResult>,
     transcription_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     device_check_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    health_monitor_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
     // health: AudioManagerHealth,
 }
 
@@ -102,6 +103,7 @@ impl AudioManager {
             transcription_receiver_handle: Arc::new(Mutex::new(None)),
             whisper_context: Arc::new(whisper_context),
             device_check_handle: Arc::new(Mutex::new(None)), // health: AudioManagerHealth::Healthy,
+            health_monitor_thread: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -131,6 +133,8 @@ impl AudioManager {
             self.start_audio_receiver_handler(transcription_sender)
                 .await?,
         );
+
+        *self.health_monitor_thread.lock().await = Some(self.start_health_monitoring()?);
 
         let mut status = self.status.lock().await;
 
@@ -164,12 +168,20 @@ impl AudioManager {
         Ok(())
     }
 
+    pub async fn restart(&self) -> Result<()> {
+        info!("restarting audio manager");
+
+        self.stop().await?;
+        self.start().await
+    }
+
     // Stop all audio processing
     pub async fn stop(&self) -> Result<()> {
         if self.status().await == AudioManagerStatus::Stopped {
             return Err(anyhow!("AudioManager already stopped"));
         }
 
+        info!("Stopping device manager");
         let mut recording_receiver_handle = self.recording_receiver_handle.lock().await;
         if let Some(handle) = recording_receiver_handle.take() {
             handle.abort();
@@ -185,10 +197,16 @@ impl AudioManager {
             handle.abort();
         }
 
+        // let mut health_monitor_handle = self.health_monitor_thread.lock().await;
+        // if let Some(handle) = health_monitor_handle.take() {
+        //     handle
+        // }
+
         self.recording_handles.clear();
 
         let _ = self.device_manager.stop_all_devices().await;
         *self.status.lock().await = AudioManagerStatus::Stopped;
+        sleep(Duration::from_secs(1)).await;
         Ok(())
     }
 
@@ -432,5 +450,25 @@ impl AudioManager {
         }));
 
         Ok(())
+    }
+
+    fn start_health_monitoring(&self) -> Result<JoinHandle<()>> {
+        let health_check_grace_period = self.options.health_check_grace_period as u64;
+        let self_clone = self.clone();
+
+        Ok(tokio::spawn(async move {
+            while self_clone.status().await == AudioManagerStatus::Running {
+                if LAST_AUDIO_CAPTURE.load(Ordering::Relaxed)
+                    < SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        - health_check_grace_period
+                {
+                    warn!("health check failed. restarting audio manager");
+                    self_clone.restart().await.unwrap();
+                }
+            }
+        }))
     }
 }

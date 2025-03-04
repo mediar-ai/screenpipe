@@ -40,8 +40,6 @@ pub fn create_whisper_context_parameters<'a>(
 
     let mut context_param = WhisperContextParameters::default();
     context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset { model_preset };
-    context_param.use_gpu(true);
-    context_param.gpu_device(0); // TODO: is this necessary?
 
     Ok(context_param)
 }
