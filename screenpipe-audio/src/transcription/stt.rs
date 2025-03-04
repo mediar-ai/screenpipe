@@ -123,7 +123,7 @@ pub async fn process_audio_input(
         ..audio
     };
 
-    let mut segments = prepare_segments(
+    let (mut segments, threshold_met) = prepare_segments(
         &audio_data,
         vad_engine,
         &segmentation_model_path,
@@ -135,13 +135,15 @@ pub async fn process_audio_input(
 
     let new_file_path = get_new_file_path(&audio.device.to_string(), output_path);
 
-    if let Err(e) = write_audio_to_file(
-        &audio.data.to_vec(),
-        audio.sample_rate,
-        &PathBuf::from(&new_file_path),
-        false,
-    ) {
-        error!("Error writing audio to file: {:?}", e);
+    if threshold_met {
+        if let Err(e) = write_audio_to_file(
+            &audio.data.to_vec(),
+            audio.sample_rate,
+            &PathBuf::from(&new_file_path),
+            false,
+        ) {
+            error!("Error writing audio to file: {:?}", e);
+        }
     }
 
     while let Some(segment) = segments.recv().await {

@@ -15,7 +15,6 @@ pub async fn process_with_whisper(
     let mut whisper_state = whisper_context
         .create_state()
         .expect("failed to create key");
-    // process_segments(segments)
 
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 0 });
 

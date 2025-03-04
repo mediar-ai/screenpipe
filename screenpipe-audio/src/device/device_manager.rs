@@ -36,7 +36,7 @@ impl DeviceManager {
             return Err(anyhow!("Device {} already running.", device));
         }
 
-        let is_running = Arc::new(AtomicBool::new(false));
+        let is_running = Arc::new(AtomicBool::new(false)); // TODO: Should this be true?
         let stream =
             match AudioStream::from_device(Arc::new(device.clone()), is_running.clone()).await {
                 Ok(stream) => stream,
@@ -80,6 +80,8 @@ impl DeviceManager {
         if !self.is_running(device) {
             return Err(anyhow!("Device {} already stopped", device));
         }
+
+        info!("Stopping device: {device}");
 
         if let Some(is_running) = self.states.get(device) {
             is_running.store(false, Ordering::Relaxed)
