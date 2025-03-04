@@ -32,6 +32,7 @@ pub enum AudioTranscriptionEngine {
     WhisperDistilLargeV3,
     #[default]
     WhisperLargeV3Turbo,
+    WhisperLargeV3TurboQuantized,
     WhisperLargeV3,
 }
 
@@ -42,6 +43,9 @@ impl fmt::Display for AudioTranscriptionEngine {
             AudioTranscriptionEngine::WhisperTiny => write!(f, "WhisperTiny"),
             AudioTranscriptionEngine::WhisperDistilLargeV3 => write!(f, "WhisperLarge"),
             AudioTranscriptionEngine::WhisperLargeV3Turbo => write!(f, "WhisperLargeV3Turbo"),
+            AudioTranscriptionEngine::WhisperLargeV3TurboQuantized => {
+                write!(f, "WhisperLargeV3TurboQuantized")
+            }
             AudioTranscriptionEngine::WhisperLargeV3 => write!(f, "WhisperLargeV3"),
         }
     }

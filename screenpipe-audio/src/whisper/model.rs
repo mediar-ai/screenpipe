@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{Error as E, Result};
 use candle::{Device, Tensor};
 use candle_nn::VarBuilder;
@@ -110,4 +112,16 @@ impl Model {
             Self::Quantized(m) => m.decoder.final_linear(x),
         }
     }
+}
+
+pub fn download_quantized_whisper() -> Result<PathBuf> {
+    let api = Api::new()?;
+    let repo = Repo::with_revision(
+        "ggerganov/whisper.cpp".to_string(),
+        RepoType::Model,
+        "main".to_string(),
+    );
+    let api_repo = api.repo(repo);
+    let model = api_repo.get("ggml-large-v3-turbo-q8_0.bin")?;
+    Ok(model)
 }

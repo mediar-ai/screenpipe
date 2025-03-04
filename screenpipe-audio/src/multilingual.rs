@@ -1,10 +1,13 @@
 use crate::whisper::{token_id, Model};
+use anyhow::anyhow;
 use candle::IndexOp;
 use candle::{Result, Tensor, D};
 use candle_transformers::models::whisper::SOT_TOKEN;
+use clap::ValueEnum;
 use log::debug;
 use screenpipe_core::Language;
 use tokenizers::Tokenizer;
+use whisper_rs::get_lang_str_full;
 
 pub const LANGUAGES: [(&str, &str); 99] = [
     ("en", "english"),
@@ -160,4 +163,22 @@ pub fn detect_language(
     let language = token_id(tokenizer, &format!("<|{}|>", probabilities[0].0))?;
     debug!("detected language: {:?}", probabilities[0].0);
     Ok(language)
+}
+
+pub fn get_lang_token(tokens: Vec<f32>, languages: Vec<Language>) -> anyhow::Result<i32> {
+    if languages.is_empty() {
+        return Ok(tokens[0] as i32);
+    }
+    for token in tokens {
+        let token = token as i32;
+        if let Some(lang) = get_lang_str_full(token) {
+            let l =
+                Language::from_str(lang, true).map_err(|_| anyhow!("language token not found"))?;
+            if languages.contains(&l) {
+                return Ok(token);
+            }
+        }
+    }
+
+    Err(anyhow::anyhow!("Language not identified"))
 }
