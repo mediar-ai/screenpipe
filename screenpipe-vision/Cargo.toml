@@ -86,11 +86,16 @@ path = "examples/websocket.rs"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 uiautomation = { version = "0.16.1" }
+rusqlite = "0.29"
 windows = { version = "0.58", features = [
   "Graphics_Imaging",
   "Media_Ocr",
   "Storage",
   "Storage_Streams",
+  "Win32_System_Com",
+  "Win32_UI_Accessibility",
+  "Win32_Foundation", 
+  "Win32_UI_WindowsAndMessaging"
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

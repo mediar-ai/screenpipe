@@ -1,3 +1,4 @@
+
 # Binaries for programs and examples
 *.exe
 *.exe~
@@ -59,3 +60,5 @@ app.py
 *.py3z
 __pycache__/
 
+
+*.zip
