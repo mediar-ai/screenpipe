@@ -20,7 +20,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (os.platform() === 'win32') {
     command = `powershell.exe -NoProfile -WindowStyle hidden -File copyToClipboard.ps1 -FilePath "${path}"`;
   } else if (os.platform() === 'darwin') {
-    command = `osascript -e 'set the clipboard to (read (POSIX file "${path}") as JPEG picture)'`;
+    command = `osascript -e 'tell application "Finder" to set the clipboard to (POSIX file "${path}")'`;
   } else {
     return NextResponse.json({ error: 'Unsupported operating system' }, { status: 400 });
   }
