@@ -4,15 +4,7 @@ import cron from "node-cron";
 import { pipe, Settings } from "@screenpipe/js";
 import puppeteer from "puppeteer-core";
 import type { Browser, CookieParam, Page } from "puppeteer-core";
-import {
-  streamText,
-  streamObject,
-  TypeValidationError,
-  type LanguageModel,
-} from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { ollama } from "ollama-ai-provider";
-import { z } from "zod";
+import OpenAI from "openai";
 import * as store from "@/lib/store";
 import { eventEmitter } from "@/lib/events";
 import { getBrowserWSEndpoint } from "@/lib/actions/connect-browser";
@@ -54,8 +46,8 @@ export async function runBot(
 ): Promise<boolean> {
   await stopBot();
 
-  const model = await getModel(settings);
-  if (!model) {
+  const openai = await getOpenAI(settings);
+  if (!openai) {
     eventEmitter.emit("catchError", {
       title: "Error finding AI model.",
       description: "Your AI model settings are not configured correctly.",
@@ -70,7 +62,7 @@ export async function runBot(
 
   browser = await puppeteer.connect({ browserWSEndpoint });
 
-  launchProcesses(cookies, frequency, prompt, model);
+  launchProcesses(cookies, frequency, prompt, openai, settings);
 
   return true;
 }
@@ -114,34 +106,41 @@ async function launchProcesses(
   cookies: CookieParam[],
   frequency: number,
   prompt: string,
-  model: LanguageModel,
+  openai: OpenAI,
+  settings: Settings,
 ): Promise<void> {
   await Promise.all([
-    profileProcess(cookies, model),
-    ocrProcess(model),
+    profileProcess(cookies, openai, settings),
+    ocrProcess(openai, settings),
     timelineProcess(cookies),
   ]);
-  await Promise.all([summaryProcess(model), suggestionProcess(prompt, model)]);
+  await Promise.all([
+    summaryProcess(openai, settings),
+    suggestionProcess(prompt, openai, settings),
+  ]);
 
   const interval = 5 - frequency + 1;
   profileJob = cron.schedule(`*/${10 * interval} * * * *`, () =>
-    profileProcess(cookies, model),
+    profileProcess(cookies, openai, settings),
   );
-  ocrJob = cron.schedule(`*/${2 * interval} * * * *`, () => ocrProcess(model));
+  ocrJob = cron.schedule(`*/${2 * interval} * * * *`, () =>
+    ocrProcess(openai, settings),
+  );
   timelineJob = cron.schedule(`*/${2 * interval} * * * *`, () =>
     timelineProcess(cookies),
   );
   summaryJob = cron.schedule(`*/${5 * interval} * * * *`, () =>
-    summaryProcess(model),
+    summaryProcess(openai, settings),
   );
   suggestionJob = cron.schedule(`*/${5 * interval} * * * *`, () =>
-    suggestionProcess(prompt, model),
+    suggestionProcess(prompt, openai, settings),
   );
 }
 
 async function profileProcess(
   cookies: CookieParam[],
-  model: LanguageModel,
+  openai: OpenAI,
+  settings: Settings,
   scrollLimit: number = 10,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
@@ -222,11 +221,18 @@ async function profileProcess(
 
     const tweetArray = Array.from(tweets).map((s: string) => JSON.parse(s));
 
-    const { fullStream } = await streamText({
-      model,
-      prompt: `
-You are an AI assistant analyzing a Twitter user's profile and engagement patterns to generate a concise summary.
-
+    const res = await openai.chat.completions.create({
+      model: settings.aiModel,
+      messages: [
+        {
+          role: "system",
+          content: `\
+You are an AI assistant analyzing a Twitter user's profile and engagement patterns to generate a concise summary.\
+            `,
+        },
+        {
+          role: "user",
+          content: `\
 ### **Instructions:**
 - Analyze the user's bio, tweets, and engagement style to determine key themes.  
 - Summarize their primary interests in a way that reflects both their focus areas and any unique perspectives they bring.
@@ -244,27 +250,15 @@ ${JSON.stringify(profileData, null, 2)}
 ${JSON.stringify(tweetArray, null, 2)}
 \`\`\`
             `,
+        },
+      ],
+      response_format: {
+        type: "text",
+      },
     });
 
-    let summary = "";
-    let i = 0;
-    for await (const chunk of fullStream) {
-      const text = getText(chunk);
-      if (text !== null) {
-        summary += text;
-
-        if (i < 99) {
-          eventEmitter.emit("updateProgress", {
-            process: 0,
-            value: 50 + (i + 1) / 2,
-          });
-        }
-
-        i += 1;
-      }
-    }
-
-    await store.pushSummary(summary);
+    const summary = res?.choices[0]?.message?.content?.trim();
+    if (summary) await store.pushSummary(summary);
   } catch (e) {
     console.error("Error in profile process:", e);
     if (browser)
@@ -279,7 +273,7 @@ ${JSON.stringify(tweetArray, null, 2)}
 
 let lastCheck: Date | null = null;
 
-async function ocrProcess(model: LanguageModel): Promise<void> {
+async function ocrProcess(openai: OpenAI, settings: Settings): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
@@ -297,11 +291,18 @@ async function ocrProcess(model: LanguageModel): Promise<void> {
     });
     const context = res?.data.map((e) => e.content);
 
-    const { fullStream } = await streamText({
-      model,
-      prompt: `
-You are an AI assistant analyzing OCR-extracted text to identify key insights, trends, and relevant topics.
-
+    const res2 = await openai.chat.completions.create({
+      model: settings.aiModel,
+      messages: [
+        {
+          role: "system",
+          content: `\
+You are an AI assistant analyzing OCR-extracted text to identify key insights, trends, and relevant topics.\
+                `,
+        },
+        {
+          role: "user",
+          content: `\
 ### **Instructions:**
 - Summarize the main topics detected in the extracted text.
 - Identify recurring themes or keywords and their context.
@@ -314,25 +315,16 @@ You are an AI assistant analyzing OCR-extracted text to identify key insights, t
 \`\`\`json
 ${JSON.stringify(context, null, 2)}
 \`\`\`
-            `,
+                `,
+        },
+      ],
+      response_format: {
+        type: "text",
+      },
     });
 
-    let summary = "";
-    let i = 0;
-    for await (const chunk of fullStream) {
-      const text = getText(chunk);
-      if (text !== null) {
-        summary += text;
-
-        if (i < 99) {
-          eventEmitter.emit("updateProgress", { process: 1, value: i + 1 });
-        }
-
-        i += 1;
-      }
-    }
-
-    await store.pushSummary(summary);
+    const summary = res2?.choices[0]?.message?.content?.trim();
+    if (summary) await store.pushSummary(summary);
     lastCheck = new Date();
 
     console.log("Analyzed OCR data.");
@@ -411,7 +403,10 @@ async function timelineProcess(
   eventEmitter.emit("updateProgress", { process: 2, value: 100 });
 }
 
-async function summaryProcess(model: LanguageModel): Promise<void> {
+async function summaryProcess(
+  openai: OpenAI,
+  settings: Settings,
+): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
     return;
@@ -420,15 +415,20 @@ async function summaryProcess(model: LanguageModel): Promise<void> {
   eventEmitter.emit("updateProgress", { process: 3, value: 0 });
 
   try {
-    console.log("Summarizing data...");
-
     const summaries = await store.getSummaries();
 
-    const { fullStream } = await streamText({
-      model,
-      prompt: `
-You are an AI assistant creating a concise and well-structured summary based on multiple previous summaries.
-
+    const res = await openai.chat.completions.create({
+      model: settings.aiModel,
+      messages: [
+        {
+          role: "system",
+          content: `\
+You are an AI assistant creating a concise and well-structured summary based on multiple previous summaries.\
+            `,
+        },
+        {
+          role: "user",
+          content: `\
 ### **Instructions:**
 - Analyze the provided summaries to identify common themes, key insights, and recurring topics.
 - Eliminate redundant or overly specific details while preserving the most important information.
@@ -440,24 +440,15 @@ You are an AI assistant creating a concise and well-structured summary based on 
 ${JSON.stringify(summaries, null, 2)}
 \`\`\`
             `,
+        },
+      ],
+      response_format: {
+        type: "text",
+      },
     });
 
-    let summary = "";
-    let i = 0;
-    for await (const chunk of fullStream) {
-      const text = getText(chunk);
-      if (text !== null) {
-        summary += text;
-
-        if (i < 99) {
-          eventEmitter.emit("updateProgress", { process: 3, value: i + 1 });
-        }
-
-        i += 1;
-      }
-    }
-
-    await store.compileSummaries(summary);
+    const summary = res?.choices[0]?.message?.content?.trim();
+    if (summary) await store.compileSummaries(summary);
 
     console.log("Summarized data.");
   } catch (e) {
@@ -474,7 +465,8 @@ ${JSON.stringify(summaries, null, 2)}
 
 async function suggestionProcess(
   prompt: string,
-  model: LanguageModel,
+  openai: OpenAI,
+  settings: Settings,
 ): Promise<void> {
   if (!browser || !browser.isConnected()) {
     await stopBot();
@@ -489,22 +481,26 @@ async function suggestionProcess(
     const summaries = await store.getSummaries();
     const tweets = (await store.getTweets()).slice(0, 10);
 
-    const schema = z.object({
-      tweetId: z.string(),
-      handle: z.string(),
-      reason: z.string(),
-      reply: z.string(),
-    });
-    const { elementStream } = await streamObject({
+    let model = settings.aiModel;
+    if (model === "gpt-4") {
+      model = "gpt-4o";
+    }
+
+    const res = await openai.chat.completions.create({
       model,
-      output: "array",
-      schema,
-      prompt: `
+      messages: [
+        {
+          role: "system",
+          content: `\
 You are an AI assistant analyzing tweet data to determine the best engagement opportunities. 
 Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion. 
 Use summaries of the user's data to add context and improve relevance.
-Generate recommended replies and timestamps for selected tweets. Return JSON output.
-
+Generate recommended replies and timestamps for selected tweets. Return JSON output.\
+            `,
+        },
+        {
+          role: "user",
+          content: `\
 ### **Instructions:**
 ${prompt}
 
@@ -517,81 +513,58 @@ ${JSON.stringify(summaries, null, 2)}
 \`\`\`json
 ${JSON.stringify(tweets, null, 2)}
 \`\`\`
+
+Make sure to return only JSON in the following schema:
+\`\`\`
+{
+  type: "object",
+  properties: {
+    suggestions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          tweetId: {
+            type: "string",
+            description: "Tweet ID to reply to.",
+          },
+          handle: {
+            type: "string",
+            description: "Handle of the Tweet's poster.",
+          },
+          reply: {
+            type: "string",
+            description: "Text of the reply.",
+          },
+          reason: {
+            type: "string",
+            description: "Reason for the reply.",
+          },
+        },
+        additionalProperties: false,
+        required: ["tweetID", "handle", "reply", "reason"],
+      },
+    },
+  },
+  additionalProperties: false,
+  required: ["suggestions"],
+},
+\`\`\`
             `,
+        },
+      ],
+      response_format: {
+        type: "json_object",
+      },
       temperature: 0.7,
     });
 
-    let i = 0;
-    for await (const suggestion of elementStream) {
-      await store.pushSuggestion(suggestion);
-      eventEmitter.emit("addSuggestion", suggestion);
-
-      if (i < 5) {
-        eventEmitter.emit("updateProgress", {
-          process: 4,
-          value: (i + 1) * 20 - 1,
-        });
-      }
-
-      i += 1;
-    }
-
-    if (i === 0) {
-      const { fullStream } = await streamText({
-        model,
-        prompt: `
-You are an AI assistant analyzing tweet data to determine the best engagement opportunities. 
-Identify tweets that have high engagement, are relevant to the user’s niche, and invite discussion. 
-Use summaries of the user's data to add context and improve relevance.
-Generate recommended replies and timestamps for selected tweets. Return JSON output.
-
-### **Instructions:**
-${prompt}
-
-### **User Summaries:**
-\`\`\`json
-${JSON.stringify(summaries, null, 2)}
-\`\`\`
-
-### **Tweets To Analyze:**
-\`\`\`json
-${JSON.stringify(tweets, null, 2)}
-\`\`\`
-
-### **Response Schema**
-Return in the following JSON format:
-[{
-  tweetId: string,
-  handle: string,
-  reply: string,
-  reason: string
-}]
-              `,
-        temperature: 0.7,
-      });
-
-      let data = "";
-      let i = 0;
-      for await (const chunk of fullStream) {
-        const text = getText(chunk);
-        if (text) {
-          data += text;
-
-          if (i < 99) {
-            eventEmitter.emit("updateProgress", { process: 4, value: i + 1 });
-          }
-
-          i += 1;
-        }
-      }
-
-      const extracted = extractBetweenBraces(data);
-      if (extracted) {
-        const suggestions: Suggestion[] = JSON.parse(extracted);
-        for (const suggestion of suggestions) {
-          await store.pushSuggestion(suggestion);
-          eventEmitter.emit("addSuggestion", suggestion);
-        }
+    const content = res?.choices[0]?.message?.content?.trim();
+    if (content) {
+      const data = JSON.parse(content);
+      for (const suggestion of data.suggestions) {
+        await store.pushSuggestion(suggestion);
+        eventEmitter.emit("addSuggestion", suggestion);
       }
     }
 
@@ -610,74 +583,15 @@ Return in the following JSON format:
   eventEmitter.emit("updateProgress", { process: 4, value: 100 });
 }
 
-function getText(chunk: any): string | null {
-  if (chunk.type == "text-delta") {
-    return chunk.textDelta;
-  } else if (chunk.type === "error") {
-    if (TypeValidationError.isInstance(chunk.error)) {
-      return chunk.error.value.choices[0]?.delta?.content || "";
-    } else {
-      throw chunk.error;
-    }
-  } else {
-    return null;
-  }
-}
-
-function extractBetweenBraces(s: string): string | null {
-  const firstIndex = s.indexOf("[");
-  const lastIndex = s.lastIndexOf("]");
-
-  if (firstIndex !== -1 && lastIndex !== -1 && lastIndex > firstIndex) {
-    return s.slice(firstIndex, lastIndex + 1);
-  }
-  return null;
-}
-
-async function getModel(settings: Settings): Promise<LanguageModel | null> {
-  let openai;
-  switch (settings.aiProviderType) {
-    case "openai":
-      if (!settings.openaiApiKey) {
-        return null;
-      }
-
-      openai = createOpenAI({
-        apiKey: settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-      });
-      return openai(settings.aiModel) as LanguageModel;
-    case "native-ollama":
-      try {
-        const response = await fetch("http://localhost:11434/api/tags");
-        if (!response.ok) throw new Error();
-      } catch {
-        return null;
-      }
-
-      return ollama(settings.aiModel) as LanguageModel;
-    case "screenpipe-cloud":
-      if (!settings.user?.token) {
-        return null;
-      }
-
-      openai = createOpenAI({
-        apiKey: settings.user.token,
-        baseURL: settings.aiUrl,
-      });
-      return openai(settings.aiModel) as LanguageModel;
-    case "custom":
-      if (!settings.openaiApiKey) {
-        return null;
-      }
-
-      openai = createOpenAI({
-        apiKey: settings.openaiApiKey,
-        baseURL: settings.aiUrl,
-      });
-      return openai(settings.aiModel) as LanguageModel;
-  }
-  return null;
+async function getOpenAI(settings: Settings): Promise<OpenAI> {
+  return new OpenAI({
+    apiKey:
+      settings.aiProviderType === "screenpipe-cloud"
+        ? settings.user.token
+        : settings.openaiApiKey,
+    baseURL: settings.aiUrl,
+    dangerouslyAllowBrowser: true,
+  });
 }
 
 async function scrapeTweets(page: Page): Promise<Tweet[]> {

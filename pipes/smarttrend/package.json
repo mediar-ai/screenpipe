@@ -51,6 +51,7 @@
     "npm": "^10.9.2",
     "ollama-ai-provider": "^1.2.0",
     "open": "^10.1.0",
+    "openai": "^4.86.1",
     "puppeteer-core": "^24.2.1",
     "react": "^19.0.0",
     "react-day-picker": "8.10.1",

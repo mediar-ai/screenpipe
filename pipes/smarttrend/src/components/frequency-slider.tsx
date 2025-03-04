@@ -5,8 +5,8 @@ import { Slider } from "@/components/ui/slider";
 import * as store from "@/lib/store";
 
 interface Props {
-  prompt: number;
-  setPrompt: (prompt: number) => void;
+  frequency: number;
+  setFrequency: (frequency: number) => void;
 }
 
 export function FrequencySlider({ frequency, setFrequency }: Props) {

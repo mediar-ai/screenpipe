@@ -29,14 +29,16 @@ export function ControlPanel({
   const { settings } = useSettings();
 
   const start = async () => {
-    const success = await runBot(
-      settings.screenpipeAppSettings,
-      cookies,
-      frequency,
-      prompt,
-    );
-    if (success) {
-      setIsRunning(true);
+    if (settings && settings.screenpipeAppSettings) {
+      const success = await runBot(
+        settings.screenpipeAppSettings,
+        cookies,
+        frequency,
+        prompt,
+      );
+      if (success) {
+        setIsRunning(true);
+      }
     }
   };
 
