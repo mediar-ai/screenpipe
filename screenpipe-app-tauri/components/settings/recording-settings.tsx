@@ -702,6 +702,39 @@ export function RecordingSettings() {
 
           {!settings.disableVision && (
             <>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h4 className="font-medium">
+                    enable realtime vision processing
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    stream screen content in real-time (dev preview) -{" "}
+                    <a
+                      href="https://github.com/mediar-ai/screenpipe/tree/main/screenpipe-js/examples/stream-screenshots"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      view example
+                    </a>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="enableRealtimeVision"
+                    checked={settings.enableRealtimeVision}
+                    onCheckedChange={(checked) =>
+                      handleSettingsChange(
+                        {
+                          enableRealtimeVision: checked,
+                        },
+                        true
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
               {/* <div className="flex items-center justify-between mb-4">
                 <div className="space-y-1">
                   <h4 className="font-medium">use all monitors</h4>
