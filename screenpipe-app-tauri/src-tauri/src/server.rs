@@ -383,6 +383,7 @@ async fn start_sidecar(
     match crate::sidecar::spawn_screenpipe(
         app_handle.clone().state::<crate::SidecarState>(),
         app_handle,
+        None,
     )
     .await
     {
