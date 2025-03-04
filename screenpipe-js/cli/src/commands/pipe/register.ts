@@ -7,6 +7,23 @@ import { logger } from "../components/commands/add/utils/logger";
 import { handleError } from "../components/commands/add/utils/handle-error";
 import * as p from "@clack/prompts";
 
+// Function to validate GitHub repository existence
+async function validateGitHubRepo(url: string): Promise<boolean> {
+  try {
+    // GitHub API URL format: https://api.github.com/repos/{owner}/{repo}
+    const repoPath = url.replace("https://github.com/", "").replace(/\/$/, "");
+    const apiUrl = `https://api.github.com/repos/${repoPath}`;
+
+    const response = await fetch(apiUrl, {
+      headers: { Accept: "application/vnd.github.v3+json" },
+    });
+
+    return response.status === 200;
+  } catch (error) {
+    return false;
+  }
+}
+
 export const registerCommand = new Command()
   .name("register")
   .description("register a new pipe")
@@ -15,7 +32,7 @@ export const registerCommand = new Command()
       throw new Error("name cannot contain spaces");
     }
     // Check for valid characters (letters, numbers, hyphens, underscores, and periods)
-    if (!/^[a-zA-Z0-9-_.]+$/.test(value)) {
+    if (!/^[a-zA-Z0-9-_]+$/.test(value)) {
       throw new Error(
         "name can only contain letters, numbers, hyphens, underscores, and periods"
       );
@@ -42,9 +59,45 @@ export const registerCommand = new Command()
       return value;
     }
   )
-  .option("--discord <handle>", "your discord handle (e.g., username#1234)")
+  .option(
+    "--discord <handle>",
+    "your discord handle (e.g., username or user.name)",
+    (value) => {
+      // Modern Discord usernames: 2-32 chars, lowercase letters, numbers, periods, underscores
+      // - Cannot have consecutive periods
+      // - Cannot start or end with a period
+      // Also support legacy format with discriminator (username#1234)
+      const modernDiscordPattern = /^(?!.*\.\.)[a-z0-9_.]{2,32}(?<!\.)$/;
+      const legacyDiscordPattern = /^[a-zA-Z0-9_]{2,32}#[0-9]{4}$/;
+
+      if (
+        !modernDiscordPattern.test(value) &&
+        !legacyDiscordPattern.test(value)
+      ) {
+        throw new Error(
+          "invalid discord handle format. should be a valid discord username (2-32 characters containing lowercase letters, numbers, periods, underscores; no consecutive periods; cannot start/end with period) or legacy format (username#1234)"
+        );
+      }
+
+      return value;
+    }
+  )
   .action(async (opts) => {
     p.intro(`${colors.highlight("⚠️ IMPORTANT: Publishing Process ⚠️")}`);
+
+    // Validate GitHub repository existence
+    const githubValidationSpinner = p.spinner();
+    githubValidationSpinner.start("Validating GitHub repository");
+
+    const isValidRepo = await validateGitHubRepo(opts.source);
+    if (!isValidRepo) {
+      githubValidationSpinner.stop("GitHub validation failed");
+      handleError(
+        `${symbols.error} repository doesn't exist or isn't accessible: ${opts.source}`
+      );
+      return;
+    }
+    githubValidationSpinner.stop("GitHub repository validated successfully");
 
     p.note(
       `Before publishing your pipe, you MUST contact ${colors.highlight(

@@ -19641,11 +19641,6 @@ function spinner(text5, options) {
 // src/commands/components/commands/add/utils/handle-error.ts
 import { z } from "zod";
 function handleError(error) {
-  logger.error(
-    `something went wrong. please check the error below for more details.`
-  );
-  logger.error(`if the problem persists, please open an issue on github.`);
-  logger.error("");
   if (typeof error === "string") {
     logger.error(error);
     logger.break();
@@ -19975,11 +19970,23 @@ import { Command as Command7 } from "commander";
 import fs2 from "fs";
 import { Command as Command3 } from "commander";
 import * as p3 from "@clack/prompts";
+async function validateGitHubRepo(url2) {
+  try {
+    const repoPath = url2.replace("https://github.com/", "").replace(/\/$/, "");
+    const apiUrl = `https://api.github.com/repos/${repoPath}`;
+    const response = await fetch(apiUrl, {
+      headers: { Accept: "application/vnd.github.v3+json" }
+    });
+    return response.status === 200;
+  } catch (error) {
+    return false;
+  }
+}
 var registerCommand = new Command3().name("register").description("register a new pipe").requiredOption("--name <name>", "name of the pipe", (value) => {
   if (value.includes(" ")) {
     throw new Error("name cannot contain spaces");
   }
-  if (!/^[a-zA-Z0-9-_.]+$/.test(value)) {
+  if (!/^[a-zA-Z0-9-_]+$/.test(value)) {
     throw new Error(
       "name can only contain letters, numbers, hyphens, underscores, and periods"
     );
@@ -20001,8 +20008,32 @@ var registerCommand = new Command3().name("register").description("register a ne
     }
     return value;
   }
-).option("--discord <handle>", "your discord handle (e.g., username#1234)").action(async (opts) => {
+).option(
+  "--discord <handle>",
+  "your discord handle (e.g., username or user.name)",
+  (value) => {
+    const modernDiscordPattern = /^(?!.*\.\.)[a-z0-9_.]{2,32}(?<!\.)$/;
+    const legacyDiscordPattern = /^[a-zA-Z0-9_]{2,32}#[0-9]{4}$/;
+    if (!modernDiscordPattern.test(value) && !legacyDiscordPattern.test(value)) {
+      throw new Error(
+        "invalid discord handle format. should be a valid discord username (2-32 characters containing lowercase letters, numbers, periods, underscores; no consecutive periods; cannot start/end with period) or legacy format (username#1234)"
+      );
+    }
+    return value;
+  }
+).action(async (opts) => {
   p3.intro(`${colors.highlight("\u26A0\uFE0F IMPORTANT: Publishing Process \u26A0\uFE0F")}`);
+  const githubValidationSpinner = p3.spinner();
+  githubValidationSpinner.start("Validating GitHub repository");
+  const isValidRepo = await validateGitHubRepo(opts.source);
+  if (!isValidRepo) {
+    githubValidationSpinner.stop("GitHub validation failed");
+    handleError(
+      `${symbols.error} repository doesn't exist or isn't accessible: ${opts.source}`
+    );
+    return;
+  }
+  githubValidationSpinner.stop("GitHub repository validated successfully");
   p3.note(
     `Before publishing your pipe, you MUST contact ${colors.highlight(
       "louis030195"
@@ -21734,7 +21765,7 @@ function makeTheme(...themes) {
 function usePrefix({ status = "idle", theme }) {
   const [showLoader, setShowLoader] = useState(false);
   const [tick, setTick] = useState(0);
-  const { prefix, spinner: spinner3 } = makeTheme(theme);
+  const { prefix, spinner: spinner4 } = makeTheme(theme);
   useEffect(() => {
     if (status === "loading") {
       let tickInterval;
@@ -21743,8 +21774,8 @@ function usePrefix({ status = "idle", theme }) {
         setShowLoader(true);
         tickInterval = setInterval(AsyncResource2.bind(() => {
           inc = inc + 1;
-          setTick(inc % spinner3.frames.length);
-        }), spinner3.interval);
+          setTick(inc % spinner4.frames.length);
+        }), spinner4.interval);
       }), 300);
       return () => {
         clearTimeout(delayTimeout);
@@ -21755,7 +21786,7 @@ function usePrefix({ status = "idle", theme }) {
     }
   }, [status]);
   if (showLoader) {
-    return spinner3.frames[tick];
+    return spinner4.frames[tick];
   }
   const iconName = status === "loading" ? "idle" : status;
   return typeof prefix === "string" ? prefix : prefix[iconName] ?? prefix["idle"];
