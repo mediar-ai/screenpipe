@@ -109,7 +109,6 @@ import {
 import { AIPresetsDialog } from "./ai-presets-dialog";
 import { usePipeSettings, useSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
-import { AIPresetsSelector } from "./ai-presets-selector";
 import { DEFAULT_PROMPT } from "./ai-provider-config";
 
 interface Agent {

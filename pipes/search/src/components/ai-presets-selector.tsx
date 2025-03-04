@@ -430,14 +430,14 @@ export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSel
 								>
 									{selectedPreset ? (
 										<div className="flex w-full items-center justify-between gap-2 overflow-hidden">
-											<span className="font-medium min-w-20 max-w-[120px] truncate text-left">
+											<span className="font-medium min-w-[80px] max-w-[30%] truncate text-left">
 												{aiPresets.find((preset) => preset.id === selectedPreset)?.id}
 											</span>
 											<div className="flex items-center gap-2 text-xs text-muted-foreground overflow-hidden">
 												<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
 													{aiPresets.find((preset) => preset.id === selectedPreset)?.provider}
 												</span>
-												<span className="truncate max-w-[120px]">
+												<span className="hidden sm:block truncate max-w-[30%]">
 													{aiPresets.find((preset) => preset.id === selectedPreset)?.model}
 												</span>
 												<span className="whitespace-nowrap">
@@ -461,7 +461,7 @@ export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSel
 						</Tooltip>
 					</TooltipProvider>
 					<PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-						<Command>
+						<Command className="max-h-[300px]">
 							<CommandInput placeholder="search presets..." />
 							<CommandEmpty>no presets found.</CommandEmpty>
 							{recommendedPresets && recommendedPresets.length > 0 && (
@@ -473,7 +473,7 @@ export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSel
 											className="flex py-2"
 										>
 											<div className="flex w-full items-center justify-between gap-2 overflow-hidden">
-												<div className="flex items-center gap-2 min-w-0">
+												<div className="flex items-center gap-2 min-w-0 flex-shrink">
 													<Check
 														className={cn(
 															"h-4 w-4 shrink-0",
@@ -482,7 +482,7 @@ export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSel
 																: "opacity-0",
 														)}
 													/>
-													<span className="font-medium truncate max-w-[120px]">
+													<span className="font-medium truncate max-w-[30%]">
 														{preset.id}
 													</span>
 													<span className="rounded bg-primary/10 text-primary px-1.5 py-0.5 text-xs font-medium shrink-0">
@@ -494,7 +494,7 @@ export const AIPresetsSelector = ({ recommendedPresets, pipeName }: AIPresetsSel
 														<span className="rounded bg-muted px-1.5 py-0.5 whitespace-nowrap">
 															{preset.provider}
 														</span>
-														<span className="truncate max-w-[120px]">
+														<span className="hidden sm:block truncate max-w-[30%]">
 															{preset.model}
 														</span>
 													</div>
