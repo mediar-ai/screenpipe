@@ -958,7 +958,7 @@ export const PipeStore: React.FC = () => {
       const now = Date.now();
 
       // Check if 5 minutes have passed since last check
-      if (lastCheckTime && now - lastCheckTime < 1 * 60 * 1000) {
+      if (lastCheckTime && now - lastCheckTime < 5 * 60 * 1000) {
         console.log("[pipe-update] Skipping check - last check was less than 5 minutes ago");
         return;
       }
