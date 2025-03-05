@@ -24,7 +24,7 @@ pub struct AudioManagerOptions {
     pub enable_realtime: bool,
     pub audio_chunk_duration: Duration,
     pub vad_sensitivity: VadSensitivity,
-    pub health_check_grace_period: usize,
+    pub health_check_grace_period: u64,
     pub enabled_devices: Vec<String>,
     pub use_all_devices: bool,
     pub db_path: Option<String>,
@@ -111,7 +111,7 @@ impl AudioManagerBuilder {
         self
     }
 
-    pub fn health_check_grace_period(mut self, health_check_grace_period: usize) -> Self {
+    pub fn health_check_grace_period(mut self, health_check_grace_period: u64) -> Self {
         self.options.health_check_grace_period = health_check_grace_period;
         self
     }

@@ -29,7 +29,7 @@ fn is_normal_shutdown(is_running: &Arc<AtomicBool>) -> bool {
 pub async fn record_and_transcribe(
     audio_stream: Arc<AudioStream>,
     duration: Duration,
-    whisper_sender: crossbeam::channel::Sender<AudioInput>,
+    whisper_sender: Arc<crossbeam::channel::Sender<AudioInput>>,
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
     while is_running.load(Ordering::Relaxed) {
@@ -44,7 +44,7 @@ pub async fn record_and_transcribe(
             Ok(_) => break, // Normal shutdown
             Err(e) => {
                 if is_normal_shutdown(&is_running) {
-                    break;
+                    return Err(e);
                 }
                 error!("record_and_transcribe error, restarting: {}", e);
                 tokio::time::sleep(Duration::from_secs(1)).await;

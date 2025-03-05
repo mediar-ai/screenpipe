@@ -484,7 +484,6 @@ async fn main() -> anyhow::Result<()> {
     let vad_sensitivity_clone = cli.vad_sensitivity.clone();
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    let audio_runtime = Runtime::new().unwrap();
     let vision_runtime = Runtime::new().unwrap();
     let vision_handle = vision_runtime.handle().clone();
 
@@ -520,7 +519,7 @@ async fn main() -> anyhow::Result<()> {
         .deepgram_api_key(cli.deepgram_api_key)
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
-    let audio_manager = audio_manager_builder.build(db.clone()).await.unwrap();
+    let audio_manager = Arc::new(audio_manager_builder.build(db.clone()).await?);
 
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
@@ -593,7 +592,7 @@ async fn main() -> anyhow::Result<()> {
         cli.disable_vision,
         cli.disable_audio,
         cli.enable_ui_monitoring,
-        Arc::new(audio_manager.clone()),
+        audio_manager.clone(),
     );
 
     // print screenpipe in gradient
@@ -1008,7 +1007,6 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);
-        drop(audio_runtime);
     });
 
     info!("shutdown complete");

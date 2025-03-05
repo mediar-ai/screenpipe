@@ -11,14 +11,14 @@ use std::sync::{
 use tracing::info;
 
 pub struct DeviceManager {
-    streams: DashMap<AudioDevice, Arc<AudioStream>>,
-    states: DashMap<AudioDevice, Arc<AtomicBool>>,
+    streams: Arc<DashMap<AudioDevice, Arc<AudioStream>>>,
+    states: Arc<DashMap<AudioDevice, Arc<AtomicBool>>>,
 }
 
 impl DeviceManager {
     pub async fn new() -> Result<Self> {
-        let streams = DashMap::new();
-        let states = DashMap::new();
+        let streams = Arc::new(DashMap::new());
+        let states = Arc::new(DashMap::new());
 
         Ok(Self { streams, states })
     }

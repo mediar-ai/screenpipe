@@ -54,7 +54,7 @@ fn bench_record_and_transcribe(c: &mut Criterion) {
                 let result = record_and_transcribe(
                     black_box(Arc::new(audio_stream)),
                     black_box(duration),
-                    black_box(whisper_sender),
+                    black_box(Arc::new(whisper_sender)),
                     black_box(is_running),
                 )
                 .await;
