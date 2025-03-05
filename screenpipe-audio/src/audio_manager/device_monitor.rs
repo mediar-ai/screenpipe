@@ -17,9 +17,7 @@ pub async fn start_device_monitor(
     device_manager: Arc<DeviceManager>,
     enabled_devices: Vec<String>,
 ) -> Result<()> {
-    if DEVICE_MONITOR.lock().await.is_some() {
-        return Ok(());
-    }
+    stop_device_monitor().await?;
 
     *DEVICE_MONITOR.lock().await = Some(tokio::spawn(async move {
         loop {

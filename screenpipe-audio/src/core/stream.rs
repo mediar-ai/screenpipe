@@ -6,6 +6,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 use tokio::sync::{broadcast, oneshot};
+use tokio::task::LocalSet;
 use tracing::{error, warn};
 
 use crate::utils::audio::audio_to_mono;
@@ -226,5 +227,19 @@ fn build_input_stream(
             "unsupported sample format: {}",
             config.sample_format()
         )),
+    }
+}
+
+impl Drop for AudioStream {
+    fn drop(&mut self) {
+        let set = LocalSet::new();
+
+        let stream_control = self.stream_control.clone();
+        let is_disconnected = self.is_disconnected.clone();
+
+        set.spawn_local(async move {
+            let _ = stream_control.send(StreamControl::Stop(oneshot::channel().0));
+            is_disconnected.store(true, Ordering::Relaxed);
+        });
     }
 }
