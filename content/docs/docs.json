@@ -20,7 +20,7 @@
       },
       {
         "tab": "API Reference",
-        "openapi": "openapi.yaml"
+        "openapi": "https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/heads/main/content/openapi.yaml"
       }
     ]
   },
