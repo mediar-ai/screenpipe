@@ -12,7 +12,9 @@ use whisper_rs::WhisperContext;
 use screenpipe_db::DatabaseManager;
 
 use super::{
-    start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
+    // start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
+    start_device_monitor,
+    stop_device_monitor,
     AudioManagerOptions,
 };
 use crate::{
@@ -91,12 +93,18 @@ impl AudioManager {
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
         };
 
+        // start_health_monitor(
+        //     Arc::new(manager.clone()),
+        //     manager.options.health_check_grace_period,
+        // )
+        // .await?;
+
         Ok(manager)
     }
 
     pub async fn start(&self) -> Result<()> {
         if self.status().await == AudioManagerStatus::Running {
-            return Err(anyhow!("AudioManager is already running"));
+            return Ok(());
         }
 
         *self.status.write().await = AudioManagerStatus::Running;
@@ -107,8 +115,7 @@ impl AudioManager {
             self.device_manager.clone(),
             self.options.enabled_devices.clone(),
         )
-        .await?;
-        start_health_monitor(self_arc.clone(), self.options.health_check_grace_period).await
+        .await
     }
 
     async fn start_internal(&self) -> Result<()> {
@@ -133,6 +140,9 @@ impl AudioManager {
 
     async fn stop_internal(&self) -> Result<()> {
         *self.status.write().await = AudioManagerStatus::Stopped;
+
+        stop_device_monitor().await?;
+
         let mut recording_receiver_handle = self.recording_receiver_handle.write().await;
         if let Some(handle) = recording_receiver_handle.take() {
             handle.abort();
@@ -156,11 +166,10 @@ impl AudioManager {
 
     pub async fn stop(&self) -> Result<()> {
         if self.status().await == AudioManagerStatus::Stopped {
-            return Err(anyhow!("AudioManager already stopped"));
+            return Ok(());
         }
         *self.status.write().await = AudioManagerStatus::Stopped;
         stop_device_monitor().await?;
-        stop_health_monitor().await?;
         self.stop_internal().await
     }
 
@@ -356,8 +365,33 @@ impl AudioManager {
         }
 
         let _ = stop_device_monitor().await;
-        let _ = stop_health_monitor().await;
+        // let _ = stop_health_monitor().await;
 
         Ok(())
+    }
+}
+
+impl Drop for AudioManager {
+    fn drop(&mut self) {
+        let rec = self.recording_handles.clone();
+        let recording = self.recording_receiver_handle.clone();
+        let transcript = self.transcription_receiver_handle.clone();
+        let device_manager = self.device_manager.clone();
+
+        tokio::spawn(async move {
+            let _ = device_manager.stop_all_devices().await;
+            if let Some(handle) = recording.write().await.take() {
+                handle.abort();
+            }
+            if let Some(handle) = transcript.write().await.take() {
+                handle.abort();
+            }
+            for h in rec.iter() {
+                h.value().lock().await.abort();
+            }
+
+            let _ = stop_device_monitor().await;
+            // let _ = stop_health_monitor().await;
+        });
     }
 }
