@@ -43,9 +43,9 @@ use tokio::{runtime::Runtime, signal, sync::broadcast};
 use tracing::{debug, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, Layer};
 
 const DISPLAY: &str = r"
                                             _          
@@ -82,65 +82,80 @@ fn setup_logging(local_data_dir: &PathBuf, cli: &Cli) -> anyhow::Result<WorkerGu
 
     let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
 
-    //TODO FIX NO DEVICES AVAILABLE IN SETTINGS LOGGING
+    let make_env_filter = || {
+        let filter = EnvFilter::from_default_env()
+            .add_directive("tokio=debug".parse().unwrap())
+            .add_directive("runtime=debug".parse().unwrap())
+            .add_directive("info".parse().unwrap())
+            .add_directive("tokenizers=error".parse().unwrap())
+            .add_directive("rusty_tesseract=error".parse().unwrap())
+            .add_directive("symphonia=error".parse().unwrap())
+            .add_directive("hf_hub=error".parse().unwrap())
+            .add_directive("whisper_rs=error".parse().unwrap());
 
-    let env_filter = EnvFilter::from_default_env()
-        .add_directive("info".parse().unwrap())
-        .add_directive("tokenizers=error".parse().unwrap())
-        .add_directive("rusty_tesseract=error".parse().unwrap())
-        .add_directive("symphonia=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap())
-        .add_directive("hf_hub=error".parse().unwrap())
-        .add_directive("whisper_rs=error".parse().unwrap());
+        #[cfg(target_os = "windows")]
+        let filter = filter
+            .add_directive("xcap::platform::impl_window=off".parse().unwrap())
+            .add_directive("xcap::platform::impl_monitor=off".parse().unwrap())
+            .add_directive("xcap::platform::utils=off".parse().unwrap());
 
-    // noise - but prob should be more precise on which error to ignore
-    #[cfg(target_os = "windows")]
-    let env_filter = env_filter
-        .add_directive("xcap::platform::impl_window=off".parse().unwrap())
-        .add_directive("xcap::platform::impl_monitor=off".parse().unwrap())
-        .add_directive("xcap::platform::utils=off".parse().unwrap());
-
-    let env_filter = env::var("SCREENPIPE_LOG")
-        .unwrap_or_default()
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .fold(
-            env_filter,
-            |filter, module_directive| match module_directive.parse() {
-                Ok(directive) => filter.add_directive(directive),
-                Err(e) => {
-                    eprintln!(
-                        "warning: invalid log directive '{}': {}",
-                        module_directive, e
-                    );
-                    filter
+        let filter = env::var("SCREENPIPE_LOG")
+            .unwrap_or_default()
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .fold(filter, |filter, module_directive| {
+                match module_directive.parse() {
+                    Ok(directive) => filter.add_directive(directive),
+                    Err(e) => {
+                        eprintln!(
+                            "warning: invalid log directive '{}': {}",
+                            module_directive, e
+                        );
+                        filter
+                    }
                 }
-            },
-        );
+            });
 
-    let env_filter = if cli.debug {
-        env_filter.add_directive("screenpipe=debug".parse().unwrap())
-    } else {
-        env_filter
+        if cli.debug {
+            filter.add_directive("screenpipe=debug".parse().unwrap())
+        } else {
+            filter
+        }
     };
 
     let timer =
         tracing_subscriber::fmt::time::ChronoLocal::new("%Y-%m-%dT%H:%M:%S%.6fZ".to_string());
 
-    let registry = tracing_subscriber::registry()
-        .with(env_filter)
+    let tracing_registry = tracing_subscriber::registry()
         .with(
             fmt::layer()
                 .with_writer(std::io::stdout)
-                .with_timer(timer.clone()),
+                .with_timer(timer.clone())
+                .with_filter(make_env_filter()),
         )
-        .with(fmt::layer().with_writer(file_writer).with_timer(timer));
+        .with(
+            fmt::layer()
+                .with_writer(file_writer)
+                .with_timer(timer)
+                .with_filter(make_env_filter()),
+        );
+
+    #[cfg(feature = "debug-console")]
+    let tracing_registry = tracing_registry.with(
+        console_subscriber::spawn().with_filter(
+            EnvFilter::from_default_env()
+                .add_directive("tokio=trace".parse().unwrap())
+                .add_directive("runtime=trace".parse().unwrap()),
+        ),
+    );
 
     // Build the final registry with conditional Sentry layer
     if !cli.disable_telemetry {
-        registry.with(sentry::integrations::tracing::layer()).init();
+        tracing_registry
+            .with(sentry::integrations::tracing::layer())
+            .init();
     } else {
-        registry.init();
+        tracing_registry.init();
     };
 
     Ok(guard)
