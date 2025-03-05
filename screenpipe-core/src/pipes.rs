@@ -83,10 +83,19 @@ fn sanitize_pipe_name(name: &str) -> String {
         if url.host_str() == Some("github.com") {
             let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
             if path_segments.len() >= 2 {
-                // Use the repository name (second segment) instead of branch name
-                let repo_name = path_segments[1];
-                debug!("Using repository name for pipe: {}", repo_name);
-                return repo_name.to_string();
+                if let Some(tree_index) = path_segments.iter().position(|&s| s == "tree") {
+                    let remaining_segments = &path_segments[tree_index + 1..];
+                    if remaining_segments.len() > 2 {
+                        debug!("Using repository name for pipe: {:?}", remaining_segments);
+                        return remaining_segments.last().unwrap().to_string();
+                    } else {
+                        debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                        return path_segments[1].to_string();
+                    }
+                } else {
+                    debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                    return path_segments[1].to_string();
+                }
             }
         }
     }
@@ -801,20 +810,7 @@ pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Res
     let is_local = Url::parse(source).is_err();
 
     let mut pipe_name =
-        sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
-
-    // For GitHub URLs, extract the repository name directly
-    if !is_local {
-        if let Ok(url) = Url::parse(source) {
-            if url.host_str() == Some("github.com") {
-                let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
-                if path_segments.len() >= 2 {
-                    pipe_name = path_segments[1].to_string();
-                    debug!("Using repository name for pipe: {}", pipe_name);
-                }
-            }
-        }
-    }
+        sanitize_pipe_name(Path::new(source).to_str().unwrap());
 
     // Add _local suffix for local pipes
     if is_local {
