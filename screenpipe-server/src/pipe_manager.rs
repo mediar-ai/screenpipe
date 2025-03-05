@@ -234,7 +234,7 @@ impl PipeManager {
         pipe_name: &str,
         pipe_id: &str,
     ) -> Result<String> {
-        let pipe_dir = download_pipe_private(&pipe_name, &url, self.screenpipe_dir.clone()).await?;
+        let pipe_dir = download_pipe_private(pipe_name, url, self.screenpipe_dir.clone()).await?;
 
         let package_json_path = pipe_dir.join("package.json");
         let version = if package_json_path.exists() {

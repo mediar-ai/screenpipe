@@ -72,8 +72,13 @@ mod tests {
         // Act
         let start_time = Instant::now();
         println!("Starting record_and_transcribe");
-        let result =
-            record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running).await;
+        let result = record_and_transcribe(
+            Arc::new(audio_stream),
+            duration,
+            Arc::new(sender),
+            is_running,
+        )
+        .await;
         println!("record_and_transcribe completed");
         let elapsed_time = start_time.elapsed();
 
@@ -133,9 +138,14 @@ mod tests {
         // Act
         let start_time = Instant::now();
 
-        record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running)
-            .await
-            .unwrap();
+        record_and_transcribe(
+            Arc::new(audio_stream),
+            duration,
+            Arc::new(sender),
+            is_running,
+        )
+        .await
+        .unwrap();
 
         let elapsed_time = start_time.elapsed();
 

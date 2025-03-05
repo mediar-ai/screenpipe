@@ -1158,7 +1158,7 @@ async fn main() -> anyhow::Result<()> {
         }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
-            audio_manager.shutdown().await;
+            audio_manager.shutdown().await?;
             let _ = shutdown_tx.send(());
         }
     }

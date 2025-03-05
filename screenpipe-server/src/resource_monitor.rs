@@ -14,7 +14,6 @@ use std::time::{Duration, Instant};
 use sysinfo::{PidExt, ProcessExt, System, SystemExt};
 use tracing::debug;
 use tracing::{error, info, warn};
-use uuid;
 
 pub struct ResourceMonitor {
     start_time: Instant,
@@ -302,7 +301,7 @@ impl ResourceMonitor {
             }
         }
 
-        if let Some(_) = &self.posthog_client {
+        if self.posthog_client.is_some() {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }

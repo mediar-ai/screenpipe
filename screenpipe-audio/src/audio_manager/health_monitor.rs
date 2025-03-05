@@ -7,7 +7,7 @@ use crate::core::LAST_AUDIO_CAPTURE;
 
 use super::{AudioManager, AudioManagerStatus};
 use anyhow::Result;
-use tokio::{runtime::Runtime, sync::Mutex, task::JoinHandle, time::sleep};
+use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 use tracing::{error, warn};
 
 lazy_static::lazy_static! {
@@ -16,14 +16,12 @@ lazy_static::lazy_static! {
 
 pub async fn start_health_monitor(
     audio_manager: Arc<AudioManager>,
-    // runtime: Arc<Runtime>,
     grace_period: u64,
 ) -> Result<()> {
     if HEALTH_MONITOR.lock().await.is_some() {
         return Ok(());
     }
 
-    // let audio_manager_clone = audio_manager.clone();
     *HEALTH_MONITOR.lock().await = Some(tokio::spawn(async move {
         loop {
             if audio_manager.status().await == AudioManagerStatus::Running {

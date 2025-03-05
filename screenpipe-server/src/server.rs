@@ -75,6 +75,8 @@ use std::str::FromStr;
 
 use crate::text_embeds::generate_embedding;
 
+pub type FrameImageCache = LruCache<i64, (String, Instant)>;
+
 pub struct AppState {
     pub db: Arc<DatabaseManager>,
     pub audio_manager: Arc<AudioManager>,
@@ -85,7 +87,7 @@ pub struct AppState {
     pub audio_disabled: bool,
     pub ui_monitoring_enabled: bool,
     pub frame_cache: Option<Arc<FrameCache>>,
-    pub frame_image_cache: Option<Arc<Mutex<LruCache<i64, (String, Instant)>>>>,
+    pub frame_image_cache: Option<Arc<Mutex<FrameImageCache>>>,
 }
 
 // Update the SearchQuery struct
