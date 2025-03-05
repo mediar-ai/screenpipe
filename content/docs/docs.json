@@ -28,7 +28,7 @@
         "pages": [
           "docs/api-reference"
         ],
-        "openapi": "https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/heads/main/content/openapi.yaml"
+        "openapi": "docs/openapi.yaml"
       }
     ]
   },
