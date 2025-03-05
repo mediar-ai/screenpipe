@@ -568,7 +568,7 @@ impl PipeManager {
                     }
                 }
                 Err(e) => {
-                    println!("failed to start pipe {}: {}", id, e);
+                    info!("[{}] failed to start pipe {}:", id, e);
                     Err(e)
                 }
             }
