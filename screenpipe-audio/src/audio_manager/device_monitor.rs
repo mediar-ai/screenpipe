@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use tokio::{runtime::Runtime, sync::Mutex, task::JoinHandle, time::sleep};
+use tokio::{sync::Mutex, task::JoinHandle, time::sleep};
 use tracing::{error, info};
 
 use crate::{core::device::parse_audio_device, device::device_manager::DeviceManager};
@@ -14,7 +14,6 @@ lazy_static::lazy_static! {
 
 pub async fn start_device_monitor(
     audio_manager: Arc<AudioManager>,
-    // runtime: Arc<Runtime>,
     device_manager: Arc<DeviceManager>,
     enabled_devices: Vec<String>,
 ) -> Result<()> {

@@ -1,12 +1,8 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use std::{
-    sync::{atomic::Ordering, Arc},
-    time::Duration,
-};
+use std::sync::{atomic::Ordering, Arc};
 use tokio::{
     join,
-    runtime::Runtime,
     sync::{Mutex, RwLock},
     task::JoinHandle,
 };
@@ -60,7 +56,6 @@ pub struct AudioManager {
     transcription_sender: Arc<crossbeam::channel::Sender<TranscriptionResult>>,
     transcription_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     recording_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
-    // runtime: Arc<Runtime>,
 }
 
 impl AudioManager {
@@ -94,7 +89,6 @@ impl AudioManager {
             recording_handles: Arc::new(recording_handles),
             recording_receiver_handle: Arc::new(RwLock::new(None)),
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
-            // runtime: Arc::new(Runtime::new().unwrap()),
         };
 
         Ok(manager)
@@ -110,17 +104,11 @@ impl AudioManager {
         let self_arc = Arc::new(self.clone());
         start_device_monitor(
             self_arc.clone(),
-            // self.runtime.clone(),
             self.device_manager.clone(),
             self.options.enabled_devices.clone(),
         )
         .await?;
-        start_health_monitor(
-            self_arc.clone(),
-            // self.runtime.clone(),
-            self.options.health_check_grace_period,
-        )
-        .await
+        start_health_monitor(self_arc.clone(), self.options.health_check_grace_period).await
     }
 
     async fn start_internal(&self) -> Result<()> {
@@ -241,7 +229,6 @@ impl AudioManager {
         let realtime_enabled = self.options.enable_realtime;
         let device_clone = device.clone();
 
-        // let recording_handle = tokio::spawn(async move {
         let recording_handle = tokio::spawn(async move {
             let record_and_transcribe_handle = record_and_transcribe(
                 stream.clone(),
@@ -353,11 +340,10 @@ impl AudioManager {
     }
 
     pub async fn shutdown(&self) -> Result<()> {
-        self.stop().await;
+        self.stop().await?;
         let rec = self.recording_handles.clone();
         let recording = self.recording_receiver_handle.clone();
         let transcript = self.transcription_receiver_handle.clone();
-        // let self_clone = self.clone();
 
         if let Some(handle) = recording.write().await.take() {
             handle.abort();
@@ -375,27 +361,3 @@ impl AudioManager {
         Ok(())
     }
 }
-
-// impl Drop for AudioManager {
-//     fn drop(&mut self) {
-//         let rec = self.recording_handles.clone();
-//         let recording = self.recording_receiver_handle.clone();
-//         let transcript = self.transcription_receiver_handle.clone();
-//         // let self_clone = self.clone();
-//         tokio::spawn(async move {
-//             if let Some(handle) = recording.write().await.take() {
-//                 handle.abort();
-//             }
-//             if let Some(handle) = transcript.write().await.take() {
-//                 handle.abort();
-//             }
-//             for h in rec.iter() {
-//                 h.value().lock().await.abort();
-//             }
-
-//             let _ = stop_device_monitor().await;
-//             let _ = stop_health_monitor().await;
-//             // let _ = self_clone.stop().await;
-//         });
-//     }
-// }

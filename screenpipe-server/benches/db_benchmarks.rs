@@ -2,7 +2,6 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use rand::Rng;
-use screenpipe_audio::core::device::AudioDevice;
 use screenpipe_db::{ContentType, DatabaseManager};
 use screenpipe_vision::OcrEngine;
 use std::sync::Arc;
