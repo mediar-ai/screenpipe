@@ -1,0 +1,170 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Screenpipe Documentation",
+  "colors": {
+    "primary": "#000000",
+    "light": "#333333",
+    "dark": "#000000"
+  },
+  "favicon": "/favicon.ico",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "index",
+              "docs/quickstart",
+              "docs/installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "docs/core/overview",
+              "docs/core/recording",
+              "docs/core/ocr",
+              "docs/core/stt"
+            ]
+          },
+          {
+            "group": "Rust CLI",
+            "pages": [
+              "docs/cli/overview",
+              "docs/cli/commands",
+              "docs/cli/configuration"
+            ]
+          },
+          {
+            "group": "Tauri App",
+            "pages": [
+              "docs/app/overview",
+              "docs/app/installation",
+              "docs/app/configuration"
+            ]
+          },
+          {
+            "group": "Plugins",
+            "pages": [
+              "docs/plugins/overview",
+              "docs/plugins/development",
+              "docs/plugins/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Rust API",
+            "pages": [
+              "docs/api/rust/overview",
+              "docs/api/rust/recording",
+              "docs/api/rust/processing"
+            ]
+          },
+          {
+            "group": "TypeScript API",
+            "pages": [
+              "docs/api/typescript/overview",
+              "docs/api/typescript/plugins"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/yourusername/screenpipe",
+          "icon": "github"
+        },
+        {
+          "anchor": "Community",
+          "href": "https://discord.gg/yourdiscord",
+          "icon": "discord"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "support",
+        "href": "mailto:your-email@example.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "download",
+      "href": "https://yourdomain.com/download"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/yourusername/screenpipe",
+      "twitter": "https://twitter.com/yourusername"
+    }
+  },
+  "feedback": {
+    "suggestEdit": true,
+    "raiseIssue": true
+  },
+  "analytics": {
+    "ga4": {
+      "measurementId": "G-XXXXXXXXXX"
+    }
+  },
+  "modeToggle": {
+    "default": "dark"
+  },
+  "backgroundImage": "/images/background.png",
+  "topbarLinks": [
+    {
+      "name": "documentation",
+      "url": "https://yourdomain.com/docs"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "get started",
+    "url": "https://yourdomain.com/download"
+  },
+  "versions": [
+    "v1.0",
+    "v0.9"
+  ],
+  "anchors": [
+    {
+      "name": "api reference",
+      "icon": "rectangle-terminal",
+      "url": "api"
+    },
+    {
+      "name": "changelog",
+      "icon": "list",
+      "url": "changelog"
+    }
+  ],
+  "search": {
+    "prompt": "search documentation..."
+  },
+  "codeSamples": {
+    "typescript": "TypeScript",
+    "rust": "Rust"
+  },
+  "api": {
+    "baseUrl": "https://api.yourdomain.com",
+    "auth": {
+      "method": "bearer"
+    }
+  }
+}
