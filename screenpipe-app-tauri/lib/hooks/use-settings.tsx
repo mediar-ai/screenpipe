@@ -323,7 +323,8 @@ const tauriStorage: PersistStorage = {
 
 		// Set new flattened values
 		for (const [key, val] of Object.entries(flattenedValue)) {
-			await tauriStore.set(key, val);
+			const defaultValue = key in DEFAULT_SETTINGS ? DEFAULT_SETTINGS[key as keyof Settings] : "";
+			await tauriStore.set(key, val === undefined ? defaultValue : val);
 		}
 
 		await tauriStore.save();
