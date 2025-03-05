@@ -132,18 +132,8 @@ paths:
     post:
       operationId: server_add_tags
       parameters:
-      - name: content_type
-        in: path
-        required: true
-        schema:
-          $ref: '#/components/schemas/TagContentType'
-        style: simple
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-        style: simple
+      - $ref: '#/components/parameters/ContentTypeParam'
+      - $ref: '#/components/parameters/IdParam'
       requestBody:
         content:
           application/json:
@@ -160,18 +150,8 @@ paths:
     delete:
       operationId: server_remove_tags
       parameters:
-      - name: content_type
-        in: path
-        required: true
-        schema:
-          $ref: '#/components/schemas/TagContentType'
-        style: simple
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: integer
-        style: simple
+      - $ref: '#/components/parameters/ContentTypeParam'
+      - $ref: '#/components/parameters/IdParam'
       requestBody:
         content:
           application/json:
@@ -2049,3 +2029,17 @@ components:
           type: integer
       required:
       - device_id
+    ContentTypeParam:
+      name: content_type
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TagContentType'
+      style: simple
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      style: simple
