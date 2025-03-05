@@ -14,12 +14,20 @@
         "tab": "Documentation",
         "pages": [
           "index",
-          "docs/quickstart",
-          "docs/installation"
+          "docs/getting-started",
+          "docs/sdk-reference"
+          "docs/architecture",
+          "docs/cli-reference",
+          "docs/plugins",
+          "docs/contributing",
+          "docs/faq"
         ]
       },
       {
         "tab": "API Reference",
+        "pages": [
+          "docs/api-reference",
+        ],
         "openapi": "https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/heads/main/content/openapi.yaml"
       }
     ]
