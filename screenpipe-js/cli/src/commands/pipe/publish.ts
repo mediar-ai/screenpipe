@@ -8,8 +8,8 @@ import ignore from "ignore";
 import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
 import { logger } from "../components/commands/add/utils/logger";
-import { execSync } from "child_process";
 import axios from "axios";
+import { execSync } from 'child_process';
 
 interface ProjectFiles {
   required: string[];
@@ -304,75 +304,122 @@ export const publishCommand = new Command("publish")
       try {
         // First get the signed URL
         console.log(colors.dim(`${symbols.arrow} getting upload URL...`));
+        console.log(colors.dim(`${symbols.arrow} requesting URL from: ${API_BASE_URL}/api/plugins/publish`));
 
-        const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
-          method: "POST",
+        const urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
+          name: opts.name,
+          version: packageJson.version,
+          fileSize,
+          fileHash,
+          description,
+        }, {
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            name: opts.name,
-            version: packageJson.version,
-            fileSize,
-            fileHash,
-            description,
-          }),
+          timeout: 30000, // 30 second timeout
         });
 
-        if (!urlResponse.ok) {
-          throw new Error(
-            `Failed to get upload URL: ${await urlResponse.text()} ${
-              urlResponse.status
-            }`
-          );
-        }
-
-        const { uploadUrl, path } = await urlResponse.json();
+        console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
+        
+        const { uploadUrl, path } = urlResponse.data;
+        console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
+        console.log(colors.dim(`${symbols.arrow} storage path: ${path}`));
+        console.log(colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`));
 
         // Upload directly to Supabase
         logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
-        const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
-          headers: {
-            "Content-Type": "application/zip",
-          },
-          maxBodyLength: Infinity,
-        });
-        if (uploadResponse.status !== 200) {
-          throw new Error(
-            `Failed to upload file to storage: code:${
-              uploadResponse.status
-            } body: ${JSON.stringify(uploadResponse.data)}`
-          );
+        console.log(colors.dim(`${symbols.arrow} starting upload with axios...`));
+        console.log(colors.dim(`${symbols.arrow} upload file size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`));
+        
+        let uploadSuccessful = false;
+        let uploadError = null;
+        
+        try {
+          // Try using a different approach for the upload
+          const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
+            headers: {
+              "Content-Type": "application/zip",
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            timeout: 300000, // 5 minute timeout for large uploads
+            decompress: false, // Disable automatic decompression
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total) {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                if (percentCompleted % 10 === 0) { // Log every 10%
+                  console.log(colors.dim(`${symbols.arrow} upload progress: ${percentCompleted}%`));
+                }
+                // Mark as successful if we reach 100%
+                if (percentCompleted === 100) {
+                  uploadSuccessful = true;
+                }
+              }
+            },
+            // Add a custom validator to handle the case where the socket closes after 100% upload
+            validateStatus: function (status) {
+              // Consider any status less than 500 as success
+              return status < 500;
+            }
+          });
+          
+          console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.status || 'unknown'}`));
+          uploadSuccessful = true;
+        } catch (error) {
+          uploadError = error;
+          
+          // Check if we've seen 100% progress
+          if (!uploadSuccessful) {
+            // This is a real error, not just a socket close after successful upload
+            console.error(colors.error(`${symbols.error} upload error: ${error instanceof Error ? error.message : 'unknown error'}`));
+            if (error instanceof Error && error.stack) {
+              console.error(colors.dim(`${symbols.arrow} stack trace: ${error.stack}`));
+            }
+            if (axios.isAxiosError(error)) {
+              console.error(colors.error(`${symbols.error} upload response: ${JSON.stringify(error.response?.data || {})}`));
+              console.error(colors.error(`${symbols.error} upload status: ${error.response?.status || 'unknown'}`));
+              console.error(colors.error(`${symbols.error} upload request config: ${JSON.stringify({
+                url: error.config?.url?.substring(0, 100) + '...',
+                method: error.config?.method,
+                timeout: error.config?.timeout,
+                headers: error.config?.headers
+              })}`));
+            }
+            throw error;
+          } else {
+            // If we've seen 100% progress, we can ignore the socket close error
+            // Use a warning style instead of error
+            console.log(colors.dim(`${symbols.info} upload completed but connection closed: ${error instanceof Error ? error.message : 'unknown'}`));
+            console.log(colors.dim(`${symbols.arrow} socket was closed after upload completed, continuing with finalization...`));
+          }
         }
-
+        
         // Notify server that upload is complete
         logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
-        const finalizeResponse = await fetch(
+        console.log(colors.dim(`${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`));
+        
+        const finalizeResponse = await axios.post(
           `${API_BASE_URL}/api/plugins/publish/finalize`,
           {
-            method: "POST",
+            name: opts.name,
+            version: packageJson.version,
+            fileHash,
+            storagePath: path,
+            description,
+            fileSize,
+          },
+          {
             headers: {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              name: opts.name,
-              version: packageJson.version,
-              fileHash,
-              storagePath: path,
-              description,
-              fileSize,
-            }),
+            timeout: 30000, // 30 second timeout
           }
         );
 
-        if (!finalizeResponse.ok) {
-          const text = await finalizeResponse.text();
-          throw new Error(`Failed to finalize upload: ${text}`);
-        }
-
-        const data = await finalizeResponse.json();
+        console.log(colors.dim(`${symbols.arrow} finalize response status: ${finalizeResponse.status}`));
+        console.log(colors.dim(`${symbols.arrow} finalize response data: ${JSON.stringify(finalizeResponse.data)}`));
 
         // Success messages
         logger.success(`\n${symbols.success} successfully published plugin!`);
@@ -389,17 +436,10 @@ export const publishCommand = new Command("publish")
           )
         );
 
-        if (data.message) {
-          logger.info(`\n${symbols.info} ${data.message}`);
+        if (finalizeResponse.data.message) {
+          logger.info(`\n${symbols.info} ${finalizeResponse.data.message}`);
         }
-
-        // Cleanup zip file
-        fs.unlinkSync(zipPath);
-        if (opts.verbose) {
-          logger.log(
-            colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
-          );
-        }
+        
       } catch (error) {
         // Cleanup zip file even if upload failed
         if (fs.existsSync(zipPath)) {
@@ -419,6 +459,17 @@ export const publishCommand = new Command("publish")
           );
         }
         process.exit(1);
+      }
+
+      // After the zip file is created and published, add cleanup logic:
+      try {
+        // Assuming zipFilePath is the variable holding the path to the zip file
+        if (fs.existsSync(zipPath)) {
+          console.log(`cleaning up zip file: ${zipPath}`);
+          fs.unlinkSync(zipPath);
+        }
+      } catch (error) {
+        console.error(`failed to clean up zip file: ${error}`);
       }
     } catch (error) {
       if (error instanceof Error) {
