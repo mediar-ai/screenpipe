@@ -83,10 +83,27 @@ fn sanitize_pipe_name(name: &str) -> String {
         if url.host_str() == Some("github.com") {
             let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
             if path_segments.len() >= 2 {
+<<<<<<< Updated upstream
                 // Use the repository name (second segment) instead of branch name
                 let repo_name = path_segments[1];
                 debug!("Using repository name for pipe: {}", repo_name);
                 return repo_name.to_string();
+=======
+                if let Some(tree_index) = path_segments.iter().position(|&s| s == "tree") {
+                    let remaining_segments = &path_segments[tree_index + 1..];
+                    if remaining_segments.len() > 2 {
+                        debug!("Using repository name for pipe: {:?}", 
+                            remaining_segments.last().unwrap().to_string());
+                        return remaining_segments.last().unwrap().to_string();
+                    } else {
+                        debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                        return path_segments[1].to_string();
+                    }
+                } else {
+                    debug!("Using repository name for pipe: {:?}", path_segments[1]);
+                    return path_segments[1].to_string();
+                }
+>>>>>>> Stashed changes
             }
         }
     }

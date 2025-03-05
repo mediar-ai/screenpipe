@@ -536,10 +536,10 @@ impl PipeManager {
 
                     match pipe_state {
                         PipeState::Port(port) => {
-                            info!("started pipe: {} on port {}", id, port);
+                            info!("[{}] pipe started on port: {}", id, port);
                         }
                         PipeState::Pid(pid) => {
-                            info!("started pipe: {} on pid {}", id, pid);
+                            info!("[{}] pipe started at pid: {}", id, pid);
                         }
                     }
 
@@ -568,7 +568,11 @@ impl PipeManager {
                     }
                 }
                 Err(e) => {
+<<<<<<< Updated upstream
                     println!("failed to start pipe {}: {}", id, e);
+=======
+                    info!("[{}] failed to start pipe: {}", id, e);
+>>>>>>> Stashed changes
                     Err(e)
                 }
             }
