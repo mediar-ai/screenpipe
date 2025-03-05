@@ -15,7 +15,7 @@
         "pages": [
           "index",
           "docs/getting-started",
-          "docs/sdk-reference"
+          "docs/sdk-reference",
           "docs/architecture",
           "docs/cli-reference",
           "docs/plugins",
