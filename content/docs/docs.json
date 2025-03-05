@@ -22,6 +22,10 @@
           "pages/docs/contributing",
           "pages/docs/faq"
         ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "openapi.yaml"
       }
     ]
   },
