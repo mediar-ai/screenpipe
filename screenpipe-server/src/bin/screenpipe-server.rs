@@ -754,6 +754,11 @@ async fn main() -> anyhow::Result<()> {
                     cli.capture_unfocused_windows,
                     realtime_audio_devices.clone(),
                     cli.enable_realtime_audio_transcription,
+                    cli.video_codec.clone(),
+                    cli.video_preset.clone(),
+                    cli.video_crf.clone(),
+                    cli.hw_accel.clone(),
+                    cli.hw_accel_device.clone(),
                     cli.enable_realtime_vision,
                 );
 

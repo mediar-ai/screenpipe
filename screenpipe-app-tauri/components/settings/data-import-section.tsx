@@ -80,7 +80,7 @@ export function DataImportSection() {
           name: "",
           creation_time: new Date().toISOString(),
           fps: 30,
-          device_name: "",
+          device_name: ""
         },
       }));
       console.log("initialized metadata config:", newMetadataConfig);
