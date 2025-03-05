@@ -709,7 +709,13 @@ async fn main() -> anyhow::Result<()> {
         .deepgram_api_key(cli.deepgram_api_key.clone())
         .output_path(PathBuf::from(output_path_clone.clone().to_string()));
 
-    let audio_manager = Arc::new(audio_manager_builder.build(db.clone()).await?);
+    let audio_manager = match audio_manager_builder.build(db.clone()).await {
+        Ok(manager) => Arc::new(manager),
+        Err(e) => {
+            error!("{e}");
+            return Ok(());
+        }
+    };
 
     let handle = {
         let runtime = &tokio::runtime::Handle::current();

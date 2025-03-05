@@ -20,6 +20,15 @@ pub async fn start_health_monitor(
 ) -> Result<()> {
     stop_health_monitor().await?;
 
+    // set last audio capture
+    *LAST_AUDIO_CAPTURE.store(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        Ordering::Relaxed,
+    );
+
     *HEALTH_MONITOR.lock().await = Some(tokio::spawn(async move {
         loop {
             if audio_manager.status().await == AudioManagerStatus::Running {

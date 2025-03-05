@@ -9,6 +9,7 @@ use crate::{
         device::{default_input_device, default_output_device},
         engine::AudioTranscriptionEngine,
     },
+    transcription::deepgram::CUSTOM_DEEPGRAM_API_TOKEN,
     vad::{VadEngineEnum, VadSensitivity},
 };
 
@@ -158,7 +159,7 @@ impl AudioManagerBuilder {
     // TODO: Make sure the custom urls work
     pub fn validate_options(&self) -> Result<()> {
         if self.options.transcription_engine == Arc::new(AudioTranscriptionEngine::Deepgram)
-            && self.options.deepgram_api_key.is_none()
+            && (self.options.deepgram_api_key.is_none() && CUSTOM_DEEPGRAM_API_TOKEN.is_empty())
         {
             return Err(anyhow::anyhow!(
                 "Deepgram API key is required for Deepgram transcription engine"
@@ -169,7 +170,9 @@ impl AudioManagerBuilder {
             return Err(anyhow::anyhow!("Output path is required for audio manager"));
         }
 
-        if self.options.enable_realtime && self.options.deepgram_api_key.is_none() {
+        if self.options.enable_realtime
+            && (self.options.deepgram_api_key.is_none() && CUSTOM_DEEPGRAM_API_TOKEN.is_empty())
+        {
             return Err(anyhow::anyhow!(
                 "Deepgram API key is required for realtime transcription"
             ));
