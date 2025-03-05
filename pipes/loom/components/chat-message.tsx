@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { VideoComponent } from "./video-comp";
+import { MediaComponent } from "@/components/media-comp";
 import { ArrowDown, ChevronDown } from "lucide-react";
 
 export interface ChatMessageProps {
@@ -158,7 +158,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 							const isMP4Link = href?.toLowerCase().includes(".mp4");
 
 							if (isMP4Link && href) {
-								return <VideoComponent filePath={href} />;
+								return <MediaComponent filePath={href} />;
 							}
 							return (
 								<a
@@ -179,7 +179,7 @@ export function ChatMessage({ message, ...props }: ChatMessageProps) {
 
 							if (isMP4File || !match) {
 								if (isMP4File) {
-									return <VideoComponent filePath={content.trim()} />;
+									return <MediaComponent filePath={content.trim()} />;
 								}
 								return (
 									<code

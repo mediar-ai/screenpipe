@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 import MediaThemeSutro from 'player.style/sutro/react';
 import MediaThemeTailwindAudio from 'player.style/tailwind-audio/react';
 
-export const VideoComponent = memo(function VideoComponent({
+export const MediaComponent = memo(function MediaComponent({
   filePath,
   className,
   customDescription,

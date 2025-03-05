@@ -7,11 +7,14 @@ import { Button } from '@/components/ui/button';
 import { pipe, ContentItem } from "@screenpipe/browser"
 import React, { useState, useEffect} from 'react';
 import { DateTimePicker } from './date-time-picker';
-import { VideoComponent } from "@/components/video-comp";
+import { MediaComponent } from "@/components/media-comp";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
 import { useAiProvider } from "@/lib/hooks/use-ai-provider";
 import { OCRContent, AudioContent } from "@screenpipe/browser";
 import { cn } from "@/lib/utils";
+import { v4 as uuidv4 } from 'uuid';
+import { generateTitle } from "@/lib/actions/generate-title";
+import { saveHistory, loadHistory, HistoryItem } from "@/lib/actions/history";
 
 import {
   Tooltip,
@@ -197,6 +200,43 @@ const Pipe: React.FC = () => {
     setKey(prevKey => prevKey + 1);
   }, [mergedVideoPath]);
 
+  const setHistory = async () => {
+    const historyId = localStorage.getItem("historyId");
+    if (historyId) {
+      const history = await loadHistory(historyId);
+      const historyItem = history[0];
+      if (historyItem) {
+        setStartTime(new Date(historyItem.params.startTime));
+        setEndTime(new Date(historyItem.params.endTime));
+        setMergedVideoPath(historyItem.mergedVideoPath);
+        setAudioContents(historyItem.audioContents)
+        // Restore messages if any
+        if (historyItem.messages) {
+          setChatMessages(
+            historyItem.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.type === "ai" ? "assistant" : "user",
+              content: msg.content,
+            }))
+          );
+        }
+      }
+      scrollToBottom();
+    }
+  };
+
+  useEffect(() => {
+    const handleChatUpdate = () => {
+      setHistory();
+    };
+    window.addEventListener("historyUpdated", handleChatUpdate);
+    setHistory();
+    return () => {
+      window.removeEventListener("historyUpdated", handleChatUpdate);
+    };
+  }, []);
+
+
   return (
     <div className="w-full mt-4 flex flex-col justify-center items-center">
       <h1 className='font-medium text-xl'>
@@ -305,7 +345,7 @@ const Pipe: React.FC = () => {
             {isCopied ? <IconCheck /> : <IconCopy />}
             <span className="sr-only">Copy video</span>
           </Button>
-          <VideoComponent
+          <MediaComponent
             filePath={mergedVideoPath}
             className="text-center m-8 "
           />
@@ -327,7 +367,7 @@ const Pipe: React.FC = () => {
                         />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <VideoComponent
+                        <MediaComponent
                           filePath={file.filePath} 
                           className="text-center m-8"
                         />
