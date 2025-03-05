@@ -39,7 +39,7 @@ pub async fn start_device_monitor(
                         let _ = audio_manager.stop_device(device_name).await;
                     } else {
                         if audio_manager.status().await != AudioManagerStatus::Running {
-                            continue;
+                            break;
                         }
                         match audio_manager.start_device(&device).await {
                             Ok(()) => {

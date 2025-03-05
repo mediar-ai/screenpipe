@@ -12,9 +12,7 @@ use whisper_rs::WhisperContext;
 use screenpipe_db::DatabaseManager;
 
 use super::{
-    // start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
-    start_device_monitor,
-    stop_device_monitor,
+    start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
     AudioManagerOptions,
 };
 use crate::{
@@ -93,11 +91,11 @@ impl AudioManager {
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
         };
 
-        // start_health_monitor(
-        //     Arc::new(manager.clone()),
-        //     manager.options.health_check_grace_period,
-        // )
-        // .await?;
+        start_health_monitor(
+            Arc::new(manager.clone()),
+            manager.options.health_check_grace_period,
+        )
+        .await?;
 
         Ok(manager)
     }
@@ -108,14 +106,7 @@ impl AudioManager {
         }
 
         *self.status.write().await = AudioManagerStatus::Running;
-        self.start_internal().await?;
-        let self_arc = Arc::new(self.clone());
-        start_device_monitor(
-            self_arc.clone(),
-            self.device_manager.clone(),
-            self.options.enabled_devices.clone(),
-        )
-        .await
+        self.start_internal().await
     }
 
     async fn start_internal(&self) -> Result<()> {
@@ -125,6 +116,14 @@ impl AudioManager {
 
         let mut recording_receiver_handle = self.recording_receiver_handle.write().await;
         *recording_receiver_handle = Some(self.start_audio_receiver_handler().await?);
+        let self_arc = Arc::new(self.clone());
+
+        start_device_monitor(
+            self_arc.clone(),
+            self.device_manager.clone(),
+            self.options.enabled_devices.clone(),
+        )
+        .await?;
 
         info!("audio manager started");
 
@@ -239,20 +238,20 @@ impl AudioManager {
         let device_clone = device.clone();
 
         let recording_handle = tokio::spawn(async move {
-            let record_and_transcribe_handle = record_and_transcribe(
+            let record_and_transcribe_handle = tokio::spawn(record_and_transcribe(
                 stream.clone(),
                 audio_chunk_duration,
                 recording_sender.clone(),
                 is_running.clone(),
-            );
+            ));
 
             let realtime_handle = if realtime_enabled {
-                Some(stream_transcription_deepgram(
+                Some(tokio::spawn(stream_transcription_deepgram(
                     stream,
                     languages,
                     is_running,
                     deepgram_api_key,
-                ))
+                )))
             } else {
                 None
             };
@@ -260,7 +259,7 @@ impl AudioManager {
             let (record_result, realtime_result) = if let Some(handle) = realtime_handle {
                 join!(record_and_transcribe_handle, handle)
             } else {
-                (record_and_transcribe_handle.await, Ok(()))
+                (record_and_transcribe_handle.await, Ok(Ok(())))
             };
 
             if record_result.is_err() || realtime_result.is_err() {
@@ -365,14 +364,22 @@ impl AudioManager {
         }
 
         let _ = stop_device_monitor().await;
-        // let _ = stop_health_monitor().await;
+        let _ = stop_health_monitor().await;
 
         Ok(())
+    }
+
+    pub fn current_devices(&self) -> Vec<AudioDevice> {
+        self.recording_handles
+            .iter()
+            .map(|p| p.key().clone())
+            .collect::<Vec<AudioDevice>>()
     }
 }
 
 impl Drop for AudioManager {
     fn drop(&mut self) {
+        info!("dropping audio manager");
         let rec = self.recording_handles.clone();
         let recording = self.recording_receiver_handle.clone();
         let transcript = self.transcription_receiver_handle.clone();
@@ -391,7 +398,7 @@ impl Drop for AudioManager {
             }
 
             let _ = stop_device_monitor().await;
-            // let _ = stop_health_monitor().await;
+            let _ = stop_health_monitor().await;
         });
     }
 }
