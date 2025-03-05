@@ -73,9 +73,11 @@ pub async fn start_continuous_recording(
         })]
     };
 
-    tokio::spawn(async move {
-        let _ = poll_meetings_events().await;
-    });
+    if !vision_disabled {
+        vision_handle.spawn(async move {
+            let _ = poll_meetings_events().await;
+        });
+    }
 
     // Join all video tasks
     let video_results = join_all(video_tasks);
@@ -83,7 +85,9 @@ pub async fn start_continuous_recording(
     // Handle any errors from the tasks
     for (i, result) in video_results.await.into_iter().enumerate() {
         if let Err(e) = result {
-            error!("Video recording error for monitor {}: {:?}", i, e);
+            if !e.is_cancelled() {
+                error!("Video recording error for monitor {}: {:?}", i, e);
+            }
         }
     }
 

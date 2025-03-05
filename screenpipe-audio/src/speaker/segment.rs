@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use ndarray::{ArrayBase, Axis, IxDyn, ViewRepr};
 use std::{cmp::Ordering, path::Path, sync::Arc, sync::Mutex};
+use tracing::error;
 
 use super::{embedding::EmbeddingExtractor, embedding_manager::EmbeddingManager};
 
@@ -71,10 +72,8 @@ fn create_speech_segment(
     let embedding = match get_speaker_embedding(embedding_extractor, segment_samples) {
         Ok(embedding) => embedding,
         Err(e) => {
-            return Err(anyhow::anyhow!(
-                "Failed to compute speaker embedding: {}",
-                e
-            ));
+            error!("Failed to compute speaker embedding: {}", e);
+            vec![0.0; 512]
         }
     };
     let speaker = get_speaker_from_embedding(embedding_manager, embedding.clone());

@@ -20,3 +20,5 @@ mod transcription_result;
 
 pub use transcription_result::process_transcription_result;
 pub use transcription_result::TranscriptionResult;
+mod handle_new_transcript;
+pub use handle_new_transcript::handle_new_transcript;

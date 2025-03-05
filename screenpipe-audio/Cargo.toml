@@ -128,7 +128,7 @@ cuda = [
 ]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 
-[[bin]]
+[[example]]
 name = "screenpipe-audio"
 path = "src/bin/screenpipe-audio.rs"
 

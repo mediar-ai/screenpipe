@@ -16,7 +16,7 @@ use super::AudioStream;
 pub async fn run_record_and_transcribe(
     audio_stream: Arc<AudioStream>,
     duration: Duration,
-    whisper_sender: crossbeam::channel::Sender<AudioInput>,
+    whisper_sender: Arc<crossbeam::channel::Sender<AudioInput>>,
     is_running: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut receiver = audio_stream.subscribe().await;
@@ -37,7 +37,7 @@ pub async fn run_record_and_transcribe(
     while is_running.load(Ordering::Relaxed)
         && !audio_stream.is_disconnected.load(Ordering::Relaxed)
     {
-        while collected_audio.len() < max_samples - 512 && is_running.load(Ordering::Relaxed) {
+        while collected_audio.len() < max_samples && is_running.load(Ordering::Relaxed) {
             match receiver.recv().await {
                 Ok(chunk) => {
                     collected_audio.extend(chunk);
