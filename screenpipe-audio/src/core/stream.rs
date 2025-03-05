@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 use tokio::sync::{broadcast, oneshot};
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 use crate::utils::audio::audio_to_mono;
 
