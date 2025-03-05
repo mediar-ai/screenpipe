@@ -86,7 +86,9 @@ fn sanitize_pipe_name(name: &str) -> String {
                 if let Some(tree_index) = path_segments.iter().position(|&s| s == "tree") {
                     let remaining_segments = &path_segments[tree_index + 1..];
                     if remaining_segments.len() > 2 {
-                        debug!("Using repository name for pipe: {:?}", remaining_segments);
+                        debug!("Using repository name for pipe: {:?}", 
+                            remaining_segments.last().unwrap().to_string()
+                        );
                         return remaining_segments.last().unwrap().to_string();
                     } else {
                         debug!("Using repository name for pipe: {:?}", path_segments[1]);
