@@ -41,7 +41,7 @@ export function useSettings() {
 
   const updateSetting = async <T extends keyof Settings>(
     key: T,
-    value: Settings[T]
+    value: Settings[T],
   ) => {
     try {
       await fetch("/api/settings", {

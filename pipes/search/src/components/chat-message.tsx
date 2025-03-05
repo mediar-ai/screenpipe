@@ -13,7 +13,7 @@ import {
   IconGemini,
 } from "@/components/ui/icons";
 import { ChatMessageActions } from "@/components/chat-message-actions";
-import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings } from "@/lib/hooks/use-pipe-settings";
 import { VideoComponent } from "./video";
 import { ArrowDown, ChevronDown } from "lucide-react";
 
