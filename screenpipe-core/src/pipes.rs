@@ -1402,7 +1402,8 @@ async fn run_cron_schedule(
         let last_run = match get_last_cron_execution(&pipe_dir, path).await {
             Ok(time) => time,
             Err(e) => {
-                error!("failed to get last cron execution: {}", e);
+                error!("[{}] failed to get last cron execution: {}", 
+                    pipe_dir.file_name().unwrap_or_default().to_string_lossy(), e);
                 None
             }
         };
@@ -1502,7 +1503,6 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
         pipe_dir.file_name().unwrap_or_default().to_string_lossy()
     );
 
-    // remove invalid build 
     // read the build value from pipe.json
     let build_dir = pipe_dir.join(".next");
     let pipe_json_path = pipe_dir.join("pipe.json");
@@ -1548,7 +1548,7 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
     if build_output.status.success() {
         let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
         let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
-        pipe_config["build"] = json!("true");
+        pipe_config["build"] = json!(true);
         let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
         let mut file = File::create(&pipe_json_path).await?;
         file.write_all(updated_pipe_json.as_bytes()).await?;
@@ -1559,7 +1559,7 @@ async fn try_build_nextjs(pipe_dir: &Path, bun_path: &Path) -> Result<BuildStatu
     } else {
         let pipe_json = tokio::fs::read_to_string(&pipe_json_path).await?;
         let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
-        pipe_config["build"] = json!("false");
+        pipe_config["build"] = json!(false);
         let updated_pipe_json = serde_json::to_string_pretty(&pipe_config)?;
         let mut file = File::create(&pipe_json_path).await?;
         file.write_all(updated_pipe_json.as_bytes()).await?;
