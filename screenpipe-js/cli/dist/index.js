@@ -20179,12 +20179,6 @@ function archiveStandardProject(archive, ig) {
     mark: true
   });
 }
-function isProjectBuilt() {
-  if (fs3.existsSync("next.config.js") || fs3.existsSync("next.config.mjs") || fs3.existsSync("next.config.ts")) {
-    return fs3.existsSync(".next") && fs3.existsSync(".next/server");
-  }
-  return fs3.existsSync("dist") || fs3.existsSync("build") || fs3.existsSync("out");
-}
 function runBuildCommand() {
   logger.info(
     colors.info(
@@ -20234,6 +20228,16 @@ var publishCommand = new Command4("publish").description("publish or update a pi
         )
       );
       process.exit(1);
+    }
+    if (!opts.skipBuildCheck) {
+      try {
+        runBuildCommand();
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error(colors.error(`${symbols.error} ${error.message}`));
+          process.exit(1);
+        }
+      }
     }
     if (opts.verbose) {
       console.log(colors.dim(`${symbols.arrow} reading package.json...`));
@@ -20333,24 +20337,6 @@ ${symbols.info} publishing ${colors.highlight(
     }
     if (opts.verbose) {
       console.log(colors.dim(`${symbols.arrow} calculating file hash...`));
-    }
-    if (!opts.skipBuildCheck && !isProjectBuilt()) {
-      if (opts.build) {
-        runBuildCommand();
-      } else {
-        console.error(
-          colors.error(
-            `${symbols.error} Project has not been built. Run ${colors.highlight(
-              "bun run build"
-            )} or ${colors.highlight(
-              "npm run build"
-            )} first, or use ${colors.highlight(
-              "--build"
-            )} flag to build automatically.`
-          )
-        );
-        process.exit(1);
-      }
     }
     try {
       console.log(colors.dim(`${symbols.arrow} getting upload URL...`));

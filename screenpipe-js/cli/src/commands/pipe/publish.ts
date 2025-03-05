@@ -99,22 +99,6 @@ async function retryFetch(
   throw new Error("Retry failed"); // Fallback error
 }
 
-function isProjectBuilt(): boolean {
-  // For Next.js projects
-  if (
-    fs.existsSync("next.config.js") ||
-    fs.existsSync("next.config.mjs") ||
-    fs.existsSync("next.config.ts")
-  ) {
-    return fs.existsSync(".next") && fs.existsSync(".next/server");
-  }
-
-  // For other projects - check common build directories
-  return (
-    fs.existsSync("dist") || fs.existsSync("build") || fs.existsSync("out")
-  );
-}
-
 function runBuildCommand(): void {
   logger.info(
     colors.info(
@@ -178,6 +162,17 @@ export const publishCommand = new Command("publish")
           )
         );
         process.exit(1);
+      }
+      // Check if the project needs to be built
+      if (!opts.skipBuildCheck) {
+        try {
+          runBuildCommand();
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(colors.error(`${symbols.error} ${error.message}`));
+            process.exit(1);
+          }
+        }
       }
 
       if (opts.verbose) {
@@ -303,29 +298,6 @@ export const publishCommand = new Command("publish")
 
       if (opts.verbose) {
         console.log(colors.dim(`${symbols.arrow} calculating file hash...`));
-      }
-
-      // Check if project is built (unless explicitly skipped)
-      if (!opts.skipBuildCheck && !isProjectBuilt()) {
-        if (opts.build) {
-          // Run build if --build flag is provided
-          runBuildCommand();
-        } else {
-          console.error(
-            colors.error(
-              `${
-                symbols.error
-              } Project has not been built. Run ${colors.highlight(
-                "bun run build"
-              )} or ${colors.highlight(
-                "npm run build"
-              )} first, or use ${colors.highlight(
-                "--build"
-              )} flag to build automatically.`
-            )
-          );
-          process.exit(1);
-        }
       }
 
       // Replace the upload section with this:
