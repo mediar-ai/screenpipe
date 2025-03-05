@@ -459,7 +459,7 @@ export const PipeStore: React.FC = () => {
       if (!response.ok) {
         toast({
           title: "failed to purge pipes",
-          description: `error: ${response.error.substring(0, 20)}...}`,
+          description: `error: ${(await response.json()).error}...`,
           variant: "destructive",
         });
         return;
@@ -481,7 +481,7 @@ export const PipeStore: React.FC = () => {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error resetting pipes",
-          description: `error: ${(error as Error).message.substring(0, 20)}...}`,
+          description: `error: ${(error as Error).message}...}`,
         variant: "destructive",
       });
     } finally {
@@ -1188,7 +1188,7 @@ export const PipeStore: React.FC = () => {
                       {isPurging ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          resetting all pipes...
+                          reseting all pipes...
                         </>
                       ) : (
                           "Confirm"
