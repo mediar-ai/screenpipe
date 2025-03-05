@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use std::sync::{atomic::Ordering, Arc};
+use std::{
+    path::PathBuf,
+    sync::{atomic::Ordering, Arc},
+};
 use tokio::{
     join,
     sync::{Mutex, RwLock},
@@ -56,6 +59,7 @@ pub struct AudioManager {
     transcription_sender: Arc<crossbeam::channel::Sender<TranscriptionResult>>,
     transcription_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
     recording_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+    stt_model_path: PathBuf,
 }
 
 impl AudioManager {
@@ -72,6 +76,7 @@ impl AudioManager {
         let (transcription_sender, transcription_receiver) = crossbeam::channel::bounded(1000);
 
         let recording_handles = DashMap::new();
+        let stt_model_path = download_whisper_model(options.transcription_engine.clone())?;
 
         whisper_rs::install_logging_hooks();
 
@@ -89,6 +94,7 @@ impl AudioManager {
             recording_handles: Arc::new(recording_handles),
             recording_receiver_handle: Arc::new(RwLock::new(None)),
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
+            stt_model_path,
         };
 
         start_health_monitor(
@@ -306,7 +312,7 @@ impl AudioManager {
         let context_param =
             create_whisper_context_parameters(self.options.transcription_engine.clone())?;
 
-        let quantized_path = download_whisper_model(self.options.transcription_engine.clone())?;
+        let quantized_path = self.stt_model_path.clone();
         let whisper_context = Arc::new(
             WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
                 .expect("failed to load model"),
