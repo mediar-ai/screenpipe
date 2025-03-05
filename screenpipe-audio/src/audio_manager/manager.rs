@@ -2,19 +2,27 @@ use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use std::{
     sync::{atomic::Ordering, Arc},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
-use tokio::{join, sync::Mutex, task::JoinHandle, time::sleep};
+use tokio::{
+    join,
+    runtime::Runtime,
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
 use tracing::{error, info, warn};
 use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
 
-use super::AudioManagerOptions;
+use super::{
+    start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
+    AudioManagerOptions,
+};
 use crate::{
     core::{
         device::{parse_audio_device, AudioDevice},
-        record_and_transcribe, LAST_AUDIO_CAPTURE,
+        record_and_transcribe,
     },
     device::device_manager::DeviceManager,
     segmentation::segmentation_manager::SegmentationManager,
@@ -35,34 +43,31 @@ pub enum AudioManagerStatus {
     Stopped,
 }
 
-type RecordingHandlesMap = DashMap<AudioDevice, Arc<Mutex<tokio::task::JoinHandle<Result<()>>>>>;
+type RecordingHandlesMap = DashMap<AudioDevice, Arc<Mutex<JoinHandle<Result<()>>>>>;
 
 #[derive(Clone)]
 pub struct AudioManager {
     options: Arc<AudioManagerOptions>,
     device_manager: Arc<DeviceManager>,
     segmentation_manager: Arc<SegmentationManager>,
-    status: Arc<Mutex<AudioManagerStatus>>,
+    status: Arc<RwLock<AudioManagerStatus>>,
     db: Arc<DatabaseManager>,
     vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>>,
-    recording_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     recording_handles: Arc<RecordingHandlesMap>,
     recording_sender: Arc<crossbeam::channel::Sender<AudioInput>>,
     recording_receiver: Arc<crossbeam::channel::Receiver<AudioInput>>,
     transcription_receiver: Arc<crossbeam::channel::Receiver<TranscriptionResult>>,
     transcription_sender: Arc<crossbeam::channel::Sender<TranscriptionResult>>,
-    transcription_receiver_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    device_monitor_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    health_monitor_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    restart_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-    restart_tx: Arc<tokio::sync::broadcast::Sender<()>>,
+    transcription_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+    recording_receiver_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+    // runtime: Arc<Runtime>,
 }
 
 impl AudioManager {
     pub async fn new(options: AudioManagerOptions, db: Arc<DatabaseManager>) -> Result<Self> {
         let device_manager = DeviceManager::new().await?;
         let segmentation_manager = Arc::new(SegmentationManager::new().await?);
-        let status = Mutex::new(AudioManagerStatus::Stopped);
+        let status = RwLock::new(AudioManagerStatus::Stopped);
         let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> = match options.vad_engine {
             VadEngineEnum::Silero => Arc::new(Mutex::new(Box::new(SileroVad::new().await?))),
             VadEngineEnum::WebRtc => Arc::new(Mutex::new(Box::new(WebRtcVad::new()))),
@@ -74,9 +79,6 @@ impl AudioManager {
         let recording_handles = DashMap::new();
 
         whisper_rs::install_logging_hooks();
-
-        // Create a channel for health monitor restarts
-        let (restart_tx, _) = tokio::sync::broadcast::channel::<()>(1);
 
         let manager = Self {
             options: Arc::new(options),
@@ -90,64 +92,65 @@ impl AudioManager {
             transcription_receiver: Arc::new(transcription_receiver),
             transcription_sender: Arc::new(transcription_sender),
             recording_handles: Arc::new(recording_handles),
-            recording_receiver_handle: Arc::new(Mutex::new(None)),
-            transcription_receiver_handle: Arc::new(Mutex::new(None)),
-            device_monitor_handle: Arc::new(Mutex::new(None)),
-            health_monitor_handle: Arc::new(Mutex::new(None)),
-            restart_tx: Arc::new(restart_tx),
-            restart_handle: Arc::new(Mutex::new(None)),
+            recording_receiver_handle: Arc::new(RwLock::new(None)),
+            transcription_receiver_handle: Arc::new(RwLock::new(None)),
+            // runtime: Arc::new(Runtime::new().unwrap()),
         };
 
         Ok(manager)
     }
 
     pub async fn start(&self) -> Result<()> {
-        self.start_internal().await?;
-        self.start_health_monitor().await?;
-        self.start_restart_monitor().await
-    }
-
-    async fn start_internal(&self) -> Result<()> {
         if self.status().await == AudioManagerStatus::Running {
             return Err(anyhow!("AudioManager is already running"));
         }
 
-        info!("Starting audio manager");
-        *self.status.lock().await = AudioManagerStatus::Running;
-        let mut transcription_receiver_handle = self.transcription_receiver_handle.lock().await;
+        *self.status.write().await = AudioManagerStatus::Running;
+        self.start_internal().await?;
+        let self_arc = Arc::new(self.clone());
+        start_device_monitor(
+            self_arc.clone(),
+            // self.runtime.clone(),
+            self.device_manager.clone(),
+            self.options.enabled_devices.clone(),
+        )
+        .await?;
+        start_health_monitor(
+            self_arc.clone(),
+            // self.runtime.clone(),
+            self.options.health_check_grace_period,
+        )
+        .await
+    }
+
+    async fn start_internal(&self) -> Result<()> {
+        *self.status.write().await = AudioManagerStatus::Running;
+        let mut transcription_receiver_handle = self.transcription_receiver_handle.write().await;
         *transcription_receiver_handle = Some(self.start_transcription_receiver_handler().await?);
 
-        let mut recording_receiver_handle = self.recording_receiver_handle.lock().await;
+        let mut recording_receiver_handle = self.recording_receiver_handle.write().await;
         *recording_receiver_handle = Some(self.start_audio_receiver_handler().await?);
 
-        self.start_device_monitor().await?;
+        info!("audio manager started");
 
         Ok(())
     }
 
     pub async fn restart(&self) -> Result<()> {
-        info!("restarting audio manager");
         self.stop_internal().await?;
         self.start_internal().await?;
+        info!("audio manager restarted");
         Ok(())
     }
 
     async fn stop_internal(&self) -> Result<()> {
-        if self.status().await == AudioManagerStatus::Stopped {
-            return Err(anyhow!("AudioManager already stopped"));
-        }
-
-        *self.status.lock().await = AudioManagerStatus::Stopped;
-
-        self.stop_device_monitor().await?;
-
-        info!("Stopping device manager");
-        let mut recording_receiver_handle = self.recording_receiver_handle.lock().await;
+        *self.status.write().await = AudioManagerStatus::Stopped;
+        let mut recording_receiver_handle = self.recording_receiver_handle.write().await;
         if let Some(handle) = recording_receiver_handle.take() {
             handle.abort();
         }
 
-        let mut transcription_receiver_handle = self.transcription_receiver_handle.lock().await;
+        let mut transcription_receiver_handle = self.transcription_receiver_handle.write().await;
         if let Some(handle) = transcription_receiver_handle.take() {
             handle.abort();
         }
@@ -159,14 +162,18 @@ impl AudioManager {
 
         self.recording_handles.clear();
         self.device_manager.stop_all_devices().await?;
-        // sleep(Duration::from_secs(1)).await;
+        info!("audio manager stopped");
         Ok(())
     }
 
     pub async fn stop(&self) -> Result<()> {
-        self.stop_internal().await?;
-        self.stop_health_monitor().await?;
-        self.stop_restart_monitor().await
+        if self.status().await == AudioManagerStatus::Stopped {
+            return Err(anyhow!("AudioManager already stopped"));
+        }
+        *self.status.write().await = AudioManagerStatus::Stopped;
+        stop_device_monitor().await?;
+        stop_health_monitor().await?;
+        self.stop_internal().await
     }
 
     pub async fn devices(&self) -> Result<Vec<AudioDevice>> {
@@ -175,7 +182,6 @@ impl AudioManager {
     }
 
     pub async fn stop_device(&self, device_name: &str) -> Result<()> {
-        // Disable specific audio device
         let device = match parse_audio_device(device_name) {
             Ok(device) => device,
             Err(_) => return Err(anyhow!("Device {} not found", device_name)),
@@ -195,13 +201,8 @@ impl AudioManager {
     }
 
     pub async fn status(&self) -> AudioManagerStatus {
-        self.status.lock().await.clone()
+        self.status.read().await.clone()
     }
-
-    // pub async fn set_use_all_devices(&mut self, use_all: bool) -> Result<()> {
-    //     self.options.use_all_devices = use_all;
-    //     Ok(())
-    // }
 
     pub async fn start_device(&self, device: &AudioDevice) -> Result<()> {
         if let Err(e) = self.device_manager.start_device(device).await {
@@ -240,6 +241,7 @@ impl AudioManager {
         let realtime_enabled = self.options.enable_realtime;
         let device_clone = device.clone();
 
+        // let recording_handle = tokio::spawn(async move {
         let recording_handle = tokio::spawn(async move {
             let record_and_transcribe_handle = record_and_transcribe(
                 stream.clone(),
@@ -350,149 +352,50 @@ impl AudioManager {
         )))
     }
 
-    async fn start_device_monitor(&self) -> Result<()> {
-        if self.device_monitor_handle.lock().await.is_some() {
-            return Ok(());
-        }
+    pub async fn shutdown(&self) -> Result<()> {
+        self.stop().await;
+        let rec = self.recording_handles.clone();
+        let recording = self.recording_receiver_handle.clone();
+        let transcript = self.transcription_receiver_handle.clone();
+        // let self_clone = self.clone();
 
-        let self_clone = self.clone();
-        *self.device_monitor_handle.lock().await = Some(tokio::spawn(async move {
-            loop {
-                if self_clone.status().await == AudioManagerStatus::Running {
-                    let currently_available_devices = self_clone.device_manager.devices().await;
-                    for device_name in self_clone.options.enabled_devices.iter() {
-                        let device = match parse_audio_device(device_name) {
-                            Ok(device) => device,
-                            Err(e) => {
-                                error!("Device name {} invalid: {}", device_name, e);
-                                continue;
-                            }
-                        };
-
-                        if self_clone.device_manager.is_running(&device)
-                            && !currently_available_devices.contains(&device)
-                        {
-                            info!("Device {device_name} disconnected");
-                            let _ = self_clone.stop_device(device_name).await;
-                        } else {
-                            match self_clone.start_device(&device).await {
-                                Ok(()) => {
-                                    //
-                                }
-                                Err(e) => {
-                                    let e_str = e.to_string();
-                                    if e_str.contains("already running")
-                                        || e_str.contains("not found")
-                                    {
-                                        continue;
-                                    }
-                                    error!("device check error: {e}");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }));
-        Ok(())
-    }
-
-    async fn stop_device_monitor(&self) -> Result<()> {
-        if let Some(handle) = self.device_monitor_handle.lock().await.take() {
+        if let Some(handle) = recording.write().await.take() {
             handle.abort();
         }
-
-        Ok(())
-    }
-
-    pub async fn start_health_monitor(&self) -> Result<()> {
-        if self.health_monitor_handle.lock().await.is_some() {
-            return Ok(());
-        }
-
-        let self_clone = self.clone();
-        *self.health_monitor_handle.lock().await = Some(tokio::spawn(async move {
-            while self_clone.status().await != AudioManagerStatus::Stopped {
-                let grace_period = self_clone.options.health_check_grace_period;
-                let restart_tx = self_clone.restart_tx.clone();
-                let current_time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                let last_capture = LAST_AUDIO_CAPTURE.load(Ordering::Relaxed);
-                let time_difference = current_time - last_capture;
-
-                info!("difference in time {}", time_difference);
-
-                if time_difference > grace_period {
-                    warn!("health check failed. attempting to restart audio manager");
-
-                    if restart_tx.send(()).is_err() {
-                        error!("Failed to send restart signal to audio manager");
-                    }
-                    LAST_AUDIO_CAPTURE.store(current_time, Ordering::Relaxed);
-                }
-                sleep(Duration::from_secs(1)).await;
-            }
-        }));
-
-        Ok(())
-    }
-
-    async fn stop_health_monitor(&self) -> Result<()> {
-        if let Some(handle) = self.health_monitor_handle.lock().await.take() {
+        if let Some(handle) = transcript.write().await.take() {
             handle.abort();
         }
-
-        Ok(())
-    }
-
-    async fn start_restart_monitor(&self) -> Result<()> {
-        if self.restart_handle.lock().await.is_some() {
-            return Ok(());
+        for h in rec.iter() {
+            h.value().lock().await.abort();
         }
 
-        let manager_clone = self.clone();
-        *self.restart_handle.lock().await = Some(tokio::spawn(async move {
-            let mut rx = manager_clone.restart_tx.subscribe();
-            while rx.recv().await.is_ok() {
-                info!("signal received");
-                if let Err(e) = manager_clone.restart().await {
-                    error!("error restarting audio manager: {e}");
-                }
-            }
-        }));
-
-        Ok(())
-    }
-
-    async fn stop_restart_monitor(&self) -> Result<()> {
-        if let Some(handle) = self.restart_handle.lock().await.take() {
-            handle.abort();
-        }
+        let _ = stop_device_monitor().await;
+        let _ = stop_health_monitor().await;
 
         Ok(())
     }
 }
 
-impl Drop for AudioManager {
-    // TODO: IS THIS NECESSARY?
-    fn drop(&mut self) {
-        info!("audio_manager drop called??");
-        let restart_handle = self.restart_handle.clone();
-        let health_monitor_handle = self.health_monitor_handle.clone();
-        // let device_monitor_handle = self.device_monitor_handle.clone();
-        tokio::spawn(async move {
-            if let Some(handle) = restart_handle.lock().await.take() {
-                handle.abort();
-            }
-            if let Some(handle) = health_monitor_handle.lock().await.take() {
-                handle.abort();
-            }
-            // if let Some(handle) = health_monitor_handle.lock().await.take() {
-            //     handle.abort();
-            // }
-        });
-    }
-}
+// impl Drop for AudioManager {
+//     fn drop(&mut self) {
+//         let rec = self.recording_handles.clone();
+//         let recording = self.recording_receiver_handle.clone();
+//         let transcript = self.transcription_receiver_handle.clone();
+//         // let self_clone = self.clone();
+//         tokio::spawn(async move {
+//             if let Some(handle) = recording.write().await.take() {
+//                 handle.abort();
+//             }
+//             if let Some(handle) = transcript.write().await.take() {
+//                 handle.abort();
+//             }
+//             for h in rec.iter() {
+//                 h.value().lock().await.abort();
+//             }
+
+//             let _ = stop_device_monitor().await;
+//             let _ = stop_health_monitor().await;
+//             // let _ = self_clone.stop().await;
+//         });
+//     }
+// }
