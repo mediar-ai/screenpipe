@@ -283,23 +283,51 @@ pub async fn process_ocr_task(
     let mut total_confidence = 0.0;
     let mut window_count = 0;
 
-    if window_images.is_empty() {
-        // If no windows, perform OCR on full screen
-        // xcap could not capture screen by screen due to the xwayland bridge, so this is a temporary solution until we implement pipewire capturing.
-        let (full_text, full_json, confidence) = match ocr_engine {
-            OcrEngine::Unstructured => perform_ocr_cloud(&image, languages.clone())
+    for captured_window in window_images {
+        let app_name = captured_window.app_name.clone();
+        let browser_url = if cfg!(target_os = "macos")
+            && captured_window.is_focused
+            && BROWSER_NAMES
+                .iter()
+                .any(|&browser| app_name.to_lowercase().contains(browser))
+        {
+            match tokio::task::spawn_blocking(move || {
+                get_active_browser_url_sync(&app_name, captured_window.process_id)
+            })
+            .await
+            {
+                Ok(Ok(url)) => Some(url),
+                Ok(Err(_)) => {
+                    // error!("Failed to get browser URL: {}", e);
+                    None
+                }
+                Err(e) => {
+                    error!("Failed to spawn blocking task: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let (window_text, window_json_output, confidence) = match ocr_engine {
+            OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-            OcrEngine::Tesseract => perform_ocr_tesseract(&image, languages.clone()),
+            OcrEngine::Tesseract => {
+                perform_ocr_tesseract(&captured_window.image, languages.clone())
+            }
             #[cfg(target_os = "windows")]
-            OcrEngine::WindowsNative => perform_ocr_windows(&image)
+            OcrEngine::WindowsNative => perform_ocr_windows(&captured_window.image)
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
             #[cfg(target_os = "macos")]
-            OcrEngine::AppleNative => perform_ocr_apple(&image, &languages),
-            OcrEngine::Custom(config) => perform_ocr_custom(&image, languages.clone(), config)
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+            OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
+            OcrEngine::Custom(config) => {
+                perform_ocr_custom(&captured_window.image, languages.clone(), config)
+                    .await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+            }
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -308,87 +336,21 @@ pub async fn process_ocr_task(
             }
         };
 
-        window_ocr_results.push(WindowOcrResult {
-            image: image.clone(),
-            window_name: "Full Screen".to_string(),
-            app_name: "Screen Capture".to_string(),
-            text: full_text,
-            text_json: parse_json_output(&full_json),
-            focused: true,
-            confidence: confidence.unwrap_or(0.0),
-            browser_url: None,
-        });
-    } else {
-        // Process individual windows as before
-        for captured_window in window_images {
-            let app_name = captured_window.app_name.clone();
-            let browser_url = if cfg!(target_os = "macos")
-                && captured_window.is_focused
-                && BROWSER_NAMES
-                    .iter()
-                    .any(|&browser| app_name.to_lowercase().contains(browser))
-            {
-                match tokio::task::spawn_blocking(move || {
-                    get_active_browser_url_sync(&app_name, captured_window.process_id)
-                })
-                .await
-                {
-                    Ok(Ok(url)) => Some(url),
-                    Ok(Err(_)) => {
-                        // error!("Failed to get browser URL: {}", e);
-                        None
-                    }
-                    Err(e) => {
-                        error!("Failed to spawn blocking task: {}", e);
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
-            let (window_text, window_json_output, confidence) = match ocr_engine {
-                OcrEngine::Unstructured => perform_ocr_cloud(&captured_window.image, languages.clone())
-                    .await
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-                OcrEngine::Tesseract => {
-                    perform_ocr_tesseract(&captured_window.image, languages.clone())
-                }
-                #[cfg(target_os = "windows")]
-                OcrEngine::WindowsNative => perform_ocr_windows(&captured_window.image)
-                    .await
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-                #[cfg(target_os = "macos")]
-                OcrEngine::AppleNative => perform_ocr_apple(&captured_window.image, &languages),
-                OcrEngine::Custom(config) => {
-                    perform_ocr_custom(&captured_window.image, languages.clone(), config)
-                        .await
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
-                }
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Unsupported OCR engine",
-                    ))
-                }
-            };
-
-            if let Some(conf) = confidence {
-                total_confidence += conf;
-                window_count += 1;
-            }
-
-            window_ocr_results.push(WindowOcrResult {
-                image: captured_window.image,
-                window_name: captured_window.window_name,
-                app_name: captured_window.app_name,
-                text: window_text,
-                text_json: parse_json_output(&window_json_output),
-                focused: captured_window.is_focused,
-                confidence: confidence.unwrap_or(0.0),
-                browser_url: browser_url.clone(),
-            });
+        if let Some(conf) = confidence {
+            total_confidence += conf;
+            window_count += 1;
         }
+
+        window_ocr_results.push(WindowOcrResult {
+            image: captured_window.image,
+            window_name: captured_window.window_name,
+            app_name: captured_window.app_name,
+            text: window_text,
+            text_json: parse_json_output(&window_json_output),
+            focused: captured_window.is_focused,
+            confidence: confidence.unwrap_or(0.0),
+            browser_url: browser_url.clone(),
+        });
     }
 
     let capture_result = CaptureResult {
