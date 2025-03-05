@@ -896,7 +896,9 @@ export function ObsidianSettings() {
               type="button"
               onClick={testLog}
               variant="outline"
-              disabled={testLogLoading || !pathValidation.isValid}
+              disabled={
+                testLogLoading || !pathValidation.isValid || !settings?.logModel
+              }
               className="flex-1"
             >
               {testLogLoading ? (
@@ -916,7 +918,11 @@ export function ObsidianSettings() {
               type="button"
               onClick={testIntelligence}
               variant="outline"
-              disabled={intelligenceLoading || !pathValidation.isValid}
+              disabled={
+                intelligenceLoading ||
+                !pathValidation.isValid ||
+                !settings?.analysisModel
+              }
               className="flex-1"
             >
               <Brain className="mr-2 h-4 w-4" />

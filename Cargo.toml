@@ -11,7 +11,7 @@ exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.59"
+version = "0.2.62"
 authors = ["louis030195 <hi@louis030195.com>"]
 description = ""
 repository = "https://github.com/mediar-ai/screenpipe"
@@ -39,7 +39,7 @@ reqwest = { version = "0.11", features = ["blocking", "multipart", "json"] }
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 vcpkg = "0.2"
 cc = "1.0"
-
+oasgen = { version = "0.22.0", features = ["axum", "chrono"] }
 once_cell = "1.20.2"
 sentry = { version = "0.36.0", features = ["tracing"] }
 

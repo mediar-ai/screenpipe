@@ -1,4 +1,5 @@
 use axum::Json;
+use oasgen::{oasgen, OaSchema};
 use once_cell::sync::OnceCell;
 use screenpipe_core::model::EmbeddingModel;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use tracing::info;
 static EMBEDDING_MODEL: OnceCell<Arc<Mutex<EmbeddingModel>>> = OnceCell::new();
 
 // OpenAI-like request/response types
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 #[allow(dead_code)]
 pub struct EmbeddingRequest {
     model: String,
@@ -20,7 +21,7 @@ pub struct EmbeddingRequest {
     user: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(OaSchema, Deserialize)]
 #[serde(untagged)]
 pub enum EmbeddingInput {
     #[serde(rename = "single")]
@@ -29,7 +30,7 @@ pub enum EmbeddingInput {
     Multiple(Vec<String>),
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct EmbeddingResponse {
     object: String,
     data: Vec<EmbeddingData>,
@@ -37,14 +38,14 @@ pub struct EmbeddingResponse {
     usage: Usage,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct EmbeddingData {
     object: String,
     embedding: Vec<f32>,
     index: usize,
 }
 
-#[derive(Serialize)]
+#[derive(OaSchema, Serialize)]
 pub struct Usage {
     prompt_tokens: usize,
     total_tokens: usize,
@@ -71,6 +72,7 @@ pub async fn get_or_initialize_model() -> anyhow::Result<Arc<Mutex<EmbeddingMode
         .map(|model| model.clone())
 }
 
+#[oasgen]
 pub async fn create_embeddings(
     Json(request): Json<EmbeddingRequest>,
 ) -> Result<Json<EmbeddingResponse>, (axum::http::StatusCode, String)> {

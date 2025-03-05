@@ -2,17 +2,21 @@ import MotionDiv from '../../components/motion-div'
 import { Tabs, Tab } from 'nextra/components'
 import Image from 'next/image'
 
+
 # getting started
 
-### install now
+### choose your installation method
 
-<MotionDiv>
-screenpipe offers multiple installation methods. for most users, we recommend:
+| method | best for | pros | cons |
+|--------|----------|------|------|
+| [desktop app](https://screenpi.pe) | personal users, quick setup | easy gui, no terminal required | less customizable, automatic updates |
+| [cli](https://screenpi.pe) | developers, automation, scripting | fast, scriptable | requires terminal familiarity |
 
-1. downloading the [desktop app](https://screenpi.pe)
-2. or using our quick install CLI:
+### install desktop app
+- download the [desktop app](https://screenpi.pe) and follow the installation instructions.
 
-<Tabs items={['macos & linux', 'windows']}>
+### install cli
+<Tabs items={['macOS & Linux', 'Windows']}>
   <Tab>
     ```bash copy
     curl -fsSL get.screenpi.pe/cli | sh
@@ -27,7 +31,11 @@ screenpipe offers multiple installation methods. for most users, we recommend:
   </Tab>
 </Tabs>
 
-then query the data using our JavaScript SDK:
+### verify installation
+- run `screenpipe` or `screenpipe.exe` to verify successful installation.
+
+### query data with javascript sdk
+then query the data using our javaScript sdk:
 
 ```typescript copy
 import { pipe } from "@screenpipe/js";
@@ -64,11 +72,8 @@ queryScreenpipe().catch(console.error);
 
 now download the [desktop app](https://screenpi.pe) and use pipes (plugins) to add more features!
 
-</MotionDiv>
-
 ### connect to AI providers
 
-<MotionDiv>
 screenpipe can connect to various AI providers to process your data. here's how to set up popular local AI providers:
 
 <Tabs items={['ollama', 'lmstudio']}>
@@ -114,8 +119,6 @@ screenpipe can connect to various AI providers to process your data. here's how 
 </Tabs>
 
 verify your ai provider using any pipe in the store!
-
-</MotionDiv>
 
 ### for developers
 

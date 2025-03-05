@@ -3,7 +3,6 @@
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { useEffect } from "react";
-import { OnboardingProvider } from "@/lib/hooks/use-onboarding";
 import { ChangelogDialogProvider } from "@/lib/hooks/use-changelog-dialog";
 import { forwardRef } from "react";
 import { store as SettingsStore, useSettings } from "@/lib/hooks/use-settings";
@@ -28,11 +27,9 @@ export const Providers = forwardRef<
   return (
     <SettingsStore.Provider>
       <ProfilesStore.Provider>
-        <OnboardingProvider>
-          <ChangelogDialogProvider>
-            <PostHogProvider client={posthog}>{children}</PostHogProvider>
-          </ChangelogDialogProvider>
-        </OnboardingProvider>
+        <ChangelogDialogProvider>
+          <PostHogProvider client={posthog}>{children}</PostHogProvider>
+        </ChangelogDialogProvider>
       </ProfilesStore.Provider>
     </SettingsStore.Provider>
   );

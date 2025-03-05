@@ -32,6 +32,7 @@ import localforage from "localforage";
 import { useLoginDialog } from "./login-dialog";
 import { PermissionButtons } from "./status/permission-buttons";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { invoke } from "@tauri-apps/api/core";
 
 const corePipes: string[] = [];
 
@@ -55,6 +56,7 @@ export const PipeStore: React.FC = () => {
     new Set()
   );
   const { isMac: isMacOS } = usePlatform();
+  const [isRestarting, setIsRestarting] = useState(false);
   const filteredPipes = pipes
     .filter(
       (pipe) =>
@@ -884,6 +886,46 @@ export const PipeStore: React.FC = () => {
     }
   };
 
+  const handleRestartScreenpipe = async () => {
+    setIsRestarting(true);
+    const toastId = toast({
+      title: "restarting screenpipe",
+      description: "please wait...",
+      duration: Infinity,
+    });
+
+    try {
+      // First stop
+      await invoke("stop_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Then start
+      await invoke("spawn_screenpipe");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      toastId.update({
+        id: toastId.id,
+        title: "screenpipe restarted",
+        description: "screenpipe has been restarted successfully.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("failed to restart screenpipe:", error);
+      toastId.update({
+        id: toastId.id,
+        title: "error",
+        description: "failed to restart screenpipe.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    } finally {
+      toastId.dismiss();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      setIsRestarting(false);
+    }
+  };
+
   useEffect(() => {
     fetchStorePlugins();
   }, [installedPipes, purchaseHistory]);
@@ -922,18 +964,17 @@ export const PipeStore: React.FC = () => {
       // Store current time as last check
       await localforage.setItem("lastUpdateCheck", now);
 
-      const installedPipes = pipes.filter((pipe) => 
-        pipe.is_installed && 
-        pipe.installed_config?.version
+      const installedPipes = pipes.filter(
+        (pipe) => pipe.is_installed && pipe.installed_config?.version
       );
-      
+
       // Skip if no pipes to check
       if (installedPipes.length === 0) return;
 
       // Format pipes for batch update check
-      const pluginsToCheck = installedPipes.map(pipe => ({
+      const pluginsToCheck = installedPipes.map((pipe) => ({
         pipe_id: pipe.id,
-        version: pipe.installed_config!.version!
+        version: pipe.installed_config!.version!,
       }));
 
       const storeApi = await PipeApi.create(settings.user.token);
@@ -941,8 +982,8 @@ export const PipeStore: React.FC = () => {
 
       // Process updates and install them
       for (const pipe of installedPipes) {
-        const update = updates.results.find(u => u.pipe_id === pipe.id);
-        if (update && 'has_update' in update && update.has_update) {
+        const update = updates.results.find((u) => u.pipe_id === pipe.id);
+        if (update && "has_update" in update && update.has_update) {
           await handleUpdatePipe(pipe);
         }
       }
@@ -1016,14 +1057,27 @@ export const PipeStore: React.FC = () => {
           <p className="text-sm text-muted-foreground">
             please start the screenpipe service to browse and manage pipes
           </p>
-          <Button
-            variant="outline"
-            onClick={openStatusDialog}
-            className="gap-2"
-          >
-            <Power className="h-4 w-4" />
-            check service status
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              onClick={handleRestartScreenpipe}
+              disabled={isRestarting}
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRestarting ? "animate-spin" : ""}`}
+              />
+              {isRestarting ? "restarting..." : "restart screenpipe"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={openStatusDialog}
+              className="gap-2"
+            >
+              <Power className="h-4 w-4" />
+              check service status
+            </Button>
+          </div>
 
           {isMacOS && (
             <div className="mt-6 pt-4 border-t w-full flex flex-col items-center">

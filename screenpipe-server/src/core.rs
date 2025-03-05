@@ -55,6 +55,7 @@ pub async fn start_continuous_recording(
     video_crf: u32,
     hw_accel: Option<String>,
     hw_accel_device: Option<String>,
+    realtime_vision: bool,
 ) -> Result<()> {
     debug!("Starting video recording for monitor {:?}", monitor_ids);
     let video_tasks = if !vision_disabled {
@@ -93,6 +94,7 @@ pub async fn start_continuous_recording(
                         languages.clone(),
                         capture_unfocused_windows,
                         encoder_settings,
+                        realtime_vision,
                     )
                     .await
                 })
@@ -130,7 +132,14 @@ pub async fn start_continuous_recording(
             languages.clone(),
             Some(audio_devices_control.clone()),
         )
-        .await?
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("ORT API") {
+                anyhow::anyhow!("ONNX Runtime initialization failed. This is likely due to missing Visual C++ Redistributable packages. Please install the latest Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe and restart your computer. For more information, see: https://github.com/mediar-ai/screenpipe/issues/1034")
+            } else {
+                e
+            }
+        })?
     };
     let whisper_sender_clone = whisper_sender.clone();
     let db_manager_audio = Arc::clone(&db);
@@ -202,6 +211,7 @@ async fn record_video(
     languages: Vec<Language>,
     capture_unfocused_windows: bool,
     encoder_settings: Option<crate::video::VideoEncoderSettings>,
+    realtime_vision: bool,
 ) -> Result<()> {
     debug!("record_video: Starting");
     let db_chunk_callback = Arc::clone(&db);
@@ -273,20 +283,22 @@ async fn record_video(
                             &window_result.text
                         };
 
-                        let _ = send_event(
-                            "ocr_result",
-                            WindowOcr {
-                                image: Some(frame.image.clone()),
-                                text: text.clone(),
-                                text_json: window_result.text_json.clone(),
-                                app_name: window_result.app_name.clone(),
-                                window_name: window_result.window_name.clone(),
-                                focused: window_result.focused,
-                                confidence: window_result.confidence,
-                                timestamp: frame.timestamp,
-                                browser_url: window_result.browser_url.clone(),
-                            },
-                        );
+                        if realtime_vision {
+                            let _ = send_event(
+                                "ocr_result",
+                                WindowOcr {
+                                    image: Some(frame.image.clone()),
+                                    text: text.clone(),
+                                    text_json: window_result.text_json.clone(),
+                                    app_name: window_result.app_name.clone(),
+                                    window_name: window_result.window_name.clone(),
+                                    focused: window_result.focused,
+                                    confidence: window_result.confidence,
+                                    timestamp: frame.timestamp,
+                                    browser_url: window_result.browser_url.clone(),
+                                },
+                            );
+                        }
                         if let Err(e) = db
                             .insert_ocr_text(frame_id, text, &text_json, Arc::clone(&ocr_engine))
                             .await
@@ -557,7 +569,7 @@ async fn process_audio_result(
                 .count_audio_transcriptions(audio_chunk_id)
                 .await
                 .unwrap_or(0);
-            
+
             if let Err(e) = db
                 .insert_audio_transcription(
                     audio_chunk_id,

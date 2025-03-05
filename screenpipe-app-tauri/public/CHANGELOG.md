@@ -1,14 +1,12 @@
-Based on the provided commits, here is the changelog for the new Screenpipe update:
-
-### **New Features:**
-- **Added thinking component for reasoning models:** Introduced a thinking component in both the rewind pipe and search pipe, enhancing model reasoning capabilities.
-- **Improved onboarding experience:** Enhanced the onboarding process by streaming screenshots in the UI for better user guidance.
+Based on the provided commits, here is the changelog for the new screenpipe update:
 
 ### **Improvements:**
-- **Optimized plugin update check:** Improved the efficiency of the plugin update check process.
+- **Removed emojis and ASCII Art from installation prompts:** Cleaned up the install.ps to present a more professional and straightforward installation experience.
 
 ### **Fixes:**
-- **Fixed duplicate bouncing icon:** Resolved the issue with the duplicate bouncing icon to improve visual feedback.
+- **Attempted fix for sideload issue:** Addressed issues related to sideloading the application to enhance overall functionality. 
 
-#### **Full Changelog:** [a13bf..8fa47](https://github.com/mediar-ai/screenpipe/compare/a13bf..8fa47)
+(Note: The specific result of the attempt fix for sideload is not clear; only the action taken is included under fixes.)
+
+#### **Full Changelog:** [20c3c..c3905](https://github.com/mediar-ai/screenpipe/compare/20c3c..c3905)
 

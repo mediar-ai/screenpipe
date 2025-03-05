@@ -1,8 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Download,
@@ -66,6 +62,22 @@ function getBuildStepMessage(buildStatus: BuildStatus | undefined): string {
   }
 }
 
+function stripMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/<\/?[^>]+(>|$)/g, "") // Remove HTML tags
+    .replace(/\*\*(.*?)\*\*|__(.*?)__/g, "$1$2") // Bold
+    .replace(/\*(.*?)\*|_(.*?)_/g, "$1$2") // Italic
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1") // Links
+    .replace(/!\[([^\]]+)\]\(([^)]+)\)/g, "$1") // Images
+    .replace(/#{1,6}\s+/g, "") // Headers
+    .replace(/`{1,3}(.*?)`{1,3}/gs, "$1") // Code blocks
+    .replace(/^\s*>[>\s]*/gm, "") // Blockquotes
+    .replace(/^\s*[-*+]\s+/gm, "") // Unordered lists
+    .replace(/^\s*\d+\.\s+/gm, "") // Ordered lists
+    .replace(/~~(.*?)~~/g, "$1"); // Strikethrough
+}
+
 export const PipeCard: React.FC<PipeCardProps> = ({
   pipe,
   onInstall,
@@ -103,7 +115,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
       const id = pipe.is_local ? pipe.id : pipe.name;
       try {
         const response = await fetch(
-          `http://localhost:3030/pipes/build-status/${id}`,
+          `http://localhost:3030/pipes/build-status/${id}`
         );
 
         if (!response.ok) {
@@ -249,7 +261,7 @@ export const PipeCard: React.FC<PipeCardProps> = ({
 
   return (
     <motion.div
-      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer backdrop-blur-sm"
+      className="group border rounded-xl p-5 hover:bg-muted/40 has-[.no-card-hover:hover]:hover:bg-transparent transition-all duration-200 cursor-pointer backdrop-blur-sm relative"
       onClick={() => onClick(pipe)}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
@@ -267,7 +279,11 @@ export const PipeCard: React.FC<PipeCardProps> = ({
               </h3>
               <div className="text-sm text-muted-foreground">
                 <PipeStoreMarkdown
-                  content={pipe.description?.substring(0, 90) || "" + "..."}
+                  content={
+                    (pipe.description
+                      ? stripMarkdown(pipe.description).substring(0, 90)
+                      : "") + "..."
+                  }
                   variant="compact"
                 />
               </div>

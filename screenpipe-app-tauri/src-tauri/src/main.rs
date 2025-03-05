@@ -871,7 +871,7 @@ async fn main() {
             if !use_dev_mode && has_files {
                 tauri::async_runtime::spawn(async move {
                     let mut manager = sidecar_manager_clone.lock().await;
-                    if let Err(e) = manager.spawn(&app_handle).await {
+                    if let Err(e) = manager.spawn(&app_handle, None).await {
                         error!("Failed to spawn initial sidecar: {}", e);
                     }
                 });

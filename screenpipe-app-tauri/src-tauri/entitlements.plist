@@ -15,8 +15,7 @@
     <true/>
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-    <!-- <key>LSUIElement</key>
-    <true/> -->
+    
 
 </dict>
 </plist>

@@ -200,7 +200,9 @@ const OnboardingStatus: React.FC<OnboardingStatusProps> = ({
       await invoke("stop_screenpipe");
       await new Promise((resolve) => setTimeout(resolve, 1_000));
 
-      await invoke("spawn_screenpipe");
+      await invoke("spawn_screenpipe", {
+        overrideArgs: ["--enable-realtime-vision"],
+      });
       await new Promise((resolve) => setTimeout(resolve, 5_000));
       toastId.update({
         id: toastId.id,

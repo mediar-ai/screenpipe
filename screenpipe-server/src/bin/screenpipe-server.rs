@@ -18,7 +18,7 @@ use screenpipe_server::{
     create_migration_worker, handle_index_command,
     pipe_manager::PipeInfo,
     start_continuous_recording, watch_pid, DatabaseManager, MigrationCommand, MigrationConfig,
-    MigrationStatus, PipeManager, ResourceMonitor, Server,
+    MigrationStatus, PipeManager, ResourceMonitor, SCServer,
 };
 use screenpipe_vision::monitor::list_monitors;
 #[cfg(target_os = "macos")]
@@ -722,6 +722,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let audio_chunk_duration = Duration::from_secs(cli.audio_chunk_duration);
+    let deepgram_api_key = cli.deepgram_api_key.clone();
     let handle = {
         let runtime = &tokio::runtime::Handle::current();
         runtime.spawn(async move {
@@ -747,7 +748,7 @@ async fn main() -> anyhow::Result<()> {
                     &audio_handle,
                     &cli.ignored_windows,
                     &cli.included_windows,
-                    cli.deepgram_api_key.clone(),
+                    deepgram_api_key.clone(),
                     cli.vad_sensitivity.clone(),
                     languages.clone(),
                     cli.capture_unfocused_windows,
@@ -758,6 +759,7 @@ async fn main() -> anyhow::Result<()> {
                     cli.video_crf.clone(),
                     cli.hw_accel.clone(),
                     cli.hw_accel_device.clone(),
+                    cli.enable_realtime_vision,
                 );
 
                 let result = tokio::select! {
@@ -792,16 +794,9 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "llm")]
     debug!("LLM initialized");
 
-    let api_plugin = |req: &axum::http::Request<axum::body::Body>| {
-        if req.uri().path() == "/search" {
-            // Track search requests
-        }
-    };
-
     let (audio_devices_tx, _) = broadcast::channel(100);
 
-    // TODO: Add SSE stream for realtime audio transcription
-    let server = Server::new(
+    let server = SCServer::new(
         db_server,
         SocketAddr::from(([127, 0, 0, 1], cli.port)),
         local_data_dir_clone_2,
@@ -926,6 +921,23 @@ async fn main() -> anyhow::Result<()> {
     println!(
         "│ frame cache            │ {:<34} │",
         cli.enable_frame_cache
+    );
+    println!(
+        "│ capture unfocused wins │ {:<34} │",
+        cli.capture_unfocused_windows
+    );
+    println!(
+        "│ auto-destruct pid      │ {:<34} │",
+        cli.auto_destruct_pid.unwrap_or(0)
+    );
+    // For security reasons, you might want to mask the API key if displayed
+    println!(
+        "│ deepgram key           │ {:<34} │",
+        if cli.deepgram_api_key.is_some() {
+            "set (masked)"
+        } else {
+            "not set"
+        }
     );
 
     const VALUE_WIDTH: usize = 34;
@@ -1138,7 +1150,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let server_future = server.start(api_plugin, cli.enable_frame_cache);
+    let server_future = server.start(cli.enable_frame_cache);
     pin_mut!(server_future);
 
     // Add auto-destruct watcher
@@ -1147,7 +1159,7 @@ async fn main() -> anyhow::Result<()> {
         let shutdown_tx_clone = shutdown_tx.clone();
         tokio::spawn(async move {
             // sleep for 1 seconds
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             if watch_pid(pid).await {
                 info!("Watched pid ({}) has stopped, initiating shutdown", pid);
 

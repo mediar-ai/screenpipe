@@ -78,6 +78,20 @@ fn generate_cron_secret() -> String {
 
 // Update this function near the top of the file
 fn sanitize_pipe_name(name: &str) -> String {
+    // First check if this is a GitHub URL and extract the repo name
+    if let Ok(url) = Url::parse(name) {
+        if url.host_str() == Some("github.com") {
+            let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
+            if path_segments.len() >= 2 {
+                // Use the repository name (second segment) instead of branch name
+                let repo_name = path_segments[1];
+                debug!("Using repository name for pipe: {}", repo_name);
+                return repo_name.to_string();
+            }
+        }
+    }
+
+    // Fall back to original sanitization logic for non-GitHub URLs
     let re = Regex::new(r"[^a-zA-Z0-9_-]").unwrap();
     let sanitized = re.replace_all(name, "-").to_string();
 
@@ -106,6 +120,7 @@ function Get-ChildProcesses($ProcessId) {{
 while ($true) {{
     try {{
         $parent = Get-Process -Id $parentPid -ErrorAction Stop
+        $child = Get-Process -Id $childPid -ErrorAction Stop
         Start-Sleep -Seconds 1
     }} catch {{
         Write-Host "Parent process ($parentPid) not found, terminating child processes"
@@ -119,7 +134,7 @@ while ($true) {{
         foreach ($processId in $allProcesses) {{
             try {{
                 Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-                Write-Host "Stopped process: $pid"
+                Write-Host "Stopped process: $processId"
             }} catch {{
                 Write-Host "Process $processId already terminated"
             }}
@@ -788,6 +803,19 @@ pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Res
     let mut pipe_name =
         sanitize_pipe_name(Path::new(source).file_name().unwrap().to_str().unwrap());
 
+    // For GitHub URLs, extract the repository name directly
+    if !is_local {
+        if let Ok(url) = Url::parse(source) {
+            if url.host_str() == Some("github.com") {
+                let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
+                if path_segments.len() >= 2 {
+                    pipe_name = path_segments[1].to_string();
+                    debug!("Using repository name for pipe: {}", pipe_name);
+                }
+            }
+        }
+    }
+
     // Add _local suffix for local pipes
     if is_local {
         pipe_name.push_str("_local");
@@ -817,6 +845,14 @@ pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Res
         debug!("Source is a URL: {}", parsed_url);
         if parsed_url.host_str() == Some("github.com") {
             download_github_folder(&parsed_url, &temp_dir).await
+        } else if cfg!(windows) && parsed_url.scheme().len() == 1 {
+            // This is likely a Windows path with drive letter being interpreted as URL scheme
+            debug!("Detected Windows path with drive letter, treating as local path");
+            let source_path = Path::new(source);
+            if !source_path.exists() || !source_path.is_dir() {
+                anyhow::bail!("Invalid local source path");
+            }
+            copy_dir_all(source_path, &temp_dir).await
         } else {
             anyhow::bail!("Unsupported URL format");
         }
@@ -1038,25 +1074,37 @@ fn download_github_folder(
 
         // Extract repo info from URL
         let path_segments: Vec<&str> = url.path_segments().unwrap().collect();
-        let (owner, repo, _, branch) = (
-            path_segments[0],
-            path_segments[1],
-            path_segments[2],
-            path_segments[3],
-        );
+
+        // Handle both URL formats: with and without /tree/branch
+        let (owner, repo, branch) = if path_segments.contains(&"tree") {
+            // Format: /owner/repo/tree/branch
+            let tree_pos = path_segments.iter().position(|&s| s == "tree").unwrap();
+            (
+                path_segments[0],
+                path_segments[1],
+                path_segments[tree_pos + 1],
+            )
+        } else {
+            // Format: /owner/repo
+            (path_segments[0], path_segments[1], "main") // Default to main branch
+        };
 
         // Extract the base path for subfolder downloads
-        let base_path = url
-            .path_segments()
-            .and_then(|segments| {
-                let segments: Vec<_> = segments.collect();
-                if segments.len() >= 5 && segments[2] == "tree" {
-                    Some(segments[4..].join("/"))
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_default();
+        let base_path = if path_segments.contains(&"tree") {
+            url.path_segments()
+                .and_then(|segments| {
+                    let segments: Vec<_> = segments.collect();
+                    if segments.len() >= 5 && segments[2] == "tree" {
+                        Some(segments[4..].join("/"))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_default()
+        } else {
+            // No subfolder for URLs without /tree/branch format
+            String::new()
+        };
 
         debug!("base path for download: {}", base_path);
 
@@ -1069,7 +1117,7 @@ fn download_github_folder(
                 .ok_or_else(|| anyhow::anyhow!("missing path in github response"))?;
 
             // Skip if file is not in the target directory
-            if !path.starts_with(&base_path) {
+            if !base_path.is_empty() && !path.starts_with(&base_path) {
                 continue;
             }
 
@@ -1089,8 +1137,12 @@ fn download_github_folder(
 
             if item_type == "blob" {
                 // Calculate relative path from base_path
-                let relative_path = if let Some(stripped) = path.strip_prefix(&base_path) {
-                    stripped.trim_start_matches('/')
+                let relative_path = if !base_path.is_empty() && path.starts_with(&base_path) {
+                    if let Some(stripped) = path.strip_prefix(&base_path) {
+                        stripped.trim_start_matches('/')
+                    } else {
+                        path
+                    }
                 } else {
                     path
                 };
@@ -1132,17 +1184,34 @@ fn get_raw_github_url(url: &str) -> anyhow::Result<String> {
     let parsed_url = Url::parse(url)?;
     if parsed_url.host_str() == Some("github.com") {
         let path_segments: Vec<&str> = parsed_url.path_segments().unwrap().collect();
-        if path_segments.len() >= 5 && path_segments.contains(&"tree") {
+
+        // Handle URLs without /tree/branch format (assume main branch)
+        if path_segments.len() >= 2 && !path_segments.contains(&"tree") {
+            let owner = path_segments[0];
+            let repo = path_segments[1];
+            let branch = "main"; // Default to main branch
+
+            let raw_url = format!(
+                "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
+                owner, repo, branch
+            );
+            debug!(
+                "Converted to GitHub API URL with default branch: {}",
+                raw_url
+            );
+            return Ok(raw_url);
+        }
+
+        // Original logic for URLs with /tree/branch format
+        if path_segments.len() >= 4 && path_segments.contains(&"tree") {
             // Find the position of "tree" in the path
             let tree_pos = path_segments.iter().position(|&s| s == "tree").unwrap();
 
             let owner = path_segments[0];
             let repo = path_segments[1];
 
-            // Everything after "tree" until the next major section is the branch
-            // Join with "/" to handle branches with slashes like "feature/branch-name"
-            let branch_end = path_segments.len();
-            let branch = path_segments[(tree_pos + 1)..branch_end].join("/");
+            // The branch is just the segment after "tree"
+            let branch = path_segments[tree_pos + 1];
 
             let raw_url = format!(
                 "https://api.github.com/repos/{}/{}/git/trees/{}?recursive=1",
@@ -1247,6 +1316,8 @@ fn find_bun_path_internal() -> Option<PathBuf> {
     }
 
     error!("bun not found");
+    let err = anyhow::anyhow!("Bun executable not found. Pipe functionality may be limited.");
+    sentry::capture_error(&err.source().unwrap());
     None
 }
 

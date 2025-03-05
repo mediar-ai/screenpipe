@@ -18,6 +18,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { ExportButton } from "../export-button";
 
 interface AIPanelProps {
 	position: { x: number; y: number };
@@ -219,15 +220,52 @@ export function AIPanel({
 		setIsStreaming(true);
 
 		try {
-			const relevantFrames = frames.filter((frame) => {
+			const relevantFrames = frames.reduce((acc, frame) => {
 				const frameTime = new Date(frame.timestamp).getTime();
 				const startTime = new Date(selectionRange.start).getTime();
 				const endTime = new Date(selectionRange.end).getTime();
-
 				const isInRange = frameTime >= startTime && frameTime <= endTime;
 
-				return isInRange;
-			});
+				if (!isInRange) return acc;
+
+				// Get minute timestamp (rounded down to nearest minute)
+				const minuteTimestamp = Math.floor(frameTime / 60000) * 60000;
+
+				// Get unique apps in this frame
+				const frameApps = new Set(
+					frame.devices.map((device) => device.metadata.app_name),
+				);
+
+				// Check if we already have this app in this minute
+				const existingFrameForMinute = acc.find((existing) => {
+					const existingTime = new Date(existing.timestamp).getTime();
+					const existingMinute = Math.floor(existingTime / 60000) * 60000;
+
+					if (existingMinute !== minuteTimestamp) return false;
+
+					// Check if apps are the same
+					const existingApps = new Set(
+						existing.devices.map((device) => device.metadata.app_name),
+					);
+					return (
+						Array.from(frameApps).every((app) => existingApps.has(app)) &&
+						Array.from(existingApps).every((app) => frameApps.has(app))
+					);
+				});
+
+				// If we have multiple apps or haven't seen this app/minute combo, add the frame
+				if (frameApps.size > 1 || !existingFrameForMinute) {
+					acc.push(frame);
+				}
+
+				return acc;
+			}, [] as StreamTimeSeriesResponse[]);
+
+			// Sort frames by timestamp
+			relevantFrames.sort(
+				(a, b) =>
+					new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+			);
 
 			const openai = new OpenAI({
 				apiKey:
@@ -288,7 +326,7 @@ export function AIPanel({
 				left: position.x,
 				top: position.y,
 				width: chatWindowSize.width,
-				height: isExpanded ? chatWindowSize.height : 120,
+				height: isExpanded ? chatWindowSize.height : "auto",
 				cursor: isDraggingPanel ? "grabbing" : "default",
 			}}
 		>
@@ -326,7 +364,7 @@ export function AIPanel({
 				</div>
 
 				{!isExpanded && (
-					<div className="p-4">
+					<div className="p-4 space-y-2">
 						<button
 							className="px-3 py-1 bg-background hover:bg-accent border text-foreground text-xs rounded flex items-center gap-2 transition-colors"
 							onClick={(e) => {
@@ -342,6 +380,7 @@ export function AIPanel({
 								{osType === "macos" ? "⌘L" : "Ctrl+L"}
 							</span>
 						</button>
+						<ExportButton />
 					</div>
 				)}
 			</div>

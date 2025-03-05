@@ -9,6 +9,42 @@ screenpipe's architecture handles continuous screen and audio capture, local dat
 </MotionDiv>
 
 <MotionDiv delay={0.1}>
+
+## conceptual overview
+
+at its core, screenpipe acts as a bridge between your digital activities and AI systems, creating a memory layer that provides context for intelligent applications. here's how to think about it:
+
+### capturing layer
+
+- **screen recording**: captures visual content at configurable frame rates
+- **audio recording**: captures spoken content from multiple sources
+- **ui monitoring**: (experimental) captures accessibility metadata about UI elements
+
+### processing layer
+
+- **ocr engines**: extract text from screen recordings (apple native, windows native, tesseract, unstructured)
+- **stt engines**: convert audio to text (whisper, deepgram)
+- **speaker identification**: identifies and labels different speakers
+- **pii removal**: optionally redacts sensitive information
+
+### storage layer
+
+- **sqlite database**: stores metadata, text, and references to media
+- **media files**: stores the actual mp4/mp3 recordings
+- **embeddings**: (coming soon) vector representations for semantic search
+
+### retrieval layer
+
+- **search api**: filtered content retrieval for applications
+- **streaming apis**: real-time access to new content
+- **memory apis**: structured access to historical context
+
+### extension layer (pipes)
+
+- **pipes ecosystem**: extensible plugins for building applications
+- **pipe sdk**: typescript interface for building custom pipes
+- **pipe runtime**: sandboxed execution environment for pipes
+
 ## diagram overview
 
 ![screenpipe diagram](https://raw.githubusercontent.com/mediar-ai/screenpipe/main/content/diagram2.png)
@@ -22,6 +58,35 @@ screenpipe's architecture handles continuous screen and audio capture, local dat
 this modular architecture makes screenpipe adaptable to various use cases, from personal productivity tracking to advanced business intelligence.
 
 <MotionDiv delay={0.2}>
+
+### data flow & lifecycle
+
+here's the typical data flow through the screenpipe system:
+
+1. **capture**
+   - screen is captured at the configured fps (default 1.0, or 0.5 on macos)
+   - audio is captured in chunks (default 30 seconds)
+   - ui events are optionally captured (macos only currently)
+
+2. **processing**
+   - captured frames are processed through OCR to extract text
+   - audio chunks are processed through STT to generate transcriptions
+   - speaker identification is applied to audio transcriptions
+
+3. **storage**
+   - processed data is stored in the local sqlite database
+   - raw media files are stored in the configured data directory
+   - metadata is indexed for efficient retrieval
+
+4. **retrieval**
+   - applications query the database through the REST API
+   - real-time data can be streamed through SSE endpoints
+   - pipes can access data through the typescript SDK
+
+5. **extension**
+   - pipes process the data to create higher-level abstractions
+   - pipes can integrate with external services (LLMs, etc.)
+   - pipes can control the system through the input API
 
 ### data abstraction layers
 
@@ -41,6 +106,90 @@ screenpipe organizes data in concentric layers of abstraction, from raw data to 
 this layered approach enables both granular access to raw data and sophisticated AI-powered insights while maintaining data privacy and efficiency.
 
 </MotionDiv>
+
+### session and state management
+
+screenpipe maintains several types of state:
+
+1. **session state**
+   - managed by the core screenpipe server
+   - controls recording status, device selection, etc.
+   - accessible through the health API endpoint
+
+2. **configuration state**
+   - stored in the settings database
+   - controls behavior of the core system
+   - accessible through the settings API
+
+3. **pipe state**
+   - each pipe maintains its own state
+   - stored in the pipe's local storage or in screenpipe's settings
+   - isolated from other pipes for security
+
+understanding the different state models is important for building robust applications. The health API (`/health`) is particularly useful for checking the system's current state and ensuring services are running correctly.
+
+### database schema
+
+screenpipe uses a SQLite database with the following main tables:
+
+- **frames**: stores metadata about captured screen frames
+- **ocr_results**: stores text extracted from frames
+- **audio_chunks**: stores metadata about audio recordings
+- **transcriptions**: stores text transcribed from audio
+- **speakers**: stores identified speakers and their metadata
+- **ui_elements**: stores UI elements captured from the screen
+- **settings**: stores application configuration
+- **pipes**: stores installed pipes and their configuration
+
+detailed schema information is available by querying the database directly:
+
+```bash
+sqlite3 ~/.screenpipe/db.sqlite .schema
+```
+
+### integration patterns
+
+developers typically interact with screenpipe in one of these patterns:
+
+1. **retrieval pattern**: query for relevant context based on the current task
+   ```typescript
+   const context = await pipe.queryScreenpipe({
+     q: "meeting notes",
+     contentType: "all",
+     limit: 10
+   })
+   ```
+
+2. **streaming pattern**: process events as they occur
+   ```typescript
+   for await (const event of pipe.streamVision()) {
+     // Process each new screen event
+   }
+   ```
+
+3. **augmentation pattern**: enhance user experience with context
+   ```typescript
+   // When user asks about a recent meeting
+   const meetingContext = await pipe.queryScreenpipe({
+     q: "meeting",
+     contentType: "audio"
+   })
+   
+   // Use context to generate response
+   const response = await generateResponse(userQuery, meetingContext)
+   ```
+
+4. **automation pattern**: take actions based on context
+   ```typescript
+   // Monitor for specific content
+   for await (const event of pipe.streamVision()) {
+     if (event.data.text.includes("meeting starting")) {
+       // Take action like sending notification
+     }
+   }
+   ```
+
+understanding these patterns will help you design effective applications that leverage screenpipe's capabilities.
 
 
 ## status 

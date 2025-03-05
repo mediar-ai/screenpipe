@@ -110,6 +110,7 @@ export type Settings = {
   videoCrf: number;
   hwAccel: string;
   hwAccelDevice: string;
+  enableRealtimeVision: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -175,6 +176,7 @@ const DEFAULT_SETTINGS: Settings = {
   videoCrf: 23,
   hwAccel: "",
   hwAccelDevice: "",
+  enableRealtimeVision: false,
 };
 
 const DEFAULT_IGNORED_WINDOWS_IN_ALL_OS = [

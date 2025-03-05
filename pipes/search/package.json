@@ -1,6 +1,6 @@
 {
   "name": "search",
-  "version": "0.1.17",
+  "version": "0.1.32",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -16,6 +16,7 @@
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-popover": "^1.1.3",
     "@radix-ui/react-progress": "^1.1.1",
+    "@radix-ui/react-scroll-area": "^1.2.3",
     "@radix-ui/react-select": "^2.1.3",
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slider": "^1.2.2",
@@ -23,8 +24,8 @@
     "@radix-ui/react-switch": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.1.5",
-    "@screenpipe/browser": "^0.1.33",
-    "@screenpipe/js": "^1.0.12",
+    "@screenpipe/browser": "^0.1.35",
+    "@screenpipe/js": "^1.0.16",
     "@shadcn/ui": "^0.0.4",
     "@tanstack/react-query": "^5.62.7",
     "@types/js-levenshtein": "^1.1.3",
@@ -58,6 +59,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@screenpipe/dev": "1.1.26",
     "@types/node": "^22.10.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
