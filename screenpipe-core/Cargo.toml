@@ -59,3 +59,10 @@ metal = ["candle/metal", "candle-nn/metal", "candle-transformers/metal"]
 cuda = ["candle/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
 mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 llm = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accessibility-sys = "0.1.3"
+accessibility = "0.1.6"
+thiserror = "2.0.12"
+core-foundation = "0.10.0"
+
