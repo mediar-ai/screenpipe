@@ -26,7 +26,7 @@
       {
         "tab": "API Reference",
         "pages": [
-          "docs/api-reference",
+          "docs/api-reference"
         ],
         "openapi": "https://raw.githubusercontent.com/mediar-ai/screenpipe/refs/heads/main/content/openapi.yaml"
       }
