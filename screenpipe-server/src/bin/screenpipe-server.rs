@@ -1000,13 +1000,14 @@ async fn main() -> anyhow::Result<()> {
         }
         _ = ctrl_c_future => {
             info!("received ctrl+c, initiating shutdown");
-            audio_manager.stop().await?;
+            audio_manager.shutdown().await;
             let _ = shutdown_tx.send(());
         }
     }
 
     tokio::task::block_in_place(|| {
         drop(vision_runtime);
+        drop(audio_manager);
     });
 
     info!("shutdown complete");
