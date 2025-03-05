@@ -2280,7 +2280,13 @@ async fn handle_video_export(
         .await;
 
     // Create video
-    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await {
+    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps, Some(VideoEncoderSettings{
+        codec: "libx265".to_string(),
+        preset: "medium".to_string(),
+        crf: 23,
+        hw_accel: None,
+        hw_accel_device: None,
+    })).await {
         Ok(_) => match tokio::fs::read(&output_path).await {
             Ok(video_data) => {
                 let _ = socket
