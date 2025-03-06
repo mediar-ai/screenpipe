@@ -5,7 +5,6 @@
 
 use std::sync::Arc;
 
-mod actions;
 mod element;
 mod errors;
 mod locator;
