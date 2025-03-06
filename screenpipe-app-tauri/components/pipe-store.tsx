@@ -23,6 +23,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useStatusDialog } from "@/lib/hooks/use-status-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -77,6 +84,8 @@ export const PipeStore: React.FC = () => {
         new Date(a.created_at as string).getTime()
       );
     });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   // Add debounced search tracking
   useEffect(() => {
@@ -429,6 +438,7 @@ export const PipeStore: React.FC = () => {
   };
 
   const handleResetAllPipes = async () => {
+    setIsPurging(true);
     try {
       const t = toast({
         title: "resetting pipes",
@@ -449,7 +459,7 @@ export const PipeStore: React.FC = () => {
       if (!response.ok) {
         toast({
           title: "failed to purge pipes",
-          description: "failed to purge pipes, please try again",
+          description: `error: ${(await response.json()).error}...`,
           variant: "destructive",
         });
         return;
@@ -471,9 +481,12 @@ export const PipeStore: React.FC = () => {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error resetting pipes",
-        description: "please try again or check the logs",
+          description: `error: ${(error as Error).message}...}`,
         variant: "destructive",
       });
+    } finally {
+      setIsPurging(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -1158,8 +1171,9 @@ export const PipeStore: React.FC = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={handleResetAllPipes}
+                      onClick={() => setConfirmOpen(true)}
                       className="flex items-center gap-2"
+                      disabled={isPurging}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1169,6 +1183,38 @@ export const PipeStore: React.FC = () => {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>confirm deletion of all pipes?</DialogTitle>
+                    <DialogDescription>
+                      are you sure you want to delete all pipes? <br/> you&apos;ll have to download them again
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex justify-end gap-4">
+                    <Button 
+                      onClick={() => setConfirmOpen(false)} 
+                      disabled={isPurging}
+                      variant={"outline"}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleResetAllPipes} 
+                      disabled={isPurging}
+                    >
+                      {isPurging ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          reseting all pipes...
+                        </>
+                      ) : (
+                          "Confirm"
+                        )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>

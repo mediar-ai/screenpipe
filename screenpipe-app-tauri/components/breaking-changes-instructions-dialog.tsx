@@ -54,7 +54,7 @@ export function BreakingChangesInstructionsDialog() {
       if(!response.ok){
         toast({
           title: "failed to purge pipes",
-          description: "failed to purge pipes, please try again",
+          description: `error: ${(await response.json()).error}...`,
           variant: "destructive"
         });
         return;
@@ -69,7 +69,7 @@ export function BreakingChangesInstructionsDialog() {
       console.error("failed to reset pipes:", error);
       toast({
         title: "error deleting pipes",
-        description: "please try again or check the logs",
+        description: `error: ${(error as Error).message}...}`,
         variant: "destructive",
       });
     } finally {
