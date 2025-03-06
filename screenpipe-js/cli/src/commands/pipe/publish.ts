@@ -153,25 +153,6 @@ function updatePackageVersion(newVersion: string): void {
   fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
 }
 
-// Add this function to bump semver version
-function bumpVersion(version: string, type: 'patch' | 'minor' | 'major' = 'patch'): string {
-  const [major, minor, patch] = version.split('.').map(Number);
-  
-  if (type === 'patch') return `${major}.${minor}.${patch + 1}`;
-  if (type === 'minor') return `${major}.${minor + 1}.0`;
-  if (type === 'major') return `${major + 1}.0.0`;
-  
-  return `${major}.${minor}.${patch + 1}`; // Default to patch
-}
-
-// Add this function to update package.json
-function updatePackageVersion(newVersion: string): void {
-  const packageJsonPath = path.join(process.cwd(), 'package.json');
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-  packageJson.version = newVersion;
-  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
-}
-
 export const publishCommand = new Command("publish")
   .description("publish or update a pipe to the store")
   .requiredOption("-n, --name <name>", "name of the pipe")
