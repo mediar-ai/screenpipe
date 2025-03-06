@@ -12,7 +12,7 @@ import {
 	SelectValue,
 } from "./ui/select";
 import { Settings, Terminal, Loader2, HelpCircle, Eye, EyeOff } from "lucide-react";
-import { useSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import {
@@ -76,6 +76,7 @@ export const DEFAULT_PROMPT = `Rules:
 - Do not put video in multiline code block it will not render the video (e.g. \`\`\`bash\n.mp4\`\`\` IS WRONG) instead using inline code block with single backtick
 - Always answer my question/intent, do not make up things
 `;
+
 
 export function AIProviderConfig({
 	onSubmit,
@@ -295,17 +296,27 @@ export function AIProviderConfig({
 
 					<Button
 						type="button"
+						disabled={!settings?.user?.token}
 						variant={
 							selectedProvider === "screenpipe-cloud" ? "default" : "outline"
 						}
 						className="flex h-24 flex-col items-center justify-center gap-2"
 						onClick={() => {
 							setSelectedProvider("screenpipe-cloud");
-							setFormData({ ...formData, provider: "screenpipe-cloud" });
+							setFormData({ ...formData, provider: "screenpipe-cloud",
+								baseUrl: "https://ai-proxy.i-f9f.workers.dev/v1",
+							 });
 						}}
 					>
 						<Icons.terminal className="h-8 w-8" />
 						<span>screenpipe</span>
+						{
+							!settings?.user?.token && (
+								<span className="text-xs text-destructive font-normal">
+									login to screenpipe to use this provider
+								</span>
+							)
+						}
 					</Button>
 
 					<Button

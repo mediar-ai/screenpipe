@@ -6,7 +6,8 @@ import { Bot, Wand2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CommandDialog, CommandInput } from "@/components/ui/command";
 import OpenAI from "openai";
-import { usePipeSettings, useSettings } from "@/lib/hooks/use-pipe-settings";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings, type PipeSettings } from "@/lib/hooks/use-settings";
 import {
   Tooltip,
   TooltipContent,

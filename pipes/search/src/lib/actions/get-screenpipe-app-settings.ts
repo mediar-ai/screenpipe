@@ -2,7 +2,7 @@
 
 import { pipe } from "@screenpipe/js";
 import type { Settings as ScreenpipeAppSettings } from "@screenpipe/js";
-import { PipeSettings } from "../hooks/use-pipe-settings";
+import { type PipeSettings } from "@/lib/hooks/use-settings";
 
 export async function getScreenpipeAppSettings() {
 	return await pipe.settings.getAll();

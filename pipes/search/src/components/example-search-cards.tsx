@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { useHealthCheck } from "@/lib/hooks/use-health-check";
-import { useSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 export interface ExampleSearch {
   title: string;

@@ -100,16 +100,17 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover";
-// import { useSettings } from "@/lib/hooks/use-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { SearchFilterGenerator } from "./search-filter-generator";
 import {
 	MultiSelectCombobox,
 	type BaseOption,
 } from "@/components/ui/multi-select-combobox";
 import { AIPresetsDialog } from "./ai-presets-dialog";
-import { usePipeSettings, useSettings } from "@/lib/hooks/use-pipe-settings";
+import { usePipeSettings } from "@/lib/hooks/use-pipe-settings";
 import type { Settings as AppSettings } from "@screenpipe/js";
-import { DEFAULT_PROMPT } from "./ai-provider-config";
+import { DEFAULT_PROMPT } from "./ai-presets-dialog";
+import { AIPresetsSelector } from "./ai-presets-selector";
 
 interface Agent {
 	id: string;
@@ -268,7 +269,7 @@ export function SearchChat() {
 	const [progress, setProgress] = useState(0);
 
 	const [floatingInput, setFloatingInput] = useState("");
-	const [isFloatingInputVisible, setIsFloatingInputVisible] = useState(false);
+	
 
 	const floatingInputRef = useRef<HTMLInputElement>(null);
 	const [showScrollButton, setShowScrollButton] = useState(false);
@@ -645,25 +646,7 @@ export function SearchChat() {
 		}
 	};
 
-	useEffect(() => {
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "/") {
-				event.preventDefault();
-				setIsFloatingInputVisible(true);
-			} else if (event.key === "Escape") {
-				setIsFloatingInputVisible(false);
-			}
-		};
 
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, []);
-
-	useEffect(() => {
-		if (isFloatingInputVisible && floatingInputRef.current) {
-			floatingInputRef.current.focus();
-		}
-	}, [isFloatingInputVisible]);
 
 	const handleResultSelection = (index: number) => {
 		setSelectedResults((prev) => {
@@ -853,7 +836,6 @@ export function SearchChat() {
 			}
 		} finally {
 			setIsAiLoading(false);
-			setIsFloatingInputVisible(false);
 			setIsStreaming(false);
 			if (!isUserScrolling) {
 				scrollToBottom();
@@ -2156,6 +2138,10 @@ export function SearchChat() {
 					</div>
 				</>
 			)}
+
+			<div className="w-1/3 mx-auto">
+			<AIPresetsSelector pipeName={"search"} />
+			</div>
 
 			{/* Scroll to Bottom Button */}
 			{showScrollButton && (

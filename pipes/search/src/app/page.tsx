@@ -1,6 +1,6 @@
 "use client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useSettings } from "@/lib/hooks/use-pipe-settings";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { Terminal } from "lucide-react";
 import { SearchChat } from "@/components/search-chat";
 
