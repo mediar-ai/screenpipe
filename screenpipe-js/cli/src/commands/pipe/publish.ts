@@ -333,6 +333,7 @@ export const publishCommand = new Command("publish")
             fileSize,
             fileHash,
             description,
+            useS3: true,
           }, {
             headers: {
               Authorization: `Bearer ${apiKey}`,
@@ -342,15 +343,26 @@ export const publishCommand = new Command("publish")
           });
         } catch (error) {
           // Handle version conflict specifically
-          if (axios.isAxiosError(error) && error.response) {
-            const status = error.response.status;
-            const errorData = error.response.data;
+          if (axios.isAxiosError(error)) {
+            console.log(colors.dim(`${symbols.arrow} network error details:`));
             
-            console.log(colors.dim(`${symbols.arrow} server responded with status: ${status}`));
+            if (error.response) {
+              // The server responded with a status code outside the 2xx range
+              console.log(colors.dim(`${symbols.arrow} server responded with status: ${error.response.status}`));
+              console.log(colors.dim(`${symbols.arrow} response data: ${JSON.stringify(error.response.data)}`));
+            } else if (error.request) {
+              // The request was made but no response was received
+              console.log(colors.dim(`${symbols.arrow} no response received from server`));
+              console.log(colors.dim(`${symbols.arrow} check network connectivity and server status`));
+              console.log(colors.dim(`${symbols.arrow} attempted to connect to: ${error.request._currentUrl || API_BASE_URL}`));
+            } else {
+              // Something happened in setting up the request
+              console.log(colors.dim(`${symbols.arrow} error setting up request: ${error.message}`));
+            }
             
             // Check if this is a version conflict error
-            if (status === 400 && typeof errorData === 'string' && 
-                errorData.includes('already exists') && errorData.includes('version')) {
+            if (error.response && error.response.status === 400 && typeof error.response.data === 'string' && 
+                error.response.data.includes('already exists') && error.response.data.includes('version')) {
               
               // Ask user if they want to bump the version
               const readline = require('readline').createInterface({
@@ -443,6 +455,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
                   fileSize,
                   fileHash,
                   description,
+                  useS3: true,
                 }, {
                   headers: {
                     Authorization: `Bearer ${apiKey}`,
@@ -456,19 +469,19 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
               }
             } else {
               // Handle other errors
-              if (typeof errorData === 'string') {
-                throw new Error(errorData);
-              } else if (errorData.error) {
-                if (Array.isArray(errorData.error)) {
-                  const issues = errorData.error.map((issue: any) => 
+              if (typeof error.response?.data === 'string') {
+                throw new Error(error.response.data);
+              } else if (error.response?.data.error) {
+                if (Array.isArray(error.response.data.error)) {
+                  const issues = error.response.data.error.map((issue: any) => 
                     `${issue.path.join('.')}: ${issue.message}`
                   ).join(', ');
                   throw new Error(`validation failed: ${issues}`);
                 } else {
-                  throw new Error(`server error: ${JSON.stringify(errorData.error)}`);
+                  throw new Error(`server error: ${JSON.stringify(error.response.data.error)}`);
                 }
               } else {
-                throw new Error(`server responded with error: ${JSON.stringify(errorData)}`);
+                throw new Error(`server responded with error: ${JSON.stringify(error.response?.data)}`);
               }
             }
           } else {
@@ -492,6 +505,43 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
         let uploadSuccessful = false;
         let uploadError = null;
         
+        // Create a progress bar
+        const progressBar = {
+          current: 0,
+          total: fileSize,
+          width: 40,
+          update(loaded: number) {
+            const percent = Math.floor((loaded / this.total) * 100);
+            const filledWidth = Math.floor((loaded / this.total) * this.width);
+            const emptyWidth = this.width - filledWidth;
+            
+            // Only update if progress has changed by at least 1%
+            if (percent > this.current) {
+              this.current = percent;
+              
+              // Clear the current line and move to beginning
+              process.stdout.write('\r');
+              
+              // Create the progress bar
+              const bar = '█'.repeat(filledWidth) + '░'.repeat(emptyWidth);
+              
+              // Format the size display
+              const loadedSize = (loaded / (1024 * 1024)).toFixed(2);
+              const totalSize = (this.total / (1024 * 1024)).toFixed(2);
+              
+              // Print the progress bar
+              process.stdout.write(
+                `${colors.dim(`${symbols.arrow} uploading: [`)}${colors.info(bar)}${colors.dim(`] ${percent}%`)} ${colors.dim(`(${loadedSize}/${totalSize} MB)`)}`
+              );
+            }
+          },
+          complete() {
+            // Move to next line after completion
+            process.stdout.write('\n');
+            logger.success(`${symbols.success} upload completed successfully`);
+          }
+        };
+        
         try {
           // Try using a different approach for the upload
           const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
@@ -504,12 +554,10 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             decompress: false, // Disable automatic decompression
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
-                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                if (percentCompleted % 10 === 0) { // Log every 10%
-                  console.log(colors.dim(`${symbols.arrow} upload progress: ${percentCompleted}%`));
-                }
+                progressBar.update(progressEvent.loaded);
+                
                 // Mark as successful if we reach 100%
-                if (percentCompleted === 100) {
+                if (progressEvent.loaded === progressEvent.total) {
                   uploadSuccessful = true;
                 }
               }
@@ -523,6 +571,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             responseType: 'arraybuffer'
           });
           
+          progressBar.complete();
           console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.status || 'unknown'}`));
           
           // Check if response is binary/non-text and log appropriately
@@ -587,6 +636,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             throw error;
           } else {
             // If we've seen 100% progress, we can ignore the socket close error
+            progressBar.complete();
             console.log(colors.dim(`${symbols.info} upload completed but connection closed: ${error instanceof Error ? error.message : 'unknown'}`));
             console.log(colors.dim(`${symbols.arrow} socket was closed after upload completed, continuing with finalization...`));
           }
