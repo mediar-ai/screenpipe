@@ -61,8 +61,11 @@ mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
 llm = []
 
 [target.'cfg(target_os = "macos")'.dependencies]
-accessibility-sys = "0.1.3"
-accessibility = "0.1.6"
+# accessibility-sys = "0.1.3"
+accessibility-sys = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
+# accessibility = "0.1.6"
+accessibility = { git = "https://github.com/eiz/accessibility.git", branch = "master" }
+
 thiserror = "2.0.12"
-core-foundation = "0.10.0"
+core-foundation = "=0.10.0"
 
