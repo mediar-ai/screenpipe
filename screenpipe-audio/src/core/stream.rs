@@ -4,7 +4,6 @@ use cpal::StreamError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::thread;
 use tokio::sync::{broadcast, oneshot};
 use tokio::task::LocalSet;
 use tracing::{error, warn};

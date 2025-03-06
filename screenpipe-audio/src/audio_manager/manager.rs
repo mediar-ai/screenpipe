@@ -14,10 +14,7 @@ use whisper_rs::WhisperContext;
 
 use screenpipe_db::DatabaseManager;
 
-use super::{
-    start_device_monitor, start_health_monitor, stop_device_monitor, stop_health_monitor,
-    AudioManagerOptions,
-};
+use super::{start_device_monitor, stop_device_monitor, AudioManagerOptions};
 use crate::{
     core::{
         device::{parse_audio_device, AudioDevice},
@@ -96,12 +93,6 @@ impl AudioManager {
             transcription_receiver_handle: Arc::new(RwLock::new(None)),
             stt_model_path,
         };
-
-        start_health_monitor(
-            // Arc::new(manager.clone()),
-            // manager.options.health_check_grace_period,
-        )
-        .await?;
 
         Ok(manager)
     }
@@ -370,7 +361,6 @@ impl AudioManager {
         }
 
         let _ = stop_device_monitor().await;
-        let _ = stop_health_monitor().await;
 
         Ok(())
     }
@@ -385,7 +375,6 @@ impl AudioManager {
 
 impl Drop for AudioManager {
     fn drop(&mut self) {
-        info!("dropping audio manager");
         let rec = self.recording_handles.clone();
         let recording = self.recording_receiver_handle.clone();
         let transcript = self.transcription_receiver_handle.clone();
@@ -404,7 +393,6 @@ impl Drop for AudioManager {
             }
 
             let _ = stop_device_monitor().await;
-            let _ = stop_health_monitor().await;
         });
     }
 }
