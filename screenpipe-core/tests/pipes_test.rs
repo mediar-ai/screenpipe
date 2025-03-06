@@ -1,7 +1,14 @@
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution, sanitize_pipe_name};
+    use screenpipe_core::{
+        run_pipe, 
+        download_pipe,
+        sanitize_pipe_name,
+        save_cron_execution,
+        download_pipe_private,
+        get_last_cron_execution,
+    };
     use serde_json::json;
     use std::sync::Arc;
     use std::sync::Once;
@@ -338,7 +345,28 @@ mod tests {
         let result = download_pipe(&source_dir.to_str().expect("failed bathbuf to str"),
             screenpipe_dir.clone()).await;
        
-        assert!(result.is_err(), "Invalid local source path: {:?}", result.err());
+        assert!(result.is_err(), "test failed for non existence local pipe: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_downloading_private_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let pipe_name = "data-table";
+        let source = "https://raw.githubusercontent.com/tribhuwan-kumar/anime/master/0.1.8.zip";
+        let result = download_pipe_private("data-table", source, screenpipe_dir.clone()).await;
+
+        assert!(
+            result.is_ok(),
+            "Failed to download private pipe: {:?}",
+            result.err()
+        );
+        assert!(screenpipe_dir.join("pipes").join(pipe_name).exists(), 
+            "test failed for downloading private pipe: {:?}",
+            result.err()
+        );
     }
 
 }

@@ -815,15 +815,8 @@ async fn retry_install(bun_path: &Path, dest_dir: &Path, max_retries: u32) -> Re
 pub async fn download_pipe(source: &str, screenpipe_dir: PathBuf) -> anyhow::Result<PathBuf> {
     info!("Processing pipe from source: {}", source);
 
-    let is_local = Url::parse(source).is_err();
-
-    let mut pipe_name =
+    let pipe_name =
         sanitize_pipe_name(Path::new(source).to_str().unwrap());
-
-    // Add _local suffix for local pipes
-    if is_local {
-        pipe_name.push_str("_local");
-    }
 
     let dest_dir = screenpipe_dir.join("pipes").join(&pipe_name);
 
@@ -1801,6 +1794,7 @@ pub async fn download_pipe_private(
             let pipe_json = tokio::fs::read_to_string(&final_pipe_json).await?;
             let mut pipe_config: Value = serde_json::from_str(&pipe_json)?;
             pipe_config["is_nextjs"] = json!(true);
+            pipe_config["build"] = json!(true);
             pipe_config["buildStatus"] = json!({
                 "status": "success",
                 "step": "completed"
