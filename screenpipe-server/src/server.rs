@@ -27,7 +27,7 @@ use crate::{
     db_types::{ContentType, FrameData, Order, SearchMatch, SearchResult, Speaker, TagContentType},
     embedding::embedding_endpoint::create_embeddings,
     pipe_manager::PipeManager,
-    video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS},
+    video::{finish_ffmpeg_process, start_ffmpeg_process, write_frame_to_ffmpeg, MAX_FPS, VideoEncoderSettings},
     video_cache::{AudioEntry, DeviceFrame, FrameCache, FrameMetadata, TimeSeriesFrame},
     video_utils::{
         extract_frame_from_video, extract_high_quality_frame, merge_videos, validate_media,
@@ -1227,8 +1227,16 @@ async fn write_frames_to_video(
     frames: &Vec<FrameContent>,
     video_file_path: &str,
     fps: f64,
+    encoder_settings: Option<VideoEncoderSettings>,
 ) -> Result<(), anyhow::Error> {
-    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps).await?;
+    let encoder_settings = encoder_settings.unwrap_or(VideoEncoderSettings {
+        codec: "libx265".to_string(),
+        preset: "ultrafast".to_string(),
+        crf: 23,
+        hw_accel: None,
+        hw_accel_device: None,
+    });
+    let mut ffmpeg_child = start_ffmpeg_process(video_file_path, fps, &encoder_settings).await?;
     let mut ffmpeg_stdin = ffmpeg_child
         .stdin
         .take()
@@ -1313,7 +1321,20 @@ pub(crate) async fn add_to_database(
                         ));
                     }
 
-                    if let Err(e) = write_frames_to_video(frames, &video_file_path, MAX_FPS).await {
+                    if let Err(e) = write_frames_to_video(
+                        frames,
+                        &video_file_path,
+                        MAX_FPS,
+                        Some(VideoEncoderSettings {
+                            codec: "libx265".to_string(),
+                            preset: "ultrafast".to_string(),
+                            crf: 23,
+                            hw_accel: None,
+                            hw_accel_device: None,
+                        }),
+                    )
+                    .await
+                    {
                         error!(
                             "Failed to write frames to video file {}: {}",
                             video_file_path, e
@@ -2259,7 +2280,13 @@ async fn handle_video_export(
         .await;
 
     // Create video
-    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps).await {
+    match write_frames_to_video(&frames, output_path.to_str().unwrap(), payload.fps, Some(VideoEncoderSettings{
+        codec: "libx265".to_string(),
+        preset: "medium".to_string(),
+        crf: 23,
+        hw_accel: None,
+        hw_accel_device: None,
+    })).await {
         Ok(_) => match tokio::fs::read(&output_path).await {
             Ok(video_data) => {
                 let _ = socket
