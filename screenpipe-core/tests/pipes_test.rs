@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution};
+    use screenpipe_core::{download_pipe, get_last_cron_execution, run_pipe, save_cron_execution, sanitize_pipe_name};
     use serde_json::json;
     use std::sync::Arc;
     use std::sync::Once;
@@ -240,8 +240,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(windows)]
-    async fn test_download_pipe_windows_path() {
+    async fn test_downloading_pipe() {
         init();
         let temp_dir = TempDir::new().unwrap();
         let screenpipe_dir = temp_dir.path().to_path_buf();
@@ -258,29 +257,88 @@ mod tests {
         .await
         .unwrap();
 
-        // Get the absolute Windows path with backslashes
-        let source_path = source_dir.to_str().unwrap().replace("/", "\\");
-        println!("Testing Windows path: {}", source_path);
-
         // Try to download the pipe using the Windows path
-        let result = download_pipe(&source_path, screenpipe_dir.clone()).await;
+        let result = download_pipe(&source_dir.to_str().expect("failed to convert to str"),
+            screenpipe_dir.clone()
+        ).await;
 
-        // The function should succeed with a Windows path
+
+        // The function should succeed for every os
         assert!(
             result.is_ok(),
-            "Failed to handle Windows path: {:?}",
+            "Failed to download pipe: {:?}",
             result.err()
         );
 
         // Verify the pipe was copied correctly
         let pipe_name = source_dir.file_name().unwrap().to_str().unwrap();
-        let dest_path = screenpipe_dir
-            .join("pipes")
-            .join(format!("{}_local", pipe_name));
+        let dest_path = screenpipe_dir.join("pipes").join(pipe_name);
+
         assert!(dest_path.exists(), "Destination pipe directory not found");
-        assert!(
-            dest_path.join("pipe.js").exists(),
-            "pipe.js not found in destination"
-        );
+        assert!(dest_path.join("pipe.js").exists(), "pipe.js not found in destination");
+
+        // tests for urls
+        let urls = vec![
+            "https://github.com/KentTDang/AI-Interview-Coach/",
+            "https://github.com/KentTDang/AI-Interview-Coach/tree/main",
+            "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search",
+        ];
+
+        for url in urls {
+            let result = download_pipe(url, screenpipe_dir.clone()).await;
+            assert!(result.is_ok(), "Failed to download pipe from URL: {}", url);
+
+            let pipe_name = sanitize_pipe_name(url);
+            println!("Pipes names: {}", pipe_name);
+            let dest_path = screenpipe_dir.join("pipes").join(pipe_name);
+            assert!(dest_path.exists(), "Destination pipe directory not found for URL: {}", url);
+        }
     }
+
+    #[tokio::test]
+    async fn test_sanitize_pipe_name() {
+        init();
+
+        // test default pipe url
+        let github_default_url = "https://github.com/KentTDang/AI-Interview-Coach/";
+        assert_eq!(sanitize_pipe_name(github_default_url), "AI-Interview-Coach");
+
+        // test pipe url with branch
+        let github_url = "https://github.com/KentTDang/AI-Interview-Coach/tree/main";
+        assert_eq!(sanitize_pipe_name(github_url), "AI-Interview-Coach");
+
+        // test pipe url as a subdirectory
+        let github_url_subdir = "https://github.com/mediar-ai/screenpipe/tree/main/pipes/search";
+        assert_eq!(sanitize_pipe_name(github_url_subdir), "search");
+
+        // test a local directory path
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("test-pipe-name");
+        tokio::fs::create_dir_all(&source_dir).await.unwrap();
+        assert_eq!(sanitize_pipe_name(
+            source_dir.to_str().expect("failed to convert path to str")
+        ), "test-pipe-name");
+
+        // test with a non-GitHub URL
+        let non_github_url = "https://example.com/some/path";
+        assert_eq!(sanitize_pipe_name(non_github_url), "https---example-com-some-path");
+
+        // url including invalid characters
+        let invalid_chars = "invalid:name/with*chars";
+        assert_eq!(sanitize_pipe_name(invalid_chars), "invalid-name-with-chars");
+    }
+
+    #[tokio::test]
+    async fn test_non_existence_local_pipe() {
+        init();
+        let temp_dir = TempDir::new().unwrap();
+        let screenpipe_dir = temp_dir.path().to_path_buf();
+
+        let source_dir = temp_dir.path().join("source_pipe");
+        let result = download_pipe(&source_dir.to_str().expect("failed bathbuf to str"),
+            screenpipe_dir.clone()).await;
+       
+        assert!(result.is_err(), "Invalid local source path: {:?}", result.err());
+    }
+
 }

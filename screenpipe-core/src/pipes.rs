@@ -77,7 +77,7 @@ fn generate_cron_secret() -> String {
 }
 
 // Update this function near the top of the file
-fn sanitize_pipe_name(name: &str) -> String {
+pub fn sanitize_pipe_name(name: &str) -> String {
     // First check if this is a GitHub URL and extract the repo name
     if let Ok(url) = Url::parse(name) {
         if url.host_str() == Some("github.com") {
@@ -99,6 +99,12 @@ fn sanitize_pipe_name(name: &str) -> String {
                     return path_segments[1].to_string();
                 }
             }
+        }
+    }
+
+    if Path::new(name).is_dir() {
+        if let Some(basename) = Path::new(name).file_name() {
+            return basename.to_string_lossy().to_string();
         }
     }
 
