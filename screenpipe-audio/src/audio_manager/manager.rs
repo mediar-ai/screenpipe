@@ -98,8 +98,8 @@ impl AudioManager {
         };
 
         start_health_monitor(
-            Arc::new(manager.clone()),
-            manager.options.health_check_grace_period,
+            // Arc::new(manager.clone()),
+            // manager.options.health_check_grace_period,
         )
         .await?;
 

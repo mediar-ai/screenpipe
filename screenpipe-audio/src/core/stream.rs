@@ -19,7 +19,7 @@ pub struct AudioStream {
     pub device_config: cpal::SupportedStreamConfig,
     transmitter: Arc<tokio::sync::broadcast::Sender<Vec<f32>>>,
     stream_control: mpsc::Sender<StreamControl>,
-    stream_thread: Option<Arc<tokio::sync::Mutex<Option<thread::JoinHandle<()>>>>>,
+    stream_thread: Option<Arc<tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>>>,
     pub is_disconnected: Arc<AtomicBool>,
 }
 
@@ -73,10 +73,10 @@ impl AudioStream {
         is_running_weak: std::sync::Weak<AtomicBool>,
         is_disconnected: Arc<AtomicBool>,
         stream_control_tx: mpsc::Sender<StreamControl>,
-    ) -> Result<thread::JoinHandle<()>> {
+    ) -> Result<tokio::task::JoinHandle<()>> {
         let device_name = device.name()?;
 
-        Ok(thread::spawn(move || {
+        Ok(tokio::task::spawn_blocking(move || {
             let error_callback = create_error_callback(
                 device_name.clone(),
                 is_running_weak,
@@ -121,15 +121,11 @@ impl AudioStream {
             let thread_handle = tokio::task::spawn_blocking(move || {
                 let mut thread_guard = thread_arc_clone.blocking_lock();
                 if let Some(join_handle) = thread_guard.take() {
-                    join_handle
-                        .join()
-                        .map_err(|_| anyhow!("failed to join stream thread"))
-                } else {
-                    Ok(())
+                    join_handle.abort();
                 }
             });
 
-            thread_handle.await??;
+            thread_handle.await?;
         }
 
         Ok(())
