@@ -518,13 +518,56 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             validateStatus: function (status) {
               // Consider any status less than 500 as success
               return status < 500;
-            }
+            },
+            // Add responseType to handle binary responses
+            responseType: 'arraybuffer'
           });
           
           console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.status || 'unknown'}`));
+          
+          // Check if response is binary/non-text and log appropriately
+          if (uploadResponse.data) {
+            const contentType = uploadResponse.headers['content-type'] || '';
+            if (contentType.includes('json')) {
+              // It's JSON, try to parse and display
+              try {
+                const jsonData = JSON.parse(uploadResponse.data.toString());
+                console.log(colors.dim(`${symbols.arrow} upload response: ${JSON.stringify(jsonData)}`));
+              } catch (e) {
+                console.log(colors.dim(`${symbols.arrow} upload response: [unparseable JSON response]`));
+              }
+            } else if (contentType.includes('text')) {
+              // It's text, display as string
+              console.log(colors.dim(`${symbols.arrow} upload response: ${uploadResponse.data.toString()}`));
+            } else {
+              // It's binary, just log the type and size
+              console.log(colors.dim(`${symbols.arrow} upload response: [binary data, ${uploadResponse.data.byteLength} bytes]`));
+              console.log(colors.dim(`${symbols.arrow} response content-type: ${contentType}`));
+            }
+          }
+          
           uploadSuccessful = true;
         } catch (error) {
           uploadError = error;
+          
+          // Always print the error response as a normal message
+          if (axios.isAxiosError(error)) {
+            if (error.response?.data) {
+              // Check if the response is binary
+              if (error.response.data instanceof Buffer || error.response.data instanceof ArrayBuffer) {
+                console.log(colors.dim(`${symbols.arrow} upload response: [binary data, ${error.response.data.byteLength} bytes]`));
+                console.log(colors.dim(`${symbols.arrow} response content-type: ${error.response.headers['content-type'] || 'unknown'}`));
+              } else {
+                // Try to stringify the response data
+                try {
+                  console.log(colors.dim(`${symbols.arrow} upload response: ${JSON.stringify(error.response.data)}`));
+                } catch (e) {
+                  console.log(colors.dim(`${symbols.arrow} upload response: [unparseable response data]`));
+                }
+              }
+            }
+            console.log(colors.dim(`${symbols.arrow} upload status: ${error.response?.status || 'unknown'}`));
+          }
           
           // Check if we've seen 100% progress
           if (!uploadSuccessful) {
@@ -534,8 +577,6 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
               console.error(colors.dim(`${symbols.arrow} stack trace: ${error.stack}`));
             }
             if (axios.isAxiosError(error)) {
-              console.error(colors.error(`${symbols.error} upload response: ${JSON.stringify(error.response?.data || {})}`));
-              console.error(colors.error(`${symbols.error} upload status: ${error.response?.status || 'unknown'}`));
               console.error(colors.error(`${symbols.error} upload request config: ${JSON.stringify({
                 url: error.config?.url?.substring(0, 100) + '...',
                 method: error.config?.method,
@@ -546,7 +587,6 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             throw error;
           } else {
             // If we've seen 100% progress, we can ignore the socket close error
-            // Use a warning style instead of error
             console.log(colors.dim(`${symbols.info} upload completed but connection closed: ${error instanceof Error ? error.message : 'unknown'}`));
             console.log(colors.dim(`${symbols.arrow} socket was closed after upload completed, continuing with finalization...`));
           }
