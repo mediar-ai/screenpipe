@@ -1,7 +1,8 @@
 use crate::ui_automation::errors::AutomationError;
 use std::collections::HashMap;
-
+use std::fmt::Debug;
 /// Represents a UI element in a desktop application
+#[derive(Debug)]
 pub struct UIElement {
     inner: Box<dyn UIElementImpl>,
 }
@@ -16,7 +17,8 @@ pub struct UIElementAttributes {
 }
 
 /// Interface for platform-specific element implementations
-pub(crate) trait UIElementImpl: Send + Sync {
+pub(crate) trait UIElementImpl: Send + Sync + Debug {
+    fn object_id(&self) -> usize;
     fn id(&self) -> Option<String>;
     fn role(&self) -> String;
     fn attributes(&self) -> UIElementAttributes;
@@ -37,6 +39,7 @@ pub(crate) trait UIElementImpl: Send + Sync {
     fn is_focused(&self) -> Result<bool, AutomationError>;
     fn perform_action(&self, action: &str) -> Result<(), AutomationError>;
     fn as_any(&self) -> &dyn std::any::Any;
+    fn clone_box(&self) -> Box<dyn UIElementImpl>;
 }
 
 impl UIElement {
@@ -143,5 +146,27 @@ impl UIElement {
     /// Get the underlying implementation as a specific type
     pub(crate) fn as_any(&self) -> &dyn std::any::Any {
         self.inner.as_any()
+    }
+}
+
+impl PartialEq for UIElement {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.object_id() == other.inner.object_id()
+    }
+}
+
+impl Eq for UIElement {}
+
+impl std::hash::Hash for UIElement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.inner.object_id().hash(state);
+    }
+}
+
+impl Clone for UIElement {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone_box(),
+        }
     }
 }

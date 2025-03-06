@@ -29,6 +29,8 @@ pub trait AccessibilityEngine: Send + Sync {
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(all(test, target_os = "macos"))]
+mod macos_test;
 #[cfg(target_os = "windows")]
 mod windows;
 

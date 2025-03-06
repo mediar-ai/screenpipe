@@ -3,30 +3,34 @@
 //! This module provides a cross-platform API for automating desktop applications
 //! through accessibility APIs, inspired by Playwright's web automation model.
 
+use std::sync::Arc;
+
 mod actions;
 mod element;
 mod errors;
 mod locator;
 mod platforms;
 mod selector;
+#[cfg(test)]
+mod tests;
 
-pub use actions::{click, press_key, scroll, type_text};
 pub use element::{UIElement, UIElementAttributes};
 pub use errors::AutomationError;
 pub use locator::Locator;
-pub use selector::{Selector, SelectorEngine};
+pub use selector::Selector;
 
 /// The main entry point for UI automation
 pub struct Desktop {
-    engine: Box<dyn platforms::AccessibilityEngine>,
+    engine: Arc<dyn platforms::AccessibilityEngine>,
 }
 
 impl Desktop {
     /// Create a new instance with the default platform-specific implementation
     pub fn new() -> Result<Self, AutomationError> {
-        Ok(Self {
-            engine: platforms::create_engine()?,
-        })
+        let boxed_engine = platforms::create_engine()?;
+        // Move the boxed engine into an Arc
+        let engine = Arc::from(boxed_engine);
+        Ok(Self { engine })
     }
 
     /// Get the root UI element representing the entire desktop
@@ -36,7 +40,7 @@ impl Desktop {
 
     /// Create a locator to find elements matching the given selector
     pub fn locator(&self, selector: impl Into<Selector>) -> Locator {
-        Locator::new(self.engine.as_ref(), selector.into())
+        Locator::new(Arc::clone(&self.engine), selector.into())
     }
 
     /// Get an element by its accessibility ID

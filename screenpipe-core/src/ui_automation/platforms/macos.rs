@@ -10,10 +10,10 @@ use core_foundation::base::CFTypeRef;
 use core_foundation::{
     base::TCFType, boolean::CFBoolean, dictionary::CFDictionary, string::CFString,
 };
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-
 // Thread-safe wrapper for AXUIElement
 pub struct ThreadSafeAXUIElement(Arc<AXUIElement>);
 
@@ -157,9 +157,7 @@ impl AccessibilityEngine for MacOSEngine {
     }
 
     fn get_element_by_id(&self, id: &str) -> Result<UIElement, AutomationError> {
-        // AXIdentifier is not always available or reliable, so we'll search
-        // by AXIdentifier attribute if available
-        let mut collector = ElementCollectorByAttribute::new("AXIdentifier", id);
+        let collector = ElementCollectorByAttribute::new("AXIdentifier", id);
         let walker = TreeWalker::new();
 
         walker.walk(self.system_wide.as_ref(), &collector.adapter());
@@ -223,7 +221,7 @@ impl AccessibilityEngine for MacOSEngine {
 
             Selector::Id(id) => {
                 // Try to find by AXIdentifier
-                let mut collector = ElementCollectorByAttribute::new("AXIdentifier", id);
+                let collector = ElementCollectorByAttribute::new("AXIdentifier", id);
                 let walker = TreeWalker::new();
 
                 let start_element = root_ax_element.unwrap_or(&self.system_wide);
@@ -238,7 +236,7 @@ impl AccessibilityEngine for MacOSEngine {
 
             Selector::Name(name) => {
                 // Try to find by AXTitle or AXDescription
-                let mut collector = ElementCollectorByAttribute::new("AXTitle", name);
+                let collector = ElementCollectorByAttribute::new("AXTitle", name);
                 let walker = TreeWalker::new();
 
                 let start_element = root_ax_element.unwrap_or(&self.system_wide);
@@ -253,7 +251,7 @@ impl AccessibilityEngine for MacOSEngine {
 
             Selector::Text(text) => {
                 // Try to find by AXValue
-                let mut collector = ElementCollectorByAttribute::new("AXValue", text);
+                let collector = ElementCollectorByAttribute::new("AXValue", text);
                 let walker = TreeWalker::new();
 
                 let start_element = root_ax_element.unwrap_or(&self.system_wide);
@@ -277,36 +275,35 @@ impl AccessibilityEngine for MacOSEngine {
 }
 
 // Adapter structs to bridge between AXUIElement and ThreadSafeAXUIElement
-struct ElementCollectorAdapter<'a> {
-    inner: &'a mut ElementCollector,
+struct ElementCollectorAdapter {
+    inner: RefCell<ElementCollector>,
 }
 
-impl<'a> TreeVisitor for ElementCollectorAdapter<'a> {
-    fn enter_element(&mut self, element: &AXUIElement) -> TreeWalkerFlow {
-        // Wrap the AXUIElement in ThreadSafeAXUIElement and delegate
+impl TreeVisitor for ElementCollectorAdapter {
+    fn enter_element(&self, element: &AXUIElement) -> TreeWalkerFlow {
         let wrapped = ThreadSafeAXUIElement::new(element.clone());
-        self.inner.enter_element_impl(&wrapped)
+        self.inner.borrow_mut().enter_element_impl(&wrapped)
     }
 
-    fn exit_element(&mut self, element: &AXUIElement) {
+    fn exit_element(&self, element: &AXUIElement) {
         let wrapped = ThreadSafeAXUIElement::new(element.clone());
-        self.inner.exit_element_impl(&wrapped)
+        self.inner.borrow_mut().exit_element_impl(&wrapped)
     }
 }
 
-struct ElementCollectorByAttributeAdapter<'a> {
-    inner: &'a mut ElementCollectorByAttribute,
+struct ElementCollectorByAttributeAdapter {
+    inner: RefCell<ElementCollectorByAttribute>,
 }
 
-impl<'a> TreeVisitor for ElementCollectorByAttributeAdapter<'a> {
-    fn enter_element(&mut self, element: &AXUIElement) -> TreeWalkerFlow {
+impl TreeVisitor for ElementCollectorByAttributeAdapter {
+    fn enter_element(&self, element: &AXUIElement) -> TreeWalkerFlow {
         let wrapped = ThreadSafeAXUIElement::new(element.clone());
-        self.inner.enter_element_impl(&wrapped)
+        self.inner.borrow_mut().enter_element_impl(&wrapped)
     }
 
-    fn exit_element(&mut self, element: &AXUIElement) {
+    fn exit_element(&self, element: &AXUIElement) {
         let wrapped = ThreadSafeAXUIElement::new(element.clone());
-        self.inner.exit_element_impl(&wrapped)
+        self.inner.borrow_mut().exit_element_impl(&wrapped)
     }
 }
 
@@ -326,8 +323,14 @@ impl ElementCollector {
         }
     }
 
-    fn adapter(&mut self) -> ElementCollectorAdapter {
-        ElementCollectorAdapter { inner: self }
+    fn adapter(&self) -> ElementCollectorAdapter {
+        ElementCollectorAdapter {
+            inner: RefCell::new(ElementCollector {
+                target_role: self.target_role.clone(),
+                target_name: self.target_name.clone(),
+                elements: Vec::new(),
+            }),
+        }
     }
 
     fn enter_element_impl(&mut self, element: &ThreadSafeAXUIElement) -> TreeWalkerFlow {
@@ -369,8 +372,14 @@ impl ElementCollectorByAttribute {
         }
     }
 
-    fn adapter(&mut self) -> ElementCollectorByAttributeAdapter {
-        ElementCollectorByAttributeAdapter { inner: self }
+    fn adapter(&self) -> ElementCollectorByAttributeAdapter {
+        ElementCollectorByAttributeAdapter {
+            inner: RefCell::new(ElementCollectorByAttribute {
+                attribute_name: self.attribute_name.clone(),
+                attribute_value: self.attribute_value.clone(),
+                elements: Vec::new(),
+            }),
+        }
     }
 
     fn enter_element_impl(&mut self, element: &ThreadSafeAXUIElement) -> TreeWalkerFlow {
@@ -397,7 +406,20 @@ pub struct MacOSUIElement {
     element: ThreadSafeAXUIElement,
 }
 
+impl std::fmt::Debug for MacOSUIElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MacOSUIElement")
+            .field("element", &self.element)
+            .finish()
+    }
+}
+
 impl UIElementImpl for MacOSUIElement {
+    fn object_id(&self) -> usize {
+        // Use the pointer address of the inner AXUIElement as a unique ID
+        self.element.as_ref() as *const _ as usize
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -600,5 +622,11 @@ impl UIElementImpl for MacOSUIElement {
                     action, e
                 ))
             })
+    }
+
+    fn clone_box(&self) -> Box<dyn UIElementImpl> {
+        Box::new(MacOSUIElement {
+            element: self.element.clone(),
+        })
     }
 }
