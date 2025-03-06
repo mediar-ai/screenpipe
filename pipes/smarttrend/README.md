@@ -1,6 +1,6 @@
 # **SmartTrend: Your Twitter Engagement Assistant 🤖**
 
-![SmartTrend Preview](preview.png)
+![SmartTrend Preview](https://raw.githubusercontent.com/mediar-ai/screenpipe/3163dbf999a50db79e168c965dc3cc5ace00c22d/pipes/smarttrend/preview.png)
 
 **SmartTrend** is an AI-powered Twitter assistant that helps you discover trending topics, generate meaningful replies, and boost your engagement effortlessly. Whether you want to grow your following, maintain active discussions, or simply stay relevant, SmartTrend makes it easy by analyzing your timeline, profile, and interactions to suggest optimized replies.
 
