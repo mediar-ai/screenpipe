@@ -184,6 +184,16 @@ fn get_running_application_pids() -> Result<Vec<i32>, AutomationError> {
         let mut pids = Vec::with_capacity(count);
         for i in 0..count {
             let app: *mut objc::runtime::Object = msg_send![apps, objectAtIndex:i];
+
+            let activation_policy: i32 = msg_send![app, activationPolicy];
+            // NSApplicationActivationPolicyRegular = 0
+            // NSApplicationActivationPolicyAccessory = 1
+            // NSApplicationActivationPolicyProhibited = 2 (background only)
+            if activation_policy == 2 {
+                // NSApplicationActivationPolicyProhibited
+                continue;
+            }
+
             let pid: i32 = msg_send![app, processIdentifier];
             pids.push(pid);
         }

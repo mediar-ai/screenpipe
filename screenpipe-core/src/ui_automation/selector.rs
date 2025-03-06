@@ -112,7 +112,7 @@ impl From<&str> for Selector {
 }
 
 /// Engine for finding elements using selectors
-pub(crate) trait SelectorEngine: Send + Sync {
+pub trait SelectorEngine: Send + Sync {
     fn find_elements(
         &self,
         selector: &Selector,

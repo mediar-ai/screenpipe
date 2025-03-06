@@ -1,4 +1,5 @@
 use crate::ui_automation::errors::AutomationError;
+use crate::ui_automation::selector::{Selector, SelectorEngine};
 use std::collections::HashMap;
 use std::fmt::Debug;
 /// Represents a UI element in a desktop application
@@ -8,6 +9,7 @@ pub struct UIElement {
 }
 
 /// Attributes associated with a UI element
+#[derive(Debug)]
 pub struct UIElementAttributes {
     pub role: String,
     pub label: Option<String>,
@@ -146,6 +148,15 @@ impl UIElement {
     /// Get the underlying implementation as a specific type
     pub(crate) fn as_any(&self) -> &dyn std::any::Any {
         self.inner.as_any()
+    }
+
+    /// Find elements matching the selector within this element
+    pub fn locator(&self, _selector: &str) -> Result<Vec<UIElement>, AutomationError> {
+        // create selector...
+        // not implemented
+        Err(AutomationError::UnsupportedOperation(
+            "locator not yet implemented".to_string(),
+        ))
     }
 }
 

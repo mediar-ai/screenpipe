@@ -3,7 +3,6 @@ use super::*;
 use crate::ui_automation::platforms::AccessibilityEngine;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
-use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
 // Mock implementation of the AccessibilityEngine trait for testing
 struct MockEngine {
@@ -459,45 +458,45 @@ mod tests {
 
             println!(
                 "Frontmost app: {:?}",
-                frontmost_app.unwrap().attributes().label
+                frontmost_app.clone().unwrap().attributes()
             );
 
             // Try to find the main window
-            // let windows = match frontmost_app.unwrap().locator("AXWindow").all() {
-            //     Ok(w) => {
-            //         println!("Found {} windows", w.len());
-            //         if w.is_empty() {
-            //             println!("No windows found in application");
-            //             return;
-            //         }
-            //         w
-            //     }
-            //     Err(e) => {
-            //         println!("Failed to find windows: {:?}", e);
-            //         return;
-            //     }
-            // };
+            let windows = match frontmost_app.unwrap().locator("AXWindow") {
+                Ok(w) => {
+                    println!("Found {} windows", w.len());
+                    if w.is_empty() {
+                        println!("No windows found in application");
+                        return;
+                    }
+                    w
+                }
+                Err(e) => {
+                    println!("Failed to find windows: {:?}", e);
+                    return;
+                }
+            };
 
-            // // Use the first window as our search root
-            // let main_window = &windows[0];
-            // println!("Using window: {:?}", main_window.attributes().label);
+            // Use the first window as our search root
+            let main_window = &windows[0];
+            println!("Using window: {:?}", main_window.attributes().label);
 
-            // // Search for buttons within this window
-            // let buttons = main_window.locator("AXButton").all().unwrap_or_default();
+            // Search for buttons within this window
+            let buttons = main_window.locator("AXButton").unwrap_or_default();
 
-            // println!("Found {} buttons in current window", buttons.len());
+            println!("Found {} buttons in current window", buttons.len());
 
-            // // Print details of each button found
-            // for (i, button) in buttons.iter().enumerate() {
-            //     let attrs = button.attributes();
-            //     println!(
-            //         "Button #{}: role={}, label={:?}, description={:?}",
-            //         i + 1,
-            //         attrs.role,
-            //         attrs.label,
-            //         attrs.description
-            //     );
-            // }
+            // Print details of each button found
+            for (i, button) in buttons.iter().enumerate() {
+                let attrs = button.attributes();
+                println!(
+                    "Button #{}: role={}, label={:?}, description={:?}",
+                    i + 1,
+                    attrs.role,
+                    attrs.label,
+                    attrs.description
+                );
+            }
         }
     }
 }
