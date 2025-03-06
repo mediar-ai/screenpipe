@@ -229,7 +229,7 @@ export const publishCommand = new Command("publish")
       logger.log(colors.dim(`${symbols.arrow} creating package archive...`));
 
       // Create temporary zip file
-      const zipPath = path.join(
+      let zipPath = path.join(
         process.cwd(),
         `${packageJson.name}-${packageJson.version}.zip`
       );
@@ -277,11 +277,11 @@ export const publishCommand = new Command("publish")
       }
 
       // Calculate file hash
-      const fileBuffer = fs.readFileSync(zipPath);
+      let fileBuffer = fs.readFileSync(zipPath);
       const hashSum = crypto.createHash("sha256");
       hashSum.update(fileBuffer);
-      const fileHash = hashSum.digest("hex");
-      const fileSize = fs.statSync(zipPath).size;
+      let fileHash = hashSum.digest("hex");
+      let fileSize = fs.statSync(zipPath).size;
 
       if (fileSize > MAX_FILE_SIZE) {
         console.error(
@@ -378,6 +378,63 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
                 // Update packageJson in memory
                 packageJson.version = newVersion;
                 
+                // Clean up the old zip file
+                if (fs.existsSync(zipPath)) {
+                  fs.unlinkSync(zipPath);
+                  if (opts.verbose) {
+                    console.log(colors.dim(`${symbols.arrow} cleaned up old zip file`));
+                  }
+                }
+                
+                // Rebuild the project with the new version
+                try {
+                  logger.info(colors.info(`\n${symbols.info} Rebuilding project with new version ${newVersion}...`));
+                  runBuildCommand();
+                } catch (error) {
+                  if (error instanceof Error) {
+                    console.error(colors.error(`${symbols.error} ${error.message}`));
+                    process.exit(1);
+                  }
+                }
+                
+                // Create a new zip file with the updated version
+                zipPath = path.join(
+                  process.cwd(),
+                  `${packageJson.name}-${newVersion}.zip`
+                );
+                const newOutput = fs.createWriteStream(zipPath);
+                const newArchive = archiver("zip", { zlib: { level: 9 } });
+                
+                newArchive.pipe(newOutput);
+                
+                logger.log(colors.dim(`${symbols.arrow} creating new package archive with version ${newVersion}...`));
+                
+                // Archive the project again
+                if (isNextProject) {
+                  await archiveNextJsProject(newArchive);
+                } else {
+                  archiveStandardProject(newArchive, ig);
+                }
+                
+                await new Promise((resolve, reject) => {
+                  newOutput.on("close", resolve);
+                  newArchive.on("error", reject);
+                  newArchive.finalize();
+                });
+                
+                // Recalculate file hash and size
+                fileBuffer = fs.readFileSync(zipPath);
+                const newHashSum = crypto.createHash("sha256");
+                newHashSum.update(fileBuffer);
+                fileHash = newHashSum.digest("hex");
+                fileSize = fs.statSync(zipPath).size;
+                
+                if (opts.verbose) {
+                  console.log(colors.dim(`${symbols.arrow} new archive created: ${zipPath}`));
+                  console.log(colors.dim(`${symbols.arrow} new file size: ${fileSize} bytes`));
+                  console.log(colors.dim(`${symbols.arrow} new file hash: ${fileHash}`));
+                }
+                
                 // Retry the request with new version
                 console.log(colors.dim(`${symbols.arrow} retrying with new version: ${newVersion}`));
                 urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
@@ -421,9 +478,10 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
 
         console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
         
-        const { uploadUrl, path } = urlResponse.data;
+        // Get the upload URL and storage path from the response
+        const { uploadUrl, path: storagePath } = urlResponse.data;
         console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
-        console.log(colors.dim(`${symbols.arrow} storage path: ${path}`));
+        console.log(colors.dim(`${symbols.arrow} storage path: ${storagePath}`));
         console.log(colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`));
 
         // Upload directly to Supabase
@@ -504,7 +562,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             name: opts.name,
             version: packageJson.version,
             fileHash,
-            storagePath: path,
+            storagePath: storagePath,
             description,
             fileSize,
           },
