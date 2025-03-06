@@ -134,6 +134,25 @@ function runBuildCommand(): void {
   }
 }
 
+// Add this function to bump semver version
+function bumpVersion(version: string, type: 'patch' | 'minor' | 'major' = 'patch'): string {
+  const [major, minor, patch] = version.split('.').map(Number);
+  
+  if (type === 'patch') return `${major}.${minor}.${patch + 1}`;
+  if (type === 'minor') return `${major}.${minor + 1}.0`;
+  if (type === 'major') return `${major + 1}.0.0`;
+  
+  return `${major}.${minor}.${patch + 1}`; // Default to patch
+}
+
+// Add this function to update package.json
+function updatePackageVersion(newVersion: string): void {
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  packageJson.version = newVersion;
+  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+}
+
 export const publishCommand = new Command("publish")
   .description("publish or update a pipe to the store")
   .requiredOption("-n, --name <name>", "name of the pipe")
@@ -306,19 +325,99 @@ export const publishCommand = new Command("publish")
         console.log(colors.dim(`${symbols.arrow} getting upload URL...`));
         console.log(colors.dim(`${symbols.arrow} requesting URL from: ${API_BASE_URL}/api/plugins/publish`));
 
-        const urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
-          name: opts.name,
-          version: packageJson.version,
-          fileSize,
-          fileHash,
-          description,
-        }, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          timeout: 30000, // 30 second timeout
-        });
+        let urlResponse;
+        try {
+          urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
+            name: opts.name,
+            version: packageJson.version,
+            fileSize,
+            fileHash,
+            description,
+          }, {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 30000, // 30 second timeout
+          });
+        } catch (error) {
+          // Handle version conflict specifically
+          if (axios.isAxiosError(error) && error.response) {
+            const status = error.response.status;
+            const errorData = error.response.data;
+            
+            console.log(colors.dim(`${symbols.arrow} server responded with status: ${status}`));
+            
+            // Check if this is a version conflict error
+            if (status === 400 && typeof errorData === 'string' && 
+                errorData.includes('already exists') && errorData.includes('version')) {
+              
+              // Ask user if they want to bump the version
+              const readline = require('readline').createInterface({
+                input: process.stdin,
+                output: process.stdout
+              });
+              
+              const newVersion = bumpVersion(packageJson.version);
+              
+              const question = `\n${symbols.info} ${colors.info(`Version ${packageJson.version} already exists.`)} 
+${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/n): `)}`;
+              
+              const answer = await new Promise<string>(resolve => {
+                readline.question(question, (ans: string) => {
+                  readline.close();
+                  resolve(ans.toLowerCase());
+                });
+              });
+              
+              if (answer === 'y' || answer === 'yes') {
+                // Update package.json with new version
+                updatePackageVersion(newVersion);
+                logger.success(`${symbols.success} Updated package.json to version ${newVersion}`);
+                
+                // Update packageJson in memory
+                packageJson.version = newVersion;
+                
+                // Retry the request with new version
+                console.log(colors.dim(`${symbols.arrow} retrying with new version: ${newVersion}`));
+                urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
+                  name: opts.name,
+                  version: newVersion,
+                  fileSize,
+                  fileHash,
+                  description,
+                }, {
+                  headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  timeout: 30000,
+                });
+              } else {
+                // User chose not to bump version
+                throw new Error(`Publishing canceled. Please update the version manually in package.json.`);
+              }
+            } else {
+              // Handle other errors
+              if (typeof errorData === 'string') {
+                throw new Error(errorData);
+              } else if (errorData.error) {
+                if (Array.isArray(errorData.error)) {
+                  const issues = errorData.error.map((issue: any) => 
+                    `${issue.path.join('.')}: ${issue.message}`
+                  ).join(', ');
+                  throw new Error(`validation failed: ${issues}`);
+                } else {
+                  throw new Error(`server error: ${JSON.stringify(errorData.error)}`);
+                }
+              } else {
+                throw new Error(`server responded with error: ${JSON.stringify(errorData)}`);
+              }
+            }
+          } else {
+            throw error; // Re-throw if not an axios error
+          }
+        }
 
         console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
         
