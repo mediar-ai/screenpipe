@@ -6,15 +6,22 @@ use crate::ui_automation::{
 use accessibility::AXUIElementAttributes;
 use accessibility::{AXAttribute, AXUIElement, TreeVisitor, TreeWalker, TreeWalkerFlow};
 use anyhow::Result;
+use core_foundation::array::CFArray;
 use core_foundation::base::CFTypeRef;
 use core_foundation::{
     base::TCFType, boolean::CFBoolean, dictionary::CFDictionary, string::CFString,
 };
+use objc::runtime::Object;
+use objc_foundation::{INSArray, INSObject, NSArray, NSObject};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::process::id;
 use std::sync::Arc;
+use tracing::{debug, info, trace, warn};
+
 // Thread-safe wrapper for AXUIElement
+#[derive(Clone)]
 pub struct ThreadSafeAXUIElement(Arc<AXUIElement>);
 
 // Implement Send and Sync for our wrapper
@@ -136,22 +143,78 @@ impl MacOSEngine {
         }))
     }
 
-    // Update find_by_role to use ThreadSafeAXUIElement
+    // Update find_by_role to actually search for elements
     fn find_by_role(
         &self,
-        _role: &str,
-        _name: Option<&str>,
-        _root: Option<&ThreadSafeAXUIElement>,
+        role: &str,
+        name: Option<&str>,
+        root: Option<&ThreadSafeAXUIElement>,
     ) -> Result<Vec<ThreadSafeAXUIElement>, AutomationError> {
-        // Implementation details would need to be adjusted
-        // This is just a placeholder
-        Err(AutomationError::UnsupportedOperation(
-            "find_by_role not yet fully implemented for macOS".to_string(),
-        ))
+        debug!(target: "ui_automation", "Searching for elements with role={} name={:?}", role, name);
+
+        let collector = ElementCollector::new(role, name);
+        let walker = TreeWalker::new();
+
+        let start_element = root.unwrap_or(&self.system_wide);
+        debug!(target: "ui_automation", "Starting tree walk from root element");
+        walker.walk(start_element.as_ref(), &collector.adapter());
+
+        // Get the collected elements from the adapter
+        let elements = collector.adapter().inner.borrow().elements.clone();
+
+        debug!(target: "ui_automation", "Found {} elements with role '{}'", elements.len(), role);
+
+        Ok(elements)
     }
 }
 
+// Helper function to get PIDs of running applications using NSWorkspace
+fn get_running_application_pids() -> Result<Vec<i32>, AutomationError> {
+    // Implementation using Objective-C bridging
+    unsafe {
+        use objc::{class, msg_send, sel, sel_impl};
+        use objc_foundation::{INSArray, NSArray};
+
+        let workspace_class = class!(NSWorkspace);
+        let shared_workspace: *mut objc::runtime::Object =
+            msg_send![workspace_class, sharedWorkspace];
+        let apps: *mut objc::runtime::Object = msg_send![shared_workspace, runningApplications];
+        let count: usize = msg_send![apps, count];
+
+        let mut pids = Vec::with_capacity(count);
+        for i in 0..count {
+            let app: *mut objc::runtime::Object = msg_send![apps, objectAtIndex:i];
+            let pid: i32 = msg_send![app, processIdentifier];
+            pids.push(pid);
+        }
+
+        debug!(target: "ui_automation", "Found {} application PIDs", pids.len());
+        Ok(pids)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    Err(AutomationError::UnsupportedPlatform(
+        "get_running_application_pids is only supported on macOS".to_string(),
+    ))
+}
+
 impl AccessibilityEngine for MacOSEngine {
+    fn get_applications(&self) -> Result<Vec<UIElement>, AutomationError> {
+        // Get running application PIDs using NSWorkspace
+        let pids = get_running_application_pids()?;
+
+        debug!(target: "ui_automation", "Found {} running applications", pids.len());
+
+        // Create AXUIElements for each application
+        let mut app_elements = Vec::new();
+        for pid in pids {
+            debug!(target: "ui_automation", "Creating AXUIElement for application with PID: {}", pid);
+            let app_element = ThreadSafeAXUIElement::application(pid);
+            app_elements.push(self.wrap_element(app_element));
+        }
+
+        Ok(app_elements)
+    }
     fn get_root_element(&self) -> UIElement {
         self.wrap_element(self.system_wide.clone())
     }
@@ -176,12 +239,6 @@ impl AccessibilityEngine for MacOSEngine {
         Err(AutomationError::UnsupportedOperation(
             "get_focused_element not yet implemented for macOS".to_string(),
         ))
-    }
-
-    fn get_applications(&self) -> Result<Vec<UIElement>, AutomationError> {
-        // In macOS, we can find applications by their AXRole being "AXApplication"
-        self.find_by_role("AXApplication", None, None)
-            .map(|elements| elements.into_iter().map(|e| self.wrap_element(e)).collect())
     }
 
     fn get_application_by_name(&self, name: &str) -> Result<UIElement, AutomationError> {
@@ -334,22 +391,88 @@ impl ElementCollector {
     }
 
     fn enter_element_impl(&mut self, element: &ThreadSafeAXUIElement) -> TreeWalkerFlow {
-        // Existing implementation goes here
-        if let Ok(role) = element.0.role() {
-            if role.to_owned() == self.target_role {
-                // If name is specified, check it matches
-                if let Some(ref target_name) = self.target_name {
-                    if let Ok(title) = element.0.title() {
-                        if title.to_owned() == *target_name {
+        // Check for role match - macOS uses AXRole attribute
+        let role_attr = AXAttribute::new(&CFString::new("AXRole"));
+
+        // Get all attribute names to help debug
+        let attr_names = match element.0.attribute_names() {
+            Ok(names) => {
+                let names_str: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+                trace!(target: "ui_automation", "Element attributes: {:?}", names_str);
+                names
+            }
+            Err(e) => {
+                trace!(target: "ui_automation", "Failed to get attribute names: {}", e);
+                CFArray::<CFString>::from_CFTypes(&[])
+            }
+        };
+
+        debug!(target: "ui_automation", "Attribute names: {:?}", attr_names);
+
+        // Always get children to validate we're traversing properly
+        if let Ok(children) = element.0.children() {
+            debug!(target: "ui_automation", "Element has {} children", children.len());
+        }
+
+        if let Ok(value) = element.0.attribute(&role_attr) {
+            if let Some(cf_string) = value.downcast_into::<CFString>() {
+                let role_value = cf_string.to_string();
+
+                trace!(target: "ui_automation", "Element role: {}", role_value);
+
+                // Get title if available
+                let mut title = String::new();
+                let title_attr = AXAttribute::new(&CFString::new("AXTitle"));
+                if let Ok(title_value) = element.0.attribute(&title_attr) {
+                    if let Some(title_cf_string) = title_value.downcast_into::<CFString>() {
+                        title = title_cf_string.to_string();
+                        trace!(target: "ui_automation", "Element title: {}", title);
+                    }
+                }
+
+                if role_value == self.target_role {
+                    debug!(
+                        target: "ui_automation",
+                        "Found element with matching role: {}, title: {}",
+                        role_value,
+                        title
+                    );
+
+                    // If name is specified, check it matches
+                    if let Some(ref target_name) = self.target_name {
+                        if title == *target_name {
+                            debug!(target: "ui_automation", "Found element with matching name: {}", title);
                             self.elements.push(element.clone());
                         }
+                    } else {
+                        // No name filter, just collect by role
+                        debug!(target: "ui_automation", "Adding element with role: {}", role_value);
+                        self.elements.push(element.clone());
                     }
-                } else {
-                    // No name filter, just collect by role
+                }
+            }
+        } else {
+            trace!(target: "ui_automation", "Element has no role attribute");
+        }
+
+        // Try to get subrole as some macOS elements expose functionality via subrole
+        let subrole_attr = AXAttribute::new(&CFString::new("AXSubrole"));
+        if let Ok(value) = element.0.attribute(&subrole_attr) {
+            if let Some(cf_string) = value.downcast_into::<CFString>() {
+                let subrole_value = cf_string.to_string();
+                trace!(target: "ui_automation", "Element subrole: {}", subrole_value);
+
+                // Check if the subrole matches our target role (for button-like elements)
+                if subrole_value == self.target_role
+                    || (self.target_role == "AXButton"
+                        && (subrole_value == "AXPushButton" || subrole_value == "AXToggleButton"))
+                {
+                    debug!(target: "ui_automation", "Found element with matching subrole: {}", subrole_value);
                     self.elements.push(element.clone());
                 }
             }
         }
+
         TreeWalkerFlow::Continue
     }
 
@@ -477,7 +600,7 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn children(&self) -> Result<Vec<UIElement>, AutomationError> {
-        // Get children of this element
+        // Regular child element traversal
         self.element
             .0
             .children()

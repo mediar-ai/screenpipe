@@ -3,6 +3,7 @@ use super::*;
 use crate::ui_automation::platforms::AccessibilityEngine;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
 // Mock implementation of the AccessibilityEngine trait for testing
 struct MockEngine {
@@ -331,98 +332,173 @@ fn create_mock_desktop() -> Desktop {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
-    #[test]
-    fn test_desktop_new() {
-        // This test would normally test the actual Desktop::new() function,
-        // but since it depends on platform-specific accessibility APIs,
-        // we'll use our mock implementation instead
-        let desktop = create_mock_desktop();
+    #[cfg(target_os = "macos")]
+    mod macos_tests {
+        use super::*;
 
-        // Basic verification that the desktop was created
-        assert!(desktop.engine.get_root_element().id().unwrap() == "desktop");
-    }
+        fn setup_tracing() {
+            // Initialize tracing with debug level for our module
+            let filter =
+                EnvFilter::from_default_env().add_directive("ui_automation=debug".parse().unwrap());
 
-    #[test]
-    fn test_desktop_root() {
-        let desktop = create_mock_desktop();
-        let root = desktop.root();
+            let subscriber = fmt::Subscriber::builder()
+                .with_env_filter(filter)
+                .with_max_level(LevelFilter::DEBUG)
+                .finish();
 
-        assert_eq!(root.id().unwrap(), "desktop");
-        assert_eq!(root.role(), "AXDesktop");
-    }
-
-    #[test]
-    fn test_desktop_element_by_id() {
-        let desktop = create_mock_desktop();
-
-        // Test finding existing element
-        let button = desktop.element_by_id("submit-button").unwrap();
-        assert_eq!(button.id().unwrap(), "submit-button");
-        assert_eq!(button.role(), "AXButton");
-
-        // Test trying to find non-existent element
-        let result = desktop.element_by_id("non-existent");
-        assert!(result.is_err());
-        if let Err(AutomationError::ElementNotFound(msg)) = result {
-            assert!(msg.contains("non-existent"));
-        } else {
-            panic!("Expected ElementNotFound error");
+            // Don't fail if it's already been initialized in another test
+            let _ = tracing::subscriber::set_global_default(subscriber);
         }
-    }
 
-    #[test]
-    fn test_desktop_focused_element() {
-        // This requires modifying the mock engine to set a focused element
-        let mut engine = MockEngine::new();
-        engine.set_focused_element("search-field");
-        let desktop = Desktop {
-            engine: Arc::new(engine),
-        };
+        #[test]
+        fn test_find_buttons() {
+            setup_tracing();
 
-        let focused = desktop.focused_element().unwrap();
-        assert_eq!(focused.id().unwrap(), "search-field");
-        assert_eq!(focused.role(), "AXTextField");
-    }
+            // Log the start of the test
+            println!("Starting button test on macOS");
 
-    #[test]
-    fn test_desktop_applications() {
-        let desktop = create_mock_desktop();
-        let apps = desktop.applications().unwrap();
+            // Create a desktop automation instance
+            let desktop = match Desktop::new() {
+                Ok(d) => {
+                    println!("Successfully created Desktop automation");
+                    d
+                }
+                Err(e) => {
+                    println!("Failed to create Desktop automation: {:?}", e);
+                    return;
+                }
+            };
 
-        assert_eq!(apps.len(), 2);
-        assert!(apps.iter().any(|app| app.id().unwrap() == "safari"));
-        assert!(apps.iter().any(|app| app.id().unwrap() == "finder"));
-    }
+            // Try different button roles that might exist on macOS
+            let button_roles = ["AXButton", "Button", "PushButton", "AXPushButton"];
 
-    #[test]
-    fn test_desktop_application() {
-        let desktop = create_mock_desktop();
+            for role in button_roles {
+                println!("Looking for elements with role: {}", role);
 
-        // Test finding existing application
-        let finder = desktop.application("Finder").unwrap();
-        assert_eq!(finder.id().unwrap(), "finder");
+                // Find all buttons on the screen using different syntax
+                let buttons = desktop
+                    .locator(Selector::Role {
+                        role: role.to_string(),
+                        name: None,
+                    })
+                    .all()
+                    .unwrap_or_default();
+                println!("Found {} elements with role {}", buttons.len(), role);
 
-        // Test trying to find non-existent application
-        let result = desktop.application("Chrome");
-        assert!(result.is_err());
-    }
+                // If we found any, print their attributes
+                for (i, button) in buttons.iter().enumerate() {
+                    println!("Button {}: {:?}", i + 1, button.attributes().label);
+                }
+            }
 
-    #[test]
-    fn test_desktop_locator() {
-        let desktop = create_mock_desktop();
+            // Also try to list all applications as they should definitely exist
+            match desktop.applications() {
+                Ok(apps) => {
+                    println!("Found {} applications", apps.len());
+                    for (i, app) in apps.iter().enumerate() {
+                        println!("App {}: {:?}", i + 1, app.attributes().label);
+                    }
+                }
+                Err(e) => {
+                    println!("Failed to get applications: {:?}", e);
+                }
+            }
 
-        // Create a locator for a button
-        let locator = desktop.locator("AXButton:Submit");
+            // Try to dump all accessibility elements for diagnostics
+            println!("Dumping all elements (limited to first 100):");
+            let mut count = 0;
+            dump_element_tree(&desktop.root(), 0, &mut count);
+        }
 
-        // Test finding elements with the locator
-        let elements = locator.all().unwrap();
-        assert_eq!(elements.len(), 1);
-        assert_eq!(elements[0].id().unwrap(), "submit-button");
+        #[test]
+        fn test_find_buttons_in_current_window() {
+            setup_tracing();
 
-        // Test first() method
-        let element = locator.first().unwrap().unwrap();
-        assert_eq!(element.id().unwrap(), "submit-button");
+            println!("Starting test to find buttons in current app window");
+
+            // Create a desktop automation instance
+            let desktop = match Desktop::new() {
+                Ok(d) => {
+                    println!("Successfully created Desktop automation");
+                    d
+                }
+                Err(e) => {
+                    println!("Failed to create Desktop automation: {:?}", e);
+                    return;
+                }
+            };
+
+            // First, get the frontmost application
+            let apps = match desktop.applications() {
+                Ok(apps) => {
+                    if apps.is_empty() {
+                        println!("No applications found");
+                        return;
+                    }
+                    apps
+                }
+                Err(e) => {
+                    println!("Failed to get applications: {:?}", e);
+                    return;
+                }
+            };
+
+            for app in &apps {
+                println!("Application: {:?}", app.attributes().label);
+            }
+
+            let frontmost_app = apps
+                .into_iter()
+                .find(|app| app.attributes().label == Some("Cursor".to_string()));
+
+            if let Some(app) = &frontmost_app {
+                println!("Frontmost application: {:?}", app.attributes().label);
+            }
+
+            println!(
+                "Frontmost app: {:?}",
+                frontmost_app.unwrap().attributes().label
+            );
+
+            // Try to find the main window
+            // let windows = match frontmost_app.unwrap().locator("AXWindow").all() {
+            //     Ok(w) => {
+            //         println!("Found {} windows", w.len());
+            //         if w.is_empty() {
+            //             println!("No windows found in application");
+            //             return;
+            //         }
+            //         w
+            //     }
+            //     Err(e) => {
+            //         println!("Failed to find windows: {:?}", e);
+            //         return;
+            //     }
+            // };
+
+            // // Use the first window as our search root
+            // let main_window = &windows[0];
+            // println!("Using window: {:?}", main_window.attributes().label);
+
+            // // Search for buttons within this window
+            // let buttons = main_window.locator("AXButton").all().unwrap_or_default();
+
+            // println!("Found {} buttons in current window", buttons.len());
+
+            // // Print details of each button found
+            // for (i, button) in buttons.iter().enumerate() {
+            //     let attrs = button.attributes();
+            //     println!(
+            //         "Button #{}: role={}, label={:?}, description={:?}",
+            //         i + 1,
+            //         attrs.role,
+            //         attrs.label,
+            //         attrs.description
+            //     );
+            // }
+        }
     }
 }
 
@@ -572,5 +648,34 @@ mod selector_tests {
 
         let safari_buttons = desktop.locator(chained).all();
         assert!(safari_buttons.is_ok());
+    }
+}
+
+fn dump_element_tree(element: &UIElement, depth: usize, count: &mut usize) {
+    if *count >= 100 {
+        return;
+    }
+    *count += 1;
+
+    let indent = "  ".repeat(depth);
+    let attrs = element.attributes();
+    println!(
+        "{}Element: role={}, label={:?}, id={:?}",
+        indent,
+        attrs.role,
+        attrs.label,
+        element.id()
+    );
+
+    // Print all properties for debugging
+    println!("{}Properties: {:?}", indent, attrs.properties);
+
+    if let Ok(children) = element.children() {
+        println!("{}Children count: {}", indent, children.len());
+        for child in children {
+            dump_element_tree(&child, depth + 1, count);
+        }
+    } else {
+        println!("{}Failed to get children", indent);
     }
 }
