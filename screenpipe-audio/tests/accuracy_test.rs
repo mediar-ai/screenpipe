@@ -1,10 +1,10 @@
-use candle_transformers::models::whisper;
 use futures::future::join_all;
 use screenpipe_audio::core::device::default_input_device;
 use screenpipe_audio::core::engine::AudioTranscriptionEngine;
 use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
 use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
 use screenpipe_audio::speaker::prepare_segments;
+use screenpipe_audio::transcription::stt::SAMPLE_RATE;
 use screenpipe_audio::transcription::whisper::model::{
     create_whisper_context_parameters, download_whisper_model,
 };
@@ -104,11 +104,11 @@ async fn test_transcription_accuracy() {
                 device: Arc::new(default_input_device().unwrap()),
             };
 
-            let audio_data = if audio_input.sample_rate != whisper::SAMPLE_RATE as u32 {
+            let audio_data = if audio_input.sample_rate != SAMPLE_RATE {
                 match resample(
                     audio_input.data.as_ref(),
                     audio_input.sample_rate,
-                    whisper::SAMPLE_RATE as u32,
+                    SAMPLE_RATE,
                 ) {
                     Ok(data) => data,
                     Err(e) => {

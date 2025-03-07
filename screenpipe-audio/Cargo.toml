@@ -31,12 +31,7 @@ clap = { version = "4.3", features = ["derive"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 
 # Local Embeddings + STT
-# TODO: feature metal, cuda, etc. see https://github.com/huggingface/candle/blob/main/candle-core/Cargo.toml
-candle = { workspace = true }
-candle-nn = { workspace = true }
-candle-transformers = { workspace = true }
 vad-rs = "0.1.4"
-tokenizers = { workspace = true }
 anyhow = "1.0.86"
 byteorder = "1.5.0"
 hf-hub = "0.3.2"
@@ -114,23 +109,12 @@ tracing-subscriber = "0.3.16"
 
 
 [features]
-metal = [
-  "candle/metal",
-  "candle-nn/metal",
-  "candle-transformers/metal",
-  "whisper-rs/metal",
-]
-cuda = [
-  "candle/cuda",
-  "candle-nn/cuda",
-  "candle-transformers/cuda",
-  "whisper-rs/cuda",
-]
-mkl = ["candle/mkl", "candle-nn/mkl", "candle-transformers/mkl"]
+metal = ["whisper-rs/metal"]
+cuda = ["whisper-rs/cuda"]
 
 [[example]]
 name = "screenpipe-audio"
-path = "src/bin/screenpipe-audio.rs"
+path = "examples/screenpipe-audio.rs"
 
 [[bench]]
 name = "pcm_decode_benchmark"

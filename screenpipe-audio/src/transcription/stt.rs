@@ -10,7 +10,6 @@ use crate::utils::audio::resample;
 use crate::utils::ffmpeg::{get_new_file_path, write_audio_to_file};
 use crate::vad::VadEngine;
 use anyhow::Result;
-use candle_transformers::models::whisper as m;
 #[cfg(target_os = "macos")]
 use objc::rc::autoreleasepool;
 use screenpipe_core::Language;
@@ -25,6 +24,8 @@ use tracing::error;
 use whisper_rs::WhisperContext;
 
 use crate::{AudioInput, TranscriptionResult};
+
+pub const SAMPLE_RATE: u32 = 16000;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn stt_sync(
@@ -107,19 +108,15 @@ pub async fn process_audio_input(
         .expect("Time went backwards")
         .as_secs();
 
-    let audio_data = if audio.sample_rate != m::SAMPLE_RATE as u32 {
-        resample(
-            audio.data.as_ref(),
-            audio.sample_rate,
-            m::SAMPLE_RATE as u32,
-        )?
+    let audio_data = if audio.sample_rate != SAMPLE_RATE {
+        resample(audio.data.as_ref(), audio.sample_rate, SAMPLE_RATE)?
     } else {
         audio.data.as_ref().to_vec()
     };
 
     let audio = AudioInput {
         data: Arc::new(audio_data.clone()),
-        sample_rate: m::SAMPLE_RATE as u32,
+        sample_rate: SAMPLE_RATE,
         ..audio
     };
 
