@@ -178,8 +178,6 @@ pub async fn handle_index_command(
                 }
             };
 
-            let engine_arc = Arc::new(engine.clone());
-
             // Do OCR processing directly
             let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
                 #[cfg(target_os = "macos")]

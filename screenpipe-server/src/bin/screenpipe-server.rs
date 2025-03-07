@@ -5,7 +5,7 @@ use dirs::home_dir;
 use futures::pin_mut;
 use port_check::is_local_ipv4_port_free;
 use screenpipe_audio::{
-    audio_manager::{AudioManagerBuilder, AudioManagerStatus},
+    audio_manager::AudioManagerBuilder,
     core::device::{
         default_input_device, default_output_device, list_audio_devices, parse_audio_device,
         trigger_audio_permission,
