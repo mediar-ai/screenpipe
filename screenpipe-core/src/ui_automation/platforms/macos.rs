@@ -16,6 +16,16 @@ use std::fmt;
 use std::sync::Arc;
 use tracing::{debug, trace};
 
+// Import the C function for setting attributes
+#[link(name = "ApplicationServices", kind = "framework")]
+extern "C" {
+    fn AXUIElementSetAttributeValue(
+        element: *mut ::std::os::raw::c_void,
+        attribute: *const ::std::os::raw::c_void,
+        value: *const ::std::os::raw::c_void,
+    ) -> i32;
+}
+
 // Thread-safe wrapper for AXUIElement
 #[derive(Clone)]
 pub struct ThreadSafeAXUIElement(Arc<AXUIElement>);
@@ -47,38 +57,6 @@ impl ThreadSafeAXUIElement {
 
     pub fn clone(&self) -> Self {
         Self(self.0.clone())
-    }
-
-    // Helper method to debug this element
-    pub fn debug_info(&self) -> String {
-        let mut info = String::new();
-
-        // Try to get role
-        match self.0.role() {
-            Ok(role) => info.push_str(&format!("Role: {}, ", role)),
-            Err(e) => info.push_str(&format!("Role error: {:?}, ", e)),
-        }
-
-        // Try to get title
-        match self.0.title() {
-            Ok(title) => info.push_str(&format!("Title: {}, ", title)),
-            Err(e) => info.push_str(&format!("Title error: {:?}, ", e)),
-        }
-
-        // Try to get description
-        let desc_attr = AXAttribute::new(&CFString::new("AXDescription"));
-        match self.0.attribute(&desc_attr) {
-            Ok(value) => {
-                if let Some(cf_string) = value.downcast_into::<CFString>() {
-                    info.push_str(&format!("Description: {}", cf_string));
-                } else {
-                    info.push_str("Description: <non-string>");
-                }
-            }
-            Err(e) => info.push_str(&format!("Description error: {:?}", e)),
-        }
-
-        info
     }
 }
 
@@ -219,23 +197,35 @@ fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
         "menu" => vec!["AXMenu".to_string()],
         "menuitem" => vec!["AXMenuItem".to_string(), "AXMenuBarItem".to_string()], // Include both types
         "dialog" => vec!["AXSheet".to_string(), "AXDialog".to_string()], // macOS often uses Sheet or Dialog
-        "text" | "textfield" => vec!["AXTextField".to_string()],
+        "text" | "textfield" => vec![
+            "AXTextField".to_string(),
+            "AXTextArea".to_string(),
+            "AXText".to_string(),
+            "AXTextArea".to_string(),
+            "AXTextEdit".to_string(),
+        ],
         "list" => vec!["AXList".to_string()],
         "listitem" => vec!["AXCell".to_string()], // List items are often cells in macOS
         "combobox" => vec!["AXPopUpButton".to_string(), "AXComboBox".to_string()],
         "tab" => vec!["AXTabGroup".to_string()],
         "tabitem" => vec!["AXRadioButton".to_string()], // Tab items are sometimes radio buttons
         "toolbar" => vec!["AXToolbar".to_string()],
-        "button-like" => vec![
-            "AXMenuItem".to_string(),
-            "AXMenuBarItem".to_string(),
-            "AXStaticText".to_string(),
-            "AXImage".to_string(),
-        ], // Types that may act as buttons
+
         _ => vec![role.to_string()], // Keep as-is for unknown roles
     }
 }
 
+fn macos_role_to_generic_role(role: &str) -> Vec<String> {
+    match role.to_lowercase().as_str() {
+        "AXWindow" => vec!["window".to_string()],
+        "AXButton" | "AXMenuItem" | "AXMenuBarItem" => vec!["button".to_string()],
+        "AXTextField" | "AXTextArea" | "AXTextEdit" => vec!["textfield".to_string()],
+        "AXList" => vec!["list".to_string()],
+        "AXCell" => vec!["listitem".to_string()],
+        "AXSheet" | "AXDialog" => vec!["dialog".to_string()],
+        _ => vec![role.to_string()],
+    }
+}
 // Helper function to get PIDs of running applications using NSWorkspace
 #[allow(clippy::all)]
 fn get_running_application_pids() -> Result<Vec<i32>, AutomationError> {
@@ -816,17 +806,6 @@ impl ElementCollectorByAttribute {
     }
 
     fn exit_element_impl(&mut self, _element: &ThreadSafeAXUIElement) {}
-
-    // Add a new method to collect elements using the tree walker
-    fn collect_elements(&self, root: &AXUIElement) -> Vec<ThreadSafeAXUIElement> {
-        let adapter = self.adapter();
-        let walker = TreeWalker::new();
-        walker.walk(root, &adapter);
-
-        // Extract the collected elements from the adapter's inner RefCell
-        let elements = adapter.inner.borrow().elements.clone();
-        elements
-    }
 }
 
 // Our concrete UIElement implementation for macOS
@@ -861,17 +840,6 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn role(&self) -> String {
-        // First, check if this is a window to handle special case
-        let is_window = self
-            .element
-            .0
-            .role()
-            .map_or(false, |r| r.to_string() == "AXWindow");
-
-        if is_window {
-            return "window".to_string();
-        }
-
         // Get the actual role
         let role = self
             .element
@@ -882,39 +850,16 @@ impl UIElementImpl for MacOSUIElement {
 
         debug!(target: "ui_automation", "Original role from AXUIElement: {}", role);
 
-        // Map AXMenuItem to button when appropriate
-        if role == "AXMenuItem" {
-            // For now, we'll consider all menu items as potential buttons
-            // In a more sophisticated implementation, we might want to check
-            // additional attributes to determine if it's really a button-like element
-            debug!(target: "ui_automation", "Mapping AXMenuItem to button role");
-            return "button".to_string();
-        }
-
-        // Map AXToolbar to toolbar
-        if role == "AXToolbar" {
-            return "toolbar".to_string();
-        }
-
         // Map macOS-specific roles to generic roles
-        match role.as_str() {
-            "AXButton" => "button".to_string(),
-            "AXCheckBox" => "checkbox".to_string(),
-            "AXMenu" => "menu".to_string(),
-            "AXMenuItem" => "button".to_string(), // Map menu items to buttons
-            "AXSheet" => "dialog".to_string(),
-            "AXTextField" => "text".to_string(),
-            "AXList" => "list".to_string(),
-            "AXCell" => "listitem".to_string(),
-            "AXPopUpButton" => "combobox".to_string(),
-            "AXTabGroup" => "tab".to_string(),
-            "AXRadioButton" => "tabitem".to_string(),
-            _ => role,
-        }
+        // TODO: why first? any issue?
+        macos_role_to_generic_role(&role)
+            .first()
+            .unwrap_or(&role)
+            .to_string()
     }
 
     fn attributes(&self) -> UIElementAttributes {
-        let mut properties = HashMap::new();
+        let properties = HashMap::new();
 
         // Check if this is a window element first
         let is_window = self
@@ -1137,11 +1082,36 @@ impl UIElementImpl for MacOSUIElement {
         ))
     }
 
-    fn type_text(&self, _text: &str) -> Result<(), AutomationError> {
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "type_text not yet implemented for macOS".to_string(),
-        ))
+    fn type_text(&self, text: &str) -> Result<(), AutomationError> {
+        // First, make sure the element is focused
+        self.focus()?;
+
+        // Create a CFString from the input text
+        let cf_string = CFString::new(text);
+
+        // Set the value of the element using direct AXUIElementSetAttributeValue call
+        unsafe {
+            let element_ref = self.element.0.as_concrete_TypeRef() as *mut ::std::os::raw::c_void;
+            let attr_str = CFString::new("AXValue");
+            let attr_str_ref = attr_str.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+            let value_ref = cf_string.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+
+            let result = AXUIElementSetAttributeValue(element_ref, attr_str_ref, value_ref);
+
+            if result != 0 {
+                debug!(
+                    target: "ui_automation",
+                    "Failed to set text value via AXValue: error code {}", result
+                );
+
+                return Err(AutomationError::PlatformError(format!(
+                    "Failed to set text: error code {}",
+                    result
+                )));
+            }
+        }
+
+        Ok(())
     }
 
     fn press_key(&self, _key: &str) -> Result<(), AutomationError> {
@@ -1191,11 +1161,36 @@ impl UIElementImpl for MacOSUIElement {
         Ok(String::new())
     }
 
-    fn set_value(&self, _value: &str) -> Result<(), AutomationError> {
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "set_value not yet implemented for macOS".to_string(),
-        ))
+    fn set_value(&self, value: &str) -> Result<(), AutomationError> {
+        // This is essentially the same implementation as type_text for macOS,
+        // as both rely on setting the AXValue attribute
+
+        // Create a CFString from the input value
+        let cf_string = CFString::new(value);
+
+        // Set the value of the element using direct AXUIElementSetAttributeValue call
+        unsafe {
+            let element_ref = self.element.0.as_concrete_TypeRef() as *mut ::std::os::raw::c_void;
+            let attr_str = CFString::new("AXValue");
+            let attr_str_ref = attr_str.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+            let value_ref = cf_string.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+
+            let result = AXUIElementSetAttributeValue(element_ref, attr_str_ref, value_ref);
+
+            if result != 0 {
+                debug!(
+                    target: "ui_automation",
+                    "Failed to set value via AXValue: error code {}", result
+                );
+
+                return Err(AutomationError::PlatformError(format!(
+                    "Failed to set value: error code {}",
+                    result
+                )));
+            }
+        }
+
+        Ok(())
     }
 
     fn is_enabled(&self) -> Result<bool, AutomationError> {
