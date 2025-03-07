@@ -24,10 +24,8 @@ mod tests {
         }
 
         #[test]
-        fn test_find_buttons_in_cursor_simple() {
+        fn test_find_buttons_in_iphone_mirroring() {
             setup_tracing();
-
-            println!("Starting test to find buttons in current app window");
 
             // Create a desktop automation instance
             let desktop = match Desktop::new() {
@@ -41,156 +39,134 @@ mod tests {
                 }
             };
 
-            let app = match desktop.application("cursor") {
+            let app = match desktop.application("Cursor") {
                 Ok(w) => w,
                 Err(e) => {
-                    println!("Failed to find window: {:?}", e);
+                    println!("Failed to find application: {:?}", e);
                     return;
                 }
             };
-
             println!("App: {:?}", app.attributes().label);
 
-            // First, get the frontmost application
-            let windows = match app.locator("window:tests.rs — screenpipe").unwrap().all() {
-                Ok(w) => w,
-                Err(e) => {
-                    println!("Failed to find window: {:?}", e);
-                    return;
-                }
-            };
+            // Print the window hierarchy to understand the structure
+            println!("\n===== WINDOW HIERARCHY =====");
+            if let Ok(children) = app.children() {
+                println!("App has {} direct children", children.len());
+                for (i, child) in children.iter().enumerate() {
+                    println!(
+                        "Child #{}: role={}, label={:?}, description={:?}",
+                        i,
+                        child.role(),
+                        child.attributes().label,
+                        child.attributes().description
+                    );
 
-            // Print detailed debug info for each window
-            for (i, window) in windows.iter().enumerate() {
-                println!("Window #{} Debug:", i + 1);
+                    // Print the next level down to see buttons
+                    if let Ok(grandchildren) = child.children() {
+                        println!("  Has {} children", grandchildren.len());
+                        for (j, grandchild) in grandchildren.iter().enumerate() {
+                            println!(
+                                "  Grandchild #{}.{}: role={}, label={:?}, description={:?}",
+                                i,
+                                j,
+                                grandchild.role(),
+                                grandchild.attributes().label,
+                                grandchild.attributes().description
+                            );
 
-                // We can access properties through the UIElement interface directly
-                println!("  Detailed inspection:");
-
-                // Access role from attributes
-                println!("  Role from attributes: {}", window.attributes().role);
-
-                // Access attributes
-                let attrs = window.attributes();
-                println!(
-                    "  Attributes from interface: role={}, label={:?}, description={:?}",
-                    attrs.role, attrs.label, attrs.description
-                );
-
-                // Check for children
-                match window.children() {
-                    Ok(children) => println!("  Children count: {}", children.len()),
-                    Err(e) => println!("  Children error: {:?}", e),
-                }
-
-                println!("Window: {:?}", window.attributes().label);
-            }
-
-            let main_window = &windows.first().unwrap();
-            println!("Using window: {:?}", main_window.attributes().label);
-
-            // Search for buttons within this window
-            let buttons = main_window.locator("button").unwrap();
-            println!("Found {} buttons", buttons.all().unwrap().len());
-
-            for (i, button) in buttons.all().unwrap().iter().enumerate() {
-                let attrs = button.attributes();
-                println!(
-                    "Button #{}: role={}, label={:?}, description={:?}",
-                    i + 1,
-                    attrs.role,
-                    attrs.label,
-                    attrs.description
-                );
-            }
-        }
-
-        #[test]
-        fn test_find_buttons_in_current_window() {
-            setup_tracing();
-
-            println!("Starting test to find buttons in current app window");
-
-            // Create a desktop automation instance
-            let desktop = match Desktop::new() {
-                Ok(d) => {
-                    println!("Successfully created Desktop automation");
-                    d
-                }
-                Err(e) => {
-                    println!("Failed to create Desktop automation: {:?}", e);
-                    return;
-                }
-            };
-
-            // First, get the frontmost application
-            let apps = match desktop.applications() {
-                Ok(apps) => {
-                    if apps.is_empty() {
-                        println!("No applications found");
-                        return;
+                            // Try one more level
+                            if let Ok(great_grandchildren) = grandchild.children() {
+                                println!("    Has {} children", great_grandchildren.len());
+                                for (k, ggc) in great_grandchildren.iter().take(5).enumerate() {
+                                    println!(
+                                        "    Great-grandchild #{}.{}.{}: role={}, label={:?}",
+                                        i,
+                                        j,
+                                        k,
+                                        ggc.role(),
+                                        ggc.attributes().label
+                                    );
+                                }
+                                if great_grandchildren.len() > 5 {
+                                    println!("    ... and {} more", great_grandchildren.len() - 5);
+                                }
+                            }
+                        }
                     }
-                    apps
                 }
-                Err(e) => {
-                    println!("Failed to get applications: {:?}", e);
-                    return;
-                }
-            };
-
-            for app in &apps {
-                println!("Application: {:?}", app.attributes().label);
             }
 
-            let frontmost_app = apps
-                .into_iter()
-                .find(|app| app.attributes().label == Some("Cursor".to_string()));
-
-            if let Some(app) = &frontmost_app {
-                println!("Frontmost application: {:?}", app.attributes().label);
-            }
-
-            println!(
-                "Frontmost app: {:?}",
-                frontmost_app.clone().unwrap().attributes()
-            );
-
-            // Try to find the main window
-            let windows = match frontmost_app.unwrap().locator("window") {
-                Ok(w) => {
-                    println!("Found {} windows", w.all().unwrap().len());
-
-                    w
-                }
-                Err(e) => {
-                    println!("Failed to find windows: {:?}", e);
-                    return;
-                }
+            // Find buttons in the application window
+            println!("\n===== BUTTON SEARCH RESULTS =====");
+            let buttons = match app.locator("button") {
+                Ok(locator) => locator.all().unwrap_or_default(),
+                Err(_) => Vec::new(),
             };
+            println!("Found {} buttons via locator API", buttons.len());
 
-            // Use the first window as our search root
-            let main_window = &windows.first().unwrap().unwrap();
-            println!("Using window: {:?}", main_window.attributes().label);
+            // Print details about each button by type
+            let mut ax_button_count = 0;
+            let mut ax_menu_item_count = 0;
+            let mut ax_menu_bar_item_count = 0;
+            let mut ax_static_text_count = 0;
+            let mut ax_image_count = 0;
+            let mut other_count = 0;
 
-            // Search for buttons within this window
-            let buttons = main_window.locator("AXButton:Submit").unwrap();
+            for (i, button) in buttons.iter().enumerate() {
+                let button_type = if let Some(props) = button.attributes().properties.get("AXRole")
+                {
+                    let props_str = props.clone();
+                    props_str
+                } else {
+                    "unknown".to_string()
+                };
 
-            println!(
-                "Found {} buttons in current window",
-                buttons.all().unwrap().len()
-            );
-
-            // Print details of each button found
-            for (i, button) in buttons.all().unwrap().iter().enumerate() {
-                let attrs = button.attributes();
                 println!(
-                    "Button #{}: role={}, label={:?}, description={:?}",
-                    i + 1,
-                    attrs.role,
-                    attrs.label,
-                    attrs.description
+                    "Button #{}: type={}, role={}, label={:?}, description={:?}",
+                    i,
+                    button_type,
+                    button.role(),
+                    button.attributes().label,
+                    button.attributes().description
                 );
+
+                // if description is "Rust" then click it
+                if button.attributes().description == Some("Rust".to_string()) {
+                    match button.click() {
+                        Ok(_) => println!("Clicked button: {:?}", button.attributes().label),
+                        Err(e) => println!("Failed to click button: {:?}", e),
+                    }
+                }
+
+                // Count by type
+                match button_type.as_str() {
+                    "AXButton" => ax_button_count += 1,
+                    "AXMenuItem" => ax_menu_item_count += 1,
+                    "AXMenuBarItem" => ax_menu_bar_item_count += 1,
+                    "AXStaticText" => ax_static_text_count += 1,
+                    "AXImage" => ax_image_count += 1,
+                    _ => other_count += 1,
+                }
             }
+
+            // Print summary of button types
+            println!("\n===== BUTTON TYPE SUMMARY =====");
+            println!("AXButton: {}", ax_button_count);
+            println!("AXMenuItem: {}", ax_menu_item_count);
+            println!("AXMenuBarItem: {}", ax_menu_bar_item_count);
+            println!("AXStaticText: {}", ax_static_text_count);
+            println!("AXImage: {}", ax_image_count);
+            println!("Other: {}", other_count);
+            println!("Total: {}", buttons.len());
+
+            // Make sure we found at least some buttons
+            assert!(buttons.len() > 0, "No buttons found in iPhone Mirroring");
+
+            // Check that we found the standard menu bar items
+            assert_eq!(
+                ax_menu_bar_item_count, 6,
+                "Should find exactly 6 menu bar items"
+            );
         }
     }
 }

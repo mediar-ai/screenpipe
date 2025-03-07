@@ -155,14 +155,24 @@ impl MacOSEngine {
         name: Option<&str>,
         root: Option<&ThreadSafeAXUIElement>,
     ) -> Result<Vec<UIElement>, AutomationError> {
-        let macos_role = map_generic_role_to_macos_role(role);
+        let macos_roles = map_generic_role_to_macos_roles(role);
         debug!(
             target: "ui_automation",
-            "Searching for elements with role={} (macOS role={}) name={:?}",
-            role, macos_role, name
+            "Searching for elements with role={} (macOS roles={:?}) name={:?}",
+            role, macos_roles, name
         );
 
-        let collector = ElementCollector::new(&macos_role, name);
+        let mut all_elements = Vec::new();
+
+        // Search for each possible macOS role
+        let collector = ElementCollector::new(
+            macos_roles
+                .iter()
+                .map(|r| r.as_str())
+                .collect::<Vec<&str>>()
+                .as_slice(),
+            name,
+        );
         let walker = TreeWalker::new();
 
         let start_element = match root {
@@ -177,39 +187,52 @@ impl MacOSEngine {
         };
 
         walker.walk(start_element, &collector.adapter());
+        all_elements.extend(collector.elements);
 
         debug!(
             target: "ui_automation",
-            "Found {} elements with role '{}' (macOS role={})",
-            collector.elements.len(),
+            "Found {} elements with role '{}' (macOS roles={:?})",
+            all_elements.len(),
             role,
-            macos_role
+            macos_roles
         );
 
-        Ok(collector
-            .elements
+        Ok(all_elements
             .into_iter()
             .map(|e| self.wrap_element(e))
             .collect())
     }
 }
 
-// Add this function to map generic roles to macOS-specific roles
-fn map_generic_role_to_macos_role(role: &str) -> String {
+// Modified to return Vec<String> for multiple possible role matches
+fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
     match role.to_lowercase().as_str() {
-        "window" => "AXWindow".to_string(),
-        "button" => "AXButton".to_string(),
-        "checkbox" => "AXCheckBox".to_string(),
-        "menu" => "AXMenu".to_string(),
-        "menuitem" => "AXMenuItem".to_string(),
-        "dialog" => "AXSheet".to_string(), // macOS often uses Sheet for dialogs
-        "text" | "textfield" => "AXTextField".to_string(),
-        "list" => "AXList".to_string(),
-        "listitem" => "AXCell".to_string(), // List items are often cells in macOS
-        "combobox" => "AXPopUpButton".to_string(),
-        "tab" => "AXTabGroup".to_string(),
-        "tabitem" => "AXRadioButton".to_string(), // Tab items are sometimes radio buttons
-        _ => role.to_string(),                    // Keep as-is for unknown roles
+        "window" => vec!["AXWindow".to_string()],
+        "button" => vec![
+            "AXButton".to_string(),
+            "AXMenuItem".to_string(),
+            "AXMenuBarItem".to_string(),
+            "AXStaticText".to_string(), // Some text might be clickable buttons
+            "AXImage".to_string(),      // Some images might be clickable buttons
+        ], // Button can be any of these
+        "checkbox" => vec!["AXCheckBox".to_string()],
+        "menu" => vec!["AXMenu".to_string()],
+        "menuitem" => vec!["AXMenuItem".to_string(), "AXMenuBarItem".to_string()], // Include both types
+        "dialog" => vec!["AXSheet".to_string(), "AXDialog".to_string()], // macOS often uses Sheet or Dialog
+        "text" | "textfield" => vec!["AXTextField".to_string()],
+        "list" => vec!["AXList".to_string()],
+        "listitem" => vec!["AXCell".to_string()], // List items are often cells in macOS
+        "combobox" => vec!["AXPopUpButton".to_string(), "AXComboBox".to_string()],
+        "tab" => vec!["AXTabGroup".to_string()],
+        "tabitem" => vec!["AXRadioButton".to_string()], // Tab items are sometimes radio buttons
+        "toolbar" => vec!["AXToolbar".to_string()],
+        "button-like" => vec![
+            "AXMenuItem".to_string(),
+            "AXMenuBarItem".to_string(),
+            "AXStaticText".to_string(),
+            "AXImage".to_string(),
+        ], // Types that may act as buttons
+        _ => vec![role.to_string()], // Keep as-is for unknown roles
     }
 }
 
@@ -324,9 +347,110 @@ impl AccessibilityEngine for MacOSEngine {
         // Regular element finding logic
         match selector {
             Selector::Role { role, name } => {
-                let macos_role = map_generic_role_to_macos_role(role);
+                let macos_roles = map_generic_role_to_macos_roles(role);
+                // Special case for buttons - directly search for menu items
+                if macos_roles.contains(&"AXButton".to_string())
+                    || macos_roles.contains(&"AXMenuItem".to_string())
+                    || macos_roles.contains(&"AXMenuBarItem".to_string())
+                {
+                    debug!(
+                        target: "ui_automation",
+                        "Button selector detected, will search for buttons and button-like elements"
+                    );
+
+                    // Always require a root element for searches to avoid searching the entire system
+                    // If no root is provided, we'll just return an empty list instead of using system_wide
+                    if root.is_none() {
+                        debug!(
+                            target: "ui_automation",
+                            "No root element provided for button search, returning empty list to avoid system-wide search"
+                        );
+                        return Ok(Vec::new());
+                    }
+
+                    let root_ax_element = root.map(|el| {
+                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
+                            &macos_el.element
+                        } else {
+                            panic!("Root element is not a macOS element")
+                        }
+                    });
+
+                    let start_element = match root_ax_element {
+                        Some(elem) => &elem.0,
+                        // We should never reach this case due to the check above
+                        None => return Ok(Vec::new()),
+                    };
+
+                    // First search for regular buttons
+                    let collector = ElementCollector::new(&["AXButton"], name.as_deref());
+                    let mut elements = collector.collect_elements(start_element);
+
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXButton elements", elements.len()
+                    );
+
+                    // Then search for menu items
+                    let menu_collector = ElementCollector::new(&["AXMenuItem"], name.as_deref());
+                    let menu_elements = menu_collector.collect_elements(start_element);
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXMenuItem elements", menu_elements.len()
+                    );
+                    elements.extend(menu_elements);
+
+                    // Also search for menu bar items
+                    let menubar_collector =
+                        ElementCollector::new(&["AXMenuBarItem"], name.as_deref());
+                    let menubar_elements = menubar_collector.collect_elements(start_element);
+
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXMenuBarItem elements", menubar_elements.len()
+                    );
+                    elements.extend(menubar_elements);
+
+                    // Search for static text elements that may be clickable
+                    let text_collector = ElementCollector::new(&["AXStaticText"], name.as_deref());
+                    let text_elements = text_collector.collect_elements(start_element);
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXStaticText elements that may be buttons", text_elements.len()
+                    );
+                    elements.extend(text_elements);
+
+                    // Search for image elements that may be used as buttons
+                    let image_collector = ElementCollector::new(&["AXImage"], name.as_deref());
+                    let image_elements = image_collector.collect_elements(start_element);
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXImage elements that may be buttons", image_elements.len()
+                    );
+                    elements.extend(image_elements);
+
+                    // Convert the elements to UIElements
+                    let ui_elements: Vec<UIElement> =
+                        elements.into_iter().map(|e| self.wrap_element(e)).collect();
+
+                    // Debug log the roles of the elements we found
+                    for (i, elem) in ui_elements.iter().enumerate() {
+                        debug!(
+                            target: "ui_automation",
+                            "Element #{}: role={}, label={:?}",
+                            i + 1,
+                            elem.role(),
+                            elem.attributes().label
+                        );
+                    }
+
+                    return Ok(ui_elements);
+                }
+
+                let macos_roles = map_generic_role_to_macos_roles(role);
+
                 // Special handling for window search
-                if macos_role == "AXWindow" && root.is_some() {
+                if macos_roles.contains(&"AXWindow".to_string()) && root.is_some() {
                     if let Some(app_elem) = root {
                         if let Some(macos_app) = app_elem.as_any().downcast_ref::<MacOSUIElement>()
                         {
@@ -337,7 +461,7 @@ impl AccessibilityEngine for MacOSEngine {
                                     .into_iter()
                                     .filter(|child| {
                                         let attrs = child.attributes();
-                                        let is_window = attrs.role == "AXWindow";
+                                        let is_window = macos_roles.contains(&attrs.role);
 
                                         if !is_window {
                                             return false;
@@ -526,15 +650,15 @@ impl TreeVisitor for ElementCollectorByAttributeAdapter {
 
 // Helper struct for collecting elements by role
 struct ElementCollector {
-    target_role: String,
+    target_roles: Vec<String>,
     target_name: Option<String>,
     elements: Vec<ThreadSafeAXUIElement>,
 }
 
 impl ElementCollector {
-    fn new(role: &str, name: Option<&str>) -> Self {
+    fn new(roles: &[&str], name: Option<&str>) -> Self {
         Self {
-            target_role: role.to_string(),
+            target_roles: roles.iter().map(|r| r.to_string()).collect(),
             target_name: name.map(|s| s.to_string()),
             elements: Vec::new(),
         }
@@ -543,7 +667,7 @@ impl ElementCollector {
     fn adapter(&self) -> ElementCollectorAdapter {
         ElementCollectorAdapter {
             inner: RefCell::new(ElementCollector {
-                target_role: self.target_role.clone(),
+                target_roles: self.target_roles.clone(),
                 target_name: self.target_name.clone(),
                 elements: Vec::new(),
             }),
@@ -590,7 +714,7 @@ impl ElementCollector {
                     }
                 }
 
-                if role_value == self.target_role {
+                if self.target_roles.contains(&role_value) {
                     debug!(
                         target: "ui_automation",
                         "Found element with matching role: {}, title: {}",
@@ -623,8 +747,8 @@ impl ElementCollector {
                 trace!(target: "ui_automation", "Element subrole: {}", subrole_value);
 
                 // Check if the subrole matches our target role (for button-like elements)
-                if subrole_value == self.target_role
-                    || (self.target_role == "AXButton"
+                if self.target_roles.contains(&subrole_value)
+                    || (self.target_roles.contains(&"AXButton".to_string())
                         && (subrole_value == "AXPushButton" || subrole_value == "AXToggleButton"))
                 {
                     debug!(target: "ui_automation", "Found element with matching subrole: {}", subrole_value);
@@ -637,6 +761,16 @@ impl ElementCollector {
     }
 
     fn exit_element_impl(&mut self, _element: &ThreadSafeAXUIElement) {}
+
+    fn collect_elements(&self, root: &AXUIElement) -> Vec<ThreadSafeAXUIElement> {
+        let adapter = self.adapter();
+        let walker = TreeWalker::new();
+        walker.walk(root, &adapter);
+
+        // Extract the collected elements from the adapter's inner RefCell
+        let elements = adapter.inner.borrow().elements.clone();
+        elements
+    }
 }
 
 // Helper struct for collecting elements by attribute value
@@ -682,6 +816,17 @@ impl ElementCollectorByAttribute {
     }
 
     fn exit_element_impl(&mut self, _element: &ThreadSafeAXUIElement) {}
+
+    // Add a new method to collect elements using the tree walker
+    fn collect_elements(&self, root: &AXUIElement) -> Vec<ThreadSafeAXUIElement> {
+        let adapter = self.adapter();
+        let walker = TreeWalker::new();
+        walker.walk(root, &adapter);
+
+        // Extract the collected elements from the adapter's inner RefCell
+        let elements = adapter.inner.borrow().elements.clone();
+        elements
+    }
 }
 
 // Our concrete UIElement implementation for macOS
@@ -727,11 +872,45 @@ impl UIElementImpl for MacOSUIElement {
             return "window".to_string();
         }
 
-        self.element
+        // Get the actual role
+        let role = self
+            .element
             .0
             .role()
             .map(|r| r.to_string())
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        debug!(target: "ui_automation", "Original role from AXUIElement: {}", role);
+
+        // Map AXMenuItem to button when appropriate
+        if role == "AXMenuItem" {
+            // For now, we'll consider all menu items as potential buttons
+            // In a more sophisticated implementation, we might want to check
+            // additional attributes to determine if it's really a button-like element
+            debug!(target: "ui_automation", "Mapping AXMenuItem to button role");
+            return "button".to_string();
+        }
+
+        // Map AXToolbar to toolbar
+        if role == "AXToolbar" {
+            return "toolbar".to_string();
+        }
+
+        // Map macOS-specific roles to generic roles
+        match role.as_str() {
+            "AXButton" => "button".to_string(),
+            "AXCheckBox" => "checkbox".to_string(),
+            "AXMenu" => "menu".to_string(),
+            "AXMenuItem" => "button".to_string(), // Map menu items to buttons
+            "AXSheet" => "dialog".to_string(),
+            "AXTextField" => "text".to_string(),
+            "AXList" => "list".to_string(),
+            "AXCell" => "listitem".to_string(),
+            "AXPopUpButton" => "combobox".to_string(),
+            "AXTabGroup" => "tab".to_string(),
+            "AXRadioButton" => "tabitem".to_string(),
+            _ => role,
+        }
     }
 
     fn attributes(&self) -> UIElementAttributes {
@@ -801,6 +980,7 @@ impl UIElementImpl for MacOSUIElement {
 
         // For non-window elements, use standard attribute retrieval
         let mut attrs = UIElementAttributes {
+            // Use our role() method which handles the mapping of AXMenuItem to button
             role: self.role(),
             label: None,
             value: None,
@@ -1071,8 +1251,8 @@ impl UIElementImpl for MacOSUIElement {
 
         // Special handling for window searches which can be tricky
         if let Selector::Role { role, name } = &selector {
-            let macos_role = map_generic_role_to_macos_role(role);
-            if macos_role == "AXWindow" {
+            let macos_roles = map_generic_role_to_macos_roles(role);
+            if macos_roles.contains(&"AXWindow".to_string()) {
                 debug!(target: "ui_automation", "Special handling for AXWindow search");
 
                 // When looking for windows, we might need to first get the application

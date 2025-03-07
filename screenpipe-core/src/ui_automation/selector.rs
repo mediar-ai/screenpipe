@@ -26,7 +26,7 @@ impl From<&str> for Selector {
         // Make common UI roles like "window", "button", etc. default to Role selectors
         // instead of Name selectors
         match s {
-            "window" | "button" | "checkbox" | "menu" | "menuitem" => Selector::Role {
+            "window" | "button" | "checkbox" | "menu" | "menuitem" | "menubar" => Selector::Role {
                 role: s.to_string(),
                 name: None,
             },
