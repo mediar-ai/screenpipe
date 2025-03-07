@@ -43,7 +43,7 @@ type RecordingHandlesMap = DashMap<AudioDevice, Arc<Mutex<JoinHandle<Result<()>>
 
 #[derive(Clone)]
 pub struct AudioManager {
-    options: Arc<AudioManagerOptions>,
+    options: Arc<RwLock<AudioManagerOptions>>,
     device_manager: Arc<DeviceManager>,
     segmentation_manager: Arc<SegmentationManager>,
     status: Arc<RwLock<AudioManagerStatus>>,
@@ -78,7 +78,7 @@ impl AudioManager {
         whisper_rs::install_logging_hooks();
 
         let manager = Self {
-            options: Arc::new(options),
+            options: Arc::new(RwLock::new(options)),
             device_manager: Arc::new(device_manager),
             segmentation_manager,
             status: Arc::new(status),
@@ -118,7 +118,7 @@ impl AudioManager {
         start_device_monitor(
             self_arc.clone(),
             self.device_manager.clone(),
-            self.options.enabled_devices.clone(),
+            self.options.read().await.enabled_devices.clone(),
         )
         .await?;
 
@@ -221,17 +221,18 @@ impl AudioManager {
     }
 
     pub async fn use_all_devices(&self) -> bool {
-        self.options.use_all_devices
+        self.options.read().await.use_all_devices
     }
 
     async fn record_device(&self, device: &AudioDevice) -> Result<JoinHandle<Result<()>>> {
+        let options = self.options.read().await;
         let stream = self.device_manager.stream(device).unwrap();
-        let audio_chunk_duration = self.options.audio_chunk_duration;
+        let audio_chunk_duration = options.audio_chunk_duration;
         let recording_sender = self.recording_sender.clone();
         let is_running = self.device_manager.is_running_mut(device).unwrap();
-        let languages = self.options.languages.clone();
-        let deepgram_api_key = self.options.deepgram_api_key.clone();
-        let realtime_enabled = self.options.enable_realtime;
+        let languages = options.languages.clone();
+        let deepgram_api_key = options.deepgram_api_key.clone();
+        let realtime_enabled = options.enable_realtime;
         let device_clone = device.clone();
 
         let recording_handle = tokio::spawn(async move {
@@ -294,14 +295,14 @@ impl AudioManager {
         let segmentation_model_path = segmentation_manager.segmentation_model_path.clone();
         let embedding_manager = segmentation_manager.embedding_manager.clone();
         let embedding_extractor = segmentation_manager.embedding_extractor.clone();
-        let output_path = self.options.output_path.clone();
-        let languages = self.options.languages.clone();
-        let deepgram_api_key = self.options.deepgram_api_key.clone();
-        let audio_transcription_engine = self.options.transcription_engine.clone();
+        let options = self.options.read().await;
+        let output_path = options.output_path.clone();
+        let languages = options.languages.clone();
+        let deepgram_api_key = options.deepgram_api_key.clone();
+        let audio_transcription_engine = options.transcription_engine.clone();
         let vad_engine = self.vad_engine.clone();
         let whisper_receiver = self.recording_receiver.clone();
-        let context_param =
-            create_whisper_context_parameters(self.options.transcription_engine.clone())?;
+        let context_param = create_whisper_context_parameters(audio_transcription_engine.clone())?;
 
         let quantized_path = self.stt_model_path.clone();
         let whisper_context = Arc::new(
@@ -336,7 +337,7 @@ impl AudioManager {
     async fn start_transcription_receiver_handler(&self) -> Result<JoinHandle<()>> {
         let transcription_receiver = self.transcription_receiver.clone();
         let db = self.db.clone();
-        let transcription_engine = self.options.transcription_engine.clone();
+        let transcription_engine = self.options.read().await.transcription_engine.clone();
         Ok(tokio::spawn(handle_new_transcript(
             db,
             transcription_receiver,
@@ -392,7 +393,6 @@ impl Drop for AudioManager {
             for h in rec.iter() {
                 h.value().lock().await.abort();
             }
-
         });
     }
 }
