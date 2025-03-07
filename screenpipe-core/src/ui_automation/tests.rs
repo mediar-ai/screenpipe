@@ -41,8 +41,7 @@ mod tests {
                 }
             };
 
-            // First, get the frontmost application
-            let windows = match desktop.locator("window:test.rs").all() {
+            let app = match desktop.application("cursor") {
                 Ok(w) => w,
                 Err(e) => {
                     println!("Failed to find window: {:?}", e);
@@ -50,7 +49,40 @@ mod tests {
                 }
             };
 
-            for window in &windows {
+            println!("App: {:?}", app.attributes().label);
+
+            // First, get the frontmost application
+            let windows = match app.locator("window:tests.rs — screenpipe").unwrap().all() {
+                Ok(w) => w,
+                Err(e) => {
+                    println!("Failed to find window: {:?}", e);
+                    return;
+                }
+            };
+
+            // Print detailed debug info for each window
+            for (i, window) in windows.iter().enumerate() {
+                println!("Window #{} Debug:", i + 1);
+
+                // We can access properties through the UIElement interface directly
+                println!("  Detailed inspection:");
+
+                // Access role from attributes
+                println!("  Role from attributes: {}", window.attributes().role);
+
+                // Access attributes
+                let attrs = window.attributes();
+                println!(
+                    "  Attributes from interface: role={}, label={:?}, description={:?}",
+                    attrs.role, attrs.label, attrs.description
+                );
+
+                // Check for children
+                match window.children() {
+                    Ok(children) => println!("  Children count: {}", children.len()),
+                    Err(e) => println!("  Children error: {:?}", e),
+                }
+
                 println!("Window: {:?}", window.attributes().label);
             }
 
