@@ -1,7 +1,9 @@
 use crate::ui_automation::errors::AutomationError;
-use crate::ui_automation::selector::{Selector, SelectorEngine};
+use crate::ui_automation::selector::Selector;
 use std::collections::HashMap;
 use std::fmt::Debug;
+
+use super::Locator;
 /// Represents a UI element in a desktop application
 #[derive(Debug)]
 pub struct UIElement {
@@ -41,6 +43,9 @@ pub(crate) trait UIElementImpl: Send + Sync + Debug {
     fn is_focused(&self) -> Result<bool, AutomationError>;
     fn perform_action(&self, action: &str) -> Result<(), AutomationError>;
     fn as_any(&self) -> &dyn std::any::Any;
+    fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError>;
+
+    // Add a method to clone the box
     fn clone_box(&self) -> Box<dyn UIElementImpl>;
 }
 
@@ -151,12 +156,9 @@ impl UIElement {
     }
 
     /// Find elements matching the selector within this element
-    pub fn locator(&self, _selector: &str) -> Result<Vec<UIElement>, AutomationError> {
-        // create selector...
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "locator not yet implemented".to_string(),
-        ))
+    pub fn locator(&self, selector: impl Into<Selector>) -> Result<Locator, AutomationError> {
+        let selector = selector.into();
+        self.inner.create_locator(selector)
     }
 }
 
@@ -176,6 +178,9 @@ impl std::hash::Hash for UIElement {
 
 impl Clone for UIElement {
     fn clone(&self) -> Self {
+        // We can't directly clone the inner Box<dyn UIElementImpl>,
+        // but we can create a new UIElement with the same identity
+        // that will behave the same way
         Self {
             inner: self.inner.clone_box(),
         }

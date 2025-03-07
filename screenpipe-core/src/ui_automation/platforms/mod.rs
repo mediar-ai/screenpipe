@@ -1,4 +1,4 @@
-use crate::ui_automation::{AutomationError, Selector, UIElement};
+use crate::ui_automation::{AutomationError, Locator, Selector, UIElement};
 
 /// The common trait that all platform-specific engines must implement
 pub trait AccessibilityEngine: Send + Sync {

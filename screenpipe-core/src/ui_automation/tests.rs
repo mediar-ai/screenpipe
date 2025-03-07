@@ -176,6 +176,12 @@ impl UIElementImpl for MockUIElementImpl {
         self
     }
 
+    fn create_locator(&self, _selector: Selector) -> Result<Locator, AutomationError> {
+        Err(AutomationError::UnsupportedOperation(
+            "locator not yet implemented".to_string(),
+        ))
+    }
+
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
         Box::new(self.clone())
     }
@@ -464,11 +470,8 @@ mod tests {
             // Try to find the main window
             let windows = match frontmost_app.unwrap().locator("AXWindow") {
                 Ok(w) => {
-                    println!("Found {} windows", w.len());
-                    if w.is_empty() {
-                        println!("No windows found in application");
-                        return;
-                    }
+                    println!("Found {} windows", w.all().unwrap().len());
+
                     w
                 }
                 Err(e) => {
@@ -478,16 +481,16 @@ mod tests {
             };
 
             // Use the first window as our search root
-            let main_window = &windows[0];
+            let main_window = &windows.first().unwrap().unwrap();
             println!("Using window: {:?}", main_window.attributes().label);
 
             // Search for buttons within this window
-            let buttons = main_window.locator("AXButton").unwrap_or_default();
+            let buttons = main_window.locator("AXButton").unwrap();
 
-            println!("Found {} buttons in current window", buttons.len());
+            println!("Found {} buttons in current window", buttons.all().unwrap().len());
 
             // Print details of each button found
-            for (i, button) in buttons.iter().enumerate() {
+            for (i, button) in buttons.all().unwrap().iter().enumerate() {
                 let attrs = button.attributes();
                 println!(
                     "Button #{}: role={}, label={:?}, description={:?}",

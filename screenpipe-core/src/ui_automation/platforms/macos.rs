@@ -1,6 +1,6 @@
 use crate::ui_automation::platforms::AccessibilityEngine;
 use crate::ui_automation::{
-    element::UIElementImpl, AutomationError, Selector, UIElement, UIElementAttributes,
+    element::UIElementImpl, AutomationError, Locator, Selector, UIElement, UIElementAttributes,
 };
 
 use accessibility::AXUIElementAttributes;
@@ -755,6 +755,13 @@ impl UIElementImpl for MacOSUIElement {
                     action, e
                 ))
             })
+    }
+
+    fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError> {
+        // This is a non-generic implementation that can be used in trait objects
+        Err(AutomationError::UnsupportedOperation(
+            "locator not yet implemented for macOS".to_string(),
+        ))
     }
 
     fn clone_box(&self) -> Box<dyn UIElementImpl> {
