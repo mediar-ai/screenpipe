@@ -4,7 +4,7 @@ use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
 use screenpipe_audio::pyannote::identify::EmbeddingManager;
 use screenpipe_audio::stt::{prepare_segments, stt};
 use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
-use screenpipe_audio::whisper::WhisperModel;
+use screenpipe_audio::whisper::{download_quantized_whisper, WhisperModel};
 use screenpipe_audio::{resample, AudioInput, AudioTranscriptionEngine};
 use screenpipe_core::Language;
 use std::path::PathBuf;
@@ -12,6 +12,7 @@ use std::sync::Arc;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
+use whisper_rs::{WhisperContext, WhisperContextParameters};
 
 #[tokio::test]
 #[ignore]
@@ -48,13 +49,29 @@ async fn test_transcription_accuracy() {
         // Add more test cases as needed
     ];
 
-    let whisper_model = Arc::new(Mutex::new(
-        WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
-    ));
+    // let whisper_model = Arc::new(Mutex::new(
+    //     WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
+    // ));
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));
 
     let mut tasks = Vec::new();
+
+    let mut context_param = WhisperContextParameters::default();
+    context_param.dtw_parameters.mode = whisper_rs::DtwMode::ModelPreset {
+        model_preset: whisper_rs::DtwModelPreset::LargeV3Turbo,
+    };
+    context_param.use_gpu(true);
+
+    let quantized_path = download_quantized_whisper().unwrap();
+    let ctx = Arc::new(Mutex::new(
+        WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_param)
+            .expect("failed to load model"),
+    ));
+    // Create a state
+    // let state = Arc::new(Mutex::new(
+    //     ctx.create_state().expect("failed to create key"),
+    // ));
 
     let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let segmentation_model_path = project_dir
@@ -72,14 +89,16 @@ async fn test_transcription_accuracy() {
     ));
 
     for (audio_file, expected_transcription) in test_cases {
-        let whisper_model = Arc::clone(&whisper_model);
+        // let whisper_model = Arc::clone(&whisper_model);
         let vad_engine = Arc::clone(&vad_engine);
 
         let embedding_extractor = Arc::clone(&embedding_extractor);
         let embedding_manager = EmbeddingManager::new(usize::MAX);
         let segmentation_model_path = segmentation_model_path.clone();
-
+        // let state_clone = state.clone();
+        let ctx = ctx.clone();
         let task = tokio::spawn(async move {
+            // let mut state = state_clone.lock().await;
             let audio_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(audio_file);
             let audio_data =
                 screenpipe_audio::pcm_decode(&audio_path).expect("Failed to decode audio file");
@@ -116,7 +135,7 @@ async fn test_transcription_accuracy() {
             )
             .await
             .unwrap();
-            let mut whisper_model_guard = whisper_model.lock().await;
+            let ctx_guard = ctx.lock().await;
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
@@ -124,7 +143,7 @@ async fn test_transcription_accuracy() {
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
-                    &mut whisper_model_guard,
+                    &ctx_guard,
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
                     vec![Language::English],
@@ -134,7 +153,7 @@ async fn test_transcription_accuracy() {
 
                 transcription.push_str(&transcript);
             }
-            drop(whisper_model_guard);
+            // drop(whisper_model_guard);
 
             let distance = levenshtein(expected_transcription, &transcription.to_lowercase());
             let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);
