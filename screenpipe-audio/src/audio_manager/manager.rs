@@ -381,6 +381,7 @@ impl Drop for AudioManager {
         let device_manager = self.device_manager.clone();
 
         tokio::spawn(async move {
+            let _ = stop_device_monitor().await;
             let _ = device_manager.stop_all_devices().await;
             if let Some(handle) = recording.write().await.take() {
                 handle.abort();
@@ -392,7 +393,6 @@ impl Drop for AudioManager {
                 h.value().lock().await.abort();
             }
 
-            let _ = stop_device_monitor().await;
         });
     }
 }
