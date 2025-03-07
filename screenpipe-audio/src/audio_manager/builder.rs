@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{env, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashSet, env, path::PathBuf, sync::Arc, time::Duration};
 
 use screenpipe_core::Language;
 use screenpipe_db::DatabaseManager;
@@ -26,7 +26,7 @@ pub struct AudioManagerOptions {
     pub audio_chunk_duration: Duration,
     pub vad_sensitivity: VadSensitivity,
     pub health_check_grace_period: u64,
-    pub enabled_devices: Vec<String>,
+    pub enabled_devices: HashSet<String>,
     pub use_all_devices: bool,
     pub db_path: Option<String>,
     pub deepgram_url: Option<String>,
@@ -39,7 +39,7 @@ impl Default for AudioManagerOptions {
         let deepgram_api_key = env::var("DEEPGRAM_API_KEY").ok();
         let deepgram_websocket_url = env::var("DEEPGRAM_WEBSOCKET_URL").ok();
         let deepgram_url = env::var("DEEPGRAM_API_URL").ok();
-        let enabled_devices = vec![];
+        let enabled_devices = HashSet::new();
         Self {
             output_path: None,
             transcription_engine: Arc::new(AudioTranscriptionEngine::default()),
@@ -118,7 +118,7 @@ impl AudioManagerBuilder {
     }
 
     pub fn enabled_devices(mut self, enabled_devices: Vec<String>) -> Self {
-        self.options.enabled_devices = enabled_devices;
+        self.options.enabled_devices = HashSet::from_iter(enabled_devices);
         self
     }
 
@@ -142,10 +142,10 @@ impl AudioManagerBuilder {
         let options = &mut self.options;
 
         if options.enabled_devices.is_empty() {
-            options.enabled_devices = vec![
+            options.enabled_devices = HashSet::from_iter(vec![
                 default_input_device()?.to_string(),
                 default_output_device()?.to_string(),
-            ];
+            ]);
         }
 
         AudioManager::new(options.clone(), db).await

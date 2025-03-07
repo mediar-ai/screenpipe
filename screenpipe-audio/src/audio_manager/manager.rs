@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{atomic::Ordering, Arc},
 };
@@ -115,12 +116,7 @@ impl AudioManager {
         *recording_receiver_handle = Some(self.start_audio_receiver_handler().await?);
         let self_arc = Arc::new(self.clone());
 
-        start_device_monitor(
-            self_arc.clone(),
-            self.device_manager.clone(),
-            self.options.read().await.enabled_devices.clone(),
-        )
-        .await?;
+        start_device_monitor(self_arc.clone(), self.device_manager.clone()).await?;
 
         info!("audio manager started");
 
@@ -180,6 +176,12 @@ impl AudioManager {
             Err(_) => return Err(anyhow!("Device {} not found", device_name)),
         };
 
+        self.options
+            .write()
+            .await
+            .enabled_devices
+            .remove(device_name);
+
         self.device_manager.stop_device(&device).await?;
 
         if let Some(pair) = self.recording_handles.get(&device) {
@@ -215,6 +217,14 @@ impl AudioManager {
             let handle = self.record_device(device).await?;
             self.recording_handles
                 .insert(device.clone(), Arc::new(Mutex::new(handle)));
+        }
+
+        if !self.enabled_devices().await.contains(&device.to_string()) {
+            self.options
+                .write()
+                .await
+                .enabled_devices
+                .insert(device.to_string());
         }
 
         Ok(())
@@ -371,6 +381,10 @@ impl AudioManager {
             .iter()
             .map(|p| p.key().clone())
             .collect::<Vec<AudioDevice>>()
+    }
+
+    pub async fn enabled_devices(&self) -> HashSet<String> {
+        self.options.read().await.enabled_devices.clone()
     }
 }
 
