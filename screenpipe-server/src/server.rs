@@ -968,12 +968,34 @@ impl SCServer {
     }
 
     pub async fn start(self, enable_frame_cache: bool) -> Result<(), std::io::Error> {
+        // Create the OpenAPI server
+        let app = self.create_router(enable_frame_cache).await;
+
+        #[cfg(feature = "experimental")]
+        let app = app.route("/experimental/input_control", post(input_control_handler));
+
+        // Create the listener
+        let listener = TcpListener::bind(&self.addr).await?;
+        info!("Server listening on {}", self.addr);
+
+        // Start serving
+        serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(())
+    }
+
+    pub async fn create_router(&self, enable_frame_cache: bool) -> Router {
         let app_state = Arc::new(AppState {
             db: self.db.clone(),
-            audio_manager: self.audio_manager,
+            audio_manager: self.audio_manager.clone(),
             app_start_time: Utc::now(),
             screenpipe_dir: self.screenpipe_dir.clone(),
-            pipe_manager: self.pipe_manager,
+            pipe_manager: self.pipe_manager.clone(),
             vision_disabled: self.vision_disabled,
             audio_disabled: self.audio_disabled,
             ui_monitoring_enabled: self.ui_monitoring_enabled,
@@ -1003,8 +1025,6 @@ impl SCServer {
                 axum::http::header::CONTENT_TYPE,
                 axum::http::header::CACHE_CONTROL,
             ]);
-
-        // Create the OpenAPI server
         let server = Server::axum()
             .get("/search", search)
             .get("/audio/list", api_list_audio_devices)
@@ -1042,7 +1062,6 @@ impl SCServer {
             .post("/v1/embeddings", create_embeddings)
             .post("/audio/device/start", start_audio_device)
             .post("/audio/device/stop", stop_audio_device)
-            // .post("/audio/stop", stop_audio_device)
             // .post("/vision/start", start_vision_device)
             // .post("/vision/stop", stop_vision_device)
             // .post("/audio/restart", restart_audio_devices)
@@ -1052,7 +1071,7 @@ impl SCServer {
             .freeze();
 
         // Build the main router with all routes
-        let app = Router::new()
+        Router::new()
             .merge(server.into_router())
             // NOTE: websockerts and sse is not supported by openapi so we move it down here
             .route("/stream/frames", get(stream_frames_handler))
@@ -1061,24 +1080,7 @@ impl SCServer {
             .route("/frames/export", get(handle_video_export_ws))
             .with_state(app_state)
             .layer(cors)
-            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()));
-
-        #[cfg(feature = "experimental")]
-        let app = app.route("/experimental/input_control", post(input_control_handler));
-
-        // Create the listener
-        let listener = TcpListener::bind(&self.addr).await?;
-        info!("Server listening on {}", self.addr);
-
-        // Start serving
-        serve(
-            listener,
-            app.into_make_service_with_connect_info::<SocketAddr>(),
-        )
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        Ok(())
+            .layer(TraceLayer::new_for_http().make_span_with(DefaultMakeSpan::default()))
     }
 }
 

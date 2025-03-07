@@ -61,7 +61,12 @@ impl From<CliOcrEngine> for Arc<DBOcrEngine> {
     fn from(cli_engine: CliOcrEngine) -> Self {
         match cli_engine {
             CliOcrEngine::Unstructured => Arc::new(DBOcrEngine::Unstructured),
+            #[cfg(target_os = "macos")]
             CliOcrEngine::AppleNative => Arc::new(DBOcrEngine::AppleNative),
+            #[cfg(target_os = "linux")]
+            CliOcrEngine::Tesseract => Arc::new(DBOcrEngine::Tesseract),
+            #[cfg(target_os = "windows")]
+            CliOcrEngine::WindowsNative => Arc::new(DBOcrEngine::WindowsNative),
             CliOcrEngine::Custom => Arc::new(DBOcrEngine::Custom(DBCustomOcrConfig::default())),
         }
     }
