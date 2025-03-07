@@ -3,8 +3,6 @@ use crate::ui_automation::{AutomationError, Selector, UIElement};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::UIElementAttributes;
-
 /// A high-level API for finding and interacting with UI elements
 pub struct Locator {
     engine: Arc<dyn AccessibilityEngine>,
@@ -73,22 +71,6 @@ impl Locator {
         Locator {
             engine: self.engine.clone(),
             selector: Selector::Chain(vec![self.selector.clone(), selector]),
-            timeout: self.timeout,
-            root: self.root.clone(),
-        }
-    }
-
-    /// Filter the current locator
-    pub fn filter<F>(&self, predicate: F) -> Locator
-    where
-        F: Fn(&UIElementAttributes) -> bool + Send + Sync + 'static,
-    {
-        let filter_id =
-            super::selector::FilterPredicate::register(self.selector.clone(), Box::new(predicate));
-
-        Locator {
-            engine: self.engine.clone(),
-            selector: Selector::Filter(filter_id),
             timeout: self.timeout,
             root: self.root.clone(),
         }

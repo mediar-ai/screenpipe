@@ -7,18 +7,14 @@ use accessibility::AXUIElementAttributes;
 use accessibility::{AXAttribute, AXUIElement, TreeVisitor, TreeWalker, TreeWalkerFlow};
 use anyhow::Result;
 use core_foundation::array::CFArray;
-use core_foundation::base::CFTypeRef;
 use core_foundation::{
     base::TCFType, boolean::CFBoolean, dictionary::CFDictionary, string::CFString,
 };
-use objc::runtime::Object;
-use objc_foundation::{INSArray, INSObject, NSArray, NSObject};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::process::id;
 use std::sync::Arc;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, trace};
 
 // Thread-safe wrapper for AXUIElement
 #[derive(Clone)]
@@ -47,42 +43,6 @@ impl ThreadSafeAXUIElement {
     // Add method to get a reference to the underlying AXUIElement
     pub fn as_ref(&self) -> &AXUIElement {
         &self.0
-    }
-
-    // Delegate methods to the wrapped AXUIElement
-    // Generic version that uses the T parameter from AXAttribute<T>
-    pub fn attribute<T: TCFType>(
-        &self,
-        attribute: &AXAttribute<T>,
-    ) -> Result<T, accessibility::Error> {
-        self.0.attribute(attribute)
-    }
-
-    pub fn perform_action(&self, action: &CFString) -> Result<(), accessibility::Error> {
-        self.0.perform_action(action)
-    }
-
-    pub fn set_attribute<T: Into<CFTypeRef> + TCFType>(
-        &self,
-        attribute: &AXAttribute<T>,
-        value: T,
-    ) -> Result<(), accessibility::Error> {
-        self.0.set_attribute(attribute, value)
-    }
-
-    // Add other delegated methods as needed
-    pub fn attribute_names(&self) -> Result<Vec<CFString>, accessibility::Error> {
-        let array = self.0.attribute_names()?;
-        let len = array.len();
-        let mut result = Vec::with_capacity(len as usize);
-
-        for i in 0..len {
-            let string_ref = array.get(i).unwrap();
-            // Create a new CFString from the reference
-            result.push(CFString::new(&string_ref.to_string()));
-        }
-
-        Ok(result)
     }
 
     pub fn clone(&self) -> Self {
@@ -169,11 +129,11 @@ impl MacOSEngine {
 }
 
 // Helper function to get PIDs of running applications using NSWorkspace
+#[allow(clippy::all)]
 fn get_running_application_pids() -> Result<Vec<i32>, AutomationError> {
     // Implementation using Objective-C bridging
     unsafe {
         use objc::{class, msg_send, sel, sel_impl};
-        use objc_foundation::{INSArray, NSArray};
 
         let workspace_class = class!(NSWorkspace);
         let shared_workspace: *mut objc::runtime::Object =
@@ -201,11 +161,6 @@ fn get_running_application_pids() -> Result<Vec<i32>, AutomationError> {
         debug!(target: "ui_automation", "Found {} application PIDs", pids.len());
         Ok(pids)
     }
-
-    #[cfg(not(target_os = "macos"))]
-    Err(AutomationError::UnsupportedPlatform(
-        "get_running_application_pids is only supported on macOS".to_string(),
-    ))
 }
 
 impl AccessibilityEngine for MacOSEngine {
@@ -758,10 +713,139 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn create_locator(&self, selector: Selector) -> Result<Locator, AutomationError> {
-        // This is a non-generic implementation that can be used in trait objects
-        Err(AutomationError::UnsupportedOperation(
-            "locator not yet implemented for macOS".to_string(),
-        ))
+        // Get the platform-specific instance of the engine
+        let engine = MacOSEngine::new()?;
+
+        // Add some debug output to understand the current element
+        let attrs = self.attributes();
+        debug!(target: "ui_automation", "Creating locator for element: role={}, label={:?}", attrs.role, attrs.label);
+
+        // Special handling for window searches which can be tricky
+        if let Selector::Role { role, name } = &selector {
+            if role == "window" {
+                debug!(target: "ui_automation", "Special handling for AXWindow search");
+
+                // When looking for windows, we might need to first get the application
+                if attrs.role == "AXApplication" {
+                    // Use the predefined AXAttribute for windows
+                    let windows_ax_attr: AXAttribute<CFArray<AXUIElement>> =
+                        accessibility::AXAttribute::<()>::windows();
+                    match self.element.0.attribute(&windows_ax_attr) {
+                        Ok(windows_array) => {
+                            let count = windows_array.len();
+                            debug!(target: "ui_automation", "Found {} windows via AXWindows attribute", count);
+
+                            // Convert the windows array to a vector of UIElements
+                            let mut windows = Vec::with_capacity(count as usize);
+                            for i in 0..count {
+                                if let Some(window_ref) = windows_array.get(i) {
+                                    // Create a new ThreadSafeAXUIElement directly
+                                    let window_element = window_ref.as_concrete_TypeRef(); // Get the underlying TypeRef
+                                    let window_ax = unsafe {
+                                        AXUIElement::wrap_under_create_rule(window_element)
+                                    }; // Create new AXUIElement
+                                    let thread_safe_window = ThreadSafeAXUIElement::new(window_ax);
+                                    let window_ui_element =
+                                        UIElement::new(Box::new(MacOSUIElement {
+                                            element: thread_safe_window,
+                                        }));
+                                    windows.push(window_ui_element);
+                                }
+                            }
+
+                            debug!(target: "ui_automation", "Successfully converted {} windows to UIElements", windows.len());
+
+                            // Create a custom Engine instance that will return our windows
+                            struct WindowsEngine {
+                                windows: Vec<UIElement>,
+                            }
+
+                            impl AccessibilityEngine for WindowsEngine {
+                                fn get_root_element(&self) -> UIElement {
+                                    panic!("WindowsEngine doesn't support get_root_element")
+                                }
+
+                                fn get_element_by_id(
+                                    &self,
+                                    _id: &str,
+                                ) -> Result<UIElement, AutomationError>
+                                {
+                                    Err(AutomationError::ElementNotFound(
+                                        "WindowsEngine doesn't support get_element_by_id"
+                                            .to_string(),
+                                    ))
+                                }
+
+                                fn get_focused_element(
+                                    &self,
+                                ) -> Result<UIElement, AutomationError>
+                                {
+                                    Err(AutomationError::ElementNotFound(
+                                        "WindowsEngine doesn't support get_focused_element"
+                                            .to_string(),
+                                    ))
+                                }
+
+                                fn get_applications(
+                                    &self,
+                                ) -> Result<Vec<UIElement>, AutomationError>
+                                {
+                                    Err(AutomationError::ElementNotFound(
+                                        "WindowsEngine doesn't support get_applications"
+                                            .to_string(),
+                                    ))
+                                }
+
+                                fn get_application_by_name(
+                                    &self,
+                                    _name: &str,
+                                ) -> Result<UIElement, AutomationError>
+                                {
+                                    Err(AutomationError::ElementNotFound(
+                                        "WindowsEngine doesn't support get_application_by_name"
+                                            .to_string(),
+                                    ))
+                                }
+
+                                fn find_elements(
+                                    &self,
+                                    selector: &Selector,
+                                    _root: Option<&UIElement>,
+                                ) -> Result<Vec<UIElement>, AutomationError>
+                                {
+                                    // If the selector is for windows, return our pre-found windows
+                                    if let Selector::Role { role, name: _ } = selector {
+                                        if role == "AXWindow" {
+                                            return Ok(self.windows.clone());
+                                        }
+                                    }
+
+                                    // Otherwise return empty list
+                                    Ok(Vec::new())
+                                }
+                            }
+
+                            let windows_engine = WindowsEngine { windows };
+                            return Ok(Locator::new(std::sync::Arc::new(windows_engine), selector));
+                        }
+                        Err(e) => {
+                            debug!(target: "ui_automation", "Failed to get AXWindows attribute: {:?}, falling back to standard search", e);
+                            // Fall back to the standard approach
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create a new locator with this element as root
+        let self_element = UIElement::new(Box::new(MacOSUIElement {
+            element: self.element.clone(),
+        }));
+
+        // Create a locator for the selector with the engine, then set root to this element
+        let locator = Locator::new(std::sync::Arc::new(engine), selector).within(self_element);
+
+        Ok(locator)
     }
 
     fn clone_box(&self) -> Box<dyn UIElementImpl> {

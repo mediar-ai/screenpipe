@@ -1,75 +1,4 @@
-use once_cell::sync::Lazy;
 use std::collections::BTreeMap;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Mutex,
-};
-
-use super::{AutomationError, UIElement, UIElementAttributes};
-
-/// A filter predicate for UI elements
-pub struct FilterPredicate {
-    parent: Box<Selector>,
-    predicate: Box<dyn Fn(&UIElementAttributes) -> bool + Send + Sync>,
-}
-
-// Global registry of filter predicates
-static FILTER_REGISTRY: Lazy<Mutex<BTreeMap<usize, FilterPredicate>>> =
-    Lazy::new(|| Mutex::new(BTreeMap::new()));
-static NEXT_FILTER_ID: AtomicUsize = AtomicUsize::new(1);
-
-impl FilterPredicate {
-    pub fn new(
-        parent: Selector,
-        predicate: Box<dyn Fn(&UIElementAttributes) -> bool + Send + Sync>,
-    ) -> Self {
-        Self {
-            parent: Box::new(parent),
-            predicate,
-        }
-    }
-
-    pub fn parent(&self) -> &Selector {
-        &self.parent
-    }
-
-    pub fn matches(&self, attrs: &UIElementAttributes) -> bool {
-        (self.predicate)(attrs)
-    }
-
-    // Register a new filter predicate and return its ID
-    pub fn register(
-        parent: Selector,
-        predicate: Box<dyn Fn(&UIElementAttributes) -> bool + Send + Sync>,
-    ) -> usize {
-        let id = NEXT_FILTER_ID.fetch_add(1, Ordering::SeqCst);
-        let filter = FilterPredicate::new(parent, predicate);
-        FILTER_REGISTRY.lock().unwrap().insert(id, filter);
-        id
-    }
-
-    // Get a filter predicate by ID
-    pub fn get(id: usize) -> Option<FilterPredicate> {
-        // Instead of trying to clone the predicate, we'll just return a reference to it
-        FILTER_REGISTRY.lock().unwrap().get(&id).map(|f| {
-            // Create a new one with same parent, but with an identity function
-            // that delegates to the original in the registry
-            let id_copy = id;
-            FilterPredicate {
-                parent: f.parent.clone(),
-                predicate: Box::new(move |attrs| {
-                    // Look up the predicate each time
-                    if let Some(registry_lock) = FILTER_REGISTRY.lock().ok() {
-                        if let Some(original) = registry_lock.get(&id_copy) {
-                            return (original.predicate)(attrs);
-                        }
-                    }
-                    false
-                }),
-            }
-        })
-    }
-}
 
 /// Represents ways to locate a UI element
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -94,28 +23,23 @@ pub enum Selector {
 
 impl From<&str> for Selector {
     fn from(s: &str) -> Self {
-        // Parse simple selector expressions like "button", "button:Submit"
-        if s.contains(':') {
-            let parts: Vec<&str> = s.splitn(2, ':').collect();
-            Selector::Role {
-                role: parts[0].to_string(),
-                name: Some(parts[1].to_string()),
+        // Make common UI roles like "window", "button", etc. default to Role selectors
+        // instead of Name selectors
+        match s {
+            "window" | "button" | "checkbox" | "menu" | "menuitem" => Selector::Role {
+                role: s.to_string(),
+                name: None,
+            },
+            _ if s.contains(':') => {
+                let parts: Vec<&str> = s.splitn(2, ':').collect();
+                Selector::Role {
+                    role: parts[0].to_string(),
+                    name: Some(parts[1].to_string()),
+                }
             }
-        } else if s.starts_with('#') {
-            Selector::Id(s[1..].to_string())
-        } else if s.starts_with('/') {
-            Selector::Path(s.to_string())
-        } else {
-            Selector::Name(s.to_string())
+            _ if s.starts_with('#') => Selector::Id(s[1..].to_string()),
+            _ if s.starts_with('/') => Selector::Path(s.to_string()),
+            _ => Selector::Name(s.to_string()),
         }
     }
-}
-
-/// Engine for finding elements using selectors
-pub trait SelectorEngine: Send + Sync {
-    fn find_elements(
-        &self,
-        selector: &Selector,
-        root: Option<&UIElement>,
-    ) -> Result<Vec<UIElement>, AutomationError>;
 }
