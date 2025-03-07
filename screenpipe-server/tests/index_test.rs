@@ -73,7 +73,7 @@ async fn test_index_command_with_sql() -> Result<()> {
         None,
         db.clone(),
         OutputFormat::Text,
-        None,
+        Some(screenpipe_server::cli::CliOcrEngine::AppleNative),
         None,
         false,
         false,
