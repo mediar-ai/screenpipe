@@ -18,6 +18,7 @@ screenpipe-events = { path = "../screenpipe-events" }
 screenpipe-vision = { path = "../screenpipe-vision" }
 screenpipe-audio = { path = "../screenpipe-audio" }
 screenpipe-core = { path = "../screenpipe-core", features = ["security"] }
+screenpipe-db = { path = "../screenpipe-db" }
 killport = { version = "1.1.0" }
 
 # Image processing
@@ -130,15 +131,6 @@ tokio-tungstenite = "0.19.0"
 # Benches
 criterion = { workspace = true }
 rand = "0.8"
-
-
-[[bench]]
-name = "db_benchmarks"
-harness = false
-
-[[bench]]
-name = "new_db_benchmark"
-harness = false
 
 [features]
 default = []

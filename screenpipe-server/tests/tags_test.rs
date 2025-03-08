@@ -3,55 +3,53 @@ use axum::{
     http::{Request, StatusCode},
     Router,
 };
-use chrono::Utc;
-use lru::LruCache;
-use screenpipe_audio::{AudioDevice, DeviceType};
+use screenpipe_audio::audio_manager::AudioManagerBuilder;
 use screenpipe_vision::OcrEngine;
 use serde_json::json;
-use std::{num::NonZeroUsize, path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower::ServiceExt;
 
-use screenpipe_server::{
-    create_router, video_cache::FrameCache, AppState, ContentItem, DatabaseManager,
-    PaginatedResponse, PipeManager,
-};
+use screenpipe_db::DatabaseManager;
+use screenpipe_server::{ContentItem, PaginatedResponse, PipeManager, SCServer};
 
 // Add this function to initialize the logger
 fn init() {
     let _ = env_logger::builder().is_test(true).try_init();
 }
 
-async fn setup_test_app() -> (Router, Arc<AppState>) {
+async fn setup_test_app() -> (Router, Arc<DatabaseManager>) {
     let db = Arc::new(DatabaseManager::new("sqlite::memory:").await.unwrap());
 
-    let app_state = Arc::new(AppState {
-        db: db.clone(),
-        vision_disabled: false,
-        audio_disabled: false,
-        app_start_time: Utc::now(),
-        screenpipe_dir: PathBuf::from(""),
-        pipe_manager: Arc::new(PipeManager::new(PathBuf::from(""))),
-        frame_cache: Some(Arc::new(
-            FrameCache::new(PathBuf::from(""), db).await.unwrap(),
-        )),
-        ui_monitoring_enabled: false,
-        frame_image_cache: Some(Arc::new(Mutex::new(LruCache::new(
-            NonZeroUsize::new(100).unwrap(),
-        )))),
-    });
+    let audio_manager = Arc::new(
+        AudioManagerBuilder::new()
+            .output_path("/tmp/screenpipe".into())
+            .build(db.clone())
+            .await
+            .unwrap(),
+    );
 
-    let app = create_router().with_state(app_state.clone());
+    let app = SCServer::new(
+        db.clone(),
+        SocketAddr::from(([127, 0, 0, 1], 23948)),
+        PathBuf::from(""),
+        Arc::new(PipeManager::new(PathBuf::from(""))),
+        false,
+        false,
+        false,
+        audio_manager,
+    );
+
+    let router = app.create_router(true).await;
     init();
-    (app, app_state)
+    (router, db)
 }
 
 #[tokio::test]
 async fn test_add_tags_and_search() {
-    let (app, app_state) = setup_test_app().await;
+    let (app, db) = setup_test_app().await;
 
     // Insert test data
-    insert_test_data(&app_state.db).await;
+    insert_test_data(&db).await;
 
     // Test adding tags to vision content
     let vision_response = app
@@ -159,8 +157,8 @@ async fn test_add_tags_and_search() {
 
 #[tokio::test]
 async fn test_add_multiple_tags_to_single_item() {
-    let (app, app_state) = setup_test_app().await;
-    insert_test_data(&app_state.db).await;
+    let (app, db) = setup_test_app().await;
+    insert_test_data(&db).await;
 
     let response = app
         .clone()
@@ -211,8 +209,8 @@ async fn test_add_multiple_tags_to_single_item() {
 
 #[tokio::test]
 async fn test_remove_tags() {
-    let (app, app_state) = setup_test_app().await;
-    insert_test_data(&app_state.db).await;
+    let (app, db) = setup_test_app().await;
+    insert_test_data(&db).await;
 
     // Add tags
     app.clone()
@@ -281,8 +279,8 @@ async fn test_remove_tags() {
 
 #[tokio::test]
 async fn test_search_by_multiple_tags() {
-    let (app, app_state) = setup_test_app().await;
-    insert_test_data(&app_state.db).await;
+    let (app, db) = setup_test_app().await;
+    insert_test_data(&db).await;
 
     // Add tags to multiple items
     app.clone()
@@ -382,7 +380,7 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         frame_id,
         "Test OCR text",
         "{'text': 'Test OCR text', 'confidence': 0.9}",
-        Arc::new(OcrEngine::Tesseract),
+        Arc::new(OcrEngine::Tesseract.into()),
     )
     .await
     .unwrap();
@@ -396,7 +394,10 @@ async fn insert_test_data(db: &Arc<DatabaseManager>) {
         "Test audio transcription",
         0,
         "test_engine",
-        &AudioDevice::new("test".to_string(), DeviceType::Output),
+        &screenpipe_db::AudioDevice {
+            name: "test".to_string(),
+            device_type: screenpipe_db::DeviceType::Output,
+        },
         None,
         None,
         None,

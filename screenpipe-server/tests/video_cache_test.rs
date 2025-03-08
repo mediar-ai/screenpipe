@@ -4,7 +4,8 @@ use dirs::home_dir;
 use std::sync::Arc;
 use tracing::{debug, error};
 
-use screenpipe_server::{video_cache::FrameCache, DatabaseManager};
+use screenpipe_db::DatabaseManager;
+use screenpipe_server::video_cache::FrameCache;
 
 async fn setup_test_env() -> Result<(FrameCache, Arc<DatabaseManager>)> {
     // enabled tracing logging
@@ -566,15 +567,15 @@ async fn test_cache_cleanup() -> Result<()> {
     // First, populate cache with some frames
     let target_time = Utc::now() - Duration::minutes(5);
     let (tx1, mut rx1) = tokio::sync::mpsc::channel(100);
-    
+
     println!("populating cache with initial frames...");
     cache.get_frames(target_time, 10, tx1, true).await?;
-    
+
     let mut initial_frames = Vec::new();
     while let Some(frame) = rx1.recv().await {
         initial_frames.push(frame);
     }
-    
+
     println!("initial cache population: {} frames", initial_frames.len());
 
     // Wait for cleanup interval (we'll use a shorter interval for testing)
@@ -584,7 +585,7 @@ async fn test_cache_cleanup() -> Result<()> {
     // Request frames again to verify cache state
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(100);
     cache.get_frames(target_time, 10, tx2, true).await?;
-    
+
     let mut post_cleanup_frames = Vec::new();
     while let Some(frame) = rx2.recv().await {
         post_cleanup_frames.push(frame);

@@ -1,7 +1,7 @@
 use axum::Json;
 use oasgen::{oasgen, OaSchema};
 use once_cell::sync::OnceCell;
-use screenpipe_core::model::EmbeddingModel;
+use screenpipe_core::embedding::model::EmbeddingModel;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;

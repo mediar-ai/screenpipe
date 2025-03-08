@@ -47,7 +47,6 @@ cron = "0.13.0"
 chrono = "0.4.38"
 sentry = { workspace = true }
 zip = "0.6.2"
-tokio-stream = "0.1.17"
 
 [dev-dependencies]
 reqwest = { workspace = true }

@@ -1,17 +1,22 @@
-use candle_transformers::models::whisper;
 use futures::future::join_all;
-use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
-use screenpipe_audio::pyannote::identify::EmbeddingManager;
-use screenpipe_audio::stt::{prepare_segments, stt};
-use screenpipe_audio::vad_engine::{SileroVad, VadEngine};
-use screenpipe_audio::whisper::WhisperModel;
-use screenpipe_audio::{resample, AudioInput, AudioTranscriptionEngine};
+use screenpipe_audio::core::device::default_input_device;
+use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
+use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
+use screenpipe_audio::speaker::prepare_segments;
+use screenpipe_audio::transcription::stt::SAMPLE_RATE;
+use screenpipe_audio::transcription::whisper::model::{
+    create_whisper_context_parameters, download_whisper_model,
+};
+use screenpipe_audio::vad::{silero::SileroVad, VadEngine};
+use screenpipe_audio::{resample, stt, AudioInput};
 use screenpipe_core::Language;
 use std::path::PathBuf;
 use std::sync::Arc;
 use strsim::levenshtein;
 use tokio::sync::Mutex;
 use tracing::debug;
+use whisper_rs::WhisperContext;
 
 #[tokio::test]
 #[ignore]
@@ -48,9 +53,17 @@ async fn test_transcription_accuracy() {
         // Add more test cases as needed
     ];
 
-    let whisper_model = Arc::new(Mutex::new(
-        WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
-    ));
+    let context_params =
+        create_whisper_context_parameters(Arc::new(AudioTranscriptionEngine::WhisperTinyQuantized))
+            .unwrap();
+
+    let quantized_path =
+        download_whisper_model(Arc::new(AudioTranscriptionEngine::WhisperTinyQuantized)).unwrap();
+    let whisper_context = Arc::new(
+        WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_params)
+            .expect("failed to load model"),
+    );
+
     let vad_engine: Arc<Mutex<Box<dyn VadEngine + Send>>> =
         Arc::new(Mutex::new(Box::new(SileroVad::new().await.unwrap())));
 
@@ -72,7 +85,7 @@ async fn test_transcription_accuracy() {
     ));
 
     for (audio_file, expected_transcription) in test_cases {
-        let whisper_model = Arc::clone(&whisper_model);
+        let whisper_context = whisper_context.clone();
         let vad_engine = Arc::clone(&vad_engine);
 
         let embedding_extractor = Arc::clone(&embedding_extractor);
@@ -88,14 +101,14 @@ async fn test_transcription_accuracy() {
                 data: Arc::new(audio_data.0),
                 sample_rate: 44100, // hardcoded based on test data sample rate
                 channels: 1,
-                device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
+                device: Arc::new(default_input_device().unwrap()),
             };
 
-            let audio_data = if audio_input.sample_rate != whisper::SAMPLE_RATE as u32 {
+            let audio_data = if audio_input.sample_rate != SAMPLE_RATE {
                 match resample(
                     audio_input.data.as_ref(),
                     audio_input.sample_rate,
-                    whisper::SAMPLE_RATE as u32,
+                    SAMPLE_RATE,
                 ) {
                     Ok(data) => data,
                     Err(e) => {
@@ -116,7 +129,6 @@ async fn test_transcription_accuracy() {
             )
             .await
             .unwrap();
-            let mut whisper_model_guard = whisper_model.lock().await;
 
             let mut transcription = String::new();
             while let Some(segment) = segments.recv().await {
@@ -124,17 +136,16 @@ async fn test_transcription_accuracy() {
                     &segment.samples,
                     audio_input.sample_rate,
                     &audio_input.device.to_string(),
-                    &mut whisper_model_guard,
                     Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                     None,
                     vec![Language::English],
+                    whisper_context.clone(),
                 )
                 .await
                 .unwrap();
 
                 transcription.push_str(&transcript);
             }
-            drop(whisper_model_guard);
 
             let distance = levenshtein(expected_transcription, &transcription.to_lowercase());
             let accuracy = 1.0 - (distance as f64 / expected_transcription.len() as f64);

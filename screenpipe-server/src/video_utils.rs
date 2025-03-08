@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use image::DynamicImage;
 use oasgen::OaSchema;
 use screenpipe_core::find_ffmpeg_path;
+use screenpipe_db::VideoMetadata as DBVideoMetadata;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::path::PathBuf;
@@ -499,6 +500,18 @@ pub struct VideoMetadata {
     pub duration: f64,
     pub device_name: Option<String>,
     pub name: Option<String>,
+}
+
+impl From<VideoMetadata> for DBVideoMetadata {
+    fn from(metadata: VideoMetadata) -> Self {
+        DBVideoMetadata {
+            creation_time: metadata.creation_time,
+            fps: metadata.fps,
+            duration: metadata.duration,
+            device_name: metadata.device_name,
+            name: metadata.name,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

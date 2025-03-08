@@ -1,6 +1,8 @@
 mod tests {
     use log::LevelFilter;
-    use screenpipe_audio::pyannote::segment::get_segments;
+    use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
+    use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
+    use screenpipe_audio::speaker::segment::get_segments;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
@@ -31,16 +33,15 @@ mod tests {
             .join("segmentation-3.0.onnx");
 
         let embedding_extractor = Arc::new(Mutex::new(
-            screenpipe_audio::pyannote::embedding::EmbeddingExtractor::new(
+            EmbeddingExtractor::new(
                 embedding_model_path
                     .to_str()
                     .ok_or_else(|| anyhow::anyhow!("Invalid embedding model path"))
                     .unwrap(),
             )
-            .unwrap()
+            .unwrap(),
         ));
-        let embedding_manager =
-            screenpipe_audio::pyannote::identify::EmbeddingManager::new(usize::MAX);
+        let embedding_manager = EmbeddingManager::new(usize::MAX);
 
         let multiple_speakers_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("test_data/speaker_identification/6_speakers.wav");

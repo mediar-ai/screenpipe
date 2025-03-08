@@ -1,6 +1,7 @@
 use anyhow::Result;
 use image::DynamicImage;
 use regex::Regex;
+use screenpipe_db::DatabaseManager;
 use screenpipe_vision::utils::{compare_with_previous_image, OcrEngine};
 
 #[cfg(target_os = "macos")]
@@ -26,7 +27,6 @@ use crate::{
     cli::CliOcrEngine,
     text_embeds::generate_embedding,
     video_utils::{extract_frames_from_video, get_video_metadata, VideoMetadataOverrides},
-    DatabaseManager,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -136,7 +136,7 @@ pub async fn handle_index_command(
             .create_video_with_frames(
                 video_path.to_str().unwrap(),
                 frames.clone(),
-                metadata.clone(),
+                metadata.into(),
             )
             .await?;
 
@@ -177,8 +177,6 @@ pub async fn handle_index_command(
                     engine
                 }
             };
-
-            let engine_arc = Arc::new(engine.clone());
 
             // Do OCR processing directly
             let (text, _, confidence): (String, String, Option<f64>) = match engine.clone() {
@@ -225,7 +223,7 @@ pub async fn handle_index_command(
                     frame_ids[idx],
                     &text,
                     "{}", // empty json
-                    engine_arc.clone(),
+                    ocr_engine.clone().unwrap().into(),
                 )
                 .await
             {

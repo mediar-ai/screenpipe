@@ -3,16 +3,20 @@ mod tests {
     use anyhow::anyhow;
     use chrono::Utc;
     use log::{debug, LevelFilter};
-    use screenpipe_audio::pyannote::embedding::EmbeddingExtractor;
-    use screenpipe_audio::pyannote::identify::EmbeddingManager;
-    use screenpipe_audio::stt::{prepare_segments, stt};
-    use screenpipe_audio::vad_engine::{SileroVad, VadEngine, VadEngineEnum, VadSensitivity};
-    use screenpipe_audio::whisper::WhisperModel;
-    use screenpipe_audio::{
-        default_output_device, list_audio_devices, pcm_decode, AudioInput, AudioStream,
-        AudioTranscriptionEngine,
+    use screenpipe_audio::core::device::{
+        default_input_device, default_output_device, list_audio_devices, parse_audio_device,
     };
-    use screenpipe_audio::{parse_audio_device, record_and_transcribe};
+    use screenpipe_audio::core::engine::AudioTranscriptionEngine;
+    use screenpipe_audio::core::record_and_transcribe;
+    use screenpipe_audio::core::stream::AudioStream;
+    use screenpipe_audio::speaker::embedding::EmbeddingExtractor;
+    use screenpipe_audio::speaker::embedding_manager::EmbeddingManager;
+    use screenpipe_audio::speaker::prepare_segments;
+    use screenpipe_audio::transcription::whisper::model::{
+        create_whisper_context_parameters, download_whisper_model,
+    };
+    use screenpipe_audio::vad::{silero::SileroVad, VadEngine};
+    use screenpipe_audio::{pcm_decode, stt, AudioInput};
     use screenpipe_core::Language;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -21,6 +25,7 @@ mod tests {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
     use tokio::sync::Mutex;
+    use whisper_rs::WhisperContext;
 
     fn setup() {
         // Initialize the logger with an info level filter
@@ -67,8 +72,13 @@ mod tests {
         // Act
         let start_time = Instant::now();
         println!("Starting record_and_transcribe");
-        let result =
-            record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running).await;
+        let result = record_and_transcribe(
+            Arc::new(audio_stream),
+            duration,
+            Arc::new(sender),
+            is_running,
+        )
+        .await;
         println!("record_and_transcribe completed");
         let elapsed_time = start_time.elapsed();
 
@@ -128,9 +138,14 @@ mod tests {
         // Act
         let start_time = Instant::now();
 
-        record_and_transcribe(Arc::new(audio_stream), duration, sender, is_running)
-            .await
-            .unwrap();
+        record_and_transcribe(
+            Arc::new(audio_stream),
+            duration,
+            Arc::new(sender),
+            is_running,
+        )
+        .await
+        .unwrap();
 
         let elapsed_time = start_time.elapsed();
 
@@ -193,108 +208,21 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
-    async fn test_audio_transcription() {
-        setup();
-        use screenpipe_audio::{create_whisper_channel, record_and_transcribe};
-        use std::sync::Arc;
-        use std::time::Duration;
-        use tokio::time::timeout;
-
-        // 1. start listening to https://music.youtube.com/watch?v=B6WAlAzuJb4&si=775sYWLG0b7XhQIH&t=50
-        // 2. run the test
-        // 3. the test should succeed (takes ~120s for some reason?) ! i think whisper is just slow as hell on cpu?
-
-        // Setup
-        let device_spec = Arc::new(default_output_device().unwrap());
-        let output_path =
-            PathBuf::from(format!("test_output_{}.mp4", Utc::now().timestamp_millis()));
-        let output_path_2 = output_path.clone();
-        let (whisper_sender, whisper_receiver, _) = create_whisper_channel(
-            Arc::new(AudioTranscriptionEngine::WhisperTiny),
-            VadEngineEnum::WebRtc,
-            None,
-            &output_path_2.clone(),
-            VadSensitivity::High,
-            vec![],
-            None,
-        )
-        .await
-        .unwrap();
-        let is_running = Arc::new(AtomicBool::new(true));
-        // Start recording in a separate thread
-        let recording_thread = tokio::spawn(async move {
-            let device_spec = Arc::clone(&device_spec);
-            let whisper_sender = whisper_sender.clone();
-            let audio_stream = AudioStream::from_device(device_spec, is_running.clone())
-                .await
-                .unwrap();
-
-            record_and_transcribe(
-                Arc::new(audio_stream),
-                Duration::from_secs(15),
-                whisper_sender,
-                is_running,
-            )
-            .await
-            .unwrap();
-        });
-
-        // Wait for the recording to complete (with a timeout)
-        let timeout_duration = Duration::from_secs(10); // Adjust as needed
-        let result = timeout(timeout_duration, async {
-            // Wait for the transcription result
-            let transcription_result = whisper_receiver.try_recv().unwrap();
-            debug!("Received transcription: {:?}", transcription_result);
-            // Check if we received a valid transcription
-            assert!(
-                transcription_result.error.is_none(),
-                "Transcription error occurred"
-            );
-            assert!(
-                transcription_result.transcription.is_some(),
-                "No transcription received"
-            );
-
-            let transcription = transcription_result.transcription.unwrap();
-            assert!(!transcription.is_empty(), "Transcription is empty");
-
-            println!("Received transcription: {}", transcription);
-
-            assert!(
-                transcription.contains("même")
-                    || transcription.contains("tu m'aimes")
-                    || transcription.contains("champs")
-            );
-
-            transcription
-        })
-        .await;
-
-        // Check the result
-        match result {
-            Ok(transcription) => {
-                println!("Test passed. Transcription: {}", transcription);
-            }
-            Err(_) => {
-                panic!("Test timed out waiting for transcription");
-            }
-        }
-
-        // Clean up
-        recording_thread.abort();
-        std::fs::remove_file(output_path_2).unwrap_or_default();
-    }
-
-    #[tokio::test]
-    #[ignore]
     async fn test_audio_transcription_language() {
         setup();
         use std::sync::Arc;
 
+        let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
+
         // Setup
-        let whisper_model = Arc::new(tokio::sync::Mutex::new(
-            WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo).unwrap(),
-        ));
+        let context_params = create_whisper_context_parameters(engine.clone()).unwrap();
+
+        let quantized_path = download_whisper_model(engine).unwrap();
+        let whisper_context = Arc::new(
+            WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_params)
+                .expect("failed to load model"),
+        );
+
         let vad_engine: Arc<tokio::sync::Mutex<Box<dyn VadEngine + Send>>> = Arc::new(
             tokio::sync::Mutex::new(Box::new(SileroVad::new().await.unwrap())),
         );
@@ -305,7 +233,7 @@ mod tests {
             data: Arc::new(audio_data.0),
             sample_rate: 44100, // hardcoded based on test data sample rate
             channels: 1,
-            device: Arc::new(screenpipe_audio::default_input_device().unwrap()),
+            device: Arc::new(default_input_device().unwrap()),
         };
 
         // Create the missing parameters
@@ -340,7 +268,6 @@ mod tests {
         )
         .await
         .unwrap();
-        let mut whisper_model_guard = whisper_model.lock().await;
 
         let mut transcription_result = String::new();
         while let Some(segment) = segments.recv().await {
@@ -348,10 +275,10 @@ mod tests {
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
-                &mut whisper_model_guard,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
                 vec![Language::Arabic],
+                whisper_context.clone(),
             )
             .await
             .unwrap();
@@ -359,7 +286,6 @@ mod tests {
             transcription_result.push_str(&transcript);
             transcription_result.push('\n');
         }
-        drop(whisper_model_guard);
 
         debug!("Received transcription: {:?}", transcription_result);
         // Check if we received a valid transcription
@@ -415,9 +341,16 @@ mod tests {
 
         let embedding_manager = EmbeddingManager::new(usize::MAX);
 
-        // Initialize the WhisperModel
-        let mut whisper_model = WhisperModel::new(&AudioTranscriptionEngine::WhisperLargeV3Turbo)
-            .expect("Failed to initialize WhisperModel");
+        let engine = Arc::new(AudioTranscriptionEngine::WhisperLargeV3TurboQuantized);
+
+        // Setup
+        let context_params = create_whisper_context_parameters(engine.clone()).unwrap();
+
+        let quantized_path = download_whisper_model(engine).unwrap();
+        let whisper_context = Arc::new(
+            WhisperContext::new_with_params(&quantized_path.to_string_lossy(), context_params)
+                .expect("failed to load model"),
+        );
 
         // Initialize VAD engine
         let vad_engine: Box<dyn VadEngine + Send> = Box::new(SileroVad::new().await.unwrap());
@@ -443,10 +376,10 @@ mod tests {
                 &segment.samples,
                 audio_input.sample_rate,
                 &audio_input.device.to_string(),
-                &mut whisper_model,
                 Arc::new(AudioTranscriptionEngine::WhisperLargeV3Turbo),
                 None,
                 vec![Language::English],
+                whisper_context.clone(),
             )
             .await
             .unwrap();

@@ -13,17 +13,17 @@ struct TestData {
 
 #[tokio::test]
 async fn test_single_subscriber() {
-    let mut stream = subscribe_to_event::<String>("test_event");
-    let _ = send_event("test_event", "hello".to_string());
+    let mut stream = subscribe_to_event::<String>("single_subscriber_event");
+    let _ = send_event("single_subscriber_event", "hello".to_string());
     assert_eq!(stream.next().await.unwrap().data, "hello");
 }
 
 #[tokio::test]
 async fn test_multiple_subscribers() {
-    let mut stream1 = subscribe_to_event::<String>("test_event");
-    let mut stream2 = subscribe_to_event::<String>("test_event");
+    let mut stream1 = subscribe_to_event::<String>("multiple_subscriber_event");
+    let mut stream2 = subscribe_to_event::<String>("multiple_subscriber_event");
 
-    let _ = send_event("test_event", "hello".to_string());
+    let _ = send_event("multiple_subscriber_event", "hello".to_string());
 
     assert_eq!(stream1.next().await.unwrap().data, "hello");
     assert_eq!(stream2.next().await.unwrap().data, "hello");
@@ -31,11 +31,11 @@ async fn test_multiple_subscribers() {
 
 #[tokio::test]
 async fn test_different_events() {
-    let mut stream1 = subscribe_to_event::<i32>("event1");
-    let mut stream2 = subscribe_to_event::<String>("event2");
+    let mut stream1 = subscribe_to_event::<i32>("different_event1");
+    let mut stream2 = subscribe_to_event::<String>("different_event2");
 
-    let _ = send_event("event1", 42);
-    let _ = send_event("event2", "hello".to_string());
+    let _ = send_event("different_event1", 42);
+    let _ = send_event("different_event2", "hello".to_string());
 
     assert_eq!(stream1.next().await.unwrap().data, 42);
     assert_eq!(stream2.next().await.unwrap().data, "hello");

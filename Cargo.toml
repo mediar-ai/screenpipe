@@ -6,6 +6,7 @@ members = [
     "screenpipe-server",
     "screenpipe-integrations",
     "screenpipe-events",
+    "screenpipe-db",
 ]
 exclude = ["screenpipe-app-tauri/src-tauri"]
 resolver = "2"

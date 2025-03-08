@@ -17,7 +17,7 @@ tokio-stream = { version = "0.1.17", features = ["sync"] }
 once_cell = { version = "1.18" }
 tracing.workspace = true
 parking_lot = "0.12.3"
-chrono = "0.4.39"
+chrono = { version = "0.4.39", features = ["serde"] }
 
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }
