@@ -188,43 +188,38 @@ mod tests {
                 }
             };
 
-            // Try multiple applications that likely have text inputs
-            // Order from most likely to have text fields to least likely
-            let app_name = "Notes";
+            let app = desktop.application("Notes").unwrap();
 
-            // Try each app until we find one with text inputs
-            println!("Trying application: {}", app_name);
+            // let children = app.children().unwrap();
 
-            let app = match desktop.application(app_name) {
-                Ok(w) => {
-                    println!("Successfully found application: {}", app_name);
-                    w
-                }
-                Err(e) => {
-                    println!("Failed to find application: {:?}", e);
-                    return;
-                }
-            };
-            println!("App: {:?}", app.attributes().label);
+            // println!("App children: {:?}", children.len());
 
-            // Inspect application structure before looking for windows
-            println!("Directly examining application structure:");
-            if let Ok(app_children) = app.children() {
-                println!("App has {} direct children", app_children.len());
-                for (i, child) in app_children.iter().enumerate() {
-                    let attrs = child.attributes();
-                    println!(
-                        "Child {}: role={}, label={:?}, value={:?}",
-                        i, attrs.role, attrs.label, attrs.value
-                    );
+            // for (i, child) in children.iter().enumerate() {
+            //     println!("App child #{}: {:?}", i, child.role());
+            // }
+
+            // let windows = app.locator("window").unwrap().all().unwrap_or_default();
+            // println!("Found {} windows", windows.len());
+
+            // for (i, window) in windows.iter().enumerate() {
+            //     println!("Window #{}: {:?}", i, window.text());
+            // }
+
+            let texts = app.locator("text").unwrap().all().unwrap_or_default();
+            println!("Found {} texts", texts.len());
+
+            for (i, text) in texts.iter().enumerate() {
+                println!("Text #{}: {:?}", i, text.role());
+                // if role i AXWebArea, fill text
+                if text.role() == "AXTextArea" {
+                    match text.type_text("Hello, world!") {
+                        Ok(_) => println!("Filled text: {:?}", text.text()),
+                        Err(e) => println!("Failed to fill text: {:?}", e),
+                    }
                 }
             }
+            
 
-            let text_fields = app.locator("text").unwrap().all().unwrap_or_default();
-            println!("Found {} text fields", text_fields.len());
-            for (i, text_field) in text_fields.iter().enumerate() {
-                println!("Text field #{}: {:?}", i, text_field.attributes().label);
-            }
         }
     }
 }

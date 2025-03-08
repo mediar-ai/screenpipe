@@ -6,17 +6,17 @@ use crate::ui_automation::{
 use accessibility::AXUIElementAttributes;
 use accessibility::{AXAttribute, AXUIElement, TreeVisitor, TreeWalker, TreeWalkerFlow};
 use anyhow::Result;
-use core_foundation::array::{CFArray, CFArrayRef};
-use core_foundation::base::{CFType, CFTypeID, CFTypeRef, TCFType};
+use core_foundation::array::{CFArray};
+use core_foundation::base::{TCFType};
 use core_foundation::boolean::CFBoolean;
-use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
-use core_foundation::string::{CFString, CFStringRef};
+use core_foundation::dictionary::{CFDictionary};
+use core_foundation::string::{CFString};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, trace};
+
+use tracing::{debug, error, trace};
 
 // Import the C function for setting attributes
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -143,6 +143,8 @@ impl MacOSEngine {
         );
 
         let mut all_elements = Vec::new();
+        // Use a HashSet to track unique element IDs to avoid duplicates
+        // let mut seen_elements = HashSet::new();
 
         // Search for each possible macOS role
         let collector = ElementCollector::new(
@@ -157,7 +159,7 @@ impl MacOSEngine {
 
         let start_element = match root {
             Some(elem) => {
-                debug!(target: "ui_automation", "Starting tree walk from provided root element");
+                debug!(target: "ui_automation", "Starting tree walk from provided root element: {:?}", elem.0.role());
                 &elem.0
             }
             None => {
@@ -166,8 +168,113 @@ impl MacOSEngine {
             }
         };
 
-        walker.walk(start_element, &collector.adapter());
-        all_elements.extend(collector.elements);
+        // // First check if the root element might have windows to add
+        // if let Some(elem) = root {
+        //     // Try to get windows from the root element
+        //     if let Ok(windows) = elem.0.windows() {
+        //         debug!(target: "ui_automation", "Found {} windows in root element", windows.len());
+                
+        //         // For each window, check if it matches our criteria
+        //         for (i, window) in windows.iter().enumerate() {
+        //             let window_safe = ThreadSafeAXUIElement::new(window.clone());
+                    
+        //             // Generate a unique identifier for this element
+        //             let element_id = match window.identifier() {
+        //                 Ok(id) => id.to_string(),
+        //                 Err(_) => format!("window_{}", i), // Use index as part of identifier
+        //             };
+                    
+        //             // Skip if we've already seen this element
+        //             if seen_elements.contains(&element_id) {
+        //                 continue;
+        //             }
+                    
+        //             // Check if window role matches what we're looking for
+        //             if let Ok(window_role) = window.role() {
+        //                 if macos_roles.iter().any(|r| r == &window_role.to_string()) {
+        //                     // Check name if specified
+        //                     let mut include_window = true;
+        //                     if let Some(name_filter) = name {
+        //                         if let Ok(window_title) = window.title() {
+        //                             include_window = window_title.to_string().contains(name_filter);
+        //                         } else {
+        //                             include_window = false;
+        //                         }
+        //                     }
+                            
+        //                     if include_window {
+        //                         all_elements.push(window_safe.clone());
+        //                         seen_elements.insert(element_id);
+        //                     }
+        //                 }
+        //             }
+                    
+        //             // Also check inside the window
+        //             walker.walk(&window, &collector.adapter());
+        //         }
+        //     }
+            
+        //     // Try with main window as well
+        //     if let Ok(main_window) = elem.0.main_window() {
+        //         let window_safe = ThreadSafeAXUIElement::new(main_window.clone());
+                
+        //         // Generate a unique identifier for this element
+        //         let element_id = match main_window.identifier() {
+        //             Ok(id) => id.to_string(),
+        //             Err(_) => "main_window".to_string(), // Use constant string for main window
+        //         };
+                
+        //         // Skip if we've already seen this element
+        //         if !seen_elements.contains(&element_id) {
+        //             // Check if window role matches
+        //             if let Ok(window_role) = main_window.role() {
+        //                 if macos_roles.iter().any(|r| r == &window_role.to_string()) {
+        //                     // Check name if specified
+        //                     let mut include_window = true;
+        //                     if let Some(name_filter) = name {
+        //                         if let Ok(window_title) = main_window.title() {
+        //                             include_window = window_title.to_string().contains(name_filter);
+        //                         } else {
+        //                             include_window = false;
+        //                         }
+        //                     }
+                            
+        //                     if include_window {
+        //                         all_elements.push(window_safe);
+        //                         seen_elements.insert(element_id);
+        //                     }
+        //                 }
+        //             }
+                    
+        //             // Also check inside the main window
+        //             walker.walk(&main_window, &collector.adapter());
+        //         }
+        //     }
+        // }
+
+        let adapter = collector.adapter();
+        walker.walk(start_element, &adapter);
+        
+        // Get elements from the adapter's collector
+        let elements = adapter.inner.borrow().elements.clone();
+        for element in elements {
+            // For elements with no identifier, generate a unique id based on their address
+            let element_id = match element.0.identifier() {
+                Ok(id) => id.to_string(),
+                Err(_) => {
+                    // Use object_id which is already defined as a unique identifier in the code
+                    // This avoids using raw pointers which requires unsafe
+                    format!("element_{}", std::ptr::addr_of!(element) as usize)
+                }
+            };
+            
+            // Skip if we've already seen this element
+            // if !seen_elements.contains(&element_id) {
+            //     all_elements.push(element);
+            //     seen_elements.insert(element_id);
+            // }
+            all_elements.push(element);
+        }
 
         debug!(
             target: "ui_automation",
@@ -211,6 +318,7 @@ fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
             "AXGenericElement".to_string(), // Generic elements that might be inputs
             "AXURIField".to_string(), // Explicit URL field type
             "AXAddressField".to_string(), // Another common name for URL fields
+            "AXStaticText".to_string(), // Static text fields
         ],
         // Add specific support for URL fields
         "url" | "urlfield" => vec![
@@ -297,6 +405,7 @@ impl AccessibilityEngine for MacOSEngine {
         for pid in pids {
             trace!(target: "ui_automation", "Creating AXUIElement for application with PID: {}", pid);
             let app_element = ThreadSafeAXUIElement::application(pid);
+            
             app_elements.push(self.wrap_element(app_element));
         }
 
@@ -361,239 +470,6 @@ impl AccessibilityEngine for MacOSEngine {
         // Regular element finding logic
         match selector {
             Selector::Role { role, name } => {
-                let macos_roles = map_generic_role_to_macos_roles(role);
-
-                // Special case for URL fields
-                if macos_roles.contains(&"AXTextField".to_string())
-                    || macos_roles.contains(&"AXTextArea".to_string())
-                    || macos_roles.contains(&"AXSearchField".to_string())
-                    || macos_roles.contains(&"AXComboBox".to_string())
-                    || macos_roles.contains(&"AXURIField".to_string())
-                    || macos_roles.contains(&"AXAddressField".to_string())
-                {
-                    debug!(
-                        target: "ui_automation",
-                        "URL field selector detected, will search for URL input elements"
-                    );
-
-                    // Always require a root element for searches to avoid searching the entire system
-                    // If no root is provided, we'll just return an empty list instead of using system_wide
-                    if root.is_none() {
-                        debug!(
-                            target: "ui_automation",
-                            "No root element provided for text field search, returning empty list to avoid system-wide search"
-                        );
-                        return Ok(Vec::new());
-                    }
-
-                    let root_ax_element = root.map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    });
-
-                    // Enhanced logging for System Settings
-                    debug!(target: "ui_automation", "Searching for text/URL fields in System Settings");
-
-                    let start_element = match root_ax_element {
-                        Some(elem) => &elem.0,
-                        // We should never reach this case due to the check above
-                        None => return Ok(Vec::new()),
-                    };
-
-                    // CRITICAL FIX: First find windows inside the application
-                    let window_collector = ElementCollector::new(&["AXWindow"], None);
-                    let windows = window_collector.collect_elements(start_element);
-                    
-                    debug!(target: "ui_automation", "Found {} windows to search", windows.len());
-                    
-                    // Collect text fields from each window
-                    let mut all_text_fields = Vec::new();
-                    
-                    // If we have windows, search each one recursively
-                    if !windows.is_empty() {
-                        for window in &windows {
-                            debug!(target: "ui_automation", "Searching window for text fields");
-                            let collector = ElementCollector::new(
-                                &[
-                                    "AXTextField",
-                                    "AXTextArea",
-                                    "AXSearchField",
-                                    "AXComboBox",
-                                    "AXURIField",
-                                    "AXAddressField",
-                                ],
-                                name.as_deref(),
-                            );
-                            let window_text_fields = collector.collect_elements(&window.0);
-                            debug!(target: "ui_automation", "Found {} text fields in window", window_text_fields.len());
-                            
-                            // Check if we found any text fields
-                            let found_text_fields = !window_text_fields.is_empty();
-                            
-                            // Add any found text fields to our collection
-                            all_text_fields.extend(window_text_fields);
-                            
-                            // Also look for content areas and groups that might contain text fields
-                            if !found_text_fields {
-                                debug!(target: "ui_automation", "Searching for content areas in window");
-                                let content_collector = ElementCollector::new(&["AXGroup", "AXScrollArea", "AXTabGroup", "AXSplitGroup"], None);
-                                let content_areas = content_collector.collect_elements(&window.0);
-                                debug!(target: "ui_automation", "Found {} content areas to search", content_areas.len());
-                                
-                                for content_area in &content_areas {
-                                    debug!(target: "ui_automation", "Searching content area for text fields");
-                                    let collector = ElementCollector::new(
-                                        &[
-                                            "AXTextField",
-                                            "AXTextArea",
-                                            "AXSearchField",
-                                            "AXComboBox",
-                                            "AXURIField",
-                                            "AXAddressField",
-                                        ],
-                                        name.as_deref(),
-                                    );
-                                    let content_text_fields = collector.collect_elements(&content_area.0);
-                                    debug!(target: "ui_automation", "Found {} text fields in content area", content_text_fields.len());
-                                    all_text_fields.extend(content_text_fields);
-                                }
-                            }
-                        }
-                    }
-                    
-                    // If we still didn't find any text fields, search directly in the app
-                    if all_text_fields.is_empty() {
-                        debug!(target: "ui_automation", "No text fields found in windows, searching app directly");
-                        let collector = ElementCollector::new(
-                            &[
-                                "AXTextField",
-                                "AXTextArea",
-                                "AXSearchField",
-                                "AXComboBox",
-                                "AXURIField",
-                                "AXAddressField",
-                            ],
-                            name.as_deref(),
-                        );
-                        all_text_fields = collector.collect_elements(start_element);
-                    }
-
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXTextField elements in total", all_text_fields.len()
-                    );
-
-                    // Convert the elements to UIElements
-                    let ui_elements: Vec<UIElement> =
-                        all_text_fields.into_iter().map(|e| self.wrap_element(e)).collect();
-
-                    return Ok(ui_elements);
-                }
-
-                // Special case for buttons - directly search for menu items
-                if macos_roles.contains(&"AXButton".to_string())
-                    || macos_roles.contains(&"AXMenuItem".to_string())
-                    || macos_roles.contains(&"AXMenuBarItem".to_string())
-                {
-                    debug!(
-                        target: "ui_automation",
-                        "Button selector detected, will search for button-like elements"
-                    );
-
-                    // Always require a root element for searches to avoid searching the entire system
-                    if root.is_none() {
-                        debug!(
-                            target: "ui_automation",
-                            "No root element provided for button search, returning empty list to avoid system-wide search"
-                        );
-                        return Ok(Vec::new());
-                    }
-
-                    let root_ax_element = root.map(|el| {
-                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
-                            &macos_el.element
-                        } else {
-                            panic!("Root element is not a macOS element")
-                        }
-                    });
-
-                    let start_element = match root_ax_element {
-                        Some(elem) => &elem.0,
-                        // We should never reach this case due to the check above
-                        None => return Ok(Vec::new()),
-                    };
-
-                    // First search for regular buttons
-                    let collector = ElementCollector::new(
-                        &[
-                            "AXButton",
-                            "AXMenuItem",
-                            "AXMenuBarItem",
-                            "AXTextField",
-                            "AXTextArea",
-                        ],
-                        name.as_deref(),
-                    );
-                    let elements = collector.collect_elements(start_element);
-
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXButton elements", elements.len()
-                    );
-
-                    // Convert the elements to UIElements
-                    let ui_elements: Vec<UIElement> =
-                        elements.into_iter().map(|e| self.wrap_element(e)).collect();
-
-                    return Ok(ui_elements);
-                }
-
-                // Special handling for window search
-                if macos_roles.contains(&"AXWindow".to_string()) && root.is_some() {
-                    if let Some(app_elem) = root {
-                        if let Some(macos_app) = app_elem.as_any().downcast_ref::<MacOSUIElement>()
-                        {
-                            // Try to get windows by directly calling children()
-                            if let Ok(children) = macos_app.children() {
-                                // Filter the children to find windows
-                                let windows = children
-                                    .into_iter()
-                                    .filter(|child| {
-                                        let attrs = child.attributes();
-                                        let is_window = macos_roles.contains(&attrs.role);
-
-                                        if !is_window {
-                                            return false;
-                                        }
-
-                                        // If name filter is specified, check for match
-                                        if let Some(filter) = name.as_ref() {
-                                            return attrs
-                                                .label
-                                                .as_ref()
-                                                .map(|label| {
-                                                    label
-                                                        .to_lowercase()
-                                                        .contains(&filter.to_lowercase())
-                                                })
-                                                .unwrap_or(false);
-                                        }
-
-                                        // No name filter, accept all windows
-                                        true
-                                    })
-                                    .collect();
-
-                                return Ok(windows);
-                            }
-                        }
-                    }
-                }
-
-                // Fall back to regular role search
                 let root_ax_element = root.map(|el| {
                     if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
                         &macos_el.element
@@ -602,7 +478,7 @@ impl AccessibilityEngine for MacOSEngine {
                     }
                 });
 
-                self.find_by_role(role, name.as_deref(), root_ax_element)
+                return self.find_by_role(role, name.as_deref(), root_ax_element);
             }
             Selector::Id(id) => {
                 // Try to find by AXIdentifier
@@ -823,9 +699,14 @@ impl ElementCollector {
             }
         }
 
+        // if window, append to elements
+        if role_value == "AXWindow" {
+            self.elements.push(element.clone());
+        }
+
         // Log everything for analysis
         if !role_value.is_empty() {
-            trace!(
+            debug!(
                 target: "ui_automation",
                 "Element: role={}, title={}, id={}, desc={}, value={}",
                 role_value, title, identifier, description, value
@@ -852,7 +733,7 @@ impl ElementCollector {
                 names
             }
             Err(e) => {
-                trace!(target: "ui_automation", "Failed to get attribute names: {}", e);
+                error!(target: "ui_automation", "Failed to get attribute names: {}", e);
                 CFArray::<CFString>::from_CFTypes(&[])
             }
         };
@@ -923,6 +804,7 @@ impl ElementCollector {
             }
         }
 
+
         // Special handling for System Settings - look for elements that might be text fields
         // even if they don't have the exact expected role
         if self.target_roles.contains(&"AXTextField".to_string()) || 
@@ -987,20 +869,14 @@ impl ElementCollector {
             }
         }
 
+        debug!(target: "ui_automation", "Found {} elements", self.elements.len());
+
+
         TreeWalkerFlow::Continue
     }
 
     fn exit_element_impl(&mut self, _element: &ThreadSafeAXUIElement) {}
 
-    fn collect_elements(&self, root: &AXUIElement) -> Vec<ThreadSafeAXUIElement> {
-        let adapter = self.adapter();
-        let walker = TreeWalker::new();
-        walker.walk(root, &adapter);
-
-        // Extract the collected elements from the adapter's inner RefCell
-        let elements = adapter.inner.borrow().elements.clone();
-        elements
-    }
 }
 
 // Helper struct for collecting elements by attribute value
@@ -1083,7 +959,7 @@ impl MacOSUIElement {
 impl UIElementImpl for MacOSUIElement {
     fn object_id(&self) -> usize {
         // Use the pointer address of the inner AXUIElement as a unique ID
-        std::ptr::addr_of!(*(self.element.0)) as usize
+        self.element.0.as_ref() as *const _ as usize
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -1106,6 +982,7 @@ impl UIElementImpl for MacOSUIElement {
             .role()
             .map(|r| r.to_string())
             .unwrap_or_default();
+
 
         debug!(target: "ui_automation", "Original role from AXUIElement: {}", role);
 
@@ -1269,21 +1146,52 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn children(&self) -> Result<Vec<UIElement>, AutomationError> {
-        // Regular child element traversal
-        self.element
-            .0
-            .children()
-            .map_err(|e| AutomationError::PlatformError(format!("Failed to get children: {}", e)))
-            .map(|children| {
-                children
-                    .iter()
-                    .map(|child| {
-                        UIElement::new(Box::new(MacOSUIElement {
-                            element: ThreadSafeAXUIElement::new(child.clone()),
-                        }))
-                    })
-                    .collect()
-            })
+
+        debug!(target: "ui_automation", "Getting children for element: {:?}", self.element.0.role());
+        let mut all_children = Vec::new();
+
+        // First try to get windows
+        if let Ok(windows) = self.element.0.windows() {
+            debug!(target: "ui_automation", "Found {} windows", windows.len());
+            
+            // Add all windows to our collection
+            for window in windows.iter() {
+                all_children.push(UIElement::new(Box::new(MacOSUIElement {
+                    element: ThreadSafeAXUIElement::new(window.clone()),
+                })));
+            }
+        } else {
+            // try main window
+            if let Ok(window) = self.element.0.main_window() {
+                all_children.push(UIElement::new(Box::new(MacOSUIElement {
+                    element: ThreadSafeAXUIElement::new(window.clone()),
+                })));
+            }
+        }
+        
+        // Then get regular children
+        match self.element.0.children() {
+            Ok(children) => {
+                // Add regular children to our collection
+                for child in children.iter() {
+                    all_children.push(UIElement::new(Box::new(MacOSUIElement {
+                        element: ThreadSafeAXUIElement::new(child.clone()),
+                    })));
+                }
+                
+                Ok(all_children)
+            },
+            Err(e) => {
+                // If we have windows but failed to get children, return the windows
+                if !all_children.is_empty() {
+                    debug!(target: "ui_automation", "Failed to get regular children but returning {} windows", all_children.len());
+                    Ok(all_children)
+                } else {
+                    // Otherwise return the error
+                    Err(AutomationError::PlatformError(format!("Failed to get children: {}", e)))
+                }
+            }
+        }
     }
 
     fn parent(&self) -> Result<Option<UIElement>, AutomationError> {
