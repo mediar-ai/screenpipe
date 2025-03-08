@@ -6,14 +6,16 @@ use crate::ui_automation::{
 use accessibility::AXUIElementAttributes;
 use accessibility::{AXAttribute, AXUIElement, TreeVisitor, TreeWalker, TreeWalkerFlow};
 use anyhow::Result;
-use core_foundation::array::CFArray;
-use core_foundation::{
-    base::TCFType, boolean::CFBoolean, dictionary::CFDictionary, string::CFString,
-};
+use core_foundation::array::{CFArray, CFArrayRef};
+use core_foundation::base::{CFType, CFTypeID, CFTypeRef, TCFType};
+use core_foundation::boolean::CFBoolean;
+use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
+use core_foundation::string::{CFString, CFStringRef};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, trace};
 
 // Import the C function for setting attributes
@@ -293,7 +295,7 @@ impl AccessibilityEngine for MacOSEngine {
         // Create AXUIElements for each application
         let mut app_elements = Vec::new();
         for pid in pids {
-            debug!(target: "ui_automation", "Creating AXUIElement for application with PID: {}", pid);
+            trace!(target: "ui_automation", "Creating AXUIElement for application with PID: {}", pid);
             let app_element = ThreadSafeAXUIElement::application(pid);
             app_elements.push(self.wrap_element(app_element));
         }
@@ -374,17 +376,12 @@ impl AccessibilityEngine for MacOSEngine {
                         "URL field selector detected, will search for URL input elements"
                     );
 
-                    debug!(
-                        target: "ui_automation",
-                        "Button selector detected, will search for buttons and button-like elements"
-                    );
-
                     // Always require a root element for searches to avoid searching the entire system
                     // If no root is provided, we'll just return an empty list instead of using system_wide
                     if root.is_none() {
                         debug!(
                             target: "ui_automation",
-                            "No root element provided for button search, returning empty list to avoid system-wide search"
+                            "No root element provided for text field search, returning empty list to avoid system-wide search"
                         );
                         return Ok(Vec::new());
                     }
@@ -397,34 +394,101 @@ impl AccessibilityEngine for MacOSEngine {
                         }
                     });
 
+                    // Enhanced logging for System Settings
+                    debug!(target: "ui_automation", "Searching for text/URL fields in System Settings");
+
                     let start_element = match root_ax_element {
                         Some(elem) => &elem.0,
                         // We should never reach this case due to the check above
                         None => return Ok(Vec::new()),
                     };
 
-                    // First search for regular buttons
-                    let collector = ElementCollector::new(
-                        &[
-                            "AXTextField",
-                            "AXTextArea",
-                            "AXSearchField",
-                            "AXComboBox",
-                            "AXURIField",
-                            "AXAddressField",
-                        ],
-                        name.as_deref(),
-                    );
-                    let elements = collector.collect_elements(start_element);
+                    // CRITICAL FIX: First find windows inside the application
+                    let window_collector = ElementCollector::new(&["AXWindow"], None);
+                    let windows = window_collector.collect_elements(start_element);
+                    
+                    debug!(target: "ui_automation", "Found {} windows to search", windows.len());
+                    
+                    // Collect text fields from each window
+                    let mut all_text_fields = Vec::new();
+                    
+                    // If we have windows, search each one recursively
+                    if !windows.is_empty() {
+                        for window in &windows {
+                            debug!(target: "ui_automation", "Searching window for text fields");
+                            let collector = ElementCollector::new(
+                                &[
+                                    "AXTextField",
+                                    "AXTextArea",
+                                    "AXSearchField",
+                                    "AXComboBox",
+                                    "AXURIField",
+                                    "AXAddressField",
+                                ],
+                                name.as_deref(),
+                            );
+                            let window_text_fields = collector.collect_elements(&window.0);
+                            debug!(target: "ui_automation", "Found {} text fields in window", window_text_fields.len());
+                            
+                            // Check if we found any text fields
+                            let found_text_fields = !window_text_fields.is_empty();
+                            
+                            // Add any found text fields to our collection
+                            all_text_fields.extend(window_text_fields);
+                            
+                            // Also look for content areas and groups that might contain text fields
+                            if !found_text_fields {
+                                debug!(target: "ui_automation", "Searching for content areas in window");
+                                let content_collector = ElementCollector::new(&["AXGroup", "AXScrollArea", "AXTabGroup", "AXSplitGroup"], None);
+                                let content_areas = content_collector.collect_elements(&window.0);
+                                debug!(target: "ui_automation", "Found {} content areas to search", content_areas.len());
+                                
+                                for content_area in &content_areas {
+                                    debug!(target: "ui_automation", "Searching content area for text fields");
+                                    let collector = ElementCollector::new(
+                                        &[
+                                            "AXTextField",
+                                            "AXTextArea",
+                                            "AXSearchField",
+                                            "AXComboBox",
+                                            "AXURIField",
+                                            "AXAddressField",
+                                        ],
+                                        name.as_deref(),
+                                    );
+                                    let content_text_fields = collector.collect_elements(&content_area.0);
+                                    debug!(target: "ui_automation", "Found {} text fields in content area", content_text_fields.len());
+                                    all_text_fields.extend(content_text_fields);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // If we still didn't find any text fields, search directly in the app
+                    if all_text_fields.is_empty() {
+                        debug!(target: "ui_automation", "No text fields found in windows, searching app directly");
+                        let collector = ElementCollector::new(
+                            &[
+                                "AXTextField",
+                                "AXTextArea",
+                                "AXSearchField",
+                                "AXComboBox",
+                                "AXURIField",
+                                "AXAddressField",
+                            ],
+                            name.as_deref(),
+                        );
+                        all_text_fields = collector.collect_elements(start_element);
+                    }
 
                     debug!(
                         target: "ui_automation",
-                        "Found {} AXTextField elements", elements.len()
+                        "Found {} AXTextField elements in total", all_text_fields.len()
                     );
 
                     // Convert the elements to UIElements
                     let ui_elements: Vec<UIElement> =
-                        elements.into_iter().map(|e| self.wrap_element(e)).collect();
+                        all_text_fields.into_iter().map(|e| self.wrap_element(e)).collect();
 
                     return Ok(ui_elements);
                 }
@@ -436,11 +500,10 @@ impl AccessibilityEngine for MacOSEngine {
                 {
                     debug!(
                         target: "ui_automation",
-                        "Button selector detected, will search for buttons and button-like elements"
+                        "Button selector detected, will search for button-like elements"
                     );
 
                     // Always require a root element for searches to avoid searching the entire system
-                    // If no root is provided, we'll just return an empty list instead of using system_wide
                     if root.is_none() {
                         debug!(
                             target: "ui_automation",
@@ -717,6 +780,70 @@ impl ElementCollector {
         // Check for role match - macOS uses AXRole attribute
         let role_attr = AXAttribute::new(&CFString::new("AXRole"));
 
+        // Enhanced logging for System Settings investigation
+        let identifier_attr = AXAttribute::new(&CFString::new("AXIdentifier"));
+        let description_attr = AXAttribute::new(&CFString::new("AXDescription"));
+        let title_attr = AXAttribute::new(&CFString::new("AXTitle"));
+        let value_attr = AXAttribute::new(&CFString::new("AXValue"));
+
+        // Extract useful identification attributes
+        let mut role_value = String::new();
+        let mut title = String::new();
+        let mut identifier = String::new();
+        let mut description = String::new();
+        let mut value = String::new();
+
+        if let Ok(role_val) = element.0.attribute(&role_attr) {
+            if let Some(cf_string) = role_val.downcast_into::<CFString>() {
+                role_value = cf_string.to_string();
+            }
+        }
+
+        if let Ok(title_val) = element.0.attribute(&title_attr) {
+            if let Some(cf_string) = title_val.downcast_into::<CFString>() {
+                title = cf_string.to_string();
+            }
+        }
+
+        if let Ok(id_val) = element.0.attribute(&identifier_attr) {
+            if let Some(cf_string) = id_val.downcast_into::<CFString>() {
+                identifier = cf_string.to_string();
+            }
+        }
+
+        if let Ok(desc_val) = element.0.attribute(&description_attr) {
+            if let Some(cf_string) = desc_val.downcast_into::<CFString>() {
+                description = cf_string.to_string();
+            }
+        }
+
+        if let Ok(val) = element.0.attribute(&value_attr) {
+            if let Some(cf_string) = val.downcast_into::<CFString>() {
+                value = cf_string.to_string();
+            }
+        }
+
+        // Log everything for analysis
+        if !role_value.is_empty() {
+            trace!(
+                target: "ui_automation",
+                "Element: role={}, title={}, id={}, desc={}, value={}",
+                role_value, title, identifier, description, value
+            );
+
+            // For potential text fields, provide extra debugging
+            if role_value.contains("Text")
+                || self.target_roles.contains(&role_value)
+                || (description.contains("field") && !value.is_empty())
+            {
+                debug!(
+                    target: "ui_automation",
+                    "Potential text field: role={}, title={}, id={}, desc={}, value={}",
+                    role_value, title, identifier, description, value
+                );
+            }
+        }
+
         // Get all attribute names to help debug
         let attr_names = match element.0.attribute_names() {
             Ok(names) => {
@@ -730,11 +857,11 @@ impl ElementCollector {
             }
         };
 
-        debug!(target: "ui_automation", "Attribute names: {:?}", attr_names);
+        trace!(target: "ui_automation", "Attribute names: {:?}", attr_names);
 
         // Always get children to validate we're traversing properly
         if let Ok(children) = element.0.children() {
-            debug!(target: "ui_automation", "Element has {} children", children.len());
+            trace!(target: "ui_automation", "Element has {} children", children.len());
         }
 
         if let Ok(value) = element.0.attribute(&role_attr) {
@@ -791,6 +918,70 @@ impl ElementCollector {
                         && (subrole_value == "AXPushButton" || subrole_value == "AXToggleButton"))
                 {
                     debug!(target: "ui_automation", "Found element with matching subrole: {}", subrole_value);
+                    self.elements.push(element.clone());
+                }
+            }
+        }
+
+        // Special handling for System Settings - look for elements that might be text fields
+        // even if they don't have the exact expected role
+        if self.target_roles.contains(&"AXTextField".to_string()) || 
+                self.target_roles.contains(&"AXTextArea".to_string()) {
+            
+            // Check for editable content
+            let editable_attr = AXAttribute::new(&CFString::new("AXEditable"));
+            let focused_attr = AXAttribute::new(&CFString::new("AXFocused"));
+            
+            let mut is_editable = false;
+            let mut is_focused = false;
+            
+            if let Ok(editable_val) = element.0.attribute(&editable_attr) {
+                if let Some(bool_val) = editable_val.downcast_into::<CFBoolean>() {
+                    // Compare with the true value constant
+                    is_editable = bool_val == CFBoolean::true_value();
+                }
+            }
+            
+            if let Ok(focused_val) = element.0.attribute(&focused_attr) {
+                if let Some(bool_val) = focused_val.downcast_into::<CFBoolean>() {
+                    // Compare with the true value constant
+                    is_focused = bool_val == CFBoolean::true_value();
+                }
+            }
+            
+            // Check if it looks like a text field based on various attributes
+            let is_likely_text_field = 
+                // Editable is a strong indicator
+                is_editable ||
+                // Has value but not in our target roles (could be custom element)
+                (!value.is_empty() && !role_value.contains("Button") && !role_value.contains("Menu")) ||
+                // Has field in the description
+                description.contains("field") ||
+                // Has placeholder text attributes
+                title.contains("placeholder") || description.contains("placeholder") ||
+                // Sometimes text fields don't have proper roles but have these identifiers
+                identifier.contains("text") || identifier.contains("input") || 
+                title.contains("input") || description.contains("input") ||
+                // System Settings specific text fields sometimes have these patterns
+                role_value == "AXGroup" && (identifier.contains("field") || description.contains("Enter")) ||
+                // In System Settings, static text elements next to editable areas might be labels for text fields
+                (role_value == "AXStaticText" && (title.contains("Enter") || description.contains("Enter")));
+            
+            if is_likely_text_field {
+                debug!(
+                    target: "ui_automation",
+                    "Found potential text field: role={}, editable={}, focus={}, desc={}",
+                    role_value, is_editable, is_focused, description
+                );
+                
+                // If name is specified, only add if it matches
+                if let Some(ref target_name) = self.target_name {
+                    if title.contains(target_name) || description.contains(target_name) {
+                        debug!(target: "ui_automation", "Found element with matching name: {}", title);
+                        self.elements.push(element.clone());
+                    }
+                } else {
+                    // No name filter, add the potential text field
                     self.elements.push(element.clone());
                 }
             }
@@ -1061,7 +1252,12 @@ impl UIElementImpl for MacOSUIElement {
                         }
                     }
                     Err(e) => {
-                        debug!(target: "ui_automation", "Error getting attribute {:?}: {:?}", name, e);
+                        // Avoid logging for common expected errors to reduce noise
+                        if !matches!(e, accessibility::Error::Ax(-25212) | 
+                                       accessibility::Error::Ax(-25205) | 
+                                       accessibility::Error::Ax(-25204)) {
+                            debug!(target: "ui_automation", "Error getting attribute {:?}: {:?}", name, e);
+                        }
                     }
                 }
             }
