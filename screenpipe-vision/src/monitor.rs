@@ -19,12 +19,12 @@ pub struct MonitorData {
 
 impl SafeMonitor {
     pub fn new(monitor: Monitor) -> Self {
-        let monitor_id = monitor.id().unwrap();
+        let monitor_id = monitor.id().unwrap_or_default();
         let monitor_data = Arc::new(MonitorData {
-            width: monitor.width().unwrap(),
-            height: monitor.height().unwrap(),
-            name: monitor.name().unwrap().to_string(),
-            is_primary: monitor.is_primary().unwrap(),
+            width: monitor.width().unwrap_or_default(),
+            height: monitor.height().unwrap_or_default(),
+            name: monitor.name().unwrap_or_default(),
+            is_primary: monitor.is_primary().unwrap_or(false),
         });
 
         Self {
@@ -110,9 +110,9 @@ pub async fn get_default_monitor() -> SafeMonitor {
 pub async fn get_monitor_by_id(id: u32) -> Option<SafeMonitor> {
     tokio::task::spawn_blocking(move || {
         Monitor::all()
-            .unwrap()
+            .unwrap_or_default()
             .into_iter()
-            .find(|m| m.id().unwrap() == id)
+            .find(|m| m.id().unwrap_or_default() == id)
             .map(SafeMonitor::new)
     })
     .await
