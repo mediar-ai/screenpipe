@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
         &output_path,
         VadSensitivity::Medium,
         languages,
-        None
+        None,
     )
     .await?;
     // Spawn threads for each device
