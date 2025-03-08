@@ -229,7 +229,7 @@ export const publishCommand = new Command("publish")
       logger.log(colors.dim(`${symbols.arrow} creating package archive...`));
 
       // Create temporary zip file
-      const zipPath = path.join(
+      let zipPath = path.join(
         process.cwd(),
         `${packageJson.name}-${packageJson.version}.zip`
       );
@@ -277,11 +277,11 @@ export const publishCommand = new Command("publish")
       }
 
       // Calculate file hash
-      const fileBuffer = fs.readFileSync(zipPath);
+      let fileBuffer = fs.readFileSync(zipPath);
       const hashSum = crypto.createHash("sha256");
       hashSum.update(fileBuffer);
-      const fileHash = hashSum.digest("hex");
-      const fileSize = fs.statSync(zipPath).size;
+      let fileHash = hashSum.digest("hex");
+      let fileSize = fs.statSync(zipPath).size;
 
       if (fileSize > MAX_FILE_SIZE) {
         console.error(
@@ -333,6 +333,7 @@ export const publishCommand = new Command("publish")
             fileSize,
             fileHash,
             description,
+            useS3: true,
           }, {
             headers: {
               Authorization: `Bearer ${apiKey}`,
@@ -340,17 +341,31 @@ export const publishCommand = new Command("publish")
             },
             timeout: 30000, // 30 second timeout
           });
+          
+          console.log(colors.dim(`${symbols.arrow} storage provider: S3`));
+          console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
         } catch (error) {
           // Handle version conflict specifically
-          if (axios.isAxiosError(error) && error.response) {
-            const status = error.response.status;
-            const errorData = error.response.data;
+          if (axios.isAxiosError(error)) {
+            console.log(colors.dim(`${symbols.arrow} network error details:`));
             
-            console.log(colors.dim(`${symbols.arrow} server responded with status: ${status}`));
+            if (error.response) {
+              // The server responded with a status code outside the 2xx range
+              console.log(colors.dim(`${symbols.arrow} server responded with status: ${error.response.status}`));
+              console.log(colors.dim(`${symbols.arrow} response data: ${JSON.stringify(error.response.data)}`));
+            } else if (error.request) {
+              // The request was made but no response was received
+              console.log(colors.dim(`${symbols.arrow} no response received from server`));
+              console.log(colors.dim(`${symbols.arrow} check network connectivity and server status`));
+              console.log(colors.dim(`${symbols.arrow} attempted to connect to: ${error.request._currentUrl || API_BASE_URL}`));
+            } else {
+              // Something happened in setting up the request
+              console.log(colors.dim(`${symbols.arrow} error setting up request: ${error.message}`));
+            }
             
             // Check if this is a version conflict error
-            if (status === 400 && typeof errorData === 'string' && 
-                errorData.includes('already exists') && errorData.includes('version')) {
+            if (error.response && error.response.status === 400 && typeof error.response.data === 'string' && 
+                error.response.data.includes('already exists') && error.response.data.includes('version')) {
               
               // Ask user if they want to bump the version
               const readline = require('readline').createInterface({
@@ -378,6 +393,63 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
                 // Update packageJson in memory
                 packageJson.version = newVersion;
                 
+                // Clean up the old zip file
+                if (fs.existsSync(zipPath)) {
+                  fs.unlinkSync(zipPath);
+                  if (opts.verbose) {
+                    console.log(colors.dim(`${symbols.arrow} cleaned up old zip file`));
+                  }
+                }
+                
+                // Rebuild the project with the new version
+                try {
+                  logger.info(colors.info(`\n${symbols.info} Rebuilding project with new version ${newVersion}...`));
+                  runBuildCommand();
+                } catch (error) {
+                  if (error instanceof Error) {
+                    console.error(colors.error(`${symbols.error} ${error.message}`));
+                    process.exit(1);
+                  }
+                }
+                
+                // Create a new zip file with the updated version
+                zipPath = path.join(
+                  process.cwd(),
+                  `${packageJson.name}-${newVersion}.zip`
+                );
+                const newOutput = fs.createWriteStream(zipPath);
+                const newArchive = archiver("zip", { zlib: { level: 9 } });
+                
+                newArchive.pipe(newOutput);
+                
+                logger.log(colors.dim(`${symbols.arrow} creating new package archive with version ${newVersion}...`));
+                
+                // Archive the project again
+                if (isNextProject) {
+                  await archiveNextJsProject(newArchive);
+                } else {
+                  archiveStandardProject(newArchive, ig);
+                }
+                
+                await new Promise((resolve, reject) => {
+                  newOutput.on("close", resolve);
+                  newArchive.on("error", reject);
+                  newArchive.finalize();
+                });
+                
+                // Recalculate file hash and size
+                fileBuffer = fs.readFileSync(zipPath);
+                const newHashSum = crypto.createHash("sha256");
+                newHashSum.update(fileBuffer);
+                fileHash = newHashSum.digest("hex");
+                fileSize = fs.statSync(zipPath).size;
+                
+                if (opts.verbose) {
+                  console.log(colors.dim(`${symbols.arrow} new archive created: ${zipPath}`));
+                  console.log(colors.dim(`${symbols.arrow} new file size: ${fileSize} bytes`));
+                  console.log(colors.dim(`${symbols.arrow} new file hash: ${fileHash}`));
+                }
+                
                 // Retry the request with new version
                 console.log(colors.dim(`${symbols.arrow} retrying with new version: ${newVersion}`));
                 urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
@@ -386,6 +458,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
                   fileSize,
                   fileHash,
                   description,
+                  useS3: true,
                 }, {
                   headers: {
                     Authorization: `Bearer ${apiKey}`,
@@ -399,19 +472,19 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
               }
             } else {
               // Handle other errors
-              if (typeof errorData === 'string') {
-                throw new Error(errorData);
-              } else if (errorData.error) {
-                if (Array.isArray(errorData.error)) {
-                  const issues = errorData.error.map((issue: any) => 
+              if (typeof error.response?.data === 'string') {
+                throw new Error(error.response.data);
+              } else if (error.response?.data.error) {
+                if (Array.isArray(error.response.data.error)) {
+                  const issues = error.response.data.error.map((issue: any) => 
                     `${issue.path.join('.')}: ${issue.message}`
                   ).join(', ');
                   throw new Error(`validation failed: ${issues}`);
                 } else {
-                  throw new Error(`server error: ${JSON.stringify(errorData.error)}`);
+                  throw new Error(`server error: ${JSON.stringify(error.response.data.error)}`);
                 }
               } else {
-                throw new Error(`server responded with error: ${JSON.stringify(errorData)}`);
+                throw new Error(`server responded with error: ${JSON.stringify(error.response?.data)}`);
               }
             }
           } else {
@@ -419,11 +492,10 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
           }
         }
 
-        console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
-        
-        const { uploadUrl, path } = urlResponse.data;
+        // Get the upload URL and storage path from the response
+        const { uploadUrl, path: storagePath } = urlResponse.data;
         console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
-        console.log(colors.dim(`${symbols.arrow} storage path: ${path}`));
+        console.log(colors.dim(`${symbols.arrow} storage path: ${storagePath}`));
         console.log(colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`));
 
         // Upload directly to Supabase
@@ -433,6 +505,43 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
         
         let uploadSuccessful = false;
         let uploadError = null;
+        
+        // Create a progress bar
+        const progressBar = {
+          current: 0,
+          total: fileSize,
+          width: 40,
+          update(loaded: number) {
+            const percent = Math.floor((loaded / this.total) * 100);
+            const filledWidth = Math.floor((loaded / this.total) * this.width);
+            const emptyWidth = this.width - filledWidth;
+            
+            // Only update if progress has changed by at least 1%
+            if (percent > this.current) {
+              this.current = percent;
+              
+              // Clear the current line and move to beginning
+              process.stdout.write('\r');
+              
+              // Create the progress bar
+              const bar = '█'.repeat(filledWidth) + '░'.repeat(emptyWidth);
+              
+              // Format the size display
+              const loadedSize = (loaded / (1024 * 1024)).toFixed(2);
+              const totalSize = (this.total / (1024 * 1024)).toFixed(2);
+              
+              // Print the progress bar
+              process.stdout.write(
+                `${colors.dim(`${symbols.arrow} uploading: [`)}${colors.info(bar)}${colors.dim(`] ${percent}%`)} ${colors.dim(`(${loadedSize}/${totalSize} MB)`)}`
+              );
+            }
+          },
+          complete() {
+            // Move to next line after completion
+            process.stdout.write('\n');
+            logger.success(`${symbols.success} upload completed successfully`);
+          }
+        };
         
         try {
           // Try using a different approach for the upload
@@ -446,12 +555,10 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             decompress: false, // Disable automatic decompression
             onUploadProgress: (progressEvent) => {
               if (progressEvent.total) {
-                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                if (percentCompleted % 10 === 0) { // Log every 10%
-                  console.log(colors.dim(`${symbols.arrow} upload progress: ${percentCompleted}%`));
-                }
+                progressBar.update(progressEvent.loaded);
+                
                 // Mark as successful if we reach 100%
-                if (percentCompleted === 100) {
+                if (progressEvent.loaded === progressEvent.total) {
                   uploadSuccessful = true;
                 }
               }
@@ -460,13 +567,57 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             validateStatus: function (status) {
               // Consider any status less than 500 as success
               return status < 500;
-            }
+            },
+            // Add responseType to handle binary responses
+            responseType: 'arraybuffer'
           });
           
+          progressBar.complete();
           console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.status || 'unknown'}`));
+          
+          // Check if response is binary/non-text and log appropriately
+          if (uploadResponse.data) {
+            const contentType = uploadResponse.headers['content-type'] || '';
+            if (contentType.includes('json')) {
+              // It's JSON, try to parse and display
+              try {
+                const jsonData = JSON.parse(uploadResponse.data.toString());
+                console.log(colors.dim(`${symbols.arrow} upload response: ${JSON.stringify(jsonData)}`));
+              } catch (e) {
+                console.log(colors.dim(`${symbols.arrow} upload response: [unparseable JSON response]`));
+              }
+            } else if (contentType.includes('text')) {
+              // It's text, display as string
+              console.log(colors.dim(`${symbols.arrow} upload response: ${uploadResponse.data.toString()}`));
+            } else {
+              // It's binary, just log the type and size
+              console.log(colors.dim(`${symbols.arrow} upload response: [binary data, ${uploadResponse.data.byteLength} bytes]`));
+              console.log(colors.dim(`${symbols.arrow} response content-type: ${contentType}`));
+            }
+          }
+          
           uploadSuccessful = true;
         } catch (error) {
           uploadError = error;
+          
+          // Always print the error response as a normal message
+          if (axios.isAxiosError(error)) {
+            if (error.response?.data) {
+              // Check if the response is binary
+              if (error.response.data instanceof Buffer || error.response.data instanceof ArrayBuffer) {
+                console.log(colors.dim(`${symbols.arrow} upload response: [binary data, ${error.response.data.byteLength} bytes]`));
+                console.log(colors.dim(`${symbols.arrow} response content-type: ${error.response.headers['content-type'] || 'unknown'}`));
+              } else {
+                // Try to stringify the response data
+                try {
+                  console.log(colors.dim(`${symbols.arrow} upload response: ${JSON.stringify(error.response.data)}`));
+                } catch (e) {
+                  console.log(colors.dim(`${symbols.arrow} upload response: [unparseable response data]`));
+                }
+              }
+            }
+            console.log(colors.dim(`${symbols.arrow} upload status: ${error.response?.status || 'unknown'}`));
+          }
           
           // Check if we've seen 100% progress
           if (!uploadSuccessful) {
@@ -476,8 +627,6 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
               console.error(colors.dim(`${symbols.arrow} stack trace: ${error.stack}`));
             }
             if (axios.isAxiosError(error)) {
-              console.error(colors.error(`${symbols.error} upload response: ${JSON.stringify(error.response?.data || {})}`));
-              console.error(colors.error(`${symbols.error} upload status: ${error.response?.status || 'unknown'}`));
               console.error(colors.error(`${symbols.error} upload request config: ${JSON.stringify({
                 url: error.config?.url?.substring(0, 100) + '...',
                 method: error.config?.method,
@@ -488,14 +637,14 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             throw error;
           } else {
             // If we've seen 100% progress, we can ignore the socket close error
-            // Use a warning style instead of error
+            progressBar.complete();
             console.log(colors.dim(`${symbols.info} upload completed but connection closed: ${error instanceof Error ? error.message : 'unknown'}`));
             console.log(colors.dim(`${symbols.arrow} socket was closed after upload completed, continuing with finalization...`));
           }
         }
         
         // Notify server that upload is complete
-        logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
+        logger.log(colors.dim(`${symbols.arrow} finalizing upload with S3 storage...`));
         console.log(colors.dim(`${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`));
         
         const finalizeResponse = await axios.post(
@@ -504,7 +653,7 @@ ${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/
             name: opts.name,
             version: packageJson.version,
             fileHash,
-            storagePath: path,
+            storagePath: storagePath,
             description,
             fileSize,
           },
