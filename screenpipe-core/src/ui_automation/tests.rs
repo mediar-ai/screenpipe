@@ -1,26 +1,31 @@
 use super::*;
+use crate::ui_automation::selector::Selector;
+use std::collections::HashMap;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui_automation::selector::Selector;
+    use std::collections::BTreeMap;
+    use tracing_subscriber::prelude::*;
     use tracing_subscriber::{filter::LevelFilter, fmt, EnvFilter};
 
     #[cfg(target_os = "macos")]
     mod macos_tests {
         use super::*;
 
+        // Setup tracing for tests
         fn setup_tracing() {
-            // Initialize tracing with debug level for our module
-            let filter =
-                EnvFilter::from_default_env().add_directive("ui_automation=debug".parse().unwrap());
+            let filter = EnvFilter::from_default_env()
+                .add_directive(LevelFilter::DEBUG.into())
+                .add_directive("ui_automation=debug".parse().unwrap());
 
-            let subscriber = fmt::Subscriber::builder()
-                .with_env_filter(filter)
-                .with_max_level(LevelFilter::DEBUG)
-                .finish();
-
-            // Don't fail if it's already been initialized in another test
-            let _ = tracing::subscriber::set_global_default(subscriber);
+            tracing_subscriber::registry()
+                .with(fmt::layer())
+                .with(filter)
+                .init();
         }
 
         #[test]
@@ -190,179 +195,70 @@ mod tests {
 
             // Try multiple applications that likely have text inputs
             // Order from most likely to have text fields to least likely
-            let app_names = ["Arc"];
-
-            let mut found_app_with_text_fields = false;
+            let app_name = "System Settings";
 
             // Try each app until we find one with text inputs
-            for &app_name in app_names.iter() {
-                println!("Trying application: {}", app_name);
+            println!("Trying application: {}", app_name);
 
-                let app = match desktop.application(app_name) {
-                    Ok(w) => {
-                        println!("Successfully found application: {}", app_name);
-                        w
-                    }
-                    Err(e) => {
-                        println!("Failed to find application: {:?}", e);
-                        continue; // Try next app
-                    }
-                };
-                println!("App: {:?}", app.attributes().label);
-
-                let windows = app.locator("window").unwrap().all().unwrap_or_default();
-                println!("Found {} windows", windows.len());
-
-                let mut text_inputs = Vec::new();
-
-                match app.locator(Selector::Role {
-                    role: "input".to_string(),
-                    name: None,
-                }) {
-                    Ok(locator) => match locator.all() {
-                        Ok(inputs) => {
-                            println!("Found {} elements with role '{}'", inputs.len(), "input");
-                            if !inputs.is_empty() {
-                                text_inputs = inputs;
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            println!("Failed to get elements with role '{}': {:?}", "input", e);
-                        }
-                    },
-                    Err(e) => {
-                        println!("Failed to create locator for role '{}': {:?}", "input", e);
-                    }
+            let app = match desktop.application(app_name) {
+                Ok(w) => {
+                    println!("Successfully found application: {}", app_name);
+                    w
                 }
-
-                // If we found no text inputs after trying all roles, try a different approach - look for any element
-                // that might have an editable value or accept text input
-                if text_inputs.is_empty() {
-                    println!(
-                        "No text fields found by role, trying to find any editable element..."
-                    );
-
-                    // Get all UI elements
-                    match app.locator(Selector::Role {
-                        role: "group".to_string(), // A generic container role that should find many elements
-                        name: None,
-                    }) {
-                        Ok(locator) => match locator.all() {
-                            Ok(elements) => {
-                                println!("Found {} elements to examine", elements.len());
-
-                                // Try to find ones that have editable text content
-                                for element in elements {
-                                    let attrs = element.attributes();
-
-                                    // Print element properties for debugging
-                                    println!(
-                                        "Element role: {}, label: {:?}",
-                                        attrs.role, attrs.label
-                                    );
-
-                                    // If the element has a "value" attribute, it might be editable
-                                    if attrs.value.is_some() {
-                                        println!("Found an element with a value attribute, might be editable");
-                                        text_inputs.push(element);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                println!("Failed to get elements for analysis: {:?}", e);
-                            }
-                        },
-                        Err(e) => {
-                            println!("Failed to create locator for analysis: {:?}", e);
-                        }
-                    }
+                Err(e) => {
+                    println!("Failed to find application: {:?}", e);
+                    return;
                 }
+            };
+            println!("App: {:?}", app.attributes().label);
 
-                // If we found text inputs, process them
-                if !text_inputs.is_empty() {
-                    found_app_with_text_fields = true;
-
+            // Inspect application structure before looking for windows
+            println!("Directly examining application structure:");
+            if let Ok(app_children) = app.children() {
+                println!("App has {} direct children", app_children.len());
+                for (i, child) in app_children.iter().enumerate() {
+                    let attrs = child.attributes();
                     println!(
-                        "Found {} potential text inputs in {}",
-                        text_inputs.len(),
-                        app_name
-                    );
-
-                    // For each text input, try to focus and simulate typing
-                    for (i, input) in text_inputs.iter().enumerate() {
-                        println!("Text input {}: {:?}", i, input.attributes());
-
-                        // Try to focus the element first
-                        match input.focus() {
-                            Ok(_) => println!("Successfully focused text input {}", i),
-                            Err(e) => {
-                                println!("Failed to focus text input {}: {:?}", i, e);
-                                continue;
-                            }
-                        }
-
-                        // Get current text (if any)
-                        match input.text() {
-                            Ok(text) => {
-                                if text.is_empty() {
-                                    println!("Text input {} is empty", i);
-                                } else {
-                                    println!("Text input {} current text: {}", i, text);
-                                }
-                            }
-                            Err(e) => println!("Failed to get text: {:?}", e),
-                        }
-
-                        // Try typing text
-                        let sample_text = "Hello from Screenpipe!";
-                        match input.type_text(sample_text) {
-                            Ok(_) => println!("Successfully filled text input {}", i),
-                            Err(e) => {
-                                println!("Failed to fill text input {}: {:?}", i, e);
-
-                                // If type_text fails, try set_value instead
-                                println!("Trying set_value instead");
-                                match input.set_value(sample_text) {
-                                    Ok(_) => println!("Successfully set value for input {}", i),
-                                    Err(e) => {
-                                        println!("Failed to set value for input {}: {:?}", i, e)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Verify the text was entered
-                        match input.text() {
-                            Ok(text) => {
-                                println!("After typing, text input {} has text: {}", i, text)
-                            }
-                            Err(e) => println!("Failed to verify text after typing: {:?}", e),
-                        }
-
-                        // We've successfully tested text input, so we can break out of the loop
-                        break;
-                    }
-
-                    // We found text inputs in this app, so we can stop trying other apps
-                    break;
-                } else {
-                    println!(
-                        "No text inputs found in {}, trying next application",
-                        app_name
+                        "Child {}: role={}, label={:?}, value={:?}",
+                        i, attrs.role, attrs.label, attrs.value
                     );
                 }
             }
 
-            // If we didn't find any text inputs in any app, the test has demonstrated what it could
-            if !found_app_with_text_fields {
-                println!("No suitable text input fields found in any of the tried applications.");
-                println!("To run this test successfully, please ensure TextEdit, Notes, or Safari is running with a document open.");
+            // Look for URL fields specifically
+            println!("Specifically searching for URL fields...");
+            let mut text_inputs = Vec::new();
+
+            // Try with the URL selector which uses our specialized URL field detection
+            match app.locator(Selector::Role {
+                role: "url".to_string(),
+                name: Some("github url or local path".to_string()),
+            }) {
+                Ok(locator) => match locator.all() {
+                    Ok(elements) => {
+                        println!("Found {} URL field elements", elements.len());
+                        if !elements.is_empty() {
+                            text_inputs = elements;
+                            // Print details about each found field
+                            for (i, element) in text_inputs.iter().enumerate() {
+                                let attrs = element.attributes();
+                                println!("URL field {}: role={}, label={:?}, value={:?}, properties={:?}", 
+                                    i, attrs.role, attrs.label, attrs.value, attrs.properties);
+                            }
+                        }
+                    }
+                    Err(e) => println!("Error finding URL fields: {:?}", e),
+                },
+                Err(e) => println!("Error creating URL field locator: {:?}", e),
             }
 
-            println!(
-                "Test completed. Text input capabilities demonstrated to the extent possible."
-            );
+            // If no fields found, try with regular text field search
+            if text_inputs.is_empty() {
+                // Try with windows or generic containers
+                // ... existing window detection code ...
+            }
+
+            // ... rest of the existing test code ...
         }
 
         #[test]

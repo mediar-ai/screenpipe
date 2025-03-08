@@ -197,12 +197,24 @@ fn map_generic_role_to_macos_roles(role: &str) -> Vec<String> {
         "menu" => vec!["AXMenu".to_string()],
         "menuitem" => vec!["AXMenuItem".to_string(), "AXMenuBarItem".to_string()], // Include both types
         "dialog" => vec!["AXSheet".to_string(), "AXDialog".to_string()], // macOS often uses Sheet or Dialog
-        "text" | "textfield" => vec![
+        "text" | "textfield" | "input" | "textbox" => vec![
             "AXTextField".to_string(),
             "AXTextArea".to_string(),
             "AXText".to_string(),
-            "AXTextArea".to_string(),
+            "AXComboBox".to_string(),
             "AXTextEdit".to_string(),
+            "AXSearchField".to_string(),
+            "AXWebArea".to_string(), // Web content might contain inputs
+            "AXGroup".to_string(),   // Twitter uses groups that contain editable content
+            "AXGenericElement".to_string(), // Generic elements that might be inputs
+            "AXURIField".to_string(), // Explicit URL field type
+            "AXAddressField".to_string(), // Another common name for URL fields
+        ],
+        // Add specific support for URL fields
+        "url" | "urlfield" => vec![
+            "AXTextField".to_string(),    // URL fields are often text fields
+            "AXURIField".to_string(),     // Explicit URL field type
+            "AXAddressField".to_string(), // Another common name for URL fields
         ],
         "list" => vec!["AXList".to_string()],
         "listitem" => vec!["AXCell".to_string()], // List items are often cells in macOS
@@ -219,10 +231,20 @@ fn macos_role_to_generic_role(role: &str) -> Vec<String> {
     match role.to_lowercase().as_str() {
         "AXWindow" => vec!["window".to_string()],
         "AXButton" | "AXMenuItem" | "AXMenuBarItem" => vec!["button".to_string()],
-        "AXTextField" | "AXTextArea" | "AXTextEdit" => vec!["textfield".to_string()],
+        "AXTextField" | "AXTextArea" | "AXTextEdit" | "AXSearchField" | "AXURIField"
+        | "AXAddressField" => vec![
+            "textfield".to_string(),
+            "input".to_string(),
+            "textbox".to_string(),
+            "url".to_string(),
+            "urlfield".to_string(),
+        ],
         "AXList" => vec!["list".to_string()],
         "AXCell" => vec!["listitem".to_string()],
         "AXSheet" | "AXDialog" => vec!["dialog".to_string()],
+        "AXGroup" | "AXGenericElement" | "AXWebArea" => {
+            vec!["group".to_string(), "genericElement".to_string()]
+        }
         _ => vec![role.to_string()],
     }
 }
@@ -338,6 +360,75 @@ impl AccessibilityEngine for MacOSEngine {
         match selector {
             Selector::Role { role, name } => {
                 let macos_roles = map_generic_role_to_macos_roles(role);
+
+                // Special case for URL fields
+                if macos_roles.contains(&"AXTextField".to_string())
+                    || macos_roles.contains(&"AXTextArea".to_string())
+                    || macos_roles.contains(&"AXSearchField".to_string())
+                    || macos_roles.contains(&"AXComboBox".to_string())
+                    || macos_roles.contains(&"AXURIField".to_string())
+                    || macos_roles.contains(&"AXAddressField".to_string())
+                {
+                    debug!(
+                        target: "ui_automation",
+                        "URL field selector detected, will search for URL input elements"
+                    );
+
+                    debug!(
+                        target: "ui_automation",
+                        "Button selector detected, will search for buttons and button-like elements"
+                    );
+
+                    // Always require a root element for searches to avoid searching the entire system
+                    // If no root is provided, we'll just return an empty list instead of using system_wide
+                    if root.is_none() {
+                        debug!(
+                            target: "ui_automation",
+                            "No root element provided for button search, returning empty list to avoid system-wide search"
+                        );
+                        return Ok(Vec::new());
+                    }
+
+                    let root_ax_element = root.map(|el| {
+                        if let Some(macos_el) = el.as_any().downcast_ref::<MacOSUIElement>() {
+                            &macos_el.element
+                        } else {
+                            panic!("Root element is not a macOS element")
+                        }
+                    });
+
+                    let start_element = match root_ax_element {
+                        Some(elem) => &elem.0,
+                        // We should never reach this case due to the check above
+                        None => return Ok(Vec::new()),
+                    };
+
+                    // First search for regular buttons
+                    let collector = ElementCollector::new(
+                        &[
+                            "AXTextField",
+                            "AXTextArea",
+                            "AXSearchField",
+                            "AXComboBox",
+                            "AXURIField",
+                            "AXAddressField",
+                        ],
+                        name.as_deref(),
+                    );
+                    let elements = collector.collect_elements(start_element);
+
+                    debug!(
+                        target: "ui_automation",
+                        "Found {} AXTextField elements", elements.len()
+                    );
+
+                    // Convert the elements to UIElements
+                    let ui_elements: Vec<UIElement> =
+                        elements.into_iter().map(|e| self.wrap_element(e)).collect();
+
+                    return Ok(ui_elements);
+                }
+
                 // Special case for buttons - directly search for menu items
                 if macos_roles.contains(&"AXButton".to_string())
                     || macos_roles.contains(&"AXMenuItem".to_string())
@@ -373,71 +464,29 @@ impl AccessibilityEngine for MacOSEngine {
                     };
 
                     // First search for regular buttons
-                    let collector = ElementCollector::new(&["AXButton"], name.as_deref());
-                    let mut elements = collector.collect_elements(start_element);
+                    let collector = ElementCollector::new(
+                        &[
+                            "AXButton",
+                            "AXMenuItem",
+                            "AXMenuBarItem",
+                            "AXTextField",
+                            "AXTextArea",
+                        ],
+                        name.as_deref(),
+                    );
+                    let elements = collector.collect_elements(start_element);
 
                     debug!(
                         target: "ui_automation",
                         "Found {} AXButton elements", elements.len()
                     );
 
-                    // Then search for menu items
-                    let menu_collector = ElementCollector::new(&["AXMenuItem"], name.as_deref());
-                    let menu_elements = menu_collector.collect_elements(start_element);
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXMenuItem elements", menu_elements.len()
-                    );
-                    elements.extend(menu_elements);
-
-                    // Also search for menu bar items
-                    let menubar_collector =
-                        ElementCollector::new(&["AXMenuBarItem"], name.as_deref());
-                    let menubar_elements = menubar_collector.collect_elements(start_element);
-
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXMenuBarItem elements", menubar_elements.len()
-                    );
-                    elements.extend(menubar_elements);
-
-                    // Search for static text elements that may be clickable
-                    let text_collector = ElementCollector::new(&["AXStaticText"], name.as_deref());
-                    let text_elements = text_collector.collect_elements(start_element);
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXStaticText elements that may be buttons", text_elements.len()
-                    );
-                    elements.extend(text_elements);
-
-                    // Search for image elements that may be used as buttons
-                    let image_collector = ElementCollector::new(&["AXImage"], name.as_deref());
-                    let image_elements = image_collector.collect_elements(start_element);
-                    debug!(
-                        target: "ui_automation",
-                        "Found {} AXImage elements that may be buttons", image_elements.len()
-                    );
-                    elements.extend(image_elements);
-
                     // Convert the elements to UIElements
                     let ui_elements: Vec<UIElement> =
                         elements.into_iter().map(|e| self.wrap_element(e)).collect();
 
-                    // Debug log the roles of the elements we found
-                    for (i, elem) in ui_elements.iter().enumerate() {
-                        debug!(
-                            target: "ui_automation",
-                            "Element #{}: role={}, label={:?}",
-                            i + 1,
-                            elem.role(),
-                            elem.attributes().label
-                        );
-                    }
-
                     return Ok(ui_elements);
                 }
-
-                let macos_roles = map_generic_role_to_macos_roles(role);
 
                 // Special handling for window search
                 if macos_roles.contains(&"AXWindow".to_string()) && root.is_some() {
@@ -821,6 +870,25 @@ impl std::fmt::Debug for MacOSUIElement {
     }
 }
 
+impl MacOSUIElement {
+    // Helper function to get the containing application
+    fn get_application(&self) -> Option<MacOSUIElement> {
+        let attr = AXAttribute::new(&CFString::new("AXTopLevelUIElement"));
+        match self.element.0.attribute(&attr) {
+            Ok(value) => {
+                if let Some(app) = value.downcast::<AXUIElement>() {
+                    Some(MacOSUIElement {
+                        element: ThreadSafeAXUIElement::new(app),
+                    })
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    }
+}
+
 impl UIElementImpl for MacOSUIElement {
     fn object_id(&self) -> usize {
         // Use the pointer address of the inner AXUIElement as a unique ID
@@ -1076,16 +1144,92 @@ impl UIElementImpl for MacOSUIElement {
     }
 
     fn focus(&self) -> Result<(), AutomationError> {
-        // not implemented
-        Err(AutomationError::UnsupportedOperation(
-            "focus not yet implemented for macOS".to_string(),
-        ))
+        // Implement proper focus functionality using AXUIElementPerformAction with the "AXRaise" action
+        // or by setting it as the AXFocusedUIElement of its parent window
+
+        // First try using the AXRaise action
+        let raise_attr = AXAttribute::new(&CFString::new("AXRaise"));
+        if let Ok(_) = self.element.0.perform_action(&raise_attr.as_CFString()) {
+            debug!(target: "ui_automation", "Successfully raised element");
+
+            // Now try to directly focus the element
+            // Get the application element
+            if let Some(app) = self.get_application() {
+                // Set the focused element
+                unsafe {
+                    let app_ref =
+                        app.element.0.as_concrete_TypeRef() as *mut ::std::os::raw::c_void;
+                    let attr_str = CFString::new("AXFocusedUIElement");
+                    let attr_str_ref =
+                        attr_str.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+                    let elem_ref =
+                        self.element.0.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+
+                    let result = AXUIElementSetAttributeValue(app_ref, attr_str_ref, elem_ref);
+                    if result == 0 {
+                        debug!(target: "ui_automation", "Successfully set focus to element");
+                        return Ok(());
+                    } else {
+                        debug!(
+                            target: "ui_automation",
+                            "Failed to set element as focused: error code {}", result
+                        );
+                    }
+                }
+            }
+        }
+
+        // If we can't use AXRaise or set focus directly, try to click the element
+        // which often gives it focus as a side effect
+        debug!(target: "ui_automation", "Attempting to focus by clicking the element");
+        self.click()
     }
 
     fn type_text(&self, text: &str) -> Result<(), AutomationError> {
-        // First, make sure the element is focused
-        self.focus()?;
+        // First, try to focus the element, but continue even if focus fails for web inputs
+        match self.focus() {
+            Ok(_) => debug!(target: "ui_automation", "Successfully focused element for typing"),
+            Err(e) => {
+                debug!(target: "ui_automation", "Focus failed, but continuing with type_text: {:?}", e);
+                // Click the element, which is often needed for web inputs
+                if let Err(click_err) = self.click() {
+                    debug!(target: "ui_automation", "Click also failed: {:?}", click_err);
+                }
+            }
+        }
 
+        // Check if this is a web input by examining the role
+        let is_web_input = {
+            let role = self.role().to_lowercase();
+            role.contains("web") || role.contains("generic")
+        };
+
+        // For web inputs, we might need a different approach
+        if is_web_input {
+            debug!(target: "ui_automation", "Detected web input, using specialized handling");
+
+            // Try different attribute names that web inputs might use
+            for attr_name in &["AXValue", "AXValueAttribute", "AXText"] {
+                let cf_string = CFString::new(text);
+                unsafe {
+                    let element_ref =
+                        self.element.0.as_concrete_TypeRef() as *mut ::std::os::raw::c_void;
+                    let attr_str = CFString::new(attr_name);
+                    let attr_str_ref =
+                        attr_str.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+                    let value_ref =
+                        cf_string.as_concrete_TypeRef() as *const ::std::os::raw::c_void;
+
+                    let result = AXUIElementSetAttributeValue(element_ref, attr_str_ref, value_ref);
+                    if result == 0 {
+                        debug!(target: "ui_automation", "Successfully set text using {}", attr_name);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
+        // Standard approach for native controls
         // Create a CFString from the input text
         let cf_string = CFString::new(text);
 
