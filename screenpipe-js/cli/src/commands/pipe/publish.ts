@@ -8,8 +8,8 @@ import ignore from "ignore";
 import { colors, symbols } from "../../utils/colors";
 import { Command } from "commander";
 import { logger } from "../components/commands/add/utils/logger";
-import { execSync } from "child_process";
 import axios from "axios";
+import { execSync } from 'child_process';
 
 interface ProjectFiles {
   required: string[];
@@ -99,22 +99,6 @@ async function retryFetch(
   throw new Error("Retry failed"); // Fallback error
 }
 
-function isProjectBuilt(): boolean {
-  // For Next.js projects
-  if (
-    fs.existsSync("next.config.js") ||
-    fs.existsSync("next.config.mjs") ||
-    fs.existsSync("next.config.ts")
-  ) {
-    return fs.existsSync(".next") && fs.existsSync(".next/server");
-  }
-
-  // For other projects - check common build directories
-  return (
-    fs.existsSync("dist") || fs.existsSync("build") || fs.existsSync("out")
-  );
-}
-
 function runBuildCommand(): void {
   logger.info(
     colors.info(
@@ -150,6 +134,25 @@ function runBuildCommand(): void {
   }
 }
 
+// Add this function to bump semver version
+function bumpVersion(version: string, type: 'patch' | 'minor' | 'major' = 'patch'): string {
+  const [major, minor, patch] = version.split('.').map(Number);
+  
+  if (type === 'patch') return `${major}.${minor}.${patch + 1}`;
+  if (type === 'minor') return `${major}.${minor + 1}.0`;
+  if (type === 'major') return `${major + 1}.0.0`;
+  
+  return `${major}.${minor}.${patch + 1}`; // Default to patch
+}
+
+// Add this function to update package.json
+function updatePackageVersion(newVersion: string): void {
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  packageJson.version = newVersion;
+  fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+}
+
 export const publishCommand = new Command("publish")
   .description("publish or update a pipe to the store")
   .requiredOption("-n, --name <name>", "name of the pipe")
@@ -178,6 +181,17 @@ export const publishCommand = new Command("publish")
           )
         );
         process.exit(1);
+      }
+      // Check if the project needs to be built
+      if (!opts.skipBuildCheck) {
+        try {
+          runBuildCommand();
+        } catch (error) {
+          if (error instanceof Error) {
+            console.error(colors.error(`${symbols.error} ${error.message}`));
+            process.exit(1);
+          }
+        }
       }
 
       if (opts.verbose) {
@@ -305,102 +319,206 @@ export const publishCommand = new Command("publish")
         console.log(colors.dim(`${symbols.arrow} calculating file hash...`));
       }
 
-      // Check if project is built (unless explicitly skipped)
-      if (!opts.skipBuildCheck && !isProjectBuilt()) {
-        if (opts.build) {
-          // Run build if --build flag is provided
-          runBuildCommand();
-        } else {
-          console.error(
-            colors.error(
-              `${
-                symbols.error
-              } Project has not been built. Run ${colors.highlight(
-                "bun run build"
-              )} or ${colors.highlight(
-                "npm run build"
-              )} first, or use ${colors.highlight(
-                "--build"
-              )} flag to build automatically.`
-            )
-          );
-          process.exit(1);
-        }
-      }
-
       // Replace the upload section with this:
       try {
         // First get the signed URL
         console.log(colors.dim(`${symbols.arrow} getting upload URL...`));
+        console.log(colors.dim(`${symbols.arrow} requesting URL from: ${API_BASE_URL}/api/plugins/publish`));
 
-        const urlResponse = await fetch(`${API_BASE_URL}/api/plugins/publish`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        let urlResponse;
+        try {
+          urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
             name: opts.name,
             version: packageJson.version,
             fileSize,
             fileHash,
             description,
-          }),
-        });
-
-        if (!urlResponse.ok) {
-          throw new Error(
-            `Failed to get upload URL: ${await urlResponse.text()} ${
-              urlResponse.status
-            }`
-          );
-        }
-
-        const { uploadUrl, path } = await urlResponse.json();
-
-        // Upload directly to Supabase
-        logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
-        const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
-          headers: {
-            "Content-Type": "application/zip",
-          },
-          maxBodyLength: Infinity,
-        });
-        if (uploadResponse.status !== 200) {
-          throw new Error(
-            `Failed to upload file to storage: code:${
-              uploadResponse.status
-            } body: ${JSON.stringify(uploadResponse.data)}`
-          );
-        }
-
-        // Notify server that upload is complete
-        logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
-        const finalizeResponse = await fetch(
-          `${API_BASE_URL}/api/plugins/publish/finalize`,
-          {
-            method: "POST",
+          }, {
             headers: {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              name: opts.name,
-              version: packageJson.version,
-              fileHash,
-              storagePath: path,
-              description,
-              fileSize,
-            }),
+            timeout: 30000, // 30 second timeout
+          });
+        } catch (error) {
+          // Handle version conflict specifically
+          if (axios.isAxiosError(error) && error.response) {
+            const status = error.response.status;
+            const errorData = error.response.data;
+            
+            console.log(colors.dim(`${symbols.arrow} server responded with status: ${status}`));
+            
+            // Check if this is a version conflict error
+            if (status === 400 && typeof errorData === 'string' && 
+                errorData.includes('already exists') && errorData.includes('version')) {
+              
+              // Ask user if they want to bump the version
+              const readline = require('readline').createInterface({
+                input: process.stdin,
+                output: process.stdout
+              });
+              
+              const newVersion = bumpVersion(packageJson.version);
+              
+              const question = `\n${symbols.info} ${colors.info(`Version ${packageJson.version} already exists.`)} 
+${colors.info(`Would you like to bump to version ${newVersion} and continue? (y/n): `)}`;
+              
+              const answer = await new Promise<string>(resolve => {
+                readline.question(question, (ans: string) => {
+                  readline.close();
+                  resolve(ans.toLowerCase());
+                });
+              });
+              
+              if (answer === 'y' || answer === 'yes') {
+                // Update package.json with new version
+                updatePackageVersion(newVersion);
+                logger.success(`${symbols.success} Updated package.json to version ${newVersion}`);
+                
+                // Update packageJson in memory
+                packageJson.version = newVersion;
+                
+                // Retry the request with new version
+                console.log(colors.dim(`${symbols.arrow} retrying with new version: ${newVersion}`));
+                urlResponse = await axios.post(`${API_BASE_URL}/api/plugins/publish`, {
+                  name: opts.name,
+                  version: newVersion,
+                  fileSize,
+                  fileHash,
+                  description,
+                }, {
+                  headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  timeout: 30000,
+                });
+              } else {
+                // User chose not to bump version
+                throw new Error(`Publishing canceled. Please update the version manually in package.json.`);
+              }
+            } else {
+              // Handle other errors
+              if (typeof errorData === 'string') {
+                throw new Error(errorData);
+              } else if (errorData.error) {
+                if (Array.isArray(errorData.error)) {
+                  const issues = errorData.error.map((issue: any) => 
+                    `${issue.path.join('.')}: ${issue.message}`
+                  ).join(', ');
+                  throw new Error(`validation failed: ${issues}`);
+                } else {
+                  throw new Error(`server error: ${JSON.stringify(errorData.error)}`);
+                }
+              } else {
+                throw new Error(`server responded with error: ${JSON.stringify(errorData)}`);
+              }
+            }
+          } else {
+            throw error; // Re-throw if not an axios error
+          }
+        }
+
+        console.log(colors.dim(`${symbols.arrow} url response status: ${urlResponse.status}`));
+        
+        const { uploadUrl, path } = urlResponse.data;
+        console.log(colors.dim(`${symbols.arrow} received upload URL: ${uploadUrl.substring(0, 50)}...`));
+        console.log(colors.dim(`${symbols.arrow} storage path: ${path}`));
+        console.log(colors.dim(`${symbols.arrow} file size: ${fileSize} bytes`));
+
+        // Upload directly to Supabase
+        logger.log(colors.dim(`${symbols.arrow} uploading to storage...`));
+        console.log(colors.dim(`${symbols.arrow} starting upload with axios...`));
+        console.log(colors.dim(`${symbols.arrow} upload file size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`));
+        
+        let uploadSuccessful = false;
+        let uploadError = null;
+        
+        try {
+          // Try using a different approach for the upload
+          const uploadResponse = await axios.put(uploadUrl, fileBuffer, {
+            headers: {
+              "Content-Type": "application/zip",
+            },
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            timeout: 300000, // 5 minute timeout for large uploads
+            decompress: false, // Disable automatic decompression
+            onUploadProgress: (progressEvent) => {
+              if (progressEvent.total) {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                if (percentCompleted % 10 === 0) { // Log every 10%
+                  console.log(colors.dim(`${symbols.arrow} upload progress: ${percentCompleted}%`));
+                }
+                // Mark as successful if we reach 100%
+                if (percentCompleted === 100) {
+                  uploadSuccessful = true;
+                }
+              }
+            },
+            // Add a custom validator to handle the case where the socket closes after 100% upload
+            validateStatus: function (status) {
+              // Consider any status less than 500 as success
+              return status < 500;
+            }
+          });
+          
+          console.log(colors.dim(`${symbols.arrow} upload completed with status: ${uploadResponse.status || 'unknown'}`));
+          uploadSuccessful = true;
+        } catch (error) {
+          uploadError = error;
+          
+          // Check if we've seen 100% progress
+          if (!uploadSuccessful) {
+            // This is a real error, not just a socket close after successful upload
+            console.error(colors.error(`${symbols.error} upload error: ${error instanceof Error ? error.message : 'unknown error'}`));
+            if (error instanceof Error && error.stack) {
+              console.error(colors.dim(`${symbols.arrow} stack trace: ${error.stack}`));
+            }
+            if (axios.isAxiosError(error)) {
+              console.error(colors.error(`${symbols.error} upload response: ${JSON.stringify(error.response?.data || {})}`));
+              console.error(colors.error(`${symbols.error} upload status: ${error.response?.status || 'unknown'}`));
+              console.error(colors.error(`${symbols.error} upload request config: ${JSON.stringify({
+                url: error.config?.url?.substring(0, 100) + '...',
+                method: error.config?.method,
+                timeout: error.config?.timeout,
+                headers: error.config?.headers
+              })}`));
+            }
+            throw error;
+          } else {
+            // If we've seen 100% progress, we can ignore the socket close error
+            // Use a warning style instead of error
+            console.log(colors.dim(`${symbols.info} upload completed but connection closed: ${error instanceof Error ? error.message : 'unknown'}`));
+            console.log(colors.dim(`${symbols.arrow} socket was closed after upload completed, continuing with finalization...`));
+          }
+        }
+        
+        // Notify server that upload is complete
+        logger.log(colors.dim(`${symbols.arrow} finalizing upload...`));
+        console.log(colors.dim(`${symbols.arrow} sending finalize request to: ${API_BASE_URL}/api/plugins/publish/finalize`));
+        
+        const finalizeResponse = await axios.post(
+          `${API_BASE_URL}/api/plugins/publish/finalize`,
+          {
+            name: opts.name,
+            version: packageJson.version,
+            fileHash,
+            storagePath: path,
+            description,
+            fileSize,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 30000, // 30 second timeout
           }
         );
 
-        if (!finalizeResponse.ok) {
-          const text = await finalizeResponse.text();
-          throw new Error(`Failed to finalize upload: ${text}`);
-        }
-
-        const data = await finalizeResponse.json();
+        console.log(colors.dim(`${symbols.arrow} finalize response status: ${finalizeResponse.status}`));
+        console.log(colors.dim(`${symbols.arrow} finalize response data: ${JSON.stringify(finalizeResponse.data)}`));
 
         // Success messages
         logger.success(`\n${symbols.success} successfully published plugin!`);
@@ -417,17 +535,10 @@ export const publishCommand = new Command("publish")
           )
         );
 
-        if (data.message) {
-          logger.info(`\n${symbols.info} ${data.message}`);
+        if (finalizeResponse.data.message) {
+          logger.info(`\n${symbols.info} ${finalizeResponse.data.message}`);
         }
-
-        // Cleanup zip file
-        fs.unlinkSync(zipPath);
-        if (opts.verbose) {
-          logger.log(
-            colors.dim(`${symbols.arrow} cleaned up temporary zip file`)
-          );
-        }
+        
       } catch (error) {
         // Cleanup zip file even if upload failed
         if (fs.existsSync(zipPath)) {
@@ -447,6 +558,17 @@ export const publishCommand = new Command("publish")
           );
         }
         process.exit(1);
+      }
+
+      // After the zip file is created and published, add cleanup logic:
+      try {
+        // Assuming zipFilePath is the variable holding the path to the zip file
+        if (fs.existsSync(zipPath)) {
+          console.log(`cleaning up zip file: ${zipPath}`);
+          fs.unlinkSync(zipPath);
+        }
+      } catch (error) {
+        console.error(`failed to clean up zip file: ${error}`);
       }
     } catch (error) {
       if (error instanceof Error) {

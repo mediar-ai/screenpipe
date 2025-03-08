@@ -31,16 +31,19 @@ const OnboardingIntro: React.FC<OnboardingIntroProps> = ({
           alt="screenpipe-logo"
         />
         <DialogTitle className="text-center text-2xl">
-          where pixels become magic
+          screenpipe
         </DialogTitle>
-        <h2 className="text-center text-sm">
-          welcome to screenpipe, excited to have you here
-        </h2>
       </DialogHeader>
-      <video width="600px" className="mt-2 rounded-md" controls preload="true">
-        <source src="/onboarding-screenpipe.mp4" type="video/mp4" />
-        your browser does not support the video tag.
-      </video>
+      <iframe
+        width="600"
+        height="338"
+        className="mt-2 rounded-md"
+        src="https://www.youtube.com/embed/2963sr3IPHY"
+        title="screenpipe introduction"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      ></iframe>
       <div className="flex gap-4 mt-4">
         <Button
           variant="ghost"

@@ -210,15 +210,12 @@ impl PipeManager {
 
         let pipe_dir = download_pipe(&normalized_url, self.screenpipe_dir.clone()).await?;
 
-        // Check if the URL is a local path
-        let is_local = normalized_url.starts_with('/') || normalized_url.starts_with('.');
-
         // update the config with the source url
         self.update_config(
             &pipe_dir.file_name().unwrap().to_string_lossy(),
             serde_json::json!({
                 "source": normalized_url,
-                "enabled": is_local,
+                "enabled": true, // always enable the pipe
             }),
         )
         .await?;

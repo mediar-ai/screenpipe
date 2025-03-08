@@ -95,5 +95,8 @@ export function registryResolveItemsTree(
       }
     }),
     docs,
+    shadcnComponent: Array.from(new Set(
+      componentArray.flatMap((item) => item.shadcnComponent ?? [])
+    ))
   })
 }
